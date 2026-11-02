@@ -38,11 +38,7 @@ class PreviewTarget extends StatelessWidget {
     child: InkWell(
       onTap: onTap,
       borderRadius: token ? moveTokenRadius : null,
-      hoverColor: token
-          ? Theme.of(
-              context,
-            ).colorScheme.primary.withValues(alpha: moveHoverAlpha)
-          : null,
+      hoverColor: token ? hoverTint : null,
       child: child,
     ),
   );

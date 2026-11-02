@@ -38,7 +38,7 @@ void main() {
   }
 
   Future<void> engineOn(WidgetTester tester) async {
-    await tester.tap(find.byTooltip('Toggle engine (E)'));
+    await tester.tap(find.byTooltip('Turn engine on'));
     await tester.pumpAndSettle();
   }
 
@@ -236,7 +236,7 @@ void main() {
     await tester.tap(await handStep(tester, 'One more queen for White'));
     w.lab.play(BoardNumber.one, 'e2e4');
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Edit board'));
+    await tester.tap(find.text('Edit position…'));
     await tester.pumpAndSettle();
     expect(find.text('Edit the board'), findsOneWidget);
     await tester.tap(find.text('Use this position'));

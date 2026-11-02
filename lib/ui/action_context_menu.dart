@@ -13,7 +13,10 @@ Future<void> showActionContextMenu(
   Offset position,
   List<AppAction> actions,
 ) async {
-  final overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
+  // What is picked runs while the window's overlay is there: the row that
+  // asked may be in a menu that has closed by then.
+  final window = Overlay.of(context).context;
+  final overlay = window.findRenderObject()! as RenderBox;
   final local = overlay.globalToLocal(position);
   final theme = Theme.of(context);
   final iconed = actions.any((action) => action.icon != null);
@@ -49,5 +52,5 @@ Future<void> showActionContextMenu(
         ),
     ],
   );
-  if (context.mounted) action?.call();
+  if (window.mounted) action?.call();
 }

@@ -59,7 +59,7 @@ void main() {
         home: Scaffold(body: MyGamesBlock(games: fixture.games)),
       ),
     );
-    await tester.tap(find.text('Add accounts'));
+    await tester.tap(find.text('Add accounts…'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextField, 'Lichess username'),

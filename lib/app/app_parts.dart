@@ -9,7 +9,7 @@ import '../storage/my_games_files.dart';
 import '../storage/settings_store.dart';
 import '../workspace/book/books.dart';
 import '../workspace/book/repertoire_catalog.dart';
-import '../workspace/document/copy_name_dialog.dart';
+import '../workspace/document/save_copy.dart';
 import '../workspace/document/document_saver.dart';
 import '../workspace/document/document_session.dart';
 import '../workspace/document/draft_keeper.dart';

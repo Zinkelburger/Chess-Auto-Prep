@@ -18,7 +18,7 @@ import '../features/study/studies_state.dart';
 import '../storage/chapter_files.dart';
 import '../workspace/book/books.dart';
 import '../workspace/document/chapter_commands.dart';
-import '../workspace/document/copy_name_dialog.dart';
+import '../workspace/document/save_copy.dart';
 import '../workspace/document/document_session.dart';
 import '../workspace/latest.dart';
 import '../chess/explorer_answer.dart' show ExplorerGame;
@@ -587,11 +587,8 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// the trainer, with a chapter up, a PGN becomes a new repertoire.
   Future<RequestResult> paste() => _paste(repertoire: true);
 
-  /// The clipboard — a PGN, bare moves or a FEN — as a new analysis board.
-  Future<RequestResult> pasteOntoBoard() => _paste();
-
-  /// Ctrl+Shift+V: a FEN on the clipboard, and nothing else, as a new
-  /// analysis board.
+  /// Actions ▸ Paste FEN: a FEN on the clipboard, and nothing else, as a
+  /// new analysis board.
   Future<RequestResult> pasteFen() => _paste(positionOnly: true);
 
   Future<RequestResult> _paste({

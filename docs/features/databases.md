@@ -18,7 +18,8 @@ the store list in `nativeStoragePlaces` (`lib/app/environment.dart`).
 Reached from the mode menu (`Databases`, in the `Data & engines` group of
 `lib/app/mode.dart`). The page has no list column.
 
-- **Heading** — `Databases`, then `Download TWIC…` (filled; only where the
+- **Actions** — no page title (the top bar names the mode): `Download TWIC…`
+  (filled; only where the
   environment has a master games path), `Import PGN…`, `Storage · 4.1 GB`
   (`Storage · measuring…` before the first measurement) and a refresh button
   (`Refresh database counts and storage`).
@@ -27,11 +28,12 @@ Reached from the mode menu (`Databases`, in the `Data & engines` group of
   empty`; under it a sentence (`databaseAbout`) saying the games come from The
   Week in Chess and imported PGN files, and that the explorer's TWIC source
   reads them.
-- **Filters** — `Player`, `Event`, `ECO`, `From date (YYYY.MM.DD)`, `Min Elo`
-  (a `NumberField`, 0–3500), a `Strongest first` chip and `Clear filters`.
+- **Filters** — `Player`, `Event`, `ECO`, `From date (YYYY.MM.DD)` (plain
+  fields, no example text or magnifier), `Minimum Elo` (a `NumberField`,
+  0–3500), a `Strongest first` chip and `Clear filters`.
   Changes apply 300 ms after the last edit.
-- **Status line** — a progress bar while reading or importing, then the
-  problem (error colour), the last message (`Imported 120 games · 3 skipped.`,
+- **Status line** — a progress line (held empty when idle), then one
+  fixed-height line: the problem (error colour), the last message (`Imported 120 games · 3 skipped.`,
   `This file was already imported.`, `Deleted Master games · freed 2.0 GB.`)
   or `Importing games…` / `Reading games…`.
 - **Game list** — one row per game: `White — Black`, then `date · event · ECO
@@ -40,14 +42,13 @@ Reached from the mode menu (`Databases`, in the `Data & engines` group of
   PGN to browse games.` (`Import a PGN to add your own games here.` without
   TWIC) or `No games match these filters.`
 - **Pager** — `Page N`, `Previous`, `Next`; 100 games a page.
-- **Actions menu** — `Refresh databases` and `Import PGN…` in a `Databases`
-  group.
+- **Actions menu** — the page's buttons in a `Databases` group:
+  `Download TWIC…` (where offered), `Import PGN…`, `Refresh`.
 
 ## Actions
 
-**Download TWIC** — `Download TWIC…` here, or `Download TWIC database` in the
-explorer when the TWIC source has no database → dialog `Download TWIC
-database` with `Weeks` (1–520, default 52) → reads theweekinchess.com/twic for
+**Download TWIC** — `Download TWIC…` here, or in the
+explorer when the TWIC source has no database → dialog `Download TWIC` with `Weeks` (1–520, default 52) → reads theweekinchess.com/twic for
 the newest issue and imports issues newest first, skipping ones already in the
 file, so the same action starts the database and brings it up to date. Status
 reads `Finding the latest TWIC issue…`, `Downloading TWIC 1612 · 3 of 52`,
@@ -70,7 +71,7 @@ to `pgn_collections/database games/<name>.pgn` (an existing copy is reused)
 and opens it in the PGN Viewer. Leaving the mode before the copy is ready
 drops the open. `Could not keep the game: <detail>` on a write failure.
 
-**Storage** — the heading button opens a dialog `Storage · <total>` with one
+**Storage** — the button among the actions opens a dialog `Storage · <total>` with one
 row per store that has bytes, its measured size and its path as a tooltip.
 Only derived data has a delete button: `Master games` and leftover copies of
 derived databases (`Leftover master_games.db.pre-v3.bak`, `…unreadable-<stamp>`).

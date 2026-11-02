@@ -326,19 +326,6 @@ void main() {
     expect(books.shareOf(books.active!, course), BookShare.some);
   });
 
-  test('renames and moves in the library are followed', () {
-    final book = books.create('Spring')!;
-    books
-      ..setRepertoire(book, najdorf, true)
-      ..setChapter(books.active!, e4, ref('e4', 'Italian'), true)
-      ..movedFolder('/repertoires/Najdorf', '/repertoires/Sicilian')
-      ..movedFile('/repertoires/e4/Italian.pgn', '/repertoires/e4/Giuoco.pgn');
-    expect(books.includes(ref('Sicilian', 'Main')), isTrue);
-    expect(books.includes(ref('Najdorf', 'Main')), isFalse);
-    expect(books.includes(ref('e4', 'Giuoco')), isTrue);
-    expect(books.includes(ref('e4', 'Italian')), isFalse);
-  });
-
   test('deleting the book in use leaves none in use', () {
     final book = books.create('Spring')!;
     books.delete(book);

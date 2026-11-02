@@ -9,6 +9,7 @@ import '../../chess/generation/legal_moves.dart';
 import '../../chess/pgn/tree_edit.dart';
 import '../../ui/theme.dart';
 import '../../ui/app_keys.dart';
+import '../../ui/options_dialog.dart';
 
 /// A single keyboard stop and a semantic square grid over the pointer board.
 /// Arrow keys follow the displayed orientation; Enter selects and plays.
@@ -54,6 +55,10 @@ class _AccessibleBoardState extends State<AccessibleBoard> {
       _notice = null;
     }
   }
+
+  /// A piece as the promotion question names it: `Queen`, not `queen`.
+  static String _pieceName(Role role) =>
+      '${role.name[0].toUpperCase()}${role.name.substring(1)}';
 
   String _square(Square square) {
     final piece = _position?.board.pieceAt(square);
@@ -143,18 +148,12 @@ class _AccessibleBoardState extends State<AccessibleBoard> {
   Future<NamedMove?> _promotion(List<NamedMove> moves) async {
     _promoting = true;
     try {
-      return await showDialog<NamedMove>(
-        context: context,
-        builder: (context) => SimpleDialog(
-          title: const Text('Promote pawn'),
-          children: [
-            for (final move in moves)
-              SimpleDialogOption(
-                onPressed: () => Navigator.pop(context, move),
-                child: Text(move.move.promotion!.name),
-              ),
-          ],
-        ),
+      return await showOptionsDialog(
+        context,
+        title: 'Promote to',
+        options: [
+          for (final move in moves) (move, _pieceName(move.move.promotion!)),
+        ],
       );
     } finally {
       _promoting = false;

@@ -8,6 +8,12 @@ import '../../chess/fen.dart';
 import '../../chess/position_setup.dart';
 import '../../ui/theme.dart';
 import 'board_view.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/form_dialog.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/segments.dart';
+import '../../ui/toggle_chip.dart';
+import '../../ui/tool_button.dart';
 
 /// What a press on the editor's board does.
 sealed class EditorTool {
@@ -97,7 +103,6 @@ class _BoardEditorState extends State<BoardEditor> {
 
   /// Shows [next] on the board and in the FEN field.
   void _set(Setup next) {
-    if (!mounted) return;
     setState(() {
       _setup = next;
       _unread = false;
@@ -109,7 +114,6 @@ class _BoardEditorState extends State<BoardEditor> {
   /// Typed text sets the board once it can be read; until then the board
   /// stays as it was and the text is the problem.
   void _typed(String text) {
-    if (!mounted) return;
     final read = SetupEdits.read(text);
     setState(() {
       _unread = read == null;
@@ -121,9 +125,7 @@ class _BoardEditorState extends State<BoardEditor> {
   void _report() =>
       widget.onChanged(_unread || _setup.illegal != null ? null : _setup.asFen);
 
-  void _pick(EditorTool tool) {
-    if (mounted) setState(() => _tool = tool);
-  }
+  void _pick(EditorTool tool) => setState(() => _tool = tool);
 
   /// A press or a stroke across [square] with the tool in hand.
   void _paint(Square square) {
@@ -147,7 +149,6 @@ class _BoardEditorState extends State<BoardEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return SizedBox(
       width: BoardEditor.width,
       child: Column(
@@ -181,28 +182,18 @@ class _BoardEditorState extends State<BoardEditor> {
               labelText: 'FEN',
               isDense: true,
               border: const OutlineInputBorder(),
-              suffixIcon: IconButton(
+              suffixIcon: ToolButton(
+                icon: AppIcons.copy,
                 tooltip: 'Copy FEN',
-                icon: const Icon(Icons.copy, size: IconSize.menu),
+                size: IconSize.menu,
                 onPressed: () =>
                     Clipboard.setData(ClipboardData(text: _fen.text)),
               ),
             ),
           ),
-          // One line held for the reason, so the dialog does not grow
+          // The line is held for the reason, so the dialog does not grow
           // and shrink as the position turns legal and back.
-          SizedBox(
-            height: editorProblemHeight,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                _problem ?? '',
-                style: TextStyle(color: scheme.error),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
+          ProblemLine(_problem),
         ],
       ),
     );
@@ -239,14 +230,13 @@ class _BoardEditorState extends State<BoardEditor> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SegmentedButton<Side>(
-          showSelectedIcon: false,
+        Segments<Side>(
           segments: const [
             ButtonSegment(value: Side.white, label: Text('White to play')),
             ButtonSegment(value: Side.black, label: Text('Black to play')),
           ],
-          selected: {_setup.turn},
-          onSelectionChanged: (side) => _set(_setup.withTurn(side.first)),
+          selected: _setup.turn,
+          onChanged: (side) => _set(_setup.withTurn(side)),
         ),
         const SizedBox(height: Space.m),
         TextButton(
@@ -258,9 +248,7 @@ class _BoardEditorState extends State<BoardEditor> {
           child: const Text('Clear board'),
         ),
         TextButton(
-          onPressed: () {
-            if (mounted) setState(() => _bottom = _bottom.opposite);
-          },
+          onPressed: () => setState(() => _bottom = _bottom.opposite),
           child: const Text('Flip board'),
         ),
         const SizedBox(height: Space.m),
@@ -274,10 +262,9 @@ class _BoardEditorState extends State<BoardEditor> {
           spacing: Space.xs,
           children: [
             for (final square in [null, ...passable])
-              ChoiceChip(
-                label: Text(square?.name ?? 'None'),
+              ToggleChip(
+                label: square?.name ?? 'None',
                 selected: _setup.epSquare == square,
-                showCheckmark: false,
                 onSelected: (_) => _set(_setup.withEnPassant(square)),
               ),
           ],
@@ -349,7 +336,7 @@ class _SpareStrip extends StatelessWidget {
             tooltip: 'Move pieces',
             selected: tool is PointerTool,
             onTap: () => onPick(const PointerTool()),
-            child: const Icon(Icons.pan_tool_alt_outlined),
+            child: const Icon(AppIcons.movePieces),
           ),
           for (final role in _roles)
             _spare(Piece(color: side, role: role), '$colour ${role.name}'),
@@ -357,7 +344,7 @@ class _SpareStrip extends StatelessWidget {
             tooltip: 'Erase pieces',
             selected: tool is EraserTool,
             onTap: () => onPick(const EraserTool()),
-            child: const Icon(Icons.delete_outline),
+            child: const Icon(AppIcons.delete),
           ),
         ],
       ),
@@ -431,7 +418,7 @@ class _Slot extends StatelessWidget {
 Future<Fen?> showBoardEditor(
   BuildContext context, {
   required Fen initial,
-  String title = 'Set up a position',
+  String title = 'Edit position',
   Side orientation = Side.white,
 }) => showDialog<Fen>(
   context: context,
@@ -467,28 +454,19 @@ class _BoardEditorDialogState extends State<_BoardEditorDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text(widget.title),
-    content: SingleChildScrollView(
+  Widget build(BuildContext context) => FormDialog(
+    title: widget.title,
+    width: null,
+    confirm: 'Use this position',
+    onConfirm: _position == null
+        ? null
+        : () => Navigator.pop(context, _position),
+    body: SingleChildScrollView(
       child: BoardEditor(
         initial: widget.initial,
         orientation: widget.orientation,
-        onChanged: (fen) {
-          if (mounted) setState(() => _position = fen);
-        },
+        onChanged: (fen) => setState(() => _position = fen),
       ),
     ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton(
-        onPressed: _position == null
-            ? null
-            : () => Navigator.pop(context, _position),
-        child: const Text('Use this position'),
-      ),
-    ],
   );
 }

@@ -210,12 +210,6 @@ final class Solitaire extends ChangeNotifier {
     notifyListeners();
   }
 
-  void cancelSetup() {
-    if (!setting) return;
-    setting = false;
-    notifyListeners();
-  }
-
   void setSide(Side value) {
     side = value;
     notifyListeners();

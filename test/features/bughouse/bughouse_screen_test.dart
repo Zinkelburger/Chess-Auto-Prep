@@ -256,8 +256,8 @@ void main() {
       expect(lab.line.upto(BoardNumber.one), 1);
     });
 
-    testWidgets('the engine\'s choice is an arrow on its board, and Space '
-        'plays it there', (tester) async {
+    testWidgets('the engine\'s choice is an arrow on its board, and Play '
+        'best move plays it there', (tester) async {
       build();
       lab.showBoards(LabBoards.two);
       await pump(tester);
@@ -266,7 +266,7 @@ void main() {
       expect(arrows.last.engine.first.to, Square.f3);
       expect(arrows.last.engine.first.colour, engineBestArrow);
       lab.focusOn(BoardNumber.two);
-      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      engine.playBest(lab.focus);
       await tester.pumpAndSettle();
       expect(lab.line.of(BoardNumber.two).single.san, 'Nf3');
     });

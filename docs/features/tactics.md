@@ -23,11 +23,11 @@ starts with the engine off, no card heading and no game counter.
 
 - **Accounts block** (top of the column, shared with My games) — with no
   username: `Add your Lichess or Chess.com username to turn your mistakes into
-  puzzles.` and `Add accounts`. Otherwise each username (tooltip `Lichess
+  puzzles.` and `Add accounts…`. Otherwise each username (tooltip `Lichess
   username` / `Chess.com username`) with `Change`, `Bullet` / `Blitz` /
   `Rapid` / `Classical` chips, the transport button (`Get games` / `Pause` /
   `Resume`) and one status line.
-- **Play** — `Play ({n})`, `Continue session` while a sitting is parked, or
+- **Play** — `Play ({n})`, `Resume` while a sitting is parked, or
   `Show puzzle` while one is up. The only filled button in the column once
   the set has puzzles; the accounts buttons are outlined then.
 - **Count line** — `{queued} of {total}`, the kinds it holds (`14 blunders,
@@ -41,15 +41,18 @@ starts with the engine off, no card heading and no game counter.
   (`2/3`, tooltip `Solved 2 of 3 tries`; blank for a new puzzle, or
   `solved`/`failed` in the current sitting) over `date · vs opponent`; a `⋯`
   menu (`Puzzle actions`). The puzzle on the board is highlighted.
-- **Column messages** — `Reading puzzles…`; `No puzzles yet. Get your games
-  above: …`; `The puzzle set could not be read: {detail}` with `Try again`;
+- **Column messages** — `Reading puzzles…`; with no account, nothing under
+  the account prompt (it already says what to do); with one, `Get games to
+  turn your mistakes into puzzles.`; `Could not read the puzzles: {detail}`
+  with `Try again`;
   `No puzzles from the last {n} days.` with `Include older puzzles`; `Your
   filters rule out every puzzle you have. Open Filters to loosen them.`;
   `Nothing matches "{q}".`
 - **Card tabs** — `Puzzle` (pinned), `Game` (open by default), and `Moves`,
   `Explorer` when opened. No repertoire tabs.
-- **Puzzle tab, idle** — `Practice your mistakes` with `{n} puzzles ready…`,
-  or `Session paused` with `End session`.
+- **Puzzle tab, idle** — one quiet line, no heading: `{n} puzzles ready to
+  play.` (blank with none), or `Session paused; your results are kept.` with
+  `End session`.
 - **Puzzle tab, solving** — `White to play` (`· 2 moves` for a longer line),
   `vs opponent · date`, `You played h5 (inaccuracy)` (after the answer:
   `, allowing Be2   +0.6 → -0.1`), a fixed-height feedback line, the buttons
@@ -67,7 +70,7 @@ starts with the engine off, no card heading and no game counter.
 
 ## Actions
 
-**Add / change accounts** — `Add accounts`, `Change` or Actions `My accounts…`
+**Add / change accounts** — `Add accounts…`, `Change` or Actions `My accounts…`
 → dialog `My accounts` with `Lichess username`, `Chess.com username` and
 `Only your username: your games are public. Leave one blank if you do not play
 there.` → `Save` stores them; nothing downloads. A changed or cleared name
@@ -79,7 +82,7 @@ saved in settings (`myGameSpeeds`), drops the paused queue. A game with no
 readable `TimeControl` always passes; daily/correspondence counts as
 `Classical`.
 
-**Get games** — the transport button or Actions `Get my games` → one pausable
+**Get games** — the transport button or Actions `Get games` → one pausable
 job per press. For each account: download (200 games while fewer than 200 are
 saved, else 20), save into the games cache, then take the newest 20 saved
 games of the chosen speeds that no review has done. Each is judged by a
@@ -95,7 +98,7 @@ a few minutes.`, `{site} has no player by that username.`, `{site} could not
 answer (HTTP {n}).` A site that cannot be reached is answered from its saved
 games: `· Lichess not reached, using saved games`.
 
-**Pause / Resume** — `Pause` (Actions `Pause the review`) → `Pausing…`, stops
+**Pause / Resume** — `Pause` (Actions `Pause`) → `Pausing…`, stops
 after the game being judged → `Paused — {n} games left`; `Resume` carries on
 without downloading again. A game's puzzles, its done mark and its counts are
 one write, so a game cut off midway is judged again and none is mined twice.
@@ -128,7 +131,7 @@ skipped in the sitting.
 **Reset / Next / Previous / End** — reset icon (an attempt already made
 stands); `Skip`/`Next` or ↓; ↑ or `‹` goes back; `End session` or Esc ends
 the sitting and shows the recap. Leaving the mode parks the sitting with its
-results; `Continue session` (column or Actions) resumes it.
+results; `Resume` (column or Actions) resumes it.
 
 **Rate** — 1–5 stars after finishing, written as `StarRating`; clicking the
 current star clears it. One star means `hidden from training` (with `Hide
@@ -137,7 +140,7 @@ one-star` on); the sitting under way is not changed.
 **Analyze** — after finishing, `Analyze` opens the `Moves` tab with the engine
 on. The engine cannot be switched on while the answer is hidden.
 
-**Game tab moves** — clicking a move or `Analyze game` opens the source game on
+**Game tab moves** — clicking a move or `Open on analysis board` opens the source game on
 a new analysis board at that ply with the engine on.
 
 **Row menu** — `Analyze in the game` (the source game, or the puzzle alone, on
@@ -149,7 +152,7 @@ with the backups and the game stays reviewed. Failure: `Could not delete the
 puzzle: {reason}` (e.g. `The puzzles changed on disk. Try again.`).
 
 **Keys** — Space show solution, ↓/↑ next/previous puzzle, Esc end sitting,
-F flip, E engine (only once the answer is shown). Actions also has `Copy FEN`
+F flip; Actions ▸ `Engine on` only once the answer is shown. Actions also has `Copy FEN`
 and the card's tabs.
 
 ## Data

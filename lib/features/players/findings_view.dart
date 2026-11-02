@@ -7,6 +7,10 @@ import '../../ui/number_field.dart';
 import '../../ui/theme.dart';
 import 'player_analysis.dart';
 import 'player_hunt.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/progress_line.dart';
+import '../../ui/tool_button.dart';
 
 /// The top of the Findings list: the button that runs the engine over the
 /// player's most played positions, its settings folded beside it, how far
@@ -44,9 +48,6 @@ class _EngineRunState extends State<EngineRun> {
   Widget build(BuildContext context) {
     final hunt = widget.hunt;
     final theme = Theme.of(context);
-    final wrong = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.error,
-    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.xs, Space.xs),
       child: Column(
@@ -62,15 +63,14 @@ class _EngineRunState extends State<EngineRun> {
             const SizedBox(height: Space.s),
             Padding(
               padding: const EdgeInsets.only(right: Space.s),
-              child: LinearProgressIndicator(
-                minHeight: progressLineHeight,
+              child: ProgressLine(
                 value: hunt.total == 0 ? null : hunt.done / hunt.total,
               ),
             ),
           ],
           if (hunt.practicalWarning case final warning?)
             Text(warning, style: theme.textTheme.bodySmall),
-          if (hunt.error case final error?) Text(error, style: wrong),
+          if (hunt.error case final error?) ProblemLine(error),
           _summary(hunt, theme),
         ],
       ),
@@ -85,13 +85,17 @@ class _EngineRunState extends State<EngineRun> {
               'Check the most played positions for bad evaluations and '
               'strong replies these games never met. Scores are from the '
               'player’s side.',
-          child: FilledButton(
+          child: FilledButton.icon(
             onPressed: widget.analysis.busy
                 ? null
                 : hunt.running
                 ? hunt.stop
                 : hunt.start,
-            child: Text(
+            icon: Icon(
+              hunt.running ? AppIcons.stop : AppIcons.run,
+              size: IconSize.action,
+            ),
+            label: Text(
               hunt.running
                   ? 'Stop · ${hunt.done} / ${hunt.total}'
                   : 'Analyze with engine',
@@ -103,13 +107,13 @@ class _EngineRunState extends State<EngineRun> {
       ),
       // The gear the engine under the board has, for the same thing: how
       // hard this engine looks.
-      IconButton(
-        onPressed: _toggleSettings,
-        isSelected: _settingsOpen,
-        icon: const Icon(Icons.settings, size: IconSize.action),
+      ToolButton(
+        icon: AppIcons.settings,
         tooltip: _settingsOpen
             ? 'Hide the analysis settings'
             : 'Analysis settings',
+        selected: _settingsOpen,
+        onPressed: _toggleSettings,
       ),
     ],
   );
@@ -295,14 +299,11 @@ class FindingRow extends StatelessWidget {
                 ],
               ),
             ),
-            IconButton(
+            ToolButton(
+              icon: dismissed ? AppIcons.undo : AppIcons.close,
               tooltip: dismissed ? 'Restore finding' : 'Dismiss finding',
-              icon: Icon(
-                dismissed ? Icons.undo : Icons.close,
-                size: IconSize.menu,
-              ),
+              size: IconSize.menu,
               onPressed: onToggle,
-              visualDensity: VisualDensity.compact,
             ),
           ],
         ),

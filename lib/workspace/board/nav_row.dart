@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/theme.dart';
 import '../document/document_session.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// The four buttons under the moves that walk the line: start, back,
 /// forward, end. Each says its key, because each has one.
@@ -33,39 +35,35 @@ class NavRow extends StatelessWidget {
               if (book case final book?)
                 ValueListenableBuilder<bool>(
                   valueListenable: book,
-                  builder: (context, open, _) => IconButton(
-                    icon: Icon(
-                      open ? Icons.menu_book : Icons.menu_book_outlined,
-                      size: IconSize.action,
-                    ),
+                  builder: (context, open, _) => ToolButton(
+                    icon: open ? AppIcons.bookOpen : AppIcons.book,
                     tooltip: open
                         ? 'Hide the opening book'
                         : 'Show the opening book under the moves',
-                    isSelected: open,
+                    selected: open,
                     onPressed: () => book.value = !open,
-                    visualDensity: VisualDensity.compact,
                   ),
                 ),
               _button(
-                Icons.first_page,
+                AppIcons.first,
                 AppKey.start.tip('Start'),
                 open,
                 session.cursor.toStart,
               ),
               _button(
-                Icons.chevron_left,
+                AppIcons.previous,
                 AppKey.back.tip('Back'),
                 open,
                 session.cursor.back,
               ),
               _button(
-                Icons.chevron_right,
+                AppIcons.next,
                 AppKey.forward.tip('Forward'),
                 open,
                 session.cursor.forward,
               ),
               _button(
-                Icons.last_page,
+                AppIcons.last,
                 AppKey.end.tip('End'),
                 open,
                 session.cursor.toEnd,
@@ -89,10 +87,5 @@ class NavRow extends StatelessWidget {
   }
 
   Widget _button(IconData icon, String tooltip, bool on, VoidCallback run) =>
-      IconButton(
-        icon: Icon(icon, size: IconSize.action),
-        tooltip: tooltip,
-        onPressed: on ? run : null,
-        visualDensity: VisualDensity.compact,
-      );
+      ToolButton(icon: icon, tooltip: tooltip, onPressed: on ? run : null);
 }

@@ -9,6 +9,7 @@ import 'trainer_state.dart';
 import 'trainer_words.dart';
 import 'training_home.dart';
 import '../../ui/list_message.dart';
+import '../../ui/app_icons.dart';
 
 /// The Train tab of the reading card: the lines of the chapter, or of its
 /// repertoire, with where each stands and the two ways in — Review what is
@@ -40,7 +41,7 @@ class TrainPane extends StatefulWidget {
   /// Sends a line to be read: to the board, the Moves tab or the builder.
   final ValueChanged<LineToRead> onRead;
 
-  /// Whether a line offers `Open in Builder`.
+  /// Whether a line offers `Open in builder`.
   final bool offerBuilder;
 
   @override
@@ -73,13 +74,10 @@ class _TrainPaneState extends State<TrainPane> {
           Wrap(
             spacing: Space.s,
             children: [
-              FilledButton(
+              FilledButton.icon(
                 onPressed: trainer.resume,
-                child: Text(
-                  trainer.selection.active
-                      ? 'Return to training'
-                      : 'Resume lesson',
-                ),
+                icon: const Icon(AppIcons.run, size: IconSize.action),
+                label: const Text('Resume'),
               ),
               TextButton(
                 onPressed: trainer.leave,
@@ -111,9 +109,10 @@ class _TrainPaneState extends State<TrainPane> {
         ),
         const SizedBox(height: Space.l),
         if (widget.onImport != null)
-          FilledButton(
+          FilledButton.icon(
             onPressed: widget.onImport,
-            child: const Text('Import course PGN…'),
+            icon: const Icon(AppIcons.open, size: IconSize.action),
+            label: const Text('Import course PGN…'),
           ),
       ],
     ),
@@ -132,7 +131,7 @@ class _TrainPaneState extends State<TrainPane> {
       );
     }
     return switch (trainer.state) {
-      TrainerIdle() || TrainerLoading() => const ListMessage(
+      TrainerIdle() || TrainerLoading() => const ListMessage.loading(
         'Reading training progress…',
         inset: Space.m,
       ),
@@ -154,7 +153,7 @@ class _TrainPaneState extends State<TrainPane> {
               const SizedBox(height: Space.m),
               FilledButton.icon(
                 onPressed: widget.onImport,
-                icon: const Icon(Icons.file_open_outlined),
+                icon: const Icon(AppIcons.open, size: IconSize.action),
                 label: const Text('Import course PGN…'),
               ),
               const SizedBox(height: Space.s),

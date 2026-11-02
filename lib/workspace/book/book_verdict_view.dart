@@ -7,6 +7,7 @@ import '../../chess/pgn/move_label.dart' show continuation;
 import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
 import '../../ui/list_message.dart';
+import '../../ui/app_icons.dart';
 
 /// What the user's book says about one game, in words and as a panel: the
 /// same wherever a game is checked — My games' list and Book tab, the
@@ -225,14 +226,14 @@ class _Actions extends StatelessWidget {
         if (onMoment case final onMoment?)
           FilledButton.icon(
             onPressed: onMoment,
-            icon: const Icon(Icons.my_location, size: IconSize.action),
+            icon: const Icon(AppIcons.moment, size: IconSize.action),
             label: const Text('Show the move'),
           ),
         Tooltip(
           message: 'Open ${place.file.name} in the builder at this position',
-          child: FilledButton.icon(
+          child: OutlinedButton.icon(
             onPressed: () => onReadBook(place),
-            icon: const Icon(Icons.menu_book, size: IconSize.action),
+            icon: const Icon(AppIcons.openElsewhere, size: IconSize.action),
             label: const Text('Open in builder'),
           ),
         ),

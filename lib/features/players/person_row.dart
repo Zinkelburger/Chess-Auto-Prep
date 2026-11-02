@@ -11,6 +11,7 @@ import 'player_dialogs.dart';
 import 'player_lookup.dart';
 import 'players.dart';
 import 'saved_games.dart';
+import '../../ui/app_icons.dart';
 
 /// One person in the directory or in a group: who they are and where their
 /// games come from, how many games are saved, and the two things done with
@@ -117,9 +118,7 @@ class PersonRow extends StatelessWidget {
             padding: const EdgeInsets.only(top: Space.xs),
             child: Text(
               notes,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface,
-              ),
+              style: bodySmallInk(theme),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -186,33 +185,31 @@ class PersonRow extends StatelessWidget {
         RowActions(
           tooltip: 'Player actions',
           children: [
-            MenuItemButton(
-              onPressed: owner.busy
-                  ? null
-                  : () => editPlayer(context, owner, player: player),
-              child: const Text('Edit player…'),
+            rowAction(
+              'Edit player…',
+              () => editPlayer(context, owner, player: player),
+              busy: owner.busy,
+              icon: AppIcons.edit,
             ),
-            MenuItemButton(
-              onPressed: () => onLink(player),
-              child: const Text('Link study…'),
-            ),
+            rowAction('Link study…', () => onLink(player)),
             if (prep)
-              MenuItemButton(
-                onPressed: owner.busy ? null : () => owner.unlinkPrep(player),
-                child: const Text('Unlink prep study'),
+              rowAction(
+                'Unlink prep study',
+                () => owner.unlinkPrep(player),
+                busy: owner.busy,
               ),
             if (deletable)
-              MenuItemButton(
-                onPressed: owner.busy || saved.deleting.contains(player.id)
-                    ? null
-                    : () => onDeleteGames(player),
-                child: const Text('Delete saved games…'),
+              rowAction(
+                'Delete saved games…',
+                () => onDeleteGames(player),
+                busy: owner.busy || saved.deleting.contains(player.id),
+                icon: AppIcons.delete,
               ),
-            MenuItemButton(
-              onPressed: owner.busy ? null : () => onRemove(player),
-              child: Text(
-                group == null ? 'Remove player…' : 'Remove from group…',
-              ),
+            rowAction(
+              group == null ? 'Remove player…' : 'Remove from group…',
+              () => onRemove(player),
+              busy: owner.busy,
+              icon: AppIcons.remove,
             ),
           ],
         ),
@@ -230,9 +227,7 @@ class PersonRow extends StatelessWidget {
             link['chapter'] as String? ??
                 p.basenameWithoutExtension(link['path'] as String),
           ),
-          labelStyle: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurface,
-          ),
+          labelStyle: bodySmallInk(theme),
           visualDensity: VisualDensity.compact,
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           padding: EdgeInsets.zero,

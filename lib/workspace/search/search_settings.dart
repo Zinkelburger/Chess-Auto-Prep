@@ -9,6 +9,7 @@ import '../../chess/generation/expectimax_options.dart';
 import '../../storage/settings.dart';
 import '../../storage/settings_store.dart';
 import '../../ui/theme.dart';
+import '../../ui/segments.dart';
 
 /// What each Expectimax setting is called and the one line under it, said
 /// the same way behind the tab's gear and in Settings ▸ Expectimax.
@@ -295,7 +296,7 @@ class _Segments<T extends Object> extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     label: name,
-    child: SegmentedButton<T>(
+    child: Segments<T>(
       segments: [
         for (final (value, label) in options)
           ButtonSegment(
@@ -303,18 +304,8 @@ class _Segments<T extends Object> extends StatelessWidget {
             label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
       ],
-      selected: {value},
-      showSelectedIcon: false,
-      style: const ButtonStyle(
-        visualDensity: VisualDensity.compact,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        padding: WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: Space.s),
-        ),
-      ),
-      onSelectionChanged: onChanged == null
-          ? null
-          : (chosen) => onChanged!(chosen.first),
+      selected: value,
+      onChanged: onChanged == null ? null : (chosen) => onChanged!(chosen),
     ),
   );
 }

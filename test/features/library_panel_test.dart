@@ -157,10 +157,7 @@ void main() {
     fixture.files.listing = const RepertoiresUnreadable('Permission denied');
     await fixture.library.refresh();
     await tester.pumpAndSettle();
-    expect(
-      find.text('Could not load repertoires. Please try again.'),
-      findsOneWidget,
-    );
+    expect(find.text('Could not read your repertoires.'), findsOneWidget);
     fixture.files.listing = Repertoires([kid]);
     await tester.tap(find.text('Try again'));
     await tester.pumpAndSettle();
@@ -194,7 +191,7 @@ void main() {
     tester,
   ) async {
     await show(tester, []);
-    await tester.tap(find.byTooltip('New repertoire'));
+    await tester.tap(find.text('New repertoire…'));
     await tester.pumpAndSettle();
     expect(find.text('Playing side'), findsNothing);
     await tester.enterText(find.byType(TextField).last, 'Benoni');
@@ -210,7 +207,7 @@ void main() {
     tester,
   ) async {
     await show(tester, []);
-    await tester.tap(find.byTooltip('New repertoire'));
+    await tester.tap(find.text('New repertoire…'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'a/b');
     await tester.tap(find.text('Create'));
@@ -244,7 +241,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete…'));
     await tester.pumpAndSettle();
-    expect(find.text('Delete repertoire "benko"?'), findsOneWidget);
+    expect(find.text('Delete repertoire “benko”?'), findsOneWidget);
     expect(
       find.text(
         'Its chapters can be restored from Deleted chapters under this '
@@ -394,7 +391,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(fixture.textAt('/repertoires/KID/Main.pgn'), '// Main\n');
     expect(fixture.textAt(trashed), isNull);
-    expect(find.textContaining('Nothing deleted'), findsOneWidget);
+    expect(
+      find.textContaining('Chapters you delete can be restored here.'),
+      findsOneWidget,
+    );
     expect(find.byType(SnackBar), findsNothing);
   });
 
@@ -426,6 +426,9 @@ void main() {
     await show(tester, [kid]);
     await tester.tap(find.text('Deleted chapters'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Nothing deleted'), findsOneWidget);
+    expect(
+      find.textContaining('Chapters you delete can be restored here.'),
+      findsOneWidget,
+    );
   });
 }

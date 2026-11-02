@@ -50,8 +50,8 @@ void main() {
       expect(w.session.isScratch, isTrue);
       expect(w.session.cursor.fen, fen);
       expect(find.byType(TrainingAnalysisPane), findsOneWidget);
-      expect(find.text('Return to training'), findsOneWidget);
-      await tester.tap(find.text('Return to training'));
+      expect(find.text('Resume'), findsOneWidget);
+      await tester.tap(find.text('Resume'));
       await tester.pumpAndSettle();
       expect(w.lineTrainer.lesson, same(lesson));
       expect(lesson.suspended, isFalse);

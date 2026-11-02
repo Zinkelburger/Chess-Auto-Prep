@@ -9,6 +9,9 @@ import '../../chess/pgn/move_label.dart';
 import '../../ui/theme.dart';
 import 'game_review.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/check_row.dart';
 
 /// The game's evaluation as a graph, the old viewer's way: White's
 /// advantage light above the middle, Black's dark below, each marked move a
@@ -461,12 +464,7 @@ class _SideSummary extends StatelessWidget {
           if (loss != null)
             Tooltip(
               message: 'Average centipawn loss',
-              child: Text(
-                'ACPL $loss',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
+              child: Text('ACPL $loss', style: theme.textTheme.bodySmall),
             ),
         ],
       ),
@@ -515,6 +513,22 @@ class _ReviewControls extends StatelessWidget {
   /// Whether the game has a review to analyze again.
   final bool reviewed;
 
+  /// Analyze, again, or Stop while it runs: one button in one place.
+  Widget _runButton() => FilledButton.icon(
+    onPressed: review.running ? review.stop : () => unawaited(review.start()),
+    icon: Icon(
+      review.running ? AppIcons.stop : AppIcons.run,
+      size: IconSize.action,
+    ),
+    label: Text(
+      review.running
+          ? 'Stop'
+          : reviewed
+          ? 'Analyze again'
+          : 'Analyze game',
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -523,19 +537,7 @@ class _ReviewControls extends StatelessWidget {
       children: [
         Row(
           children: [
-            FilledButton.icon(
-              onPressed: review.running
-                  ? review.stop
-                  : () => unawaited(review.start()),
-              icon: Icon(review.running ? Icons.stop : Icons.play_arrow),
-              label: Text(
-                review.running
-                    ? 'Stop'
-                    : reviewed
-                    ? 'Analyze again'
-                    : 'Analyze game',
-              ),
-            ),
+            _runButton(),
             const SizedBox(width: Space.m),
             Expanded(
               child: Text(
@@ -551,21 +553,14 @@ class _ReviewControls extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            Tooltip(
-              message: review.session.readOnly != null
+            CheckRow(
+              key: const ValueKey('review-annotate'),
+              label: 'Annotate PGN',
+              tooltip: review.session.readOnly != null
                   ? 'This file is read-only'
                   : 'Write evaluations, ?/?? marks and better lines into the game',
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Annotate PGN', style: theme.textTheme.bodySmall),
-                  Switch(
-                    key: const ValueKey('review-annotate'),
-                    value: review.annotate && review.session.readOnly == null,
-                    onChanged: review.canAnnotate ? review.setAnnotate : null,
-                  ),
-                ],
-              ),
+              value: review.annotate && review.session.readOnly == null,
+              onChanged: review.canAnnotate ? review.setAnnotate : null,
             ),
           ],
         ),
@@ -584,14 +579,7 @@ class _ReviewControls extends StatelessWidget {
               ),
             ),
           ),
-        if (review.problem case final problem?)
-          Padding(
-            padding: const EdgeInsets.only(top: Space.s),
-            child: Text(
-              problem,
-              style: TextStyle(color: theme.colorScheme.error),
-            ),
-          ),
+        if (review.problem case final problem?) ProblemLine(problem),
       ],
     );
   }

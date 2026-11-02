@@ -68,7 +68,7 @@ void main() {
     expect(find.text('Open PGN file…'), findsOneWidget);
     expect(find.text('Paste PGN as repertoire'), findsOneWidget);
     expect(find.text('Paste PGN or FEN'), findsOneWidget);
-    expect(find.text('Set up position…'), findsOneWidget);
+    expect(find.text('Edit position…'), findsOneWidget);
     expect(find.text('Ctrl+V'), findsOneWidget);
     expect(find.text('Close file'), findsNothing);
     await tester.tap(find.text('Actions'));
@@ -133,7 +133,7 @@ void main() {
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
     expect(find.text('Save to repertoire…'), findsOneWidget);
-    expect(find.text('Save to study…'), findsNothing);
+    expect(find.text('Add game to study…'), findsNothing);
     expect(find.text('Paste PGN or FEN'), findsOneWidget);
   });
 

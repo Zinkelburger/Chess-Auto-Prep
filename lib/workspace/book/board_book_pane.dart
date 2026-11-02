@@ -71,7 +71,7 @@ class _BoardBookPaneState extends State<BoardBookPane> {
               'Open a game to check it against your books.',
               inset: 0,
             ),
-            BoardBookReading() => const ListMessage(
+            BoardBookReading() => const ListMessage.loading(
               'Reading your repertoires…',
               inset: 0,
             ),

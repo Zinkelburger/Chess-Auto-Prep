@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../chess/fen.dart';
 import '../../chess/typed_move.dart';
 import '../../ui/app_keys.dart';
+import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
 
 /// The typed-move field's words and focus.
@@ -11,8 +12,7 @@ import '../../ui/theme.dart';
 /// The window keeps one for the life of the workspace instead of the field
 /// keeping its own: the field under the board is built anew as a lesson
 /// takes the board and gives it back, and keys reach it from outside the
-/// field — `/` from anywhere in the workspace, a move's first letter from a
-/// lesson that is asking for one.
+/// field — a move's first letter from a lesson that is asking for one.
 final class MoveEntry {
   final words = TextEditingController();
   final problem = ValueNotifier<String?>(null);
@@ -75,7 +75,7 @@ class MoveField extends StatefulWidget {
   State<MoveField> createState() => _MoveFieldState();
 }
 
-class _MoveFieldState extends State<MoveField> {
+class _MoveFieldState extends State<MoveField> with ListeningState<MoveField> {
   /// Enter found no move in the words; the next change forgets it.
   bool _refused = false;
 
@@ -93,17 +93,16 @@ class _MoveFieldState extends State<MoveField> {
       if (mounted) widget.entry.follow(widget.fen);
     });
     _heard = _words.text;
-    _words.addListener(_changed);
   }
 
   @override
+  Listenable listenableOf(MoveField widget) => widget.entry.words;
+
+  @override
   void didUpdateWidget(MoveField old) {
+    // Another field's words are where this one starts, not a change.
+    if (old.entry != widget.entry) _heard = widget.entry.words.text;
     super.didUpdateWidget(old);
-    if (old.entry != widget.entry) {
-      old.entry.words.removeListener(_changed);
-      _heard = _words.text;
-      _words.addListener(_changed);
-    }
     // Words typed for another position mean nothing in this one.
     widget.entry.follow(widget.fen);
     // A board that stops taking moves gives the keys back.
@@ -114,15 +113,10 @@ class _MoveFieldState extends State<MoveField> {
     }
   }
 
-  @override
-  void dispose() {
-    _words.removeListener(_changed);
-    super.dispose();
-  }
-
   /// Heard on the controller rather than from the field, so words a lesson
   /// types in from outside are read the same as keys pressed here.
-  void _changed() {
+  @override
+  void changed() {
     final text = _words.text;
     if (text == _heard) return;
     _heard = text;
@@ -168,7 +162,7 @@ class _MoveFieldState extends State<MoveField> {
       skipTraversal: true,
       onKeyEvent: _key,
       child: Tooltip(
-        message: AppKey.typeMove.tip('Type a move'),
+        message: 'Type a move',
         child: ValueListenableBuilder(
           valueListenable: _words,
           builder: (context, value, _) {
@@ -198,16 +192,9 @@ class _MoveFieldState extends State<MoveField> {
               ),
               decoration: InputDecoration(
                 isDense: true,
-                // What the box is for, as the search fields show their
-                // magnifier: an empty box says nothing by itself.
-                prefixIcon: Icon(
-                  Icons.keyboard_outlined,
-                  size: IconSize.menu,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                prefixIconConstraints: const BoxConstraints(
-                  minWidth: IconSize.menu + 2 * Space.s,
-                ),
+                // The box's name on its border, as every field has.
+                labelText: 'Move',
+                floatingLabelBehavior: FloatingLabelBehavior.always,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: Space.s,
                   vertical: Space.s,
@@ -229,7 +216,7 @@ class _MoveFieldState extends State<MoveField> {
   }
 
   /// What a move can be written with: SAN and UCI letters, digits, and the
-  /// marks the reading ignores. Space and `/` are keys, never words here.
+  /// marks the reading ignores. Space is a key, never a word here.
   static final _moveCharacters = RegExp(r'[a-hA-HKkQqRrNnOox0-9=+#!?:-]');
 
   /// `exd8=Q+!` is eight; nothing a move is written as is longer.

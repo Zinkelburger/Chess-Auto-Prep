@@ -11,6 +11,12 @@ import '../../ui/choice_field.dart';
 import '../../ui/number_field.dart';
 import '../../ui/theme.dart';
 import '../../workspace/board/board_editor.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/form_dialog.dart';
+import '../../ui/tool_button.dart';
+import '../../ui/toggle_chip.dart';
+import '../../ui/check_row.dart';
+import '../../ui/field_row.dart';
 
 Future<TournamentConfig?> tournamentSetup(
   BuildContext context, {
@@ -65,75 +71,57 @@ class _SetupState extends State<_Setup> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text(
-      widget.previous == null ? 'New tournament' : 'Configure next run',
-    ),
-    content: SizedBox(
-      width: 660,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _name,
-              decoration: const InputDecoration(labelText: 'Name'),
-            ),
-            const SizedBox(height: Space.m),
-            Text('Engines', style: Theme.of(context).textTheme.titleMedium),
-            for (var i = 0; i < _seats.length; i++) _seat(i),
-            TextButton.icon(
-              onPressed: () =>
-                  _change(() => _seats.add(TournamentEngine.bundled())),
-              icon: const Icon(Icons.add),
-              label: const Text('Add engine'),
-            ),
-            const SizedBox(height: Space.m),
-            _startPosition(),
-            _choices('Format', _values, 'format', {
-              'roundRobin': 'Round robin',
-              'gauntlet': 'Gauntlet',
-            }, 'roundRobin'),
-            _number(
-              'Games per pairing',
-              _values,
-              'gamesPerPairing',
-              10,
-              1,
-              1000,
-            ),
-            _number('Simultaneous games', _values, 'concurrency', 1, 1, 64),
-            _toggle('Alternate colors', _values, 'alternateColors', true),
-            _presets(),
-            _choices('Time control', _time, 'kind', {
-              'movetime': 'Time per move',
-              'incremental': 'Clock + increment',
-              'fixedDepth': 'Fixed depth',
-              'fixedNodes': 'Fixed nodes',
-            }, 'movetime'),
-            ..._limits(),
-            _toggle('Annotate evaluations', _values, 'annotateMoves', false),
-            ExpansionTile(
-              title: const Text('Adjudication'),
-              children: _adjudication(),
-            ),
-            if (_problem != null)
-              Text(
-                _problem!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-          ],
-        ),
+  Widget build(BuildContext context) => FormDialog(
+    title: widget.previous == null ? 'New tournament' : 'Configure next run',
+    width: dialogWide,
+    confirm: 'Start new run',
+    confirmIcon: AppIcons.run,
+    onConfirm: _start,
+    canFail: true,
+    problem: _problem,
+    body: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _name,
+            decoration: const InputDecoration(labelText: 'Name'),
+          ),
+          const SizedBox(height: Space.m),
+          Text('Engines', style: Theme.of(context).textTheme.titleMedium),
+          for (var i = 0; i < _seats.length; i++) _seat(i),
+          TextButton.icon(
+            onPressed: () =>
+                _change(() => _seats.add(TournamentEngine.bundled())),
+            icon: const Icon(AppIcons.add, size: IconSize.action),
+            label: const Text('Add engine'),
+          ),
+          const SizedBox(height: Space.m),
+          _startPosition(),
+          _choices('Format', _values, 'format', {
+            'roundRobin': 'Round robin',
+            'gauntlet': 'Gauntlet',
+          }, 'roundRobin'),
+          _number('Games per pairing', _values, 'gamesPerPairing', 10, 1, 1000),
+          _number('Simultaneous games', _values, 'concurrency', 1, 1, 64),
+          _toggle('Alternate colors', _values, 'alternateColors', true),
+          _presets(),
+          _choices('Time control', _time, 'kind', {
+            'movetime': 'Time per move',
+            'incremental': 'Clock + increment',
+            'fixedDepth': 'Fixed depth',
+            'fixedNodes': 'Fixed nodes',
+          }, 'movetime'),
+          ..._limits(),
+          _toggle('Annotate evaluations', _values, 'annotateMoves', false),
+          ExpansionTile(
+            title: const Text('Adjudication'),
+            children: _adjudication(),
+          ),
+        ],
       ),
     ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton(onPressed: _start, child: const Text('Start new run')),
-    ],
   );
 
   /// The FEN the games start from beside a small board showing it, greyed
@@ -215,12 +203,12 @@ class _SetupState extends State<_Setup> {
             },
           ),
         ),
-        IconButton(
+        ToolButton(
+          icon: AppIcons.remove,
           tooltip: 'Remove engine ${index + 1}',
           onPressed: _seats.length > 2
               ? () => _change(() => _seats.removeAt(index))
               : null,
-          icon: const Icon(Icons.close),
         ),
       ],
     );
@@ -250,9 +238,8 @@ class _SetupState extends State<_Setup> {
     Map<String, Object?> data,
     String key,
     bool value,
-  ) => CheckboxListTile(
-    contentPadding: EdgeInsets.zero,
-    title: Text(name),
+  ) => CheckRow(
+    label: name,
     value: data[key] as bool? ?? value,
     onChanged: (n) => _change(() => data[key] = n),
   );
@@ -262,26 +249,21 @@ class _SetupState extends State<_Setup> {
     String key,
     Map<String, String> options,
     String fallback,
-  ) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: Space.s),
-    child: Row(
-      children: [
-        Expanded(child: Text(name)),
-        SizedBox(
-          width: 240,
-          child: ChoiceField(
-            text: options[data[key] ?? fallback] ?? options[fallback]!,
-            options: options.values.toList(),
-            hint: name,
-            onChanged: (text) {
-              final found = options.entries
-                  .where((e) => e.value == text)
-                  .firstOrNull;
-              if (found != null) _change(() => data[key] = found.key);
-            },
-          ),
-        ),
-      ],
+  ) => FieldRow(
+    label: name,
+    child: SizedBox(
+      width: settingChoiceWidth,
+      child: ChoiceField(
+        text: options[data[key] ?? fallback] ?? options[fallback]!,
+        options: options.values.toList(),
+        hint: name,
+        onChanged: (text) {
+          final found = options.entries
+              .where((e) => e.value == text)
+              .firstOrNull;
+          if (found != null) _change(() => data[key] = found.key);
+        },
+      ),
     ),
   );
 
@@ -296,9 +278,8 @@ class _SetupState extends State<_Setup> {
         runSpacing: Space.xs,
         children: [
           for (final preset in tournamentTimePresets)
-            ChoiceChip(
-              showCheckmark: false,
-              label: Text(preset.label),
+            ToggleChip(
+              label: preset.label,
               tooltip: describeTime(preset.time),
               selected: describeTime(preset.time) == current,
               onSelected: (_) => _change(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
 import '../document/document_session.dart';
 import 'gap_hunt.dart';
@@ -8,6 +9,7 @@ import '../board/line_preview.dart';
 import '../board/preview_target.dart';
 import 'replies.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/app_icons.dart';
 
 /// The Replies tab of the reading card: what the opponent plays at the
 /// position on the board, how often, and whether the chapter answers it.
@@ -41,29 +43,20 @@ class RepliesPane extends StatefulWidget {
   State<RepliesPane> createState() => _RepliesPaneState();
 }
 
-class _RepliesPaneState extends State<RepliesPane> {
+class _RepliesPaneState extends State<RepliesPane>
+    with ListeningState<RepliesPane> {
   final _preview = HoverPreview<LinePreview>();
+
+  @override
+  Listenable listenableOf(RepliesPane widget) => widget.replies;
 
   /// A row rebuilt or gone from under the pointer never hears it leave, so
   /// the floated board goes whenever the table does.
   @override
-  void initState() {
-    super.initState();
-    widget.replies.addListener(_leave);
-  }
-
-  @override
-  void didUpdateWidget(RepliesPane old) {
-    super.didUpdateWidget(old);
-    if (old.replies != widget.replies) {
-      old.replies.removeListener(_leave);
-      widget.replies.addListener(_leave);
-    }
-  }
+  void changed() => _leave();
 
   @override
   void dispose() {
-    widget.replies.removeListener(_leave);
     _preview.dispose();
     super.dispose();
   }
@@ -214,7 +207,7 @@ class _Status extends StatelessWidget {
             ),
             OutlinedButton.icon(
               onPressed: gaps.canNextGap ? gaps.nextGap : null,
-              icon: const Icon(Icons.skip_next, size: IconSize.action),
+              icon: const Icon(AppIcons.skip, size: IconSize.action),
               label: const Text('Next gap'),
             ),
           ],
@@ -252,7 +245,7 @@ class _ReplyRow extends StatelessWidget {
     final scheme = theme.colorScheme;
     final muted = TextStyle(color: scheme.onSurfaceVariant);
     return Material(
-      color: marked ? scheme.surfaceContainerHighest : Colors.transparent,
+      color: marked ? scheme.secondaryContainer : Colors.transparent,
       child: PreviewTarget(
         onHover: onHover,
         onLeave: onLeave,
@@ -300,9 +293,7 @@ class _ReplyRow extends StatelessWidget {
       child: Text(
         value ?? 'not in tree',
         style: value == null
-            ? theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              )
+            ? theme.textTheme.labelSmall
             : monoText.copyWith(color: scheme.onSurface),
       ),
     );
@@ -315,7 +306,7 @@ class _ReplyRow extends StatelessWidget {
     final scheme = theme.colorScheme;
     if (row.inRepertoire) {
       return Icon(
-        Icons.check,
+        AppIcons.tick,
         size: IconSize.menu,
         color: scheme.onSurfaceVariant,
       );
@@ -323,9 +314,7 @@ class _ReplyRow extends StatelessWidget {
     if (row.elsewhere case final chapter?) {
       return Text(
         chapter,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: scheme.onSurfaceVariant,
-        ),
+        style: theme.textTheme.labelSmall,
         overflow: TextOverflow.ellipsis,
       );
     }

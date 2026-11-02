@@ -110,7 +110,7 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 200));
     expect(tester.getSize(find.byType(EnginePane)), before);
-    await tester.tap(find.byTooltip('Turn engine off (E)'));
+    await tester.tap(find.byTooltip('Turn engine off'));
     await tester.pump();
     expect(tester.getSize(find.byType(EnginePane)).height, engineBarHeight);
     expect(analysis.enabled, isFalse);
@@ -305,7 +305,7 @@ void main() {
     await analysis.enable();
     await tester.pump();
     expect(find.text('No Stockfish in this build'), findsOneWidget);
-    expect(find.byTooltip('Turn engine on (E)'), findsOneWidget);
+    expect(find.byTooltip('Turn engine on'), findsOneWidget);
   });
 
   testWidgets('the crosshair keeps the threat choice, which the analysis '

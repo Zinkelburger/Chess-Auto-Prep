@@ -90,7 +90,7 @@ void main() {
               find.byWidgetPredicate(
                 (widget) =>
                     widget is IconButton &&
-                    widget.tooltip == 'New opening book',
+                    widget.tooltip == 'New opening book…',
               ),
             )
             .onPressed,
@@ -98,8 +98,8 @@ void main() {
       );
       expect(
         tester
-            .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Use this book'),
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Use this book'),
             )
             .onPressed,
         isNull,
@@ -122,7 +122,7 @@ void main() {
     'creation already confirmed in a dialog waits for reference save',
     (tester) async {
       await show(tester);
-      await tester.tap(find.byTooltip('New opening book'));
+      await tester.tap(find.byTooltip('New opening book…'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).last, 'Next event');
       final held = Completer<SaveResult>();

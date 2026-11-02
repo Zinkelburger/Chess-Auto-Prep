@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../../storage/chapter_files.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/search_field.dart';
+import '../../ui/list_message.dart';
 import '../../ui/theme.dart';
 import 'study_choice.dart';
+import '../../ui/app_icons.dart';
 
 /// The answer of [showStudyPicker]: the study, and the chapter's name when
 /// one chapter is going in (empty for `Chapter N`).
@@ -90,7 +92,7 @@ class _StudyPickerState extends State<_StudyPicker> {
             : 'Add to study',
       ),
       content: SizedBox(
-        width: nameDialogWidth,
+        width: dialogNarrow,
         height: choiceDialogHeight + Space.xl * 2,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -114,20 +116,17 @@ class _StudyPickerState extends State<_StudyPicker> {
             const SizedBox(height: Space.s),
             ListTile(
               dense: true,
-              leading: const Icon(Icons.add, size: IconSize.action),
+              leading: const Icon(AppIcons.add, size: IconSize.action),
               title: const Text('New study…'),
               onTap: () => _newStudy(),
             ),
             Expanded(
               child: matches.isEmpty
-                  ? Padding(
-                      padding: const EdgeInsets.all(Space.m),
-                      child: Text(
-                        widget.studies.isEmpty
-                            ? 'No studies yet'
-                            : 'Nothing matches "$_query".',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
+                  ? ListMessage(
+                      widget.studies.isEmpty
+                          ? 'No studies yet.'
+                          : 'Nothing matches "$_query".',
+                      inset: Space.m,
                     )
                   : ListView.builder(
                       itemCount: matches.length,

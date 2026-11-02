@@ -80,13 +80,6 @@ final class BughouseLab extends ChangeNotifier {
     }
   }
 
-  /// Both halves of an engine's joint action, board 1 first; a sitting
-  /// board keeps its moves.
-  void playJoint(JointMove joint) => playMoves([
-    for (final board in BoardNumber.values)
-      if (joint.on(board) case final uci?) (board, uci),
-  ]);
-
   /// [moves] played in order from the table on screen: an engine line up to
   /// the move clicked. All or nothing: when one no longer plays, none is
   /// played and the line is said not to fit.

@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../storage/settings_store.dart';
+import '../../ui/problem_line.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'setting_controls.dart';
 import 'setting_rows.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// Opens the settings over the workspace. Every change has already
 /// happened by the time it closes; the close button, Esc or outside click dismisses it.
@@ -60,12 +63,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // The shape and the panel colour come from the theme's dialogs.
     return Dialog(
-      backgroundColor: theme.colorScheme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(readingCardRadius),
-        side: BorderSide(color: theme.colorScheme.outline),
-      ),
       child: SizedBox(
         width: settingsDialogWidth,
         height: settingsDialogHeight,
@@ -116,7 +115,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   List<Widget> _saveStatus(ThemeData theme) => [
     if (widget.store.problem case final problem?)
-      _Problem(problem)
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Space.l),
+        child: ProblemLine(problem),
+      )
     else
       Padding(
         padding: const EdgeInsets.symmetric(
@@ -215,11 +217,10 @@ class _TitleBar extends StatelessWidget {
             style: Theme.of(context).textTheme.titleMedium,
           ),
         ),
-        IconButton(
-          icon: const Icon(Icons.close, size: IconSize.action),
+        ToolButton(
+          icon: AppIcons.close,
           tooltip: AppKey.closeDialog.tip('Close'),
           onPressed: onClose,
-          visualDensity: VisualDensity.compact,
         ),
       ],
     ),
@@ -241,14 +242,17 @@ class _Place extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final icon = switch (name) {
-      'Look' => Icons.palette_outlined,
-      'Engine' => Icons.memory_outlined,
-      'Repertoire' => Icons.menu_book_outlined,
-      'Files' => Icons.folder_outlined,
-      'Accounts' => Icons.person_outline,
-      'App' => Icons.settings_outlined,
-      'Shortcuts' => Icons.keyboard_outlined,
-      _ => Icons.tune,
+      'Look' => AppIcons.look,
+      'Engine' => AppIcons.engine,
+      'Repertoire' => AppIcons.book,
+      'Files' => AppIcons.files,
+      'Accounts' => AppIcons.accounts,
+      'App' => AppIcons.settings,
+      'Shortcuts' => AppIcons.keyboard,
+      'Expectimax' => AppIcons.expectimax,
+      'Tactics' => AppIcons.tactics,
+      'Training' => AppIcons.training,
+      _ => AppIcons.settings,
     };
     return Padding(
       padding: const EdgeInsets.only(bottom: Space.xs),
@@ -257,9 +261,7 @@ class _Place extends StatelessWidget {
         button: true,
         child: Material(
           borderRadius: BorderRadius.circular(readingCardRadius),
-          color: selected
-              ? scheme.primary.withValues(alpha: 0.12)
-              : Colors.transparent,
+          color: selected ? scheme.secondaryContainer : Colors.transparent,
           child: InkWell(
             borderRadius: BorderRadius.circular(readingCardRadius),
             onTap: onTap,
@@ -288,26 +290,6 @@ class _Place extends StatelessWidget {
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Problem extends StatelessWidget {
-  const _Problem(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.l, Space.s, Space.l, Space.s),
-      child: Text(
-        text,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.error,
         ),
       ),
     );

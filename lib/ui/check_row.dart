@@ -25,6 +25,7 @@ class CheckRow extends StatelessWidget {
     final row = InkWell(
       onTap: change == null ? null : () => change(!value),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Checkbox(
             value: value,

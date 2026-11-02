@@ -82,7 +82,7 @@ void main() {
 
   testWidgets('Done says the key that does the same', (tester) async {
     await pump(tester);
-    expect(find.byTooltip('Done editing (Ctrl+E)'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Done'), findsOneWidget);
   });
 
   testWidgets('while part of the game is hidden there is no note and no '

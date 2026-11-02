@@ -5,12 +5,15 @@ import 'package:flutter/material.dart';
 import '../../chess/training/training_line.dart';
 import '../../storage/chapter_files.dart';
 import '../../ui/choice_field.dart';
+import '../../ui/list_message.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'trainer.dart';
 import 'trainer_state.dart';
 import 'training_scope.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// One repertoire's outline. The general library stays in the builder.
 class TrainingOutline extends StatefulWidget {
@@ -91,7 +94,7 @@ class _TrainingOutlineState extends State<TrainingOutline> {
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
               onPressed: widget.onImport,
-              icon: const Icon(Icons.file_open_outlined),
+              icon: const Icon(AppIcons.open, size: IconSize.action),
               label: const Text('Import course PGN…'),
             ),
           ),
@@ -104,15 +107,14 @@ class _TrainingOutlineState extends State<TrainingOutline> {
     final trainer = widget.trainer;
     final state = trainer.state;
     if (state is! TrainerReady) {
-      return Padding(
-        padding: const EdgeInsets.all(Space.m),
-        child: Text(
-          trainer.selection.root.isEmpty
-              ? 'Choose a repertoire above, or import a course.'
-              : state is TrainerLoading
-              ? 'Loading chapters…'
-              : 'No trainable chapters available.',
-        ),
+      if (trainer.selection.root.isNotEmpty && state is TrainerLoading) {
+        return const ListMessage.loading('Reading chapters…', inset: Space.m);
+      }
+      return ListMessage(
+        trainer.selection.root.isEmpty
+            ? 'Choose a repertoire above, or import a course.'
+            : 'No chapters with lines to train.',
+        inset: Space.m,
       );
     }
     return ListenableBuilder(
@@ -133,9 +135,11 @@ class _TrainingOutlineState extends State<TrainingOutline> {
               onTap: () => trainer.selection.select(),
             ),
             if (chapters.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(Space.m),
-                child: Text('No chapters or lines match.'),
+              ListMessage(
+                _query.isEmpty
+                    ? 'No chapters with lines to train.'
+                    : 'Nothing matches "${_search.text.trim()}".',
+                inset: Space.m,
               ),
             for (final chapter in chapters) _chapter(state, chapter),
           ],
@@ -169,9 +173,9 @@ class _TrainingOutlineState extends State<TrainingOutline> {
           dense: true,
           contentPadding: const EdgeInsets.only(right: Space.xs),
           selected: selection.chapter == chapter.ref && selection.line == null,
-          leading: IconButton(
+          leading: ToolButton(
+            icon: open ? AppIcons.expanded : AppIcons.collapsed,
             tooltip: open ? 'Collapse chapter' : 'Expand chapter',
-            icon: Icon(open ? Icons.expand_more : Icons.chevron_right),
             onPressed: () => setState(
               () => open
                   ? _expanded.remove(chapter.ref)
@@ -306,11 +310,10 @@ class _TrainingOutlineState extends State<TrainingOutline> {
         rowAction(
           'Read moves and notes',
           () => widget.onRead(state.toRead(line, ReadIn.moves)),
-          busy: false,
         ),
         if (trainable)
           rowAction(
-            review.excluded ? 'Resume line training' : 'Pause line training',
+            review.excluded ? 'Include in training' : 'Exclude from training',
             () => unawaited(
               trainer.changeProgress(
                 state.progress.setExcluded(line, excluded: !review.excluded),

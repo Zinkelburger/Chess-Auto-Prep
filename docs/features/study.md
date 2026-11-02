@@ -5,7 +5,8 @@ writes lines, annotates them, and drills them as line practice. It uses the
 shared board, move tree, engine, document session and autosave system.
 
 Code: `lib/features/study/` (`Studies` owner in `studies.dart`, renames,
-restores and deletes in `study_file_changes.dart`, `StudyPanel`, the send to
+restores and deletes in `study_file_changes.dart`, `StudyPanel` with its
+toolbar's `StudyCommands` in `study_actions.dart`, the send to
 Lichess in `study_sender.dart` and `study_send_dialog.dart`),
 study training controls in `lib/features/trainer/study_training_controls.dart`,
 PGN rules in `lib/chess/pgn/study.dart`, `study_edits.dart`,
@@ -16,7 +17,7 @@ the shared picker in `lib/workspace/document/study_picker.dart`.
 ## Navigate and organize
 
 The sidebar has two views: a searchable **Your studies** picker, and the
-current study's searchable chapter list. **All studies** returns to the picker.
+current study's searchable chapter list. The back arrow (**Back to studies**) returns to the picker.
 Chapter names have full-name tooltips, the active chapter is highlighted and
 revealed on selection, and filtering preserves the original chapter ordinals.
 Drag an ordinal to reorder when the search is empty; **Move to position…** in
@@ -35,14 +36,15 @@ are entered, as Lichess names an imported game. The chapter menu provides
 glyphs and shapes…**, **Clear variations…** and **Delete chapter…**. Changing a starting
 position or clearing material asks for confirmation. The last chapter cannot
 be deleted. The study menu (**Study actions**) provides **New study…**,
-**Import chapters…**, **Rename study…**, **Save study PGN as…**, **Send to
-Lichess…**, **Copy study PGN** and **Delete study…**, plus **Retry study save**
-/ **Retry rename** when a write failed. **Import…** and, with a study open,
-**Send to Lichess…** sit side by side under the toolbar.
+**Rename study…**, **Export study PGN…**, **Copy study PGN** and **Delete
+study…**, plus **Retry save** when a write failed. **Import chapters…** and, with a study open,
+**Send to Lichess…** sit side by side under the toolbar. Actions ▸ File has
+**New study…**, **New chapter…**, **Import chapters…** and **Send to
+Lichess…** too, off where the panel's are.
 
 ## Import and export
 
-**Import…** has three sources: **PGN file**, **Paste PGN** and **Lichess URL**
+**Import chapters…** has three sources: **PGN file**, **Paste PGN** and **Lichess URL**
 (a study or chapter link). Reading a source produces a chapter-count preview before any write. Choose
 **New study** or **Current study**; the destination is captured when the dialog
 opens. Failures retain the typed source and explain how to retry. A replacement
@@ -77,7 +79,7 @@ reason and how many went; **Send again** then goes to the study already made.
 A new study holds at most 64 chapters.
 
 **Copy study PGN** and **Copy chapter PGN** export the respective material.
-**Save study PGN as…** writes a captured snapshot to a chosen folder and never
+**Export study PGN…** writes a captured snapshot to a chosen folder and never
 overwrites an existing file. Other modes use the shared **Add to study** picker
 and the same append command.
 
@@ -96,7 +98,7 @@ shows the chapter among the study's games in the viewer; its **Open in
 Study** comes back.
 
 On Edit the strip under the moves has the glyphs and the comment field;
-**Ctrl+E** turns the switch. A move's menu includes **Comment this move**
+Actions ▸ **Edit** turns the switch too. A move's menu includes **Comment this move**
 and **Add line to study…**, and can be opened by right-click, Shift+F10, or
 the context-menu key while its move token is focused. Move-quality glyphs and
 positional evaluations are separate groups, so choosing `±` keeps an existing
@@ -134,7 +136,7 @@ Deleting a study moves its PGN into `.cap-pgn-history` below the studies folder.
 **Deleted studies** remains visible at the foot of the sidebar, including when
 the active list is empty. It lists recoverable files with **Restore** and
 **Restore as…**. Name collisions never overwrite a current study. Unconfirmed
-restores retain the original operation/revision and offer **Retry restore**,
+restores retain the original operation/revision and offer **Retry save**,
 even when the source recovery file has already moved. Restoring refreshes the
 study list without taking the user away from the current document.
 

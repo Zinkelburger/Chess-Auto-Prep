@@ -104,7 +104,7 @@ Pasted pastedBoard(String text, {required Side side}) {
 }
 
 /// [text] as an analysis board at the position it holds, seen from the
-/// side to move, when it is one FEN and nothing else: what Ctrl+Shift+V
+/// side to move, when it is one FEN and nothing else: what Paste FEN
 /// pastes.
 Pasted pastedPosition(String text) {
   if (text.trim().isEmpty) {

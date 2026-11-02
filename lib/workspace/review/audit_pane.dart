@@ -7,6 +7,10 @@ import '../../chess/fen.dart';
 import '../../ui/theme.dart';
 import 'chapter_audit.dart';
 import '../document/document_session.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/tool_button.dart';
+import '../../ui/toggle_chip.dart';
 
 /// The Audit tab: the chapter's own moves checked against the engine.
 ///
@@ -77,7 +81,7 @@ class _AuditPaneState extends State<AuditPane> {
           if (running)
             FilledButton.icon(
               onPressed: stopping ? null : audit.stop,
-              icon: const Icon(Icons.pause),
+              icon: const Icon(AppIcons.stop, size: IconSize.action),
               label: const Text('Stop'),
             )
           else
@@ -85,22 +89,20 @@ class _AuditPaneState extends State<AuditPane> {
               message: 'Check the chapter\'s moves and the replies it misses',
               child: FilledButton.icon(
                 onPressed: audit.canStart ? () => unawaited(_start()) : null,
-                icon: const Icon(Icons.play_arrow),
+                icon: const Icon(AppIcons.run, size: IconSize.action),
                 label: const Text('Audit'),
               ),
             ),
-          Tooltip(
-            message: 'Also ask ChessDB for good replies (sends positions)',
-            child: FilterChip(
-              label: const Text('ChessDB'),
-              selected: audit.askChessDb,
-              onSelected: running
-                  ? null
-                  : (on) {
-                      if (!mounted) return;
-                      setState(() => audit.askChessDb = on);
-                    },
-            ),
+          ToggleChip(
+            label: 'ChessDB',
+            tooltip: 'Also ask ChessDB for good replies (sends positions)',
+            selected: audit.askChessDb,
+            onSelected: running
+                ? null
+                : (on) {
+                    if (!mounted) return;
+                    setState(() => audit.askChessDb = on);
+                  },
           ),
         ],
       ),
@@ -165,7 +167,7 @@ class _AuditPaneState extends State<AuditPane> {
     }
     return ListView.builder(
       itemCount: findings.length,
-      itemExtent: trainRowHeight,
+      itemExtent: twoLineRowHeight,
       itemBuilder: (context, index) {
         final finding = findings[index];
         return _FindingRow(
@@ -179,15 +181,10 @@ class _AuditPaneState extends State<AuditPane> {
   }
 
   Widget _notKept(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, 0),
-      child: Text(
-        'Dismissals could not be saved; they last only until you audit '
-        'again.',
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: theme.colorScheme.error,
-        ),
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: Space.m),
+      child: ProblemLine(
+        'Could not save the dismissals; they last until you audit again.',
       ),
     );
   }
@@ -265,10 +262,9 @@ class _FindingRow extends StatelessWidget {
                 ],
               ),
             ),
-            IconButton(
-              icon: const Icon(Icons.close, size: IconSize.action),
-              tooltip: 'Dismiss',
-              visualDensity: VisualDensity.compact,
+            ToolButton(
+              icon: AppIcons.close,
+              tooltip: 'Hide this finding',
               onPressed: onDismiss,
             ),
           ],

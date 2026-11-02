@@ -6,10 +6,17 @@ import 'package:intl/intl.dart';
 import '../../storage/disk_usage.dart';
 import '../../storage/master_corpus.dart';
 import '../../ui/confirm_dialog.dart';
+import '../../ui/list_message.dart';
 import '../../ui/number_field.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/progress_line.dart';
 import '../../ui/theme.dart';
 import 'database_library.dart';
 import 'twic_download_dialog.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
+import '../../ui/toggle_chip.dart';
+import '../../ui/field_row.dart';
 
 class DatabasesScreen extends StatelessWidget {
   const DatabasesScreen({
@@ -47,8 +54,7 @@ class DatabasesScreen extends StatelessWidget {
           const SizedBox(height: Space.l),
           _CorpusFilters(library: library),
           const SizedBox(height: Space.m),
-          if (library.activity != DatabaseActivity.idle)
-            const LinearProgressIndicator(),
+          ProgressLine(active: library.activity != DatabaseActivity.idle),
           _status(context),
           const Divider(),
           Expanded(child: _games(context)),
@@ -58,50 +64,47 @@ class DatabasesScreen extends StatelessWidget {
     ),
   );
 
+  /// The page's actions. The top bar already names the mode, so the page
+  /// carries no title of its own.
   Widget _heading(BuildContext context) => Wrap(
-    alignment: WrapAlignment.spaceBetween,
+    spacing: Space.s,
+    runSpacing: Space.s,
     crossAxisAlignment: WrapCrossAlignment.center,
-    spacing: Space.l,
     children: [
-      Text('Databases', style: Theme.of(context).textTheme.titleLarge),
-      Wrap(
-        spacing: Space.s,
-        children: [
-          if (library.offersDownload)
-            Tooltip(
-              message:
-                  'Weekly issues of The Week in Chess from theweekinchess.com',
-              child: FilledButton.icon(
-                icon: const Icon(Icons.download),
-                onPressed: library.activity == DatabaseActivity.importing
-                    ? null
-                    : () => unawaited(showTwicDownload(context, library)),
-                label: const Text('Download TWIC…'),
-              ),
-            ),
-          Tooltip(
-            message: 'Adds a PGN file’s games to the master games',
-            child: OutlinedButton.icon(
-              icon: const Icon(Icons.file_open),
-              onPressed:
-                  library.activity == DatabaseActivity.idle &&
-                      !library.busy &&
-                      library.path != null
-                  ? () => unawaited(library.importFile())
-                  : null,
-              label: const Text('Import PGN…'),
-            ),
+      if (library.offersDownload)
+        Tooltip(
+          message:
+              'Download weekly issues of The Week in Chess into the '
+              'master games',
+          child: FilledButton.icon(
+            icon: const Icon(AppIcons.download, size: IconSize.action),
+            onPressed: library.activity == DatabaseActivity.importing
+                ? null
+                : () => unawaited(showTwicDownload(context, library)),
+            label: const Text('Download TWIC…'),
           ),
-          if (library.places != null) _StorageButton(library: library),
-          IconButton(
-            tooltip: 'Refresh database counts and storage',
-            onPressed: () {
-              unawaited(library.refresh());
-              unawaited(library.measure());
-            },
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
+        ),
+      Tooltip(
+        message: 'Add a PGN file’s games to the master games',
+        child: OutlinedButton.icon(
+          icon: const Icon(AppIcons.open, size: IconSize.action),
+          onPressed:
+              library.activity == DatabaseActivity.idle &&
+                  !library.busy &&
+                  library.path != null
+              ? () => unawaited(library.importFile())
+              : null,
+          label: const Text('Import PGN…'),
+        ),
+      ),
+      if (library.places != null) _StorageButton(library: library),
+      ToolButton(
+        icon: AppIcons.refresh,
+        tooltip: 'Refresh',
+        onPressed: () {
+          unawaited(library.refresh());
+          unawaited(library.measure());
+        },
       ),
     ],
   );
@@ -113,13 +116,16 @@ class DatabasesScreen extends StatelessWidget {
       DatabaseActivity.reading => 'Reading games…',
       DatabaseActivity.idle => '',
     };
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Space.s),
-      child: Text(
-        problem ?? library.message ?? message,
-        style: problem == null
-            ? null
-            : TextStyle(color: Theme.of(context).colorScheme.error),
+    if (problem != null) return ProblemLine(problem);
+    return SizedBox(
+      height: problemLineHeight,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          library.message ?? message,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
     );
   }
@@ -127,14 +133,13 @@ class DatabasesScreen extends StatelessWidget {
   Widget _games(BuildContext context) {
     final games = library.page.games;
     if (games.isEmpty) {
-      return Center(
-        child: Text(
-          library.size.games == 0
-              ? library.offersDownload
-                    ? 'Download TWIC or import a PGN to browse games.'
-                    : 'Import a PGN to add your own games here.'
-              : 'No games match these filters.',
-        ),
+      return ListMessage(
+        library.size.games == 0
+            ? library.offersDownload
+                  ? 'Download TWIC or import a PGN to browse games.'
+                  : 'Import a PGN to add your own games here.'
+            : 'No games match these filters.',
+        inset: 0,
       );
     }
     return ListView.builder(
@@ -268,27 +273,29 @@ class _CorpusFiltersState extends State<_CorpusFilters> {
     runSpacing: Space.s,
     crossAxisAlignment: WrapCrossAlignment.center,
     children: [
-      _field(_player, 'Player', 220),
-      _field(_event, 'Event', 200),
+      _field(_player, 'Player', 186),
+      _field(_event, 'Event', 180),
       _field(_eco, 'ECO', 90),
-      _field(_since, 'From date', 170),
-      const Text('Min Elo'),
+      _field(_since, 'From date', 214),
       SizedBox(
-        width: 160,
-        child: NumberField(
+        width: eloFilterWidth,
+        child: FieldRow(
           label: 'Minimum Elo',
-          value: _elo,
-          min: 0,
-          max: 3500,
-          onChanged: (value) {
-            if (!mounted) return;
-            setState(() => _elo = value);
-            _changed();
-          },
+          child: NumberField(
+            label: 'Minimum Elo',
+            value: _elo,
+            min: 0,
+            max: 3500,
+            onChanged: (value) {
+              if (!mounted) return;
+              setState(() => _elo = value);
+              _changed();
+            },
+          ),
         ),
       ),
-      FilterChip(
-        label: const Text('Strongest first'),
+      ToggleChip(
+        label: 'Strongest first',
         selected: _strongest,
         onSelected: (value) {
           if (!mounted) return;
@@ -321,7 +328,6 @@ class _CorpusFiltersState extends State<_CorpusFilters> {
           controller: controller,
           decoration: InputDecoration(
             labelText: controller == _since ? '$label (YYYY.MM.DD)' : label,
-            prefixIcon: const Icon(Icons.search),
           ),
           onChanged: _changed,
         ),
@@ -381,7 +387,7 @@ class _StorageButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TextButton.icon(
     key: const ValueKey('storage'),
-    icon: const Icon(Icons.storage),
+    icon: const Icon(AppIcons.storage, size: IconSize.action),
     onPressed: () => unawaited(
       showDialog<void>(
         context: context,
@@ -411,7 +417,7 @@ class _StorageDialog extends StatelessWidget {
       return AlertDialog(
         title: Text('Storage · ${formatBytes(_total(library.storage))}'),
         content: SizedBox(
-          width: 480,
+          width: dialogMedium,
           child: ListView(
             shrinkWrap: true,
             children: [
@@ -433,22 +439,18 @@ class _StorageDialog extends StatelessWidget {
                           style: TextStyle(color: muted),
                         ),
                         if (store.removable)
-                          IconButton(
-                            tooltip: 'Delete ${store.name}',
+                          ToolButton(
+                            icon: AppIcons.delete,
+                            tooltip: 'Delete ${store.name}…',
                             onPressed:
                                 library.removing != null || store.bytes == 0
                                 ? null
                                 : () => unawaited(_remove(context, store)),
-                            icon: const Icon(Icons.delete_outline),
                           ),
                       ],
                     ),
                   ),
-              if (library.problem case final problem?)
-                Text(
-                  problem,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
+              if (library.problem case final problem?) ProblemLine(problem),
             ],
           ),
         ),
@@ -465,7 +467,7 @@ class _StorageDialog extends StatelessWidget {
   Future<void> _remove(BuildContext context, StoreUsage store) async {
     final sure = await confirmAction(
       context,
-      title: 'Delete ${store.name}?',
+      title: 'Delete “${store.name}”?',
       message: store.name.startsWith('Leftover')
           ? 'A copy left beside a database the app rebuilds. '
                 'Deleting it frees ${formatBytes(store.bytes)}.'

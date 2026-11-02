@@ -2,8 +2,10 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import 'listening_state.dart';
+import 'menu_entry.dart';
 import 'app_keys.dart';
 import 'theme.dart';
+import 'app_icons.dart';
 
 /// One thing a pane can show, by an identity that never changes — an enum
 /// value, so the pane's body can switch over every tab — what the tab is
@@ -314,16 +316,15 @@ class _PaneTabStripState<K extends Object> extends State<PaneTabStrip<K>>
               menuChildren: [
                 for (final tab in tabs.tabs)
                   if (!tabs.isOpen(tab.id))
-                    MenuItemButton(
-                      onPressed: () => tabs.show(tab.id),
-                      child: Text(tab.title),
-                    ),
+                    MenuEntry(tab.title, () => tabs.show(tab.id)),
               ],
               builder: (context, menu, _) => IconButton(
-                tooltip: widget.onAdd == null ? 'Open tab' : 'New analysis tab',
+                tooltip: widget.onAdd == null
+                    ? 'Open tab'
+                    : 'New analysis board',
                 onPressed:
                     widget.onAdd ?? (menu.isOpen ? menu.close : menu.open),
-                icon: const Icon(Icons.add, size: IconSize.menu),
+                icon: const Icon(AppIcons.add, size: IconSize.menu),
                 visualDensity: VisualDensity.compact,
               ),
             ),
@@ -412,7 +413,7 @@ class _TabSlot<K extends Object> extends StatelessWidget {
       canRequestFocus: false,
       skipTraversal: true,
       onKeyEvent: (node, event) {
-        if (onContextMenu == null || !AppKey.tabMenu.accepts(event)) {
+        if (onContextMenu == null || !AppKey.focusMenu.accepts(event)) {
           return KeyEventResult.ignored;
         }
         final box = context.findRenderObject() as RenderBox;
@@ -489,8 +490,8 @@ class _Tab extends StatelessWidget {
               borderRadius: shape,
               splashFactory: NoSplash.splashFactory,
               highlightColor: Colors.transparent,
-              hoverColor: scheme.onSurface.withValues(alpha: 0.06),
-              focusColor: scheme.onSurface.withValues(alpha: 0.10),
+              hoverColor: hoverTint,
+              focusColor: hoverTint,
               child: Padding(
                 padding: const EdgeInsets.only(left: Space.m, right: Space.xs),
                 child: Row(
@@ -517,7 +518,7 @@ class _Tab extends StatelessWidget {
                         style: ButtonStyle(
                           overlayColor: WidgetStateProperty.resolveWith(
                             (states) => states.contains(WidgetState.focused)
-                                ? scheme.primary.withValues(alpha: 0.25)
+                                ? selectedTint
                                 : Colors.transparent,
                           ),
                           minimumSize: const WidgetStatePropertyAll(
@@ -528,7 +529,7 @@ class _Tab extends StatelessWidget {
                           ),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        icon: const Icon(Icons.close, size: IconSize.menu),
+                        icon: const Icon(AppIcons.close, size: IconSize.menu),
                       )
                     else
                       const SizedBox(width: Space.m),

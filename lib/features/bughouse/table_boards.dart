@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../chess/bughouse/table.dart';
 import '../../chess/pgn/board_shapes.dart';
+import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
 import '../../workspace/board/board_view.dart';
 import 'bughouse_lab.dart';
@@ -48,37 +49,25 @@ class TableBoards extends StatefulWidget {
 /// A reserve piece picked up by a click, for the next square clicked.
 typedef _Picked = ({BoardNumber board, Side side, Role role});
 
-class _TableBoardsState extends State<TableBoards> {
+class _TableBoardsState extends State<TableBoards>
+    with ListeningState<TableBoards> {
   _Picked? _picked;
 
   BughouseLab get _lab => widget.lab;
 
   @override
-  void initState() {
-    super.initState();
-    _lab.addListener(_tableChanged);
-  }
+  Listenable listenableOf(TableBoards widget) => widget.lab;
 
   @override
   void didUpdateWidget(TableBoards oldWidget) {
+    if (oldWidget.lab != _lab) _picked = null;
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.lab != _lab) {
-      oldWidget.lab.removeListener(_tableChanged);
-      _lab.addListener(_tableChanged);
-      _picked = null;
-    }
   }
 
+  /// A move that took the picked-up piece's turn or reserve drops it.
   @override
-  void dispose() {
-    _lab.removeListener(_tableChanged);
-    super.dispose();
-  }
-
-  void _tableChanged() {
-    if (!mounted || _picked == null || _stillPicked(_lab.position) != null) {
-      return;
-    }
+  void changed() {
+    if (_picked == null || _stillPicked(_lab.position) != null) return;
     setState(() => _picked = null);
   }
 

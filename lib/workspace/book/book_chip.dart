@@ -6,6 +6,8 @@ import '../../storage/book_list.dart';
 import '../../ui/choice_dialog.dart';
 import '../../ui/theme.dart';
 import 'books.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// The one control wherever the book is read: the active book's name, which
 /// switches to another book, and a pencil into the Books mode to edit them.
@@ -52,7 +54,7 @@ class BookChip extends StatelessWidget {
                 onPressed: books.books.isEmpty
                     ? onEdit
                     : () => unawaited(_choose(context)),
-                icon: const Icon(Icons.menu_book_outlined, size: IconSize.menu),
+                icon: const Icon(AppIcons.book, size: IconSize.menu),
                 label: Text(
                   active?.name ?? 'No opening book set',
                   maxLines: 1,
@@ -61,12 +63,11 @@ class BookChip extends StatelessWidget {
               ),
             ),
           ),
-          IconButton(
+          ToolButton(
+            icon: AppIcons.edit,
             tooltip: 'Edit opening books',
-            iconSize: IconSize.menu,
-            visualDensity: VisualDensity.compact,
+            size: IconSize.menu,
             onPressed: onEdit,
-            icon: const Icon(Icons.edit_outlined),
           ),
         ],
       );

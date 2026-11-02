@@ -2,9 +2,9 @@
 
 ## Default: finish where the user can see it
 
-Local `main` is the working version the user opens. `origin/main` is the
-published version. `origin/backup/local-main` backs up committed development
-without publishing it. Do not open PRs unless requested.
+Local `main` is the working version the user opens. On GitHub, `origin/dev`
+holds every development commit (the backup of local `main`), and
+`origin/main` is the published version: one squashed commit per publish. Do not open PRs unless requested.
 
 1. Start the task with `python3 scripts/agent_worktree.py <task-name>`. It uses
    current local `main`, including unpublished commits, not stale `origin/main`
@@ -15,7 +15,7 @@ without publishing it. Do not open PRs unless requested.
    `python3 scripts/agent_worktree.py --verify .`.
 3. Run `python3 scripts/agent_integrate.py` from that task worktree. It finds
    the main checkout, serializes integrations, advances it with a fast-forward,
-   pushes `HEAD` to `origin/backup/local-main` and verifies that remote SHA,
+   pushes `HEAD` to `origin/dev` and verifies that remote SHA,
    then removes the task worktree and deletes its branch locally and on origin.
    This is authorized routine completion, not an approval handoff. Pass
    `--keep` to retain the worktree when you will keep working in it; a later

@@ -2,10 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../chess/tournament/result.dart';
+import '../features/tournaments/engine_manager.dart';
 import '../features/tournaments/tournament_run.dart';
 import '../features/tournaments/tournaments_screen.dart';
 import '../storage/chapter_files.dart';
 import '../ui/app_action.dart';
+import '../ui/app_icons.dart';
 import '../ui/screen_keys.dart';
 import '../workspace/workspace.dart';
 import '../workspace/workspace_tabs.dart';
@@ -26,8 +28,34 @@ final class TournamentView extends ModeView {
 
   @override
   Widget list(Widget toggle) => const SizedBox.shrink();
+
+  /// The page's own buttons.
   @override
-  List<AppAction> actions(ModeMenu menu) => [];
+  List<AppAction> actions(ModeMenu menu) => [
+    if (run case final run?) ...[
+      AppAction(
+        'New tournament…',
+        run.running || run.canRetry
+            ? null
+            : () => unawaited(
+                newTournament(menu.context, run, workspace.session.cursor.fen),
+              ),
+        icon: AppIcons.add,
+        group: 'Tournaments',
+      ),
+      AppAction(
+        'Engines…',
+        () => unawaited(manageTournamentEngines(menu.context, run)),
+        group: 'Tournaments',
+      ),
+      AppAction(
+        'Refresh',
+        () => unawaited(run.refresh()),
+        icon: AppIcons.refresh,
+        group: 'Tournaments',
+      ),
+    ],
+  ];
   @override
   Widget screen(Map<ShortcutActivator, VoidCallback> windowKeys) => ScreenKeys(
     bindings: windowKeys,

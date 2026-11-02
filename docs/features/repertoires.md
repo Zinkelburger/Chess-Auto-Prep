@@ -28,7 +28,8 @@ outline (only while a whole-file repertoire chapter is open and no training
 sitting is on the board), then the workspace. When the window is too narrow
 for both, the list and the outline share one column as two pages.
 
-- **List header** — `Your repertoires`, a `+` (`New repertoire`), and
+- **List header** — `Your repertoires`, a `+` (`New repertoire…`, shown once
+  the list has a repertoire), and
   `Search repertoires` (filters names as typed).
 - **Repertoire row** — chevron, name, `3 chapters · Modified 4h ago`; row
   actions `Rename…`, `New chapter…`, `Delete…`. Rows are sorted by name.
@@ -38,25 +39,26 @@ for both, the list and the outline share one column as two pages.
   disabled while another catalog change runs.
 - **List foot** — `Deleted chapters`, which swaps the list for the deleted
   chapters view (`Back to repertoires`, one row per chapter with `Restore`;
-  empty: `Nothing deleted` / `Chapters you delete can be restored here.`).
-- **List states** — `No repertoires yet.` with `New repertoire`;
-  `Nothing matches "q".`; `Could not load repertoires. Please try again.` with
-  `Retry`; a folder that could not be read is named above the list
+  empty: `Chapters you delete can be restored here.`).
+- **List states** — `Reading repertoires…`; `No repertoires yet.` with
+  `New repertoire…`; `Nothing matches "q".`; `Could not read your
+  repertoires.` with `Try again`; a folder that could not be read is named
+  above the list
   (`<name> could not be read: <reason>`).
-- **Outline header** — `Chapters`, a filter toggle `At this position`, a `+`
-  (`New chapter`), and `Find a chapter or line`.
+- **Outline header** — `Chapters`, a filter toggle (`Show only lines through the board position`), a `+`
+  (`New chapter…`, shown once the repertoire has a chapter), and `Find a
+  chapter or line`.
 - **Outline chapter row** — name (bold and accented when open; muted with
   `Proposed` for a draft), `12 lines`, and the chapter's root moves under the
   name when it does not start at the initial position. Lines may be dropped on
   any chapter but the open one.
 - **Outline line rows** — the open chapter's lines; a `⋯` menu with
   `Move to chapter…`, `Rename line…`, `Delete line`, `New chapter…`.
-- **Outline states** — `No chapters yet` / `Create a chapter, then add your
-  moves.`; `No chapter or line matches "q".`; `No lines match this search.`;
-  `No line reaches this position.`; `Empty — add lines to fill this chapter.`;
-  `Some chapters could not be searched.`
-- **Outline foot** — `Version history`; while a cross-file line move is
-  unresolved, `The line move still needs retrying.` with `Retry line move` and
+- **Outline states** — `No chapters yet.` with `New chapter…`; `Nothing
+  matches "q".`; `No line reaches this position.`; `No lines yet.`; `Some
+  chapters could not be searched.`
+- **Outline foot** — `Version history…`; while a cross-file line move is
+  unresolved, `The line move still needs retrying.` with `Retry save` and
   `Discard`.
 - **Workspace** — board, move note card (editable here, including the
   chapter introduction) and the action panes. The builder opens two panes:
@@ -83,7 +85,11 @@ for both, the list and the outline share one column as two pages.
 
 ## Actions
 
-**New repertoire** — list `+` or `New repertoire` → `Create repertoire` name
+Actions ▸ File also has the list's `New repertoire…`, `New chapter…` (off until
+a repertoire is open) and `Import course PGN…`. On the analysis board
+`Train this chapter`, `Next gap` and `Play as Black` are shown off.
+
+**New repertoire** — list `+` or `New repertoire…` → `Create repertoire` name
 dialog → `<name>/Main.pgn` with no side, opened at once (the side question
 follows) → `A repertoire named "X" already exists.` /
 `Could not create the repertoire.`
@@ -143,7 +149,7 @@ is read again, on an undo, or when a line is deleted, put back, moved or
 reordered, even among lines whose headers are alike. A cross-file move
 writes both PGNs and the training files as one recoverable transaction,
 pinning `[LineID]` first; Ctrl+Z restores both chapters. A failed write keeps
-the move for `Retry line move` and blocks other catalog changes until it is
+the move for `Retry save` and blocks other catalog changes until it is
 retried or discarded. Accepting proposed lines from a draft is this move.
 
 **Rename / delete a line** — the line's `⋯`; deletion is undoable with Ctrl+Z.
@@ -211,8 +217,8 @@ time.
 - Audit: `audit.db` (engine lines, so a rerun only asks about new positions),
   `audit_dismissed.db` (dismissals keyed by kind, position and move, so they
   survive renames) and `eval_cache.db`, all in the support folder. When
-  dismissals cannot be saved: `Dismissals could not be saved; they last only
-  until you audit again.`
+  dismissals cannot be saved: `Could not save the dismissals; they last until
+  you audit again.`
 - Search trees and drafts: `.cap-generation/` beside the chapter
   ([generation.md](generation.md)).
 - Course import rules, measured against four Chessable exports

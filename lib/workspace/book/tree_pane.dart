@@ -4,6 +4,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 
 import '../../chess/pgn/move_label.dart' show numberedMoves;
+import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
 import 'repertoire_tree.dart';
 import '../document/document_session.dart';
@@ -12,6 +13,8 @@ import '../board/preview_target.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/list_message.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// The explorer's Book: the active book's chapters as an opening
 /// explorer. For the position on the board, every move any of the book's
@@ -43,32 +46,34 @@ class TreePane extends StatefulWidget {
   State<TreePane> createState() => _TreePaneState();
 }
 
-class _TreePaneState extends State<TreePane> {
+class _TreePaneState extends State<TreePane> with ListeningState<TreePane> {
   final _preview = HoverPreview<LinePreview>();
+
+  @override
+  Listenable listenableOf(TreePane widget) => widget.tree;
 
   /// A row rebuilt or gone from under the pointer never hears it leave, so
   /// the floated board goes whenever the rows do.
   @override
+  void changed() => _leave();
+
+  @override
   void initState() {
     super.initState();
     widget.tree.watch();
-    widget.tree.addListener(_leave);
   }
 
   @override
   void didUpdateWidget(TreePane old) {
     super.didUpdateWidget(old);
     if (old.tree != widget.tree) {
-      old.tree.removeListener(_leave);
       old.tree.unwatch();
       widget.tree.watch();
-      widget.tree.addListener(_leave);
     }
   }
 
   @override
   void dispose() {
-    widget.tree.removeListener(_leave);
     // Ending the free board tells the board's builders, which may not be
     // marked dirty while the framework is unmounting this pane: the tab is
     // let go once the frame is done instead.
@@ -120,7 +125,10 @@ class _TreePaneState extends State<TreePane> {
   }
 
   Widget _body() => switch (widget.tree.state) {
-    TreeReading() => const ListMessage('Reading your book…', inset: Space.m),
+    TreeReading() => const ListMessage.loading(
+      'Reading your book…',
+      inset: Space.m,
+    ),
     TreeNothing(:final sentence) => ListMessage(sentence, inset: Space.m),
     TreeShown(:final rows) => ListView.builder(
       itemCount: rows.length + 1,
@@ -173,19 +181,17 @@ class _Summary extends StatelessWidget {
             ),
           ),
           if (off.isNotEmpty) ...[
-            IconButton(
+            ToolButton(
+              icon: AppIcons.undo,
               tooltip: AppKey.back.tip('Take back'),
-              iconSize: IconSize.menu,
-              visualDensity: VisualDensity.compact,
+              size: IconSize.menu,
               onPressed: tree.back,
-              icon: const Icon(Icons.undo),
             ),
-            IconButton(
+            ToolButton(
+              icon: AppIcons.back,
               tooltip: 'Back to the file',
-              iconSize: IconSize.menu,
-              visualDensity: VisualDensity.compact,
+              size: IconSize.menu,
               onPressed: tree.backToFile,
-              icon: const Icon(Icons.close),
             ),
           ],
         ],
@@ -200,9 +206,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final style = theme.textTheme.labelSmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
+    final style = theme.textTheme.labelSmall;
     return SizedBox(
       height: explorerHeaderHeight,
       child: Row(

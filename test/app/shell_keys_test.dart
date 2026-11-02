@@ -15,7 +15,7 @@ import '../support/viewer_fixture.dart';
 import '../support/window_fixture.dart';
 
 /// The keys the window binds: Enter and Esc through
-/// the variations, Esc out of whatever the user is in, F11, Ctrl+Shift+V
+/// the variations, Esc out of whatever the user is in, F11
 /// and the viewer's Space.
 void main() {
   late WindowFixture w;
@@ -40,15 +40,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> ctrl(
-    WidgetTester tester,
-    LogicalKeyboardKey key, {
-    bool shift = false,
-  }) async {
+  Future<void> ctrl(WidgetTester tester, LogicalKeyboardKey key) async {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
     await tester.sendKeyEvent(key);
-    if (shift) await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
   }
@@ -78,7 +72,8 @@ void main() {
     await w.pumpShell(tester);
     await w.requests.openFile(ref);
     await tester.pumpAndSettle();
-    await ctrl(tester, LogicalKeyboardKey.keyE);
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
     final field = find.descendant(
       of: find.byType(CommentField),
       matching: find.byType(TextField),
@@ -122,7 +117,7 @@ void main() {
     tester,
   ) async {
     await openKid(tester);
-    await ctrl(tester, LogicalKeyboardKey.keyE);
+    await chooseAction(tester, 'Edit');
     expect(find.byType(CommentField), findsOneWidget);
     await key(tester, LogicalKeyboardKey.escape);
     expect(
@@ -155,7 +150,7 @@ void main() {
     expect(w.trainer.recap, isNotNull);
   });
 
-  group('Ctrl+Shift+V', () {
+  group('Actions ▸ Paste FEN', () {
     const fen = '4k3/8/8/8/8/8/4P3/4K3 w - - 0 1';
 
     testWidgets('puts a FEN on a new analysis board, from a chapter', (
@@ -163,7 +158,7 @@ void main() {
     ) async {
       await openKid(tester);
       clipboardHolds(tester, fen);
-      await ctrl(tester, LogicalKeyboardKey.keyV, shift: true);
+      await chooseAction(tester, 'Paste FEN');
       expect(w.session.isScratch, isTrue);
       expect(w.session.cursor.fen, const Fen(fen));
     });
@@ -173,7 +168,7 @@ void main() {
     ) async {
       await openKid(tester);
       clipboardHolds(tester, '1. e4 e5');
-      await ctrl(tester, LogicalKeyboardKey.keyV, shift: true);
+      await chooseAction(tester, 'Paste FEN');
       expect(w.session.source, kidMain);
       expect(find.text('The clipboard holds no FEN.'), findsOneWidget);
     });
@@ -245,8 +240,8 @@ void main() {
       w.session.cursor.forward();
       await tester.pumpAndSettle();
       final here = w.session.cursor.fen;
-      await ctrl(tester, LogicalKeyboardKey.keyE, shift: true);
-      expect(find.text('Set up a position'), findsOneWidget);
+      await chooseAction(tester, 'Edit position…');
+      expect(find.text('Edit position'), findsOneWidget);
       final field = find.widgetWithText(TextField, 'FEN');
       expect(tester.widget<TextField>(field).controller!.text, here.value);
       await tester.enterText(field, fen);
@@ -261,7 +256,7 @@ void main() {
 
     testWidgets('Cancel leaves the board as it was', (tester) async {
       await openKid(tester);
-      await ctrl(tester, LogicalKeyboardKey.keyE, shift: true);
+      await chooseAction(tester, 'Edit position…');
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(w.session.source, kidMain);

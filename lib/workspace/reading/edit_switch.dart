@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../ui/app_keys.dart';
 import '../document/document_session.dart';
+import '../../ui/segments.dart';
 
 /// `Read | Edit` at the foot of the card in the PGN Viewer and Study: the
 /// one control that turns editing on and off there. Reading keeps what is
@@ -16,25 +16,23 @@ class EditSwitch extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: Listenable.merge([session, editing]),
-    builder: (context, _) => SegmentedButton<bool>(
-      segments: [
-        const ButtonSegment(
+    builder: (context, _) => Segments<bool>(
+      segments: const [
+        ButtonSegment(
           value: false,
           label: Text('Read'),
           tooltip: 'Read the game: moves played stay off the file',
         ),
         ButtonSegment(
           value: true,
-          label: const Text('Edit'),
-          tooltip: AppKey.edit.tip('Edit the game: changes save as you go'),
+          label: Text('Edit'),
+          tooltip: 'Edit the game: changes save as you go',
         ),
       ],
-      selected: {editing.value},
-      showSelectedIcon: false,
-      style: const ButtonStyle(visualDensity: VisualDensity.compact),
-      onSelectionChanged: session.chapter == null || session.shownTo != null
+      selected: editing.value,
+      onChanged: session.chapter == null || session.shownTo != null
           ? null
-          : (picked) => editing.value = picked.single,
+          : (picked) => editing.value = picked,
     ),
   );
 }

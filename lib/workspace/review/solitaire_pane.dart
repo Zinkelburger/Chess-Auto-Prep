@@ -7,6 +7,8 @@ import '../../ui/theme.dart';
 import 'solitaire.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/segments.dart';
 
 /// The Solitaire tab: the setup before a start, the guess being made while
 /// one runs, and what was missed once the game is through.
@@ -74,29 +76,27 @@ class _Setup extends StatelessWidget {
         const SizedBox(height: Space.s),
         _Row(
           label: 'Guess for',
-          child: SegmentedButton<Side>(
+          child: Segments<Side>(
             key: const ValueKey('solitaire-side'),
-            showSelectedIcon: false,
             segments: const [
               ButtonSegment(value: Side.white, label: Text('White')),
               ButtonSegment(value: Side.black, label: Text('Black')),
             ],
-            selected: {solitaire.side},
-            onSelectionChanged: (value) => solitaire.setSide(value.first),
+            selected: solitaire.side,
+            onChanged: (value) => solitaire.setSide(value),
           ),
         ),
         const SizedBox(height: Space.s),
         _Row(
           label: 'Start at',
-          child: SegmentedButton<bool>(
+          child: Segments<bool>(
             key: const ValueKey('solitaire-start'),
-            showSelectedIcon: false,
             segments: const [
               ButtonSegment(value: true, label: Text('Beginning')),
               ButtonSegment(value: false, label: Text('Current position')),
             ],
-            selected: {solitaire.fromStart},
-            onSelectionChanged: (value) => solitaire.setFromStart(value.first),
+            selected: solitaire.fromStart,
+            onChanged: (value) => solitaire.setFromStart(value),
           ),
         ),
         const SizedBox(height: Space.s),
@@ -121,7 +121,7 @@ class _Setup extends StatelessWidget {
         FilledButton.icon(
           key: const ValueKey('solitaire-begin'),
           onPressed: count == 0 ? null : solitaire.start,
-          icon: const Icon(Icons.play_arrow),
+          icon: const Icon(AppIcons.run, size: IconSize.action),
           label: const Text('Start solitaire'),
         ),
       ],
@@ -220,14 +220,14 @@ class _Guessing extends StatelessWidget {
         child: OutlinedButton.icon(
           key: const ValueKey('solitaire-hint'),
           onPressed: solitaire.canHint ? solitaire.showHint : null,
-          icon: const Icon(Icons.lightbulb_outline),
+          icon: const Icon(AppIcons.hint, size: IconSize.action),
           label: const Text('Hint'),
         ),
       ),
       OutlinedButton.icon(
         key: const ValueKey('solitaire-reveal'),
         onPressed: solitaire.canReveal ? solitaire.reveal : null,
-        icon: const Icon(Icons.visibility_outlined),
+        icon: const Icon(AppIcons.reveal, size: IconSize.action),
         label: const Text('Give up this move'),
       ),
       Tooltip(
@@ -309,7 +309,7 @@ class _Done extends StatelessWidget {
     spacing: Space.s,
     runSpacing: Space.s,
     children: [
-      FilledButton.icon(
+      OutlinedButton.icon(
         key: const ValueKey('solitaire-copy-pgn'),
         onPressed: () async {
           final pgn = solitaire.reviewPgn;
@@ -318,7 +318,7 @@ class _Done extends StatelessWidget {
           await Clipboard.setData(ClipboardData(text: pgn));
           say('Session PGN copied.', problem: false);
         },
-        icon: const Icon(Icons.copy_outlined),
+        icon: const Icon(AppIcons.copy, size: IconSize.action),
         label: const Text('Copy session PGN'),
       ),
       OutlinedButton(
@@ -328,11 +328,13 @@ class _Done extends StatelessWidget {
       if (onNextGame != null)
         OutlinedButton(onPressed: onNextGame, child: const Text('Next game')),
       if (onAddToStudy != null)
-        OutlinedButton(
+        OutlinedButton.icon(
           onPressed: onAddToStudy,
-          child: const Text('Add to study…'),
+          icon: const Icon(AppIcons.add, size: IconSize.action),
+          label: const Text('Add game to study…'),
         ),
-      TextButton(onPressed: solitaire.stop, child: const Text('Done')),
+      // Done ends the session: the one filled button, never the copy.
+      FilledButton(onPressed: solitaire.stop, child: const Text('Done')),
     ],
   );
 }
@@ -345,7 +347,7 @@ class _Crown extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     children: [
       Icon(
-        Icons.emoji_events_outlined,
+        AppIcons.won,
         size: IconSize.menu,
         color: Theme.of(context).colorScheme.primary,
       ),

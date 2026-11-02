@@ -10,6 +10,7 @@ import '../workspace/workspace_tabs.dart';
 import 'mode.dart';
 import 'mode_view.dart';
 import 'workspace_requests.dart';
+import '../ui/app_icons.dart';
 
 /// Books: the user's books and what is in each, a screen of its own. A
 /// chapter opens in the builder.
@@ -49,6 +50,11 @@ final class BooksView extends ModeView {
 
   @override
   List<AppAction> actions(ModeMenu menu) => [
-    AppAction('New opening book', menu.dialogs.newBook, group: 'Opening books'),
+    AppAction(
+      'New opening book…',
+      menu.dialogs.newBook,
+      icon: AppIcons.add,
+      group: 'Opening books',
+    ),
   ];
 }

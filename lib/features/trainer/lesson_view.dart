@@ -17,7 +17,10 @@ import 'lesson.dart';
 import 'trainer.dart';
 import 'trainer_state.dart';
 import 'trainer_words.dart';
+import '../../ui/listening_state.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/problem_line.dart';
 
 /// The Train tab while a sitting runs: the line and how far the sitting has
 /// to go, what the lesson wants now, the moves played so far with the note
@@ -48,7 +51,8 @@ class LessonView extends StatefulWidget {
   State<LessonView> createState() => _LessonViewState();
 }
 
-class _LessonViewState extends State<LessonView> {
+class _LessonViewState extends State<LessonView>
+    with ListeningState<LessonView> {
   final _focus = FocusNode(debugLabel: 'lesson');
 
   /// The line whose moves and notes are being read instead of the moves so
@@ -61,9 +65,11 @@ class _LessonViewState extends State<LessonView> {
   }
 
   @override
+  Listenable listenableOf(LessonView widget) => widget.lesson;
+
+  @override
   void initState() {
     super.initState();
-    widget.lesson.addListener(_lessonChanged);
     // The keys are the lesson's from the start. Autofocus would leave them
     // with the workspace, which holds the focus already.
     _focus.requestFocus();
@@ -73,8 +79,6 @@ class _LessonViewState extends State<LessonView> {
   void didUpdateWidget(LessonView old) {
     super.didUpdateWidget(old);
     if (old.lesson == widget.lesson) return;
-    old.lesson.removeListener(_lessonChanged);
-    widget.lesson.addListener(_lessonChanged);
     // A new sitting over this one, from the recap's buttons, takes the keys
     // too, wherever the focus went meanwhile.
     _focus.requestFocus();
@@ -82,15 +86,15 @@ class _LessonViewState extends State<LessonView> {
 
   @override
   void dispose() {
-    widget.lesson.removeListener(_lessonChanged);
     _focus.dispose();
     super.dispose();
   }
 
   /// Once the lesson stops asking, the keys go back to it: Space, the
   /// ratings and ↓ are the lesson's, not letters of a move.
-  void _lessonChanged() {
-    if (!mounted || askingFor(widget.lesson)) return;
+  @override
+  void changed() {
+    if (askingFor(widget.lesson)) return;
     if (widget.moves.focus.hasFocus) _focus.requestFocus();
   }
 
@@ -203,7 +207,7 @@ class _OnLine extends StatelessWidget {
               ? 'Study position'
               : trainer.lessonToRead?.place == ReadIn.moves
               ? 'Read line'
-              : 'Open in Builder',
+              : 'Open in builder',
         ),
       ),
     );
@@ -473,18 +477,12 @@ class _Control extends StatelessWidget {
         asked: !short,
       ),
       SavingLine() => Text('Saving…', style: text.bodySmall),
-      LineNotSaved(:final failure) => Row(
-        children: [
-          Expanded(
-            child: Text(
-              progressProblem(failure, doing: 'save the rating'),
-              style: text.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.error,
-              ),
-            ),
-          ),
-          TextButton(onPressed: lesson.retry, child: const Text('Try again')),
-        ],
+      LineNotSaved(:final failure) => ProblemLine(
+        progressProblem(failure, doing: 'save the rating'),
+        action: OutlinedButton(
+          onPressed: lesson.retry,
+          child: const Text('Try again'),
+        ),
       ),
       _ => const SizedBox(height: Space.xl),
     };
@@ -585,21 +583,15 @@ class _Footer extends StatelessWidget {
               tooltip: 'Line actions',
               children: [
                 if (onBuilder != null)
-                  MenuItemButton(
-                    onPressed: onBuilder,
-                    child: const Text('Open in Builder'),
+                  rowAction(
+                    'Open in builder',
+                    onBuilder,
+                    icon: AppIcons.openElsewhere,
                   ),
-                MenuItemButton(
-                  onPressed: onPeek,
-                  child: const Text('View moves and notes'),
-                ),
-                MenuItemButton(
-                  onPressed: () => unawaited(lesson.exclude()),
-                  child: Text(
-                    trainer.selection.active
-                        ? 'Pause line training'
-                        : 'Exclude from training',
-                  ),
+                rowAction('View moves and notes', onPeek),
+                rowAction(
+                  'Exclude from training',
+                  () => unawaited(lesson.exclude()),
                 ),
               ],
             ),

@@ -7,6 +7,8 @@ import 'action_layout.dart';
 import 'action_panes.dart';
 import 'review/audit_pane.dart';
 import 'explorer/explorer.dart';
+import '../ui/app_action.dart';
+import '../ui/app_icons.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import 'board/board_claim.dart';
@@ -58,11 +60,11 @@ class WorkspaceView extends StatelessWidget {
   final ActionLayout? layout;
 
   /// Whether the edit strip is open. The shell owns it: the Actions menu
-  /// and Ctrl+E turn it, and the strip's Done turns it off.
+  /// turns it, and the strip's Done turns it off.
   final ValueNotifier<bool> editing;
 
   /// The words and focus of the move field under the board. The shell owns
-  /// them: its `/` focuses the field and a lesson types into it.
+  /// them: a lesson types into it.
   final MoveEntry moves;
 
   /// What the mode on screen and the shell add.
@@ -252,13 +254,10 @@ class _Tabbed extends StatelessWidget {
         session: workspace.session,
         moveMenu: (path) => [
           if (hooks.onAnnotate != null)
-            MenuItemButton(
-              onPressed: () {
-                workspace.session.cursor.goTo(path);
-                hooks.onAnnotate!();
-              },
-              child: const Text('Comment this move'),
-            ),
+            AppAction('Comment this move', () {
+              workspace.session.cursor.goTo(path);
+              hooks.onAnnotate!();
+            }, icon: AppIcons.comment),
           ...?hooks.moveMenu?.call(path),
         ],
         heading: hooks.header ? _heading() : null,

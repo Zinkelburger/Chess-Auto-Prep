@@ -109,10 +109,10 @@ void main() {
       await activate(tester, 'e7');
       await activate(tester, 'e8');
       await tester.pumpAndSettle();
-      for (final piece in ['queen', 'rook', 'bishop', 'knight']) {
+      for (final piece in ['Queen', 'Rook', 'Bishop', 'Knight']) {
         expect(find.text(piece), findsOneWidget);
       }
-      await tester.tap(find.text('knight'));
+      await tester.tap(find.text('Knight'));
       await tester.pumpAndSettle();
       expect(played, ['e7e8n']);
       semantics.dispose();
@@ -128,7 +128,7 @@ void main() {
     await activate(tester, 'e8');
     await tester.pumpAndSettle();
     await pump(tester);
-    await tester.tap(find.text('queen'));
+    await tester.tap(find.text('Queen'));
     await tester.pumpAndSettle();
     expect(played, isEmpty);
     semantics.dispose();

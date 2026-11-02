@@ -9,6 +9,9 @@ import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/tree_edit.dart' show positionOf;
 import '../../storage/finds_store.dart';
 import '../../ui/choice_field.dart';
+import '../../ui/list_message.dart';
+import '../../ui/list_row.dart';
+import '../../ui/problem_line.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
 import '../../ui/toggle_chip.dart';
@@ -16,6 +19,8 @@ import '../document/document_session.dart';
 import 'finds.dart';
 import '../board/line_preview.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/segments.dart';
+import '../../ui/pane_header.dart';
 
 /// The Positions column: everything the searches have pointed out, one row
 /// a position, in the column a mode keeps its own list in.
@@ -154,23 +159,31 @@ class _FindsPanelState extends State<FindsPanel> {
         builder: (context, _) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Toolbar(
-              chapter: _chapterPositions == null
-                  ? null
-                  : ToggleChip(
-                      label: 'This chapter',
-                      selected: _thisChapter,
-                      onSelected: _showThisChapter,
-                    ),
+            PaneHeader(
+              'Positions',
+              actions: [
+                if (_chapterPositions != null)
+                  ToggleChip(
+                    label: 'This chapter',
+                    selected: _thisChapter,
+                    onSelected: _showThisChapter,
+                  ),
+              ],
               trailing: widget.trailing,
             ),
             _Order(finds: finds),
             _Kinds(finds: finds),
             _CountLine(finds: finds),
             if (finds.canRetry)
-              TextButton(
-                onPressed: () => unawaited(finds.retry()),
-                child: const Text('Retry saving positions'),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Space.m),
+                child: ProblemLine(
+                  'Could not save the positions.',
+                  action: OutlinedButton(
+                    onPressed: () => unawaited(finds.retry()),
+                    child: const Text('Retry save'),
+                  ),
+                ),
               ),
             Expanded(child: _list(context, finds)),
           ],
@@ -182,22 +195,17 @@ class _FindsPanelState extends State<FindsPanel> {
   Widget _list(BuildContext context, Finds finds) {
     final shown = finds.shown;
     if (shown.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(Space.l),
-        child: Text(
-          finds.all.isEmpty
-              ? 'Nothing found yet. Run a search from the Expectimax tab; '
-                    'what it points out is listed here.'
-              : finds.narrowed
-              ? 'None in this chapter.'
-              : 'None of these kinds.',
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
+      return ListMessage(
+        finds.all.isEmpty
+            ? 'What a search from the Expectimax tab finds is listed here.'
+            : finds.narrowed
+            ? 'None in this chapter.'
+            : 'None of these kinds.',
       );
     }
     return ListView.builder(
       itemCount: shown.length,
-      itemExtent: trainRowHeight,
+      itemExtent: twoLineRowHeight,
       itemBuilder: (context, at) {
         final kept = shown[at];
         return _FindRow(
@@ -217,33 +225,6 @@ class _FindsPanelState extends State<FindsPanel> {
   }
 }
 
-/// The column's name, the chapter switch and the host's controls in the
-/// corner.
-class _Toolbar extends StatelessWidget {
-  const _Toolbar({required this.chapter, required this.trailing});
-
-  final Widget? chapter;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.s, 0),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            'Positions',
-            style: Theme.of(context).textTheme.labelSmall,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        ?chapter,
-        ?trailing,
-      ],
-    ),
-  );
-}
-
 class _Order extends StatelessWidget {
   const _Order({required this.finds});
 
@@ -252,7 +233,7 @@ class _Order extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, 0),
-    child: SegmentedButton<FindOrder>(
+    child: Segments<FindOrder>(
       segments: const [
         ButtonSegment(
           value: FindOrder.worth,
@@ -270,15 +251,9 @@ class _Order extends StatelessWidget {
           tooltip: 'The last found first',
         ),
       ],
-      selected: {finds.order},
-      showSelectedIcon: false,
-      style: const ButtonStyle(
-        visualDensity: VisualDensity.compact,
-        padding: WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: Space.xs),
-        ),
-      ),
-      onSelectionChanged: (picked) => finds.sortBy(picked.single),
+      selected: finds.order,
+      narrow: true,
+      onChanged: (picked) => finds.sortBy(picked),
     ),
   );
 }
@@ -329,15 +304,7 @@ class _CountLine extends StatelessWidget {
       FindsUnsaved() => ' · search positions not saved',
       null => '',
     };
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, Space.xs),
-      child: Text(
-        '$count$last',
-        style: Theme.of(context).textTheme.labelSmall,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
+    return CountLine('$count$last');
   }
 
   static String _positions(int n) => n == 1 ? '1 position' : '$n positions';
@@ -380,58 +347,39 @@ class _FindRow extends StatelessWidget {
     return MouseRegion(
       onEnter: (_) => onHover(_anchor(context)),
       onExit: (_) => onLeave(),
-      child: Material(
-        color: open ? scheme.secondaryContainer : Colors.transparent,
-        child: InkWell(
-          onTap: onOpen,
-          child: Padding(
-            padding: const EdgeInsets.only(left: Space.m, right: Space.xs),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text.rich(
-                        TextSpan(
-                          children: [
-                            TextSpan(
-                              text: displaySan(context, keyMoveText(kept)),
-                              style: monoText.copyWith(color: scheme.onSurface),
-                            ),
-                            TextSpan(text: '  ${kindName(find.kind)}'),
-                          ],
-                        ),
-                        style: theme.textTheme.bodyMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        findNumbers(kept),
-                        style: theme.textTheme.labelSmall,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+      child: ListRow(
+        selected: open,
+        onTap: onOpen,
+        height: null,
+        menu: [
+          if (onTrain case final train?) rowAction('Train this line', train),
+          rowAction('Remove', onRemove),
+        ],
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: displaySan(context, keyMoveText(kept)),
+                    style: monoText.copyWith(color: scheme.onSurface),
                   ),
-                ),
-                RowActions(
-                  children: [
-                    if (onTrain case final train?)
-                      MenuItemButton(
-                        onPressed: train,
-                        child: const Text('Train this line'),
-                      ),
-                    MenuItemButton(
-                      onPressed: onRemove,
-                      child: const Text('Remove'),
-                    ),
-                  ],
-                ),
-              ],
+                  TextSpan(text: '  ${kindName(find.kind)}'),
+                ],
+              ),
+              style: theme.textTheme.bodyMedium,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-          ),
+            Text(
+              findNumbers(kept),
+              style: theme.textTheme.labelSmall,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
       ),
     );

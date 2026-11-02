@@ -278,59 +278,6 @@ final class Books extends ChangeNotifier {
     });
   }
 
-  /// A chapter file was renamed or moved from [from] to [to]: every book
-  /// that had it has it where it went.
-  void movedFile(String from, String to) {
-    final was = bookPath(_root, from);
-    final now = bookPath(_root, to);
-    if (was == null || now == null) return;
-    _rewrite(
-      (book) => book.copyWith(
-        chapters: {
-          for (final chapter in book.chapters)
-            chapter.path == was ? BookChapter(now, chapter.section) : chapter,
-        },
-      ),
-    );
-  }
-
-  /// A repertoire folder was renamed from [from] to [to].
-  void movedFolder(String from, String to) {
-    final was = bookPath(_root, from);
-    final now = bookPath(_root, to);
-    if (was == null || now == null) return;
-    String moved(String path) => path == was
-        ? now
-        : (path.startsWith('$was/')
-              ? '$now${path.substring(was.length)}'
-              : path);
-    _rewrite(
-      (book) => book.copyWith(
-        repertoires: {for (final folder in book.repertoires) moved(folder)},
-        chapters: {
-          for (final chapter in book.chapters)
-            BookChapter(moved(chapter.path), chapter.section),
-        },
-      ),
-    );
-  }
-
-  /// The chapter [from] of the course file at [path] is now called [to].
-  void renamedSection(String path, String from, String to) {
-    final at = bookPath(_root, path);
-    if (at == null) return;
-    _rewrite(
-      (book) => book.copyWith(
-        chapters: {
-          for (final chapter in book.chapters)
-            chapter.path == at && chapter.section == from
-                ? BookChapter(at, to)
-                : chapter,
-        },
-      ),
-    );
-  }
-
   void _rewrite(Book Function(Book book) change) => _apply(
     (list) => BookList(
       books: [for (final book in list.books) change(book)],

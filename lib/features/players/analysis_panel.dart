@@ -8,6 +8,7 @@ import '../../chess/players/player.dart';
 import '../../ui/choice_dialog.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
+import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
 import 'analysis_filters.dart';
 import 'analysis_rows.dart';
@@ -20,6 +21,12 @@ import 'player_hunt.dart';
 import 'player_picker.dart';
 import 'players.dart';
 import '../../ui/list_message.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/progress_line.dart';
+import '../../ui/segments.dart';
+import '../../ui/tool_button.dart';
+import '../../ui/pane_header.dart';
 
 /// The Player analysis column: who is being prepared for and where their
 /// games stand, the colour they are looked at from, then the search and the
@@ -55,7 +62,8 @@ class AnalysisPanel extends StatefulWidget {
   State<AnalysisPanel> createState() => _AnalysisPanelState();
 }
 
-class _AnalysisPanelState extends State<AnalysisPanel> {
+class _AnalysisPanelState extends State<AnalysisPanel>
+    with ListeningState<AnalysisPanel> {
   late final _search = TextEditingController(text: widget.analysis.query);
   bool _filtersOpen = false;
 
@@ -65,30 +73,17 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
   PlayerAnalysis get owner => widget.analysis;
 
   @override
-  void initState() {
-    super.initState();
-    owner.addListener(_followQuery);
-  }
-
-  @override
-  void didUpdateWidget(AnalysisPanel old) {
-    super.didUpdateWidget(old);
-    if (old.analysis != widget.analysis) {
-      old.analysis.removeListener(_followQuery);
-      owner.addListener(_followQuery);
-      _followQuery();
-    }
-  }
+  Listenable listenableOf(AnalysisPanel widget) => widget.analysis;
 
   @override
   void dispose() {
-    owner.removeListener(_followQuery);
     _search.dispose();
     super.dispose();
   }
 
   /// Another player chosen clears the search; the box says so.
-  void _followQuery() {
+  @override
+  void changed() {
     if (owner.query.isEmpty && _search.text.isNotEmpty) _search.clear();
   }
 
@@ -136,11 +131,10 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
               if (player != null)
                 _menu(player)
               else if (widget.players.players.isNotEmpty)
-                IconButton(
-                  icon: const Icon(Icons.add, size: IconSize.action),
-                  tooltip: 'Add player',
+                ToolButton(
+                  icon: AppIcons.add,
+                  tooltip: 'Add player…',
                   onPressed: _add,
-                  visualDensity: VisualDensity.compact,
                 ),
             ],
             trailing: widget.trailing,
@@ -165,25 +159,28 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
   Widget _menu(Player player) => RowActions(
     tooltip: 'Player actions',
     children: [
-      MenuItemButton(onPressed: _choose, child: const Text('Change player…')),
+      rowAction('Change player…', _choose),
       // Only a player with an account has games to download.
       if (player.accounts.isNotEmpty)
-        MenuItemButton(
-          onPressed: owner.busy ? null : () => unawaited(_getGames(player)),
-          child: const Text('Get games…'),
+        rowAction(
+          'Get games…',
+          () => unawaited(_getGames(player)),
+          busy: owner.busy,
+          icon: AppIcons.download,
         ),
-      MenuItemButton(
-        onPressed: owner.busy ? null : widget.onImport,
-        child: const Text('Add PGN…'),
+      rowAction(
+        'Add PGN…',
+        widget.onImport,
+        busy: owner.busy,
+        icon: AppIcons.open,
       ),
-      MenuItemButton(
-        onPressed: owner.busy ? null : () => unawaited(owner.select(player)),
-        child: const Text('Reload saved games'),
+      rowAction(
+        'Refresh',
+        () => unawaited(owner.select(player)),
+        busy: owner.busy,
+        icon: AppIcons.refresh,
       ),
-      MenuItemButton(
-        onPressed: widget.onDirectory,
-        child: const Text('Players & prep'),
-      ),
+      rowAction('Players & prep', widget.onDirectory),
     ],
   );
 
@@ -202,15 +199,14 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
         if (corpus != null && corpus.games.isNotEmpty) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(Space.m, 0, Space.m, Space.s),
-            child: SegmentedButton<Side>(
+            child: Segments<Side>(
               segments: const [
                 ButtonSegment(value: Side.white, label: Text('As White')),
                 ButtonSegment(value: Side.black, label: Text('As Black')),
               ],
-              selected: {owner.side},
-              showSelectedIcon: false,
-              style: _segments,
-              onSelectionChanged: (v) => owner.setSide(v.single),
+              selected: owner.side,
+              narrow: true,
+              onChanged: (v) => owner.setSide(v),
             ),
           ),
           Expanded(child: _lists(player)),
@@ -234,7 +230,7 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
           ),
         ),
         SliverToBoxAdapter(
-          child: _CountLine(
+          child: _GameCount(
             games: shown.length,
             filters: AnalysisFilters.active(owner),
             filtersOpen: _filtersOpen,
@@ -305,7 +301,7 @@ extension on _AnalysisPanelState {
       )
     else
       SliverFixedExtentList.builder(
-        itemExtent: puzzleRowHeight,
+        itemExtent: twoLineRowHeight,
         itemCount: indexes.length,
         itemBuilder: (context, i) => PlayerGameRow(
           game: owner.corpus!.games[indexes[i]],
@@ -350,12 +346,6 @@ extension on _AnalysisPanelState {
     ];
   }
 }
-
-/// A switch in the column, as small as the rows under it.
-const _segments = ButtonStyle(
-  visualDensity: VisualDensity.compact,
-  padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: Space.xs)),
-);
 
 /// The mode's name, or the chosen player's, with the column's actions and
 /// the host's toggle in the corner.
@@ -403,9 +393,6 @@ class _Status extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final wrong = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.error,
-    );
     final status = analysis.status;
     return Padding(
       padding: const EdgeInsets.fromLTRB(Space.m, 0, Space.m, Space.s),
@@ -429,15 +416,15 @@ class _Status extends StatelessWidget {
                 ),
               ],
             ),
-            const LinearProgressIndicator(minHeight: progressLineHeight),
+            const ProgressLine(),
           ] else if (status != null)
             Text(status, style: theme.textTheme.labelSmall),
           if (analysis.error case final error?) ...[
-            Text(error, style: wrong),
+            ProblemLine(error),
             Wrap(
               spacing: Space.s,
               children: [
-                TextButton(
+                OutlinedButton(
                   onPressed: analysis.busy ? null : analysis.retry,
                   child: const Text('Try again'),
                 ),
@@ -463,7 +450,7 @@ class _Status extends StatelessWidget {
               ],
             ),
           ],
-          for (final warning in analysis.warnings) Text(warning, style: wrong),
+          for (final warning in analysis.warnings) ProblemLine(warning),
         ],
       ),
     );
@@ -491,11 +478,23 @@ class _NoGames extends StatelessWidget {
       runSpacing: Space.s,
       children: [
         if (canDownload)
-          FilledButton(onPressed: onDownload, child: const Text('Get games')),
+          FilledButton.icon(
+            onPressed: onDownload,
+            icon: const Icon(AppIcons.download, size: IconSize.action),
+            label: const Text('Get games…'),
+          ),
         if (canDownload)
-          OutlinedButton(onPressed: onImport, child: const Text('Add PGN…'))
+          OutlinedButton.icon(
+            onPressed: onImport,
+            icon: const Icon(AppIcons.open, size: IconSize.action),
+            label: const Text('Add PGN…'),
+          )
         else
-          FilledButton(onPressed: onImport, child: const Text('Add PGN…')),
+          FilledButton.icon(
+            onPressed: onImport,
+            icon: const Icon(AppIcons.open, size: IconSize.action),
+            label: const Text('Add PGN…'),
+          ),
       ],
     ),
   );
@@ -503,8 +502,8 @@ class _NoGames extends StatelessWidget {
 
 /// How many games the colour, the search and the filters let through, with
 /// the way to the filters beside it.
-class _CountLine extends StatelessWidget {
-  const _CountLine({
+class _GameCount extends StatelessWidget {
+  const _GameCount({
     required this.games,
     required this.filters,
     required this.filtersOpen,
@@ -519,27 +518,16 @@ class _CountLine extends StatelessWidget {
   final VoidCallback onFilters;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.xs, 0),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            '$games ${games == 1 ? 'game' : 'games'}',
-            style: Theme.of(context).textTheme.labelSmall,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        TextButton.icon(
-          onPressed: onFilters,
-          icon: Icon(
-            filtersOpen ? Icons.expand_less : Icons.expand_more,
-            size: IconSize.action,
-          ),
-          iconAlignment: IconAlignment.end,
-          label: Text(filters == 0 ? 'Filters' : 'Filters ($filters)'),
-        ),
-      ],
+  Widget build(BuildContext context) => CountLine(
+    '$games ${games == 1 ? 'game' : 'games'}',
+    action: TextButton.icon(
+      onPressed: onFilters,
+      icon: Icon(
+        filtersOpen ? AppIcons.showLess : AppIcons.showMore,
+        size: IconSize.action,
+      ),
+      iconAlignment: IconAlignment.end,
+      label: Text(filters == 0 ? 'Filters' : 'Filters ($filters)'),
     ),
   );
 }
@@ -560,10 +548,10 @@ class _ListSwitch extends SliverPersistentHeaderDelegate {
   final Color color;
 
   @override
-  double get minExtent => trainRowHeight;
+  double get minExtent => twoLineRowHeight;
 
   @override
-  double get maxExtent => trainRowHeight;
+  double get maxExtent => twoLineRowHeight;
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlaps) =>
@@ -579,9 +567,7 @@ class _ListSwitch extends SliverPersistentHeaderDelegate {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SegmentedButton<PlayerList>(
-                  showSelectedIcon: false,
-                  style: _segments,
+                Segments<PlayerList>(
                   segments: const [
                     ButtonSegment(
                       value: PlayerList.openings,
@@ -596,8 +582,9 @@ class _ListSwitch extends SliverPersistentHeaderDelegate {
                       label: Text('Findings'),
                     ),
                   ],
-                  selected: {list},
-                  onSelectionChanged: (v) => onChanged(v.single),
+                  selected: list,
+                  narrow: true,
+                  onChanged: (v) => onChanged(v),
                 ),
               ],
             ),

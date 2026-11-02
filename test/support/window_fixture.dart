@@ -337,3 +337,25 @@ final class ScriptedDraftQuestion implements DraftQuestion {
   @override
   void withdraw() {}
 }
+
+/// Opens the top bar's Actions menu and takes [label] from it.
+Future<void> chooseAction(WidgetTester tester, String label) async {
+  await tester.tap(find.text('Actions'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(label).last);
+  await tester.pumpAndSettle();
+}
+
+/// Actions ▸ Panels ▸ [entry]: `Positions`, or `Back to the list`.
+Future<void> choosePanel(WidgetTester tester, String entry) async {
+  await tester.tap(find.text('Actions'));
+  await tester.pumpAndSettle();
+  final panels = find.widgetWithText(SubmenuButton, 'Panels');
+  await tester.ensureVisible(panels);
+  await tester.tap(panels);
+  await tester.pumpAndSettle();
+  final item = find.widgetWithText(MenuItemButton, entry);
+  await tester.ensureVisible(item);
+  await tester.tap(item);
+  await tester.pumpAndSettle();
+}

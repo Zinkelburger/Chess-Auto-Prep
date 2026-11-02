@@ -15,7 +15,7 @@ import 'engine_settings.dart';
 import 'engine_status.dart';
 import '../board/line_preview.dart';
 import '../board/preview_target.dart';
-import '../../ui/app_keys.dart';
+import '../../ui/app_icons.dart';
 
 /// The engine's lines for the position on the board, laid out as the old
 /// app's engine bar: a labelled sliding switch and the engine's status —
@@ -216,9 +216,7 @@ class _Header extends StatelessWidget {
       child: Row(
         children: [
           Tooltip(
-            message: AppKey.engine.tip(
-              analysis.enabled ? 'Turn engine off' : 'Turn engine on',
-            ),
+            message: analysis.enabled ? 'Turn engine off' : 'Turn engine on',
             child: Semantics(
               label: 'Engine',
               child: EngineSwitch(
@@ -247,7 +245,7 @@ class _Header extends StatelessWidget {
             ),
           ),
           _HeaderToggle(
-            icon: Icons.gps_fixed,
+            icon: AppIcons.threat,
             tooltip: analysis.threatShown ? 'Hide threat' : 'Show threat',
             selected: analysis.threatShown,
             onPressed: analysis.enabled
@@ -261,7 +259,7 @@ class _Header extends StatelessWidget {
                 : null,
           ),
           _HeaderToggle(
-            icon: Icons.settings,
+            icon: AppIcons.settings,
             tooltip: settingsOpen.value ? 'Show lines' : 'Engine settings',
             selected: settingsOpen.value,
             onPressed: () => settingsOpen.value = !settingsOpen.value,
@@ -422,7 +420,7 @@ class _LineRowState extends State<_LineRow> {
           ? IconButton(
               tooltip: _expanded ? 'Collapse line' : 'Show full line',
               icon: Icon(
-                _expanded ? Icons.expand_less : Icons.expand_more,
+                _expanded ? AppIcons.showLess : AppIcons.showMore,
                 size: IconSize.menu,
               ),
               padding: EdgeInsets.zero,

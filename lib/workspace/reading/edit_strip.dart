@@ -9,11 +9,13 @@ import '../../ui/listening_state.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/theme.dart';
 import 'comment_field.dart';
-import '../document/copy_name_dialog.dart';
+import '../document/save_copy.dart';
 import '../document/document_saver.dart';
 import '../document/document_session.dart';
 import '../document/session_results.dart';
 import '../../ui/app_keys.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// Everything about changing the document, under the moves: Done, Undo, the
 /// save state, the six glyphs and the note on the move the board is on.
@@ -126,7 +128,7 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
   }
 
   Future<void> _saveCopy() async {
-    final name = await showCopyNameDialog(context);
+    final name = await askCopyName(context);
     if (name == null || !mounted) return;
     final result = await widget.session.saveCopy(name);
     if (!mounted) return;
@@ -211,27 +213,35 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
     );
   }
 
+  /// Whether the strip offers Save: edits are held off the file.
+  bool get _held => widget.session.hasHeldEdits || widget.session.holdsEdits;
+
   Widget _stateRow(bool editing, SaveState state) => Row(
     children: [
       if (editing) ...[
         if (widget.done) ...[
-          Tooltip(
-            message: AppKey.edit.tip('Done editing'),
-            child: FilledButton(
-              onPressed: () => widget.editing.value = false,
-              style: FilledButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-              ),
-              child: const Text('Done'),
-            ),
-          ),
+          // Save, while there is something to save, is the filled one.
+          _held
+              ? OutlinedButton(
+                  onPressed: () => widget.editing.value = false,
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  child: const Text('Done'),
+                )
+              : FilledButton(
+                  onPressed: () => widget.editing.value = false,
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  child: const Text('Done'),
+                ),
           const SizedBox(width: Space.s),
         ],
-        IconButton(
-          onPressed: widget.session.canUndo ? _undo : null,
-          icon: const Icon(Icons.undo, size: IconSize.action),
+        ToolButton(
+          icon: AppIcons.undo,
           tooltip: AppKey.undo.tip('Undo'),
-          visualDensity: VisualDensity.compact,
+          onPressed: widget.session.canUndo ? _undo : null,
         ),
         const SizedBox(width: Space.s),
       ],
@@ -253,11 +263,11 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
         },
       ),
       if (state is SaveFailed)
-        TextButton(
+        OutlinedButton(
           onPressed: widget.session.retrySave,
           child: const Text('Retry save'),
         ),
-      if (widget.session.hasHeldEdits || widget.session.holdsEdits) ...[
+      if (_held) ...[
         TextButton(
           onPressed: widget.session.hasHeldEdits ? _discard : null,
           child: const Text('Discard'),

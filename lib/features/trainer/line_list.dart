@@ -9,6 +9,7 @@ import '../../chess/training/schedule.dart';
 import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
 import '../../storage/training_progress.dart';
+import '../../ui/problem_line.dart';
 import '../../ui/relative_time.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
@@ -19,6 +20,8 @@ import 'trainer_state.dart';
 import 'study_training_controls.dart';
 import 'trainer_words.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/segments.dart';
 
 /// The trainer between sittings: the scope, where its lines stand, Review
 /// and Learn, and the lines themselves — or the wrong answers given in
@@ -45,7 +48,7 @@ class LineList extends StatefulWidget {
   final Widget? bookChip;
   final ValueChanged<LineToRead> onRead;
 
-  /// Whether a row offers `Open in Builder`: not while the builder is the
+  /// Whether a row offers `Open in builder`: not while the builder is the
   /// mode, where reading the line is the same thing.
   final bool offerBuilder;
 
@@ -111,15 +114,18 @@ class _LineListState extends State<LineList> {
                     unawaited(_change(write, doing: doing)),
               ),
               if (progress.stale)
-                _Problem(
+                ProblemLine(
                   progressProblem(
                     const ProgressConflict(),
                     doing: 'save training progress',
                   ),
-                  action: ('Reload', () => unawaited(widget.trainer.reload())),
+                  action: TextButton(
+                    onPressed: () => unawaited(widget.trainer.reload()),
+                    child: const Text('Reload'),
+                  ),
                 )
               else if (_problem case final problem?)
-                _Problem(problem),
+                ProblemLine(problem),
               const SizedBox(height: Space.m),
               _toolbar(progress),
               if (_showing == _Showing.lines && _orders.length > 1) ...[
@@ -172,7 +178,7 @@ class _LineListState extends State<LineList> {
 
   static const _toolbarRowWidth = 420.0;
 
-  Widget _switch(TrainingProgress progress) => SegmentedButton<_Showing>(
+  Widget _switch(TrainingProgress progress) => Segments<_Showing>(
     segments: [
       const ButtonSegment(value: _Showing.lines, label: Text('Lines')),
       ButtonSegment(
@@ -180,11 +186,10 @@ class _LineListState extends State<LineList> {
         label: Text('Mistakes · ${progress.mistakes.length}'),
       ),
     ],
-    selected: {_showing},
-    showSelectedIcon: false,
-    onSelectionChanged: (s) {
+    selected: _showing,
+    onChanged: (s) {
       if (!mounted) return;
-      setState(() => _showing = s.single);
+      setState(() => _showing = s);
     },
   );
 
@@ -197,19 +202,15 @@ class _LineListState extends State<LineList> {
 
   Widget _orderPicker() => Align(
     alignment: Alignment.centerLeft,
-    child: SegmentedButton<LineOrder>(
+    child: Segments<LineOrder>(
       segments: [
         for (final order in _orders)
           ButtonSegment(value: order, label: Text(orderName(order))),
       ],
-      selected: {
-        _orders.contains(widget.trainer.order)
-            ? widget.trainer.order
-            : LineOrder.training,
-      },
-      showSelectedIcon: false,
-      style: const ButtonStyle(visualDensity: VisualDensity.compact),
-      onSelectionChanged: (s) => widget.trainer.order = s.single,
+      selected: _orders.contains(widget.trainer.order)
+          ? widget.trainer.order
+          : LineOrder.training,
+      onChanged: (s) => widget.trainer.order = s,
     ),
   );
 
@@ -232,7 +233,11 @@ class _LineListState extends State<LineList> {
   Widget _lines(TrainingProgress progress) {
     final lines = _visibleLines(progress);
     if (lines.isEmpty) {
-      return _Muted(_query.isEmpty ? 'No lines here yet.' : 'No line matches.');
+      return _Muted(
+        _query.isEmpty
+            ? 'No lines here yet.'
+            : 'Nothing matches "${_search.text.trim()}".',
+      );
     }
     final many = widget.ready.chapters.length > 1;
     // Worked out over the rows shown, so a search never trims a row
@@ -390,19 +395,9 @@ class _Header extends StatelessWidget {
     tooltip: 'Training actions',
     children: [
       if (onImport != null)
-        rowAction(
-          'Import course PGN…',
-          onImport!,
-          busy: false,
-          icon: Icons.file_open_outlined,
-        ),
+        rowAction('Import course PGN…', onImport!, icon: AppIcons.open),
       if (onSettings != null)
-        rowAction(
-          'Training settings…',
-          onSettings!,
-          busy: false,
-          icon: Icons.settings_outlined,
-        ),
+        rowAction('Training settings…', onSettings!, icon: AppIcons.settings),
       rowAction(
         'Mark every line known',
         () => onChange(
@@ -419,11 +414,7 @@ class _Header extends StatelessWidget {
         ),
         busy: progress.stale,
       ),
-      rowAction(
-        'Reload progress',
-        () => unawaited(trainer.reload()),
-        busy: false,
-      ),
+      rowAction('Reload progress', () => unawaited(trainer.reload())),
     ],
   );
 }
@@ -465,7 +456,7 @@ class _LineRow extends StatelessWidget {
           ? () => onRead(ReadIn.moves)
           : onTrain,
       child: SizedBox(
-        height: MediaQuery.textScalerOf(context).scale(trainRowHeight),
+        height: MediaQuery.textScalerOf(context).scale(twoLineRowHeight),
         child: Row(
           children: [
             Expanded(
@@ -510,9 +501,13 @@ extension on _LineRow {
     const doing = 'save training progress';
     final trained = status == LineStatus.due || status == LineStatus.learned;
     final reads = [
-      rowAction('Read', () => onRead(ReadIn.moves), busy: false),
+      rowAction('Read', () => onRead(ReadIn.moves)),
       if (offerBuilder)
-        rowAction('Open in Builder', () => onRead(ReadIn.builder), busy: false),
+        rowAction(
+          'Open in builder',
+          () => onRead(ReadIn.builder),
+          icon: AppIcons.openElsewhere,
+        ),
     ];
     if (status == LineStatus.game) return RowActions(children: reads);
     return RowActions(
@@ -568,7 +563,7 @@ class _MistakeRow extends StatelessWidget {
     return InkWell(
       onTap: onShow,
       child: SizedBox(
-        height: MediaQuery.textScalerOf(context).scale(trainRowHeight),
+        height: MediaQuery.textScalerOf(context).scale(twoLineRowHeight),
         child: Row(
           children: [
             Expanded(
@@ -604,35 +599,6 @@ class _MistakeRow extends StatelessWidget {
       : '${mistake.fen.fullMove}...';
 }
 
-class _Problem extends StatelessWidget {
-  const _Problem(this.sentence, {this.action});
-
-  final String sentence;
-  final (String, VoidCallback)? action;
-
-  @override
-  Widget build(BuildContext context) {
-    final error = Theme.of(context).colorScheme.error;
-    return Padding(
-      padding: const EdgeInsets.only(top: Space.s),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              sentence,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: error),
-            ),
-          ),
-          if (action case (final label, final run))
-            TextButton(onPressed: run, child: Text(label)),
-        ],
-      ),
-    );
-  }
-}
-
 class _Muted extends StatelessWidget {
   const _Muted(this.words);
 
@@ -654,7 +620,7 @@ class TrainScopeButtons extends StatelessWidget {
   @override
   Widget build(BuildContext context) => trainer.studyDocument != null
       ? StudyTrainingControls(trainer: trainer)
-      : SegmentedButton<TrainScope>(
+      : Segments<TrainScope>(
           segments: const [
             ButtonSegment(value: TrainScope.chapter, label: Text('Chapter')),
             ButtonSegment(
@@ -663,10 +629,8 @@ class TrainScopeButtons extends StatelessWidget {
             ),
             ButtonSegment(value: TrainScope.book, label: Text('Book')),
           ],
-          selected: {trainer.scope},
-          showSelectedIcon: false,
-          style: const ButtonStyle(visualDensity: VisualDensity.compact),
-          onSelectionChanged: (s) => trainer.setScope(s.single),
+          selected: trainer.scope,
+          onChanged: (s) => trainer.setScope(s),
         );
 }
 

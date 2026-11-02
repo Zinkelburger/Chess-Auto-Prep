@@ -6,19 +6,18 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('keys are named the way a tooltip writes them', () {
-    expect(AppKey.edit.label, 'Ctrl+E');
-    expect(AppKey.pastePosition.label, 'Ctrl+Shift+V');
+    expect(AppKey.save.label, 'Ctrl+S');
+    expect(AppKey.previousTab.label, 'Ctrl+Shift+Tab');
     expect(AppKey.settings.label, 'Ctrl+,');
     expect(AppKey.back.label, '←');
     expect(AppKey.historyBack.label, 'Alt+←');
     expect(AppKey.leave.label, 'Esc');
-    expect(AppKey.typeMove.label, '/');
     expect(AppKey.flip.tip('Flip board'), 'Flip board (F)');
   });
 
   test('the Shortcuts list names every key but not the macOS twins', () {
     expect(AppKey.start.allLabels, 'Home / PgUp');
-    expect(AppKey.edit.allLabels, 'Ctrl+E');
+    expect(AppKey.save.allLabels, 'Ctrl+S');
     expect(AppKey.enterVariation.allLabels, 'Enter');
     expect(AppKey.rate.allLabels, '1–4');
   });
@@ -52,6 +51,6 @@ void main() {
       timeStamp: Duration.zero,
     );
     expect(AppKey.flip.accepts(down), isTrue);
-    expect(AppKey.engine.accepts(down), isFalse);
+    expect(AppKey.undo.accepts(down), isFalse);
   });
 }

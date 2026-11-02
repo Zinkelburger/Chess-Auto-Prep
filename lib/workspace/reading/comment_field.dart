@@ -22,9 +22,13 @@ import '../document/document_session.dart';
 /// to wherever the cursor has reached by then, so words typed under one move
 /// cannot land on another — nor in another document.
 class CommentField extends StatefulWidget {
-  const CommentField({super.key, required this.session});
+  const CommentField({super.key, required this.session, this.labelled = true});
 
   final DocumentSession session;
+
+  /// Whether the field names the move its words are for. Where a heading
+  /// above it already shows the move, it carries no label of its own.
+  final bool labelled;
 
   @override
   State<CommentField> createState() => _CommentFieldState();
@@ -192,10 +196,12 @@ class _CommentFieldState extends State<CommentField>
               minLines: 2,
               maxLines: 4,
               style: text.bodyMedium,
+              // The label sits above the box, never inside it as a prompt.
               decoration: InputDecoration(
                 isDense: true,
                 border: const OutlineInputBorder(),
-                labelText: _label(context),
+                labelText: widget.labelled ? _label(context) : null,
+                floatingLabelBehavior: FloatingLabelBehavior.always,
               ),
             ),
           ),

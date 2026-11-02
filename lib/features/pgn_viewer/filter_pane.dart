@@ -9,6 +9,9 @@ import '../../workspace/board/board_view.dart';
 import '../../workspace/explorer/file_filter.dart';
 import 'export_dialog.dart';
 import 'pgn_viewer.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/segments.dart';
+import '../../ui/tool_button.dart';
 
 /// The Filter tab: which of the open file's games the list shows. How many
 /// pass, one Field / Rule / Value row per rule starting with a blank one,
@@ -103,7 +106,7 @@ class ViewerFilterPane extends StatelessWidget {
         onPressed: () => filter.apply(
           editing.copyWith(rules: [...rules, const HeaderRule()]),
         ),
-        icon: const Icon(Icons.add, size: IconSize.menu),
+        icon: const Icon(AppIcons.add, size: IconSize.action),
         label: const Text('Add rule'),
       ),
       if (filter.applied.position case final position?)
@@ -115,20 +118,17 @@ class ViewerFilterPane extends StatelessWidget {
       else
         TextButton.icon(
           onPressed: onPosition ?? filter.reachingBoardPosition,
-          icon: const Icon(Icons.grid_on, size: IconSize.menu),
+          icon: const Icon(AppIcons.position, size: IconSize.menu),
           label: const Text('Reaching this position'),
         ),
       if (rules.length > 1)
-        SegmentedButton<bool>(
+        Segments<bool>(
           segments: const [
             ButtonSegment(value: false, label: Text('All')),
             ButtonSegment(value: true, label: Text('Any')),
           ],
-          selected: {editing.any},
-          showSelectedIcon: false,
-          style: const ButtonStyle(visualDensity: VisualDensity.compact),
-          onSelectionChanged: (any) =>
-              filter.apply(editing.copyWith(any: any.single)),
+          selected: editing.any,
+          onChanged: (any) => filter.apply(editing.copyWith(any: any)),
         ),
     ],
   );
@@ -140,16 +140,18 @@ class ViewerFilterPane extends StatelessWidget {
     return Wrap(
       spacing: Space.xs,
       children: [
-        TextButton(
+        TextButton.icon(
           onPressed: ready
               ? () => exportViewerPgn(context, viewer, say ?? (_) {})
               : null,
-          child: const Text('Export matching games…'),
+          icon: const Icon(AppIcons.saveCopy, size: IconSize.action),
+          label: const Text('Export games…'),
         ),
         if (onSaveToStudy case final save?)
-          TextButton(
+          TextButton.icon(
             onPressed: ready ? save : null,
-            child: const Text('Save to study…'),
+            icon: const Icon(AppIcons.add, size: IconSize.action),
+            label: const Text('Add games to study…'),
           ),
       ],
     );
@@ -193,7 +195,7 @@ class _Count extends StatelessWidget {
           if (!filter.filter.isEmpty)
             TextButton(
               onPressed: () => filter.apply(GameFilter.none),
-              child: const Text('Clear'),
+              child: const Text('Clear filters'),
             ),
         ],
       ),
@@ -211,7 +213,7 @@ class _PositionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => InputChip(
-    avatar: const Icon(Icons.grid_on, size: IconSize.menu),
+    avatar: const Icon(AppIcons.position, size: IconSize.menu),
     label: Tooltip(
       richMessage: WidgetSpan(
         child: SizedBox(
@@ -275,10 +277,10 @@ class _RuleRow extends StatelessWidget {
       hint: 'Value',
       onChanged: (typed) => onChanged(rule.copyWith(value: typed)),
     );
-    final remove = IconButton(
-      icon: const Icon(Icons.close, size: IconSize.menu),
+    final remove = ToolButton(
+      icon: AppIcons.remove,
       tooltip: 'Remove this rule',
-      visualDensity: VisualDensity.compact,
+      size: IconSize.menu,
       onPressed: onRemove,
     );
     return LayoutBuilder(

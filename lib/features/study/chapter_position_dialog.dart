@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../ui/field_row.dart';
+import '../../ui/form_dialog.dart';
 import '../../ui/number_field.dart';
-import '../../ui/theme.dart';
 
 Future<int?> showChapterPosition(
   BuildContext context,
@@ -28,30 +28,19 @@ class _PositionState extends State<_Position> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Move chapter'),
-    content: SizedBox(
-      width: nameDialogWidth,
-      child: FieldRow(
+  Widget build(BuildContext context) => FormDialog(
+    title: 'Move chapter',
+    confirm: 'Move',
+    onConfirm: () => Navigator.pop(context, _position),
+    body: FieldRow(
+      label: 'Position',
+      child: NumberField(
         label: 'Position',
-        child: NumberField(
-          label: 'Position',
-          value: _position,
-          min: 1,
-          max: widget.count,
-          onChanged: (value) => setState(() => _position = value),
-        ),
+        value: _position,
+        min: 1,
+        max: widget.count,
+        onChanged: (value) => setState(() => _position = value),
       ),
     ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton(
-        onPressed: () => Navigator.pop(context, _position),
-        child: const Text('Move'),
-      ),
-    ],
   );
 }

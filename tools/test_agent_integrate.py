@@ -62,7 +62,7 @@ class AgentIntegrateTests(unittest.TestCase):
         result = self.integrate()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(git(self.main, 'rev-parse', 'HEAD'), self.head)
-        self.assertEqual(self.remote_head('backup/local-main'), self.head)
+        self.assertEqual(self.remote_head('dev'), self.head)
         self.assertEqual(self.remote_head('main'), self.base)
         self.assertEqual((self.main / 'task.txt').read_text(), 'task change\n')
         self.assertEqual((self.main / 'user.txt').read_text(), 'unfinished user edit\n')
@@ -122,7 +122,7 @@ class AgentIntegrateTests(unittest.TestCase):
         git(self.task, 'switch', '-c', 'codex/other')
         self.commit(self.task, 'remote-only.txt', 'remote development\n')
         ahead = git(self.task, 'rev-parse', 'HEAD')
-        git(self.task, 'push', 'origin', 'HEAD:refs/heads/backup/local-main')
+        git(self.task, 'push', 'origin', 'HEAD:refs/heads/dev')
         git(self.task, 'switch', 'codex/task')
         result = self.integrate()
         self.assertNotEqual(result.returncode, 0)
@@ -130,7 +130,7 @@ class AgentIntegrateTests(unittest.TestCase):
         self.assertTrue(self.task.exists())
         self.assertEqual(self.remote_head('codex/task'), self.head)
         self.assertEqual(git(self.main, 'rev-parse', 'HEAD'), self.head)
-        self.assertEqual(self.remote_head('backup/local-main'), ahead)
+        self.assertEqual(self.remote_head('dev'), ahead)
         self.assertEqual(self.remote_head('main'), self.base)
 
     def test_dirty_task_and_concurrent_integration_are_rejected(self):

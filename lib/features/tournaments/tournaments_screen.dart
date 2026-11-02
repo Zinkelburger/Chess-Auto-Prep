@@ -8,6 +8,7 @@ import '../../chess/fen.dart';
 import '../../chess/tournament/config.dart';
 import '../../chess/tournament/result.dart';
 import '../../ui/confirm_dialog.dart';
+import '../../ui/problem_line.dart';
 import '../../storage/settings_store.dart';
 import '../../storage/tournaments.dart';
 import '../../ui/theme.dart';
@@ -16,6 +17,9 @@ import 'setup_dialog.dart';
 import 'tournament_run.dart';
 import 'standings_table.dart';
 import 'history_list.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
+import '../../ui/check_row.dart';
 
 class TournamentsScreen extends StatefulWidget {
   const TournamentsScreen({
@@ -57,28 +61,29 @@ class _ScreenState extends State<TournamentsScreen> {
                 onPressed: run.running || run.canRetry
                     ? null
                     : () => unawaited(_new()),
-                icon: const Icon(Icons.add),
-                label: const Text('New tournament'),
+                icon: const Icon(AppIcons.add, size: IconSize.action),
+                label: const Text('New tournament…'),
               ),
               TextButton(
                 onPressed: () =>
                     unawaited(manageTournamentEngines(context, run)),
-                child: const Text('Engines'),
+                child: const Text('Engines…'),
               ),
-              IconButton(
+              ToolButton(
+                icon: AppIcons.refresh,
                 tooltip: 'Refresh tournaments',
                 onPressed: () => unawaited(run.refresh()),
-                icon: const Icon(Icons.refresh),
               ),
               if (run.running)
-                OutlinedButton(
+                OutlinedButton.icon(
                   onPressed: run.stopping ? null : run.stop,
-                  child: Text(
+                  icon: const Icon(AppIcons.stop, size: IconSize.action),
+                  label: Text(
                     run.stopping ? 'Stopping after this move…' : 'Stop',
                   ),
                 ),
               if (run.canRetry && !run.running)
-                FilledButton(
+                OutlinedButton(
                   onPressed: () => unawaited(run.retrySave()),
                   child: const Text('Retry save'),
                 ),
@@ -87,11 +92,8 @@ class _ScreenState extends State<TournamentsScreen> {
         ),
         if (run.problem case final message?)
           Padding(
-            padding: const EdgeInsets.all(Space.s),
-            child: SelectableText(
-              message,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: Space.m),
+            child: ProblemLine(message),
           ),
         for (final warning in run.historyWarnings)
           Padding(
@@ -107,7 +109,7 @@ class _ScreenState extends State<TournamentsScreen> {
               const VerticalDivider(width: 1),
               Expanded(
                 child: run.selected == null
-                    ? const Center(child: Text('No tournaments yet'))
+                    ? const SizedBox.shrink()
                     : _details(run.selected!),
               ),
             ],
@@ -187,14 +189,14 @@ class _ScreenState extends State<TournamentsScreen> {
             onPressed: run.running || run.canRetry
                 ? null
                 : () => unawaited(_new(t.config)),
-            child: const Text('Run again'),
+            child: const Text('Run again…'),
           ),
-          IconButton(
-            tooltip: 'Move tournament to trash',
+          ToolButton(
+            icon: AppIcons.delete,
+            tooltip: 'Delete tournament…',
             onPressed: run.running || run.canRetry
                 ? null
                 : () => unawaited(_remove(t)),
-            icon: const Icon(Icons.delete_outline),
           ),
         ],
       ),
@@ -216,10 +218,8 @@ class _ScreenState extends State<TournamentsScreen> {
         const SizedBox(height: Space.m),
       ],
       TournamentStandingsTable(tournament: t),
-      CheckboxListTile(
-        contentPadding: EdgeInsets.zero,
-        controlAffinity: ListTileControlAffinity.leading,
-        title: const Text('Show final positions'),
+      CheckRow(
+        label: 'Show final positions',
         value: widget.settings.value.tournamentFinalPositions,
         onChanged: (value) => unawaited(
           widget.settings.update(
@@ -229,7 +229,7 @@ class _ScreenState extends State<TournamentsScreen> {
       ),
       TextButton.icon(
         onPressed: t.games.isEmpty ? null : () => widget.open(t, 0),
-        icon: const Icon(Icons.open_in_new),
+        icon: const Icon(AppIcons.openElsewhere, size: IconSize.action),
         label: const Text('Browse games'),
       ),
       SelectableText(
@@ -258,30 +258,22 @@ class _ScreenState extends State<TournamentsScreen> {
             subtitle: Text(
               '${g.result} · ${_ending(g.termination)}${g.detail.isEmpty ? "" : " · ${g.detail}"}',
             ),
-            trailing: const Icon(Icons.open_in_new),
+            trailing: const Icon(AppIcons.openElsewhere),
             onTap: () => widget.open(t, g.index),
           ),
         ),
       ],
     ),
   );
-  Future<void> _new([TournamentConfig? previous]) async {
-    final config = await tournamentSetup(
-      context,
-      engines: run.engines,
-      position: widget.position,
-      previous: previous,
-    );
-    if (!mounted || config == null) return;
-    unawaited(run.start(config));
-  }
+  Future<void> _new([TournamentConfig? previous]) =>
+      newTournament(context, run, widget.position, previous: previous);
 
   Future<void> _remove(Tournament t) async {
     if (await confirmAction(
       context,
-      title: 'Move tournament to trash',
-      message: 'Move ${t.config.name} and its games to the tournament trash?',
-      confirm: 'Move to trash',
+      title: 'Delete tournament “${t.config.name}”?',
+      message: 'Its games go to the tournament trash.',
+      confirm: 'Delete',
     )) {
       await run.remove(t);
     }
@@ -303,3 +295,21 @@ String _ending(String reason) => switch (reason) {
   'aborted' => 'Stopped',
   _ => reason,
 };
+
+/// The setup for a tournament, then its run: from the page's button, its
+/// `Run again…` with the last one's settings, or the Actions menu.
+Future<void> newTournament(
+  BuildContext context,
+  TournamentRun run,
+  Fen position, {
+  TournamentConfig? previous,
+}) async {
+  final config = await tournamentSetup(
+    context,
+    engines: run.engines,
+    position: position,
+    previous: previous,
+  );
+  if (!context.mounted || config == null) return;
+  unawaited(run.start(config));
+}

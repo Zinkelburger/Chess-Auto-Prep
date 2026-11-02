@@ -268,39 +268,6 @@ final class Studies extends ChangeNotifier {
         _ => 'Nothing to add.',
       });
 
-  /// What [input] is recognised as, for the import dialog to echo back, or
-  /// null when it is not a link this app can fetch. Pure, so the dialog can
-  /// ask on every keystroke; the widgets never see the client itself.
-  String? linkDescription(String input) => parseStudyLink(input)?.describe;
-
-  /// Downloads the study [url] names and files it under the name its own
-  /// tags give it.
-  ///
-  /// Replacing nothing: a name already taken gets a number after it, because
-  /// a download must never land on top of a study the user wrote. The PGN is
-  /// read before it is written — that is where the name comes from, and a
-  /// download with no games in it is refused rather than filed as an empty
-  /// study.
-  Future<StudyResult> importFromUrl(String url) {
-    final link = parseStudyLink(url);
-    if (link == null) {
-      return Future.value(const StudyProblem('Not a Lichess study link.'));
-    }
-    return _run('import ${link.describe}', () async {
-      final fetched = await _lichess.fetch(link);
-      if (fetched case StudyNotFetched(:final sentence)) {
-        return StudyProblem(sentence);
-      }
-      final pgn = (fetched as StudyFetched).pgn;
-      final read = await readChapter(name: '', text: pgn);
-      if (read.lines.isEmpty) {
-        return StudyProblem(StudyFetchProblem.empty.sentence);
-      }
-      final wanted = studyNameIn(read.lines) ?? 'Lichess ${link.studyId}';
-      return _createdUnderAFreeName(wanted, pgn);
-    });
-  }
-
   Future<StudyResult> importPgn() async {
     if (picker == null || importer == null) {
       return const StudyProblem('File import is unavailable.');
@@ -399,7 +366,7 @@ final class Studies extends ChangeNotifier {
       return _changes.renames(study, to)
           ? retryRename()
           : Future.value(
-              const StudyProblem('Retry the pending study rename first.'),
+              const StudyProblem('Retry the pending study save first.'),
             );
     }
     if (to == study) return Future.value(const StudyDone());
@@ -533,7 +500,7 @@ final class Studies extends ChangeNotifier {
         'A study named "${creation.ref.name}" already exists.',
       ),
       store.IoFailure(:final detail) => StudyProblem(
-        'Could not save the study: $detail. Retry study save to finish.',
+        'Could not save the study: $detail. Retry save to finish.',
       ),
     };
   }

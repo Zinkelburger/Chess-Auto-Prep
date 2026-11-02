@@ -19,7 +19,8 @@ The left panel has a searchable repertoire switcher and **Import course PGN…**
 The trainer remembers its repertoire in settings, independently of the file
 being read on the board. It opens on the whole repertoire, so **Learn** starts
 at the first unfinished line without a chapter or line selection. Import uses
-the normal guarded repertoire importer and leaves the downloaded original alone.
+the normal guarded repertoire importer and leaves the downloaded original alone. Actions ▸ Training has **Learn** and **Review** (off with nothing to
+learn or review), and Actions ▸ File **Import course PGN…**.
 
 The outline expands chapters and lines. A chapter selects its training scope;
 a line selects its scope and previews its moves on the board without starting
@@ -85,7 +86,7 @@ its line at the current position. Analysis and Explorer can then be used
 alongside Train, with the normal database choices and resizable pane controls.
 The dedicated trainer's Analysis tab is its only engine surface and uses the
 shared engine on that board; exploration never edits the repertoire.
-**Return to training** restores the
+**Resume** restores the
 retained lesson position and conceals answers again. Engine startup failure
 stays in the normal engine controls and does not prevent returning.
 

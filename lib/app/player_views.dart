@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../features/players/analysis_panel.dart';
 import '../features/players/player_book_pane.dart';
+import '../features/players/player_dialogs.dart';
 import '../features/players/player_games.dart';
 import '../features/players/player_analysis.dart';
 import '../features/players/player_tree_pane.dart';
@@ -20,6 +21,7 @@ import '../workspace/workspace_tabs.dart';
 import 'mode_view.dart';
 import 'player_wiring.dart';
 import 'workspace_requests.dart';
+import '../ui/app_icons.dart';
 
 final class PlayerAnalysisView extends ModeView {
   PlayerAnalysisView(Workspace workspace, this.requests, this.players)
@@ -145,7 +147,8 @@ final class PlayerAnalysisView extends ModeView {
   List<AppAction> actions(ModeMenu menu) => [
     AppAction('Players & prep', players.showDirectory, group: 'Player'),
     AppAction(
-      'Get latest games',
+      'Get games',
+      icon: AppIcons.download,
       players.analysis.player?.accounts.isNotEmpty == true &&
               !players.analysis.busy
           ? () => unawaited(
@@ -155,7 +158,8 @@ final class PlayerAnalysisView extends ModeView {
       group: 'Player',
     ),
     AppAction(
-      'Add PGN games…',
+      'Add PGN…',
+      icon: AppIcons.open,
       players.analysis.player == null
           ? null
           : () => unawaited(players.importPgn()),
@@ -182,7 +186,7 @@ final class PlayerAnalysisView extends ModeView {
       group: 'Analysis',
     ),
     AppAction(
-      'Save line to prep study',
+      'Add line to prep study',
       players.analysis.player == null
           ? null
           : () => unawaited(players.saveLine()),
@@ -213,14 +217,49 @@ final class PlayersView extends ModeView {
   @override
   Listenable get changes =>
       Listenable.merge([players.directory, players.saved]);
+
+  /// The page's own buttons: adding to whatever is listed, pasting a list
+  /// of people, and reading it all again.
   @override
-  List<AppAction> actions(ModeMenu menu) => [
-    AppAction(
-      'Reload players',
-      () => unawaited(players.directory.load()),
-      group: 'Players',
-    ),
-  ];
+  List<AppAction> actions(ModeMenu menu) {
+    final owner = players.directory;
+    final blocked = owner.busy || owner.needsRetry;
+    final groups = owner.showingGroups;
+    final group = owner.group;
+    final context = menu.context;
+    return [
+      AppAction(
+        groups
+            ? 'New group…'
+            : group != null
+            ? 'Add players…'
+            : 'Add player…',
+        blocked
+            ? null
+            : groups
+            ? () => unawaited(saveGroupFrom(context, owner))
+            : group != null
+            ? () => unawaited(addToGroup(context, owner, group))
+            : () => unawaited(editPlayer(context, owner)),
+        icon: AppIcons.add,
+        group: 'Players',
+      ),
+      if (!groups)
+        AppAction(
+          'Paste players…',
+          blocked ? null : () => unawaited(importPlayers(context, owner)),
+          icon: AppIcons.paste,
+          group: 'Players',
+        ),
+      AppAction(
+        'Refresh',
+        () => unawaited(owner.load()),
+        icon: AppIcons.refresh,
+        group: 'Players',
+      ),
+    ];
+  }
+
   @override
   Widget screen(Map<ShortcutActivator, VoidCallback> windowKeys) => ScreenKeys(
     bindings: windowKeys,

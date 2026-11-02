@@ -176,7 +176,7 @@ void main() {
 
   testWidgets('invalid Lichess links explain how to recover', (tester) async {
     await pump(tester);
-    await tester.tap(find.text('Import…'));
+    await tester.tap(find.text('Import chapters…'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Lichess URL'));
     await tester.pumpAndSettle();
@@ -191,7 +191,7 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    await tester.tap(find.text('Import…'));
+    await tester.tap(find.text('Import chapters…'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Lichess URL'));
     await tester.pumpAndSettle();
@@ -221,7 +221,7 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    await tester.tap(find.byTooltip('All studies'));
+    await tester.tap(find.byTooltip('Back to studies'));
     await tester.pumpAndSettle();
     expect(find.text('Your studies'), findsOneWidget);
     expect(find.text('Pawn endings'), findsNothing);
@@ -260,7 +260,7 @@ void main() {
       importer: importer,
     );
     await pump(tester);
-    await tester.tap(find.text('Import…'));
+    await tester.tap(find.text('Import chapters…'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Choose PGN file…'));
     await tester.pumpAndSettle();
@@ -290,7 +290,7 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    await tester.tap(find.text('Import…'));
+    await tester.tap(find.text('Import chapters…'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Paste PGN'));
     await tester.pumpAndSettle();

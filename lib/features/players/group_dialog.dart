@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../chess/players/player.dart';
 import '../../ui/field_row.dart';
 import '../../ui/file_names.dart';
+import '../../ui/form_dialog.dart';
 import '../../ui/number_field.dart';
 import '../../ui/theme.dart';
 
@@ -52,10 +53,11 @@ class _GroupDialogState extends State<_GroupDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text(widget.group == null ? 'New group' : 'Edit group'),
-    content: SizedBox(
-      width: nameDialogWidth,
+  Widget build(BuildContext context) => FormDialog(
+    title: widget.group == null ? 'New group' : 'Edit group',
+    confirm: 'Save group',
+    onConfirm: save,
+    body: SingleChildScrollView(
       child: Form(
         key: form,
         child: Column(
@@ -91,21 +93,12 @@ class _GroupDialogState extends State<_GroupDialog> {
                 value: rounds,
                 min: 1,
                 max: 30,
-                onChanged: (v) {
-                  if (mounted) setState(() => rounds = v);
-                },
+                onChanged: (v) => setState(() => rounds = v),
               ),
             ),
           ],
         ),
       ),
     ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton(onPressed: save, child: const Text('Save group')),
-    ],
   );
 }

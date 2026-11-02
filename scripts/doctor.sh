@@ -198,7 +198,7 @@ if [[ "$branch" != "HEAD" && "$branch" != "?" ]]; then
   if [[ "$branch" == main ]]; then
     # main intentionally differs from the published origin/main. Check its
     # development backup; publication status is not a health failure.
-    upstream=origin/backup/local-main
+    upstream=origin/dev
     if ! git rev-parse --verify "$upstream" >/dev/null 2>&1; then
       upstream=''
     fi

@@ -16,7 +16,7 @@ Future<void> exportViewerPgn(
   }
   final name = await showNameDialog(
     context,
-    title: 'Export visible games',
+    title: 'Export games',
     label: 'PGN file name',
     confirm: 'Choose folder',
   );

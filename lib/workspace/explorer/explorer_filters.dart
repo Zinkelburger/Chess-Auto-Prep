@@ -5,6 +5,9 @@ import '../../ui/choice_field.dart';
 import '../../ui/fold_button.dart';
 import '../../ui/theme.dart';
 import 'explorer.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/segments.dart';
+import '../../ui/toggle_chip.dart';
 
 /// The top of the Explorer tab: the databases side by side, the chosen one
 /// pressed, and at the end `Filters` for the one that can be narrowed.
@@ -71,8 +74,8 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
                   widget.onDownload != null)
                 TextButton.icon(
                   onPressed: widget.onDownload,
-                  icon: const Icon(Icons.download, size: IconSize.menu),
-                  label: const Text('Download more'),
+                  icon: const Icon(AppIcons.download, size: IconSize.action),
+                  label: const Text('Download TWIC…'),
                 ),
               if (summary != null)
                 ConstrainedBox(
@@ -89,9 +92,7 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
                   child: FoldButton(
                     label: 'Filters',
                     unfolded: unfolded,
-                    onPressed: () {
-                      if (mounted) setState(() => _unfolded = !_unfolded);
-                    },
+                    onPressed: () => setState(() => _unfolded = !_unfolded),
                   ),
                 ),
             ],
@@ -179,24 +180,13 @@ class _Sources extends StatelessWidget {
 
   Widget _buttons() {
     final choice = explorer.choice;
-    return SegmentedButton<ExplorerSource>(
+    return Segments<ExplorerSource>(
       segments: [
         for (final source in explorer.sources)
           ButtonSegment(value: source, label: Text(source.title)),
       ],
-      selected: {choice.source},
-      showSelectedIcon: false,
-      style: const ButtonStyle(
-        animationDuration: Duration.zero,
-        overlayColor: WidgetStatePropertyAll(Colors.transparent),
-        visualDensity: VisualDensity.compact,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        padding: WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: Space.s),
-        ),
-      ),
-      onSelectionChanged: (picked) =>
-          explorer.choose(choice.copyWith(source: picked.single)),
+      selected: choice.source,
+      onChanged: (picked) => explorer.choose(choice.copyWith(source: picked)),
     );
   }
 }
@@ -218,9 +208,7 @@ class _Summary extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         textAlign: TextAlign.right,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
+        style: theme.textTheme.bodySmall,
       ),
     );
   }
@@ -237,11 +225,9 @@ class _TwicFilters extends StatelessWidget {
     final choice = explorer.choice;
     return Align(
       alignment: Alignment.centerLeft,
-      child: FilterChip(
-        chipAnimationStyle: _quietChips,
-        label: const Text('Classical OTB only'),
+      child: ToggleChip(
+        label: 'Classical OTB only',
         selected: choice.classicalOnly,
-        visualDensity: VisualDensity.compact,
         onSelected: (on) => explorer.choose(choice.copyWith(classicalOnly: on)),
       ),
     );
@@ -266,11 +252,9 @@ class _LichessFilters extends StatelessWidget {
           label: 'Speed',
           chips: [
             for (final speed in LichessSpeed.values)
-              FilterChip(
-                chipAnimationStyle: _quietChips,
-                label: Text(speed.title),
+              ToggleChip(
+                label: speed.title,
                 selected: choice.speeds.contains(speed),
-                visualDensity: VisualDensity.compact,
                 onSelected: (on) => _speed(choice, speed, on),
               ),
           ],
@@ -280,11 +264,9 @@ class _LichessFilters extends StatelessWidget {
           label: 'Rating',
           chips: [
             for (final rating in lichessRatings)
-              FilterChip(
-                chipAnimationStyle: _quietChips,
-                label: Text('$rating'),
+              ToggleChip(
+                label: '$rating',
                 selected: choice.ratings.contains(rating),
-                visualDensity: VisualDensity.compact,
                 onSelected: (on) => _rating(choice, rating, on),
               ),
           ],
@@ -332,12 +314,7 @@ class _ChipRow extends StatelessWidget {
           height: explorerChipHeight,
           child: Align(
             alignment: Alignment.centerLeft,
-            child: Text(
-              label,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
+            child: Text(label, style: theme.textTheme.labelSmall),
           ),
         ),
         Expanded(
@@ -347,9 +324,3 @@ class _ChipRow extends StatelessWidget {
     );
   }
 }
-
-final _quietChips = ChipAnimationStyle(
-  enableAnimation: AnimationStyle.noAnimation,
-  selectAnimation: AnimationStyle.noAnimation,
-  avatarDrawerAnimation: AnimationStyle.noAnimation,
-);

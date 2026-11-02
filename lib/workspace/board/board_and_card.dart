@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
 import '../action_layout.dart';
 
@@ -25,40 +26,34 @@ class BoardAndCard extends StatefulWidget {
   State<BoardAndCard> createState() => BoardAndCardState();
 }
 
-class BoardAndCardState extends State<BoardAndCard> {
+class BoardAndCardState extends State<BoardAndCard>
+    with ListeningState<BoardAndCard> {
   double _share = 0.4;
+
+  @override
+  Listenable? listenableOf(BoardAndCard widget) => widget.layout;
 
   @override
   void initState() {
     super.initState();
-    widget.layout?.addListener(_changed);
     _share = widget.layout?.boardFraction ?? 0.4;
   }
 
   @override
   void didUpdateWidget(BoardAndCard oldWidget) {
+    if (oldWidget.layout != widget.layout) {
+      _share = widget.layout?.boardFraction ?? 0.4;
+    }
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.layout == widget.layout) return;
-    oldWidget.layout?.removeListener(_changed);
-    widget.layout?.addListener(_changed);
-    _share = widget.layout?.boardFraction ?? 0.4;
   }
 
-  void _changed() {
-    if (mounted) {
+  @override
+  void changed() =>
       setState(() => _share = widget.layout?.boardFraction ?? _share);
-    }
-  }
 
   void _resize(double share) {
     setState(() => _share = share.clamp(0.2, 0.8));
     widget.layout?.resizeBoard(_share);
-  }
-
-  @override
-  void dispose() {
-    widget.layout?.removeListener(_changed);
-    super.dispose();
   }
 
   @override

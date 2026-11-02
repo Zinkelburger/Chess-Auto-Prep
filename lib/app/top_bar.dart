@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../ui/app_action.dart';
 import '../ui/choice_dialog.dart';
-import '../ui/action_context_menu.dart';
+import '../ui/menu_entry.dart';
 import '../ui/theme.dart';
 import 'mode.dart';
 import '../ui/app_keys.dart';
+import '../ui/app_icons.dart';
+import '../ui/tool_button.dart';
 
 /// The row over the window: the mode menu and, beside it, the Actions menu —
 /// one menu of everything that can be done now, the same shape in every mode.
@@ -77,21 +79,19 @@ class TopBar extends StatelessWidget {
       child: Row(
         children: [
           if (!listShown) ListToggle(shown: false, onPressed: onToggleList),
-          IconButton(
-            icon: const Icon(Icons.arrow_back, size: IconSize.action),
+          ToolButton(
+            icon: AppIcons.back,
             tooltip: AppKey.historyBack.tip(
               backTo == null ? 'Back' : 'Back to $backTo',
             ),
             onPressed: backTo == null ? null : onBack,
-            visualDensity: VisualDensity.compact,
           ),
-          IconButton(
-            icon: const Icon(Icons.arrow_forward, size: IconSize.action),
+          ToolButton(
+            icon: AppIcons.forward,
             tooltip: AppKey.historyForward.tip(
               forwardTo == null ? 'Forward' : 'Forward to $forwardTo',
             ),
             onPressed: forwardTo == null ? null : onForward,
-            visualDensity: VisualDensity.compact,
           ),
           _ModeMenu(mode: mode, onMode: onMode, offered: offered),
           const SizedBox(width: Space.s),
@@ -110,11 +110,10 @@ class TopBar extends StatelessWidget {
                 ),
               ),
             ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined, size: IconSize.action),
+          ToolButton(
+            icon: AppIcons.settings,
             tooltip: AppKey.settings.tip('Settings'),
             onPressed: onSettings,
-            visualDensity: VisualDensity.compact,
           ),
         ],
       ),
@@ -151,10 +150,7 @@ class _ModeMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     return MenuAnchor(
       menuChildren: [
-        MenuItemButton(
-          onPressed: () => _find(context),
-          child: const Text('Find a mode…'),
-        ),
+        MenuEntry('Find a mode…', () => _find(context), icon: AppIcons.search),
         for (final group in modeGroups.entries) ...[
           const Divider(height: 1),
           Padding(
@@ -166,27 +162,25 @@ class _ModeMenu extends StatelessWidget {
           ),
           for (final named in group.value)
             if (offered(named))
-              MenuItemButton(
-                onPressed: () => onMode(named),
-                leadingIcon: named == mode
-                    ? const Icon(Icons.check, size: IconSize.menu)
-                    : const SizedBox(width: IconSize.menu),
-                child: Text(named.label),
+              MenuEntry(
+                named.label,
+                () => onMode(named),
+                icon: named == mode ? AppIcons.tick : null,
+                slot: true,
               ),
         ],
       ],
       builder: (context, controller, _) => TextButton.icon(
         onPressed: controller.isOpen ? controller.close : controller.open,
-        icon: const Icon(Icons.menu, size: IconSize.action),
+        icon: const Icon(AppIcons.modeMenu, size: IconSize.action),
         label: Text(mode.label),
       ),
     );
   }
 }
 
-/// Named sections for the work and submenus for secondary controls.
-/// Ctrl+K opens the same list as something to type into. The entries are
-/// made when the menu opens and kept up to date only while it is open.
+/// Named sections for the work and submenus for secondary controls. The
+/// entries are made when the menu opens and kept up to date only while it is open.
 class _ActionsMenu extends StatefulWidget {
   const _ActionsMenu({required this.actions, required this.changes});
 
@@ -239,26 +233,6 @@ class _ActionsMenuState extends State<_ActionsMenu> {
     for (final action in widget.actions()) {
       (groups[action.group ?? 'Actions'] ??= []).add(action);
     }
-    Widget entry(AppAction action) => GestureDetector(
-      onSecondaryTapUp: action.alternatives.isEmpty
-          ? null
-          : (details) => showActionContextMenu(
-              context,
-              details.globalPosition,
-              action.alternatives,
-            ),
-      child: MenuItemButton(
-        onPressed: action.run,
-        leadingIcon: action.icon == null
-            ? null
-            : Icon(action.icon, size: IconSize.menu),
-        trailingIcon: action.shortcut == null
-            ? null
-            : Text(action.shortcut!, style: text.labelSmall),
-        child: Text(action.label),
-      ),
-    );
-
     final children = <Widget>[];
     for (final group in groups.entries.where(
       (group) => !_secondary.containsKey(group.key),
@@ -279,7 +253,7 @@ class _ActionsMenuState extends State<_ActionsMenu> {
           child: Text(group.key, style: text.labelSmall),
         ),
       );
-      children.addAll(group.value.map(entry));
+      children.addAll(group.value.map(MenuEntry.action));
     }
     final secondary = groups.entries.where(
       (group) => _secondary.containsKey(group.key),
@@ -293,21 +267,21 @@ class _ActionsMenuState extends State<_ActionsMenu> {
       children.add(
         SubmenuButton(
           leadingIcon: Icon(_secondary[group.key], size: IconSize.menu),
-          menuChildren: group.value.map(entry).toList(),
+          menuChildren: menuEntries(group.value),
           child: Text(group.key),
         ),
       );
     }
-    return children;
+    return alignMenu(children);
   }
 
   /// Keep the document's work in view; secondary controls expand beside it.
   static const _secondary = {
-    'Copy': Icons.content_copy,
-    'Panels': Icons.tab_outlined,
-    'Action Tabs': Icons.tab,
-    'Layout': Icons.grid_view,
-    'Window': Icons.fullscreen,
+    'Copy': AppIcons.copy,
+    'Panels': AppIcons.panels,
+    'Action Tabs': AppIcons.paneTabs,
+    'Layout': AppIcons.layout,
+    'Window': AppIcons.window,
   };
 
   @override
@@ -318,15 +292,11 @@ class _ActionsMenuState extends State<_ActionsMenu> {
       menuChildren: _heard == null
           ? const []
           : _entries(Theme.of(context).textTheme),
-      // Ctrl+K opens the same actions as a list to type into.
-      builder: (context, controller, _) => Tooltip(
-        message: AppKey.actions.tip('Actions'),
-        child: TextButton.icon(
-          onPressed: controller.isOpen ? controller.close : controller.open,
-          icon: const Icon(Icons.arrow_drop_down, size: IconSize.action),
-          iconAlignment: IconAlignment.end,
-          label: const Text('Actions'),
-        ),
+      builder: (context, controller, _) => TextButton.icon(
+        onPressed: controller.isOpen ? controller.close : controller.open,
+        icon: const Icon(AppIcons.dropDown, size: IconSize.action),
+        iconAlignment: IconAlignment.end,
+        label: const Text('Actions'),
       ),
     );
   }
@@ -341,15 +311,9 @@ class ListToggle extends StatelessWidget {
   final VoidCallback onPressed;
 
   @override
-  Widget build(BuildContext context) => IconButton(
-    icon: Icon(
-      shown
-          ? Icons.keyboard_double_arrow_left
-          : Icons.keyboard_double_arrow_right,
-      size: IconSize.action,
-    ),
-    tooltip: AppKey.toggleList.tip(shown ? 'Hide the list' : 'Show the list'),
+  Widget build(BuildContext context) => ToolButton(
+    icon: shown ? AppIcons.hideList : AppIcons.showList,
+    tooltip: shown ? 'Hide the list' : 'Show the list',
     onPressed: onPressed,
-    visualDensity: VisualDensity.compact,
   );
 }

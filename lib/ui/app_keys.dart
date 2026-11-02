@@ -8,7 +8,7 @@ enum KeyPlace {
   window('Window'),
   board('Board and moves'),
   squares('Chessboard square focus'),
-  tabs('Focused tabs'),
+  tabs('Focused tabs and list rows'),
   comment('Comment box'),
   moveBox('Move box'),
   trainer('Repertoire trainer'),
@@ -36,19 +36,7 @@ enum AppKey {
     SingleActivator(LogicalKeyboardKey.comma, control: true),
     SingleActivator(LogicalKeyboardKey.comma, meta: true),
   ]),
-  actions('Actions', KeyPlace.window, [
-    SingleActivator(LogicalKeyboardKey.keyK, control: true),
-    SingleActivator(LogicalKeyboardKey.keyK, meta: true),
-  ]),
-  toggleList('Show or hide the list', KeyPlace.window, [
-    SingleActivator(LogicalKeyboardKey.keyB, control: true),
-    SingleActivator(LogicalKeyboardKey.keyB, meta: true),
-  ]),
-  positions('Positions', KeyPlace.window, [
-    SingleActivator(LogicalKeyboardKey.keyP, control: true),
-    SingleActivator(LogicalKeyboardKey.keyP, meta: true),
-  ]),
-  openFile('Open a PGN file', KeyPlace.window, [
+  openFile('Open PGN file…', KeyPlace.window, [
     SingleActivator(LogicalKeyboardKey.keyO, control: true),
     SingleActivator(LogicalKeyboardKey.keyO, meta: true),
   ]),
@@ -56,21 +44,9 @@ enum AppKey {
     SingleActivator(LogicalKeyboardKey.keyV, control: true),
     SingleActivator(LogicalKeyboardKey.keyV, meta: true),
   ]),
-  pastePosition('Paste FEN', KeyPlace.window, [
-    SingleActivator(LogicalKeyboardKey.keyV, control: true, shift: true),
-    SingleActivator(LogicalKeyboardKey.keyV, meta: true, shift: true),
-  ]),
-  analysisBoard('New analysis board', KeyPlace.window, [
+  analysisBoard('New analysis tab', KeyPlace.window, [
     SingleActivator(LogicalKeyboardKey.keyN, control: true),
     SingleActivator(LogicalKeyboardKey.keyN, meta: true),
-  ]),
-  setUpPosition('Set up position', KeyPlace.window, [
-    SingleActivator(LogicalKeyboardKey.keyE, control: true, shift: true),
-    SingleActivator(LogicalKeyboardKey.keyE, meta: true, shift: true),
-  ]),
-  search('Search from the board', KeyPlace.window, [
-    SingleActivator(LogicalKeyboardKey.keyG, control: true),
-    SingleActivator(LogicalKeyboardKey.keyG, meta: true),
   ]),
   fullScreen('Full screen', KeyPlace.window, [
     SingleActivator(LogicalKeyboardKey.f11),
@@ -116,7 +92,7 @@ enum AppKey {
   squareClear('Clear selected piece', KeyPlace.squares, [
     SingleActivator(LogicalKeyboardKey.escape),
   ]),
-  tabMenu('Open tab menu', KeyPlace.tabs, [
+  focusMenu('Open the tab or row menu', KeyPlace.tabs, [
     SingleActivator(LogicalKeyboardKey.f10, shift: true),
     SingleActivator(LogicalKeyboardKey.contextMenu),
   ]),
@@ -146,18 +122,11 @@ enum AppKey {
   flip('Flip board', KeyPlace.board, [
     SingleActivator(LogicalKeyboardKey.keyF),
   ]),
-  engine('Engine on or off', KeyPlace.board, [
-    SingleActivator(LogicalKeyboardKey.keyE),
-  ]),
-  edit('Edit notes and moves', KeyPlace.board, [
-    SingleActivator(LogicalKeyboardKey.keyE, control: true),
-    SingleActivator(LogicalKeyboardKey.keyE, meta: true),
-  ]),
   undo('Undo', KeyPlace.board, [
     SingleActivator(LogicalKeyboardKey.keyZ, control: true),
     SingleActivator(LogicalKeyboardKey.keyZ, meta: true),
   ]),
-  save('Save changes', KeyPlace.board, [
+  save('Save', KeyPlace.board, [
     SingleActivator(LogicalKeyboardKey.keyS, control: true),
     SingleActivator(LogicalKeyboardKey.keyS, meta: true),
   ]),
@@ -171,8 +140,6 @@ enum AppKey {
     SingleActivator(LogicalKeyboardKey.keyW, control: true),
     SingleActivator(LogicalKeyboardKey.keyW, meta: true),
   ]),
-  // A character, not a key: `/` is Shift+7 on some keyboards.
-  typeMove('Type a move', KeyPlace.board, [CharacterActivator('/')]),
 
   commitComment('Finish the comment', KeyPlace.comment, [
     SingleActivator(LogicalKeyboardKey.enter, control: true),
@@ -219,12 +186,6 @@ enum AppKey {
   ]),
   closePreview('Close the preview', KeyPlace.bughouse, [
     SingleActivator(LogicalKeyboardKey.escape),
-  ]),
-  bughouseEngine('Toggle engine', KeyPlace.bughouse, [
-    SingleActivator(LogicalKeyboardKey.keyE),
-  ]),
-  playBest('Play the engine’s best move', KeyPlace.bughouse, [
-    SingleActivator(LogicalKeyboardKey.space),
   ]);
 
   const AppKey(this.action, this.place, this.keys, {this._named});
@@ -235,7 +196,7 @@ enum AppKey {
   final List<ShortcutActivator> keys;
   final String? _named;
 
-  /// The key in the words a tooltip uses: `Ctrl+E`, `F`, `←`.
+  /// The key in the words a tooltip uses: `Ctrl+S`, `F`, `←`.
   String get label => _named ?? keyName(keys.first);
 
   /// Every key that does it, without the macOS twins: `Home / PgUp`.

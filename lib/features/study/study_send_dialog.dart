@@ -6,6 +6,8 @@ import '../../chess/pgn/chapter.dart';
 import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
 import 'study_sender.dart';
+import '../../ui/form_dialog.dart';
+import '../../ui/segments.dart';
 
 /// Asks where on Lichess the open study goes, sends it, and says what
 /// Lichess now holds. One question: a new study, or one already there.
@@ -97,16 +99,13 @@ class _SendState extends State<_Send> with ListeningState<_Send> {
 
   /// Where the chapters go: a new study, or the one the link names.
   List<Widget> _destination(ThemeData theme, {required bool locked}) => [
-    SegmentedButton<bool>(
-      showSelectedIcon: false,
-      selected: {_existing},
+    Segments<bool>(
       segments: const [
         ButtonSegment(value: false, label: Text('New study')),
         ButtonSegment(value: true, label: Text('Existing study')),
       ],
-      onSelectionChanged: locked
-          ? null
-          : (value) => setState(() => _existing = value.single),
+      selected: _existing,
+      onChanged: locked ? null : (value) => setState(() => _existing = value),
     ),
     const SizedBox(height: Space.m),
     if (_existing) ...[
@@ -140,53 +139,51 @@ class _SendState extends State<_Send> with ListeningState<_Send> {
     final state = widget.sender.state;
     final sending = state is Sending;
     final done = state is SendDone;
-    return PopScope(
-      canPop: !sending,
-      child: AlertDialog(
-        title: const Text('Send to Lichess'),
-        content: SizedBox(
-          width: nameDialogWidth * 1.5,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                '$_count ${_count == 1 ? 'chapter' : 'chapters'} of '
-                '“${widget.name}”',
-              ),
-              const SizedBox(height: Space.m),
-              ..._destination(theme, locked: sending || done),
-              const SizedBox(height: Space.m),
-              _Outcome(
-                state: state,
-                onOpen: (study) => unawaited(
-                  widget.sender.openPage(StudySender.studyPage(study)),
-                ),
-                onLogIn: widget.onLogIn == null ? null : _logIn,
-              ),
-            ],
-          ),
+    final count = '$_count ${_count == 1 ? 'chapter' : 'chapters'}';
+    return FormDialog(
+      title: 'Send to Lichess',
+      width: dialogMedium,
+      busy: sending,
+      progress: switch (state) {
+        Sending(done: final sent, :final total) when total > 0 => sent / total,
+        _ => null,
+      },
+      canFail: true,
+      problem: switch (state) {
+        SendFailed(:final sentence) => sentence,
+        _ => null,
+      },
+      problemAction: switch (state) {
+        SendFailed(login: true) when widget.onLogIn != null => TextButton(
+          onPressed: _logIn,
+          child: const Text('Log in to Lichess…'),
         ),
-        actions: [
-          if (!done)
-            TextButton(
-              onPressed: sending ? null : () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-          if (done)
-            FilledButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Done'),
-            )
-          else
-            FilledButton(
-              onPressed: sending || !_ready ? null : _send,
-              child: Text(
-                state is SendFailed
-                    ? 'Send again'
-                    : 'Send $_count ${_count == 1 ? 'chapter' : 'chapters'}',
-              ),
-            ),
+        _ => null,
+      },
+      cancel: done ? null : 'Cancel',
+      confirm: done
+          ? 'Done'
+          : state is SendFailed
+          ? 'Send again'
+          : 'Send $count',
+      onConfirm: done
+          ? () => Navigator.pop(context)
+          : _ready
+          ? _send
+          : null,
+      body: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('$count of “${widget.name}”'),
+          const SizedBox(height: Space.m),
+          ..._destination(theme, locked: sending || done),
+          const SizedBox(height: Space.m),
+          _Outcome(
+            state: state,
+            onOpen: (study) =>
+                unawaited(widget.sender.openPage(StudySender.studyPage(study))),
+          ),
         ],
       ),
     );
@@ -195,11 +192,10 @@ class _SendState extends State<_Send> with ListeningState<_Send> {
 
 /// What the send is doing or came to, in the dialog's last lines.
 class _Outcome extends StatelessWidget {
-  const _Outcome({required this.state, required this.onOpen, this.onLogIn});
+  const _Outcome({required this.state, required this.onOpen});
 
   final StudySend state;
   final ValueChanged<String> onOpen;
-  final VoidCallback? onLogIn;
 
   @override
   Widget build(BuildContext context) {
@@ -207,14 +203,9 @@ class _Outcome extends StatelessWidget {
     return Semantics(
       liveRegion: true,
       child: switch (state) {
-        SendIdle() => const SizedBox.shrink(),
-        Sending(:final done, :final total) => Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            LinearProgressIndicator(value: total == 0 ? null : done / total),
-            const SizedBox(height: Space.s),
-            Text('Sending chapter ${done + 1} of $total…'),
-          ],
+        SendIdle() || SendFailed() => const SizedBox.shrink(),
+        Sending(:final done, :final total) => Text(
+          'Sending chapter ${done + 1} of $total…',
         ),
         SendDone(:final study, :final added, :final updated, :final skipped) =>
           Column(
@@ -246,17 +237,6 @@ class _Outcome extends StatelessWidget {
               ),
             ],
           ),
-        SendFailed(:final sentence, :final login) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(sentence, style: TextStyle(color: theme.colorScheme.error)),
-            if (login && onLogIn != null)
-              TextButton(
-                onPressed: onLogIn,
-                child: const Text('Log in to Lichess'),
-              ),
-          ],
-        ),
       },
     );
   }

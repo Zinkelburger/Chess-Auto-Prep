@@ -11,6 +11,8 @@ import '../document/document_session.dart';
 import '../board/line_preview.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/tool_button.dart';
 
 /// The move on the board and what the file says about it, under the board
 /// where the eye already is, as Lichess shows it: `14. Nf5!  Good move`
@@ -100,7 +102,7 @@ class _MoveNoteState extends State<MoveNote> with CommentPreviews<MoveNote> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _header(context, move, edit: edit, finding: finding),
-                  if (edit) CommentField(session: session),
+                  if (edit) CommentField(session: session, labelled: false),
                   if (!edit) ...[
                     for (final (comment, at, from) in notes)
                       _comment(comment, at, from),
@@ -141,9 +143,9 @@ class _MoveNoteState extends State<MoveNote> with CommentPreviews<MoveNote> {
             : Text('Notes', style: Theme.of(context).textTheme.labelLarge),
       ),
       if (!widget.editable && widget.editing != null && !finding)
-        IconButton(
-          tooltip: AppKey.edit.tip(edit ? 'Done editing' : 'Edit notes'),
-          icon: Icon(edit ? Icons.check : Icons.edit_outlined),
+        ToolButton(
+          icon: edit ? AppIcons.done : AppIcons.edit,
+          tooltip: edit ? 'Done editing' : 'Edit notes',
           onPressed: () => widget.editing!.value = !widget.editing!.value,
         ),
     ],

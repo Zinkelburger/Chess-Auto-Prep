@@ -20,10 +20,10 @@ move list, engine and explorer are described in [workspace](workspace.md).
 
 ## Screen
 
-- **List column** (left; Ctrl+B or the `«` in its corner hides it) — the open
+- **List column** (left; the `«` in its corner hides it) — the open
   file's name with a `+` (`Open PGN file…`, Ctrl+O), a `Search` box, a filter
   button (`Filter games`) and, while a filter narrows, `n of N` (`Filtering…`
-  while it runs) with `Clear`; an `Order` field (`File order`, `Newest first`,
+  while it runs) with `Clear filters`; an `Order` field (`File order`, `Newest first`,
   `Rating high`, `Rating low`; typeable) and `Follow a player`. Then the games:
   number, players, result; the game on the board is marked. A file with
   chapters (Lichess `ChapterName`, a course's player-header titles; rule in
@@ -37,7 +37,7 @@ move list, engine and explorer are described in [workspace](workspace.md).
   `Filtering games…`.
 - **Board** with the game counter under it — `‹ [n] of N ›`, the number
   typeable to jump. On Read the board is quiet: the engine row appears only
-  while the engine is on (E), the move field while typed in (`/`), the
+  while the engine is on, the move field while typed in, the
   move-note card when the move has a note. On Edit the engine row and the move
   field are always there.
 - **Reading card** — opens on `Moves` alone: no tab strip, no frame, a `+` in
@@ -45,7 +45,7 @@ move list, engine and explorer are described in [workspace](workspace.md).
   name) is the top of the move text and scrolls with it. Where the game left
   the user's book, one line under the heading says so, e.g. `You left book:
   3...Nf6 (book 3...cxd4) · Main`, with `Show my line`. Its foot is `Read |
-  Edit` (Ctrl+E), then the four move arrows; the viewer opens on Read.
+  Edit`, then the four move arrows; the viewer opens on Read.
 - **`+` menu** — the viewer's tabs (`Moves`, `Explorer`, `Filter`, `Analysis`,
   `Game review`, `Solitaire`, `My books`), then `Engine on` with its key, then
   `New pane`. A tab picked while Moves is alone opens under it.
@@ -59,14 +59,14 @@ move list, engine and explorer are described in [workspace](workspace.md).
   read-only`, `Edits stay unsaved until you save them`), `Discard` and `Save`
   while edits are held, then on Edit the glyphs and the comment field. `Read`
   closes it; there is no `Done`.
-- **Actions menu** (Ctrl+K) — Document: `Edit` / `Done editing`, `Undo`,
+- **Actions menu** — Document: `Edit` / `Done editing`, `Undo`,
   `Save changes` and `Discard changes` while edits are held; Board: `Flip
   board`, `Engine on`/`off`, `Play through` / `Stop playing`; Game: `Analyze
   game` / `Stop analysis`, `Analyze all games` (the review's `Analyze all N
   games`), `Solitaire chess` / `Stop
   solitaire`, `Add game to study…`; File: `Open in Study` (a study's file),
-  `Close file`, `Filter games`, `Export visible games as PGN…`, `Save
-  selection to study…`; Copy: `Copy game PGN`, `Copy FEN`.
+  `Close file`, `Filter games`, `Export games…`, `Add
+  games to study…`; Copy: `Copy game PGN`, `Copy FEN`.
 
 ## Actions
 
@@ -93,7 +93,7 @@ holds rules: `Field` (`Player`, `Moves`, `White`, `Black`, `White rating`,
 `Black rating`, `Date`, `Event`, `Site`, `Result`, `ECO`, `Opening`, or any
 header typed) / `Rule` (`contains`, `excludes`, `is`, `starts with`, `regex`,
 `≥`, `≤`) / `Value`, `Add rule`, `Reaching this position`, `All` / `Any`,
-`Clear`, and while narrowing `Export matching games…` and `Save to study…`.
+`Clear filters`, and while narrowing `Export games…` and `Add games to study…`.
 `Player` matches either colour, `;` separates names. `Moves` takes a
 sequence, move numbers optional, `…` / `...` / `[gap]` for "anywhere after";
 `≥`/`≤` count its moves. `Reaching this position` captures the board once and
@@ -114,7 +114,7 @@ Enter on an empty box follows nobody. Each game turns to that player's side;
 a manual flip stands until the next game.
 
 **Read and edit** — the viewer and Study share this card and its rule.
-`Read | Edit` at the card's foot, Ctrl+E or Actions ▸ `Edit` turns it; each
+`Read | Edit` at the card's foot or Actions ▸ `Edit` turns it; each
 mode keeps its own side (the viewer starts on Read, Study on Edit). On Read,
 moves played, review annotations and the like show at once but are held in
 memory (`DocumentSession.holdsEdits`): the strip says `Unsaved changes` with
@@ -123,8 +123,8 @@ change is written as it is made, as in the builder, and turning to Edit writes
 what Read held first; Ctrl+Z undoes either way (100 steps held). Coming to the
 mode, or to a document tab that held edits, never writes them. A read-only
 file holds edits on Read and Edit alike, and Save asks `Save your moves` →
-`Copy into Documents…` (a name, then a copy in `pgn_collections` that opens)
-or `Add to a study…`. Document tabs keep each file's held edits and undo
+`Copy into Documents…` (a file name, checked as every name is, then a copy in
+`pgn_collections` that opens) or `Add to a study…`. Document tabs keep each file's held edits and undo
 while another is up. Failures go to the top bar's status line with one way
 out (`Retry save`, Reload).
 
@@ -181,7 +181,7 @@ move or gives up; an unjudged move is never called a mistake. Future moves,
 notes and variations stay hidden (`DocumentSession.showOnlyTo`) and visible
 engine analysis is off. At the end the full game returns with attempts, hints
 and evaluations annotated: `Copy session PGN`, `Play again`, `Next game`,
-`Add to study…`, `Done`. Esc, another game or leaving the mode ends it.
+`Add to study…`, `Done` (the filled one). Esc, another game or leaving the mode ends it.
 Solitaire never writes the source file.
 
 **Play through** — Space or `Play through` → one main-line move a second
@@ -194,16 +194,16 @@ study…` → one study picker (chapter name for a single chapter, `New study…
 typeable list). The mode stays; the status line names where the chapters went
 with `Open study`.
 
-**Export** — `Export visible games as PGN…` / `Export matching games…` →
-`Export visible games` asks a `PGN file name`, then `Choose folder` → the
+**Export** — `Export games…` (Actions or the Filter tab) →
+`Export games` asks a `PGN file name`, then `Choose folder` → the
 visible games in list order, with comments and variations, written to a new
 file; an existing file is never replaced; the source is untouched. Refused
 while filtering: `Wait for filtering to finish and select at least one game.`
 
 **Close file** — Actions ▸ `Close file` → back to the recent list.
 
-Keys: ←/→, Home/End, ↑/↓ (game), Enter/Esc (variation), F, E, Space, Ctrl+E
-(edit), Ctrl+S, Ctrl+Z, Ctrl+N (Analysis tab), Ctrl+O, Ctrl+B, F11 — all from
+Keys: ←/→, Home/End, ↑/↓ (game), Enter/Esc (variation), F, Space, Ctrl+S,
+Ctrl+Z, Ctrl+N (Analysis tab), Ctrl+O, F11 — all from
 `AppKey`.
 
 ## Data
@@ -241,7 +241,7 @@ Keys: ←/→, Home/End, ↑/↓ (game), Enter/Esc (variation), F, E, Space, Ctr
   with moves in mono 16 (owner, 2026-09-21).
 - No eval bar anywhere in the app (owner, 2026-09-21).
 - Reading shows no editing chrome; editing is the strip, opened by `Read |
-  Edit` at the card's foot, Ctrl+E or Actions ▸ Edit (owner, 2026-09-21,
+  Edit` at the card's foot or Actions ▸ Edit (owner, 2026-09-21,
   2026-10-24).
 - Comments are laid out: paragraphs, inline moves (hover shows a board; click
   shows the position without writing), bare-FEN diagrams, headings and quotes

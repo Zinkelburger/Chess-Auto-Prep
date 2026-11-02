@@ -13,6 +13,10 @@ import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
 import 'trainer.dart';
 import 'trainer_state.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/tool_button.dart';
+import '../../ui/toggle_chip.dart';
 
 /// The selected scope's training desk, inside the shared Train pane.
 class TrainingHome extends StatefulWidget {
@@ -87,15 +91,15 @@ class _TrainingHomeState extends State<TrainingHome> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (selection.chapter != null)
-          TextButton(
-            onPressed: () => selection.select(),
-            child: Text(
-              '← ${selection.repertoire?.name ?? 'Whole repertoire'}',
-            ),
-          ),
         Row(
           children: [
+            if (selection.chapter != null)
+              ToolButton(
+                icon: AppIcons.back,
+                tooltip:
+                    'Back to ${selection.repertoire?.name ?? 'the whole repertoire'}',
+                onPressed: () => selection.select(),
+              ),
             Expanded(
               child: Text(
                 line?.name ?? selection.title,
@@ -109,7 +113,7 @@ class _TrainingHomeState extends State<TrainingHome> {
                   rowAction(
                     'Training settings…',
                     widget.onSettings!,
-                    busy: false,
+                    icon: AppIcons.settings,
                   ),
                 rowAction(
                   'Mark scope as learned',
@@ -135,11 +139,7 @@ class _TrainingHomeState extends State<TrainingHome> {
                   ),
                   busy: widget.ready.progress.stale,
                 ),
-                rowAction(
-                  'Reload progress',
-                  () => unawaited(trainer.reload()),
-                  busy: false,
-                ),
+                rowAction('Reload progress', () => unawaited(trainer.reload())),
               ],
             ),
           ],
@@ -193,13 +193,10 @@ class _TrainingHomeState extends State<TrainingHome> {
           runSpacing: Space.s,
           children: [
             if (paused)
-              FilledButton(
+              FilledButton.icon(
                 onPressed: busy ? null : _resumeScope,
-                child: Text(
-                  selection.repertoirePaused
-                      ? 'Resume repertoire'
-                      : 'Resume training',
-                ),
+                icon: const Icon(AppIcons.run, size: IconSize.action),
+                label: const Text('Resume'),
               )
             else
               FilledButton(
@@ -258,28 +255,26 @@ class _TrainingHomeState extends State<TrainingHome> {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         const Text('Review'),
-        ChoiceChip(
-          label: const Text('Due'),
+        ToggleChip(
+          label: 'Due',
           selected: !trainer.options.reviewAll && !selection.choosing,
           onSelected: (_) {
             selection.chooseLines(false);
             selection.update(trainer.options.copyWith(reviewAll: false));
           },
         ),
-        ChoiceChip(
-          label: const Text('All learned'),
+        ToggleChip(
+          label: 'All learned',
           selected: trainer.options.reviewAll && !selection.choosing,
           onSelected: (_) {
             selection.chooseLines(false);
             selection.update(trainer.options.copyWith(reviewAll: true));
           },
         ),
-        FilterChip(
-          label: Text(
-            selection.choosing
-                ? '${selection.picked.length} selected'
-                : 'Choose lines',
-          ),
+        ToggleChip(
+          label: selection.choosing
+              ? '${selection.picked.length} selected'
+              : 'Choose lines',
           selected: selection.choosing,
           onSelected: selection.chooseLines,
         ),
@@ -407,10 +402,5 @@ class _TrainingHomeState extends State<TrainingHome> {
       ),
   ];
 
-  Widget _problem(BuildContext context, String text) => Text(
-    text,
-    style: Theme.of(
-      context,
-    ).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error),
-  );
+  Widget _problem(BuildContext context, String text) => ProblemLine(text);
 }

@@ -40,8 +40,8 @@ final class FillRequest {
     this.lichess = const ExplorerChoice(source: ExplorerSource.lichess),
   });
 
-  /// The next search as [settings] have it: the Expectimax tab's button,
-  /// Ctrl+G and Actions all start this one.
+  /// The next search as [settings] have it: the Expectimax tab's button
+  /// and Actions both start this one.
   FillRequest.of(Settings settings)
     : this(
         elo: settings.opponentElo,

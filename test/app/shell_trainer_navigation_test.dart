@@ -18,12 +18,12 @@ void main() {
   tearDown(() => w.dispose());
 
   Future<void> openBuilder(WidgetTester tester) async {
-    if (find.text('Open in Builder').evaluate().isEmpty) {
+    if (find.text('Open in builder').evaluate().isEmpty) {
       await tester.tap(find.byTooltip('Line actions'));
       await tester.pumpAndSettle();
     }
-    await tester.ensureVisible(find.text('Open in Builder'));
-    await tester.tap(find.text('Open in Builder'));
+    await tester.ensureVisible(find.text('Open in builder'));
+    await tester.tap(find.text('Open in builder'));
   }
 
   Future<void> start(WidgetTester tester, Mode mode) async {

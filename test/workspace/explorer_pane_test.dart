@@ -12,6 +12,7 @@ import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/explorer/opening_names.dart';
 import 'package:chess_auto_prep/workspace/explorer/explorer.dart';
 import 'package:chess_auto_prep/workspace/explorer/explorer_pane.dart';
+import 'package:chess_auto_prep/workspace/explorer/explorer_rows.dart';
 import 'package:chess_auto_prep/workspace/explorer/file_filter.dart';
 import 'package:chess_auto_prep/workspace/explorer/local_games.dart';
 import 'package:chessground/chessground.dart' show StaticChessboard;
@@ -301,9 +302,9 @@ void main() {
           return true;
         },
       );
-      expect(find.text('Log in to Lichess'), findsOneWidget);
+      expect(find.text('Log in to Lichess…'), findsOneWidget);
       expect(find.text('Try again'), findsNothing);
-      await tester.tap(find.text('Log in to Lichess'));
+      await tester.tap(find.text('Log in to Lichess…'));
       await tester.pumpAndSettle();
       expect(logins, 1);
       expect(explorer.state, isA<ExplorerShown>());
@@ -325,7 +326,7 @@ void main() {
     );
     await tester.tap(find.text('TWIC'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Download TWIC database'));
+    await tester.tap(find.text('Download TWIC…'));
     await tester.pumpAndSettle();
     expect(downloads, 1);
     expect(explorer.state, isA<ExplorerShown>());

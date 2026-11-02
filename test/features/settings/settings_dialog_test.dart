@@ -459,8 +459,8 @@ void main() {
     await pump(tester);
     await selectPlace(tester, 'Shortcuts');
     await tester.pumpAndSettle();
-    expect(find.text(AppKey.actions.action), findsOneWidget);
-    expect(find.text(AppKey.actions.label), findsOneWidget);
+    expect(find.text(AppKey.openFile.action), findsOneWidget);
+    expect(find.text(AppKey.openFile.label), findsOneWidget);
     await tester.enterText(find.byType(TextField).first, 'flip');
     await tester.pumpAndSettle();
     expect(find.text('Flip board'), findsOneWidget);

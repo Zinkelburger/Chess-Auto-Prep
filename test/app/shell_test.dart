@@ -51,6 +51,10 @@ void main() {
       await pump(tester);
       await tester.tap(find.text('Actions'));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.widgetWithText(SubmenuButton, 'Action Tabs'),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(SubmenuButton, 'Action Tabs'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Show Replies'));
@@ -132,7 +136,7 @@ void main() {
     expect(w.analysis.pausedFor, isNull);
     w.requests.switchTo(Mode.trainer);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Resume lesson'));
+    await tester.tap(find.text('Resume'));
     await tester.pump();
     expect(w.lineTrainer.lesson, same(lesson));
     expect(lesson.suspended, isFalse);
@@ -202,7 +206,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('The clipboard holds no FEN.'), findsOneWidget);
     expect(tester.getRect(board), quiet);
-    await tester.tap(find.byTooltip('Close'));
+    await tester.tap(find.byTooltip('Hide this message'));
     await tester.pumpAndSettle();
     expect(find.text('The clipboard holds no FEN.'), findsNothing);
     expect(tester.getRect(board), quiet);
@@ -387,6 +391,10 @@ void main() {
     expect(find.text('Replies'), findsOneWidget);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.widgetWithText(SubmenuButton, 'Action Tabs'),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(SubmenuButton, 'Action Tabs'));
     await tester.pumpAndSettle();
     expect(find.text('Next tab'), findsOneWidget);
@@ -397,6 +405,10 @@ void main() {
     expect(find.text('Replies'), findsNothing);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.widgetWithText(SubmenuButton, 'Action Tabs'),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(SubmenuButton, 'Action Tabs'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Show Replies'));
@@ -406,7 +418,7 @@ void main() {
     expect(find.text('Next gap'), findsOneWidget, reason: 'brought up');
   });
 
-  testWidgets('Search from here (Ctrl+G) brings the Search tab up and '
+  testWidgets('Expectimax from here brings the Search tab up and '
       'starts it, on the analysis board and on a chapter', (tester) async {
     await pump(tester);
     Future<void> searchFromHere() async {
@@ -416,11 +428,9 @@ void main() {
         find.widgetWithText(MenuItemButton, 'Expectimax from here'),
       );
       expect(entry.onPressed, isNotNull);
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pumpAndSettle();
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.tap(
+        find.widgetWithText(MenuItemButton, 'Expectimax from here'),
+      );
       await tester.pumpAndSettle();
       // No engine in this test: the tab says so, and the pane is back.
       expect(find.byType(SearchPane), findsOneWidget);
@@ -435,14 +445,43 @@ void main() {
     await searchFromHere();
   });
 
-  testWidgets('Actions sits beside the mode menu, at the left, and says its '
-      'key', (tester) async {
+  testWidgets('Actions offers the list\'s own buttons, and the repertoire '
+      'entries are off on the analysis board', (tester) async {
+    await pump(tester);
+    VoidCallback? entry(String label) => tester
+        .widget<MenuItemButton>(find.widgetWithText(MenuItemButton, label))
+        .onPressed;
+    Future<void> open() async {
+      await tester.tap(find.text('Actions'));
+      await tester.pumpAndSettle();
+    }
+
+    await open();
+    expect(w.session.isScratch, isTrue);
+    expect(entry('New repertoire…'), isNotNull);
+    expect(entry('Import course PGN…'), isNotNull);
+    expect(entry('New chapter…'), isNull, reason: 'no repertoire open');
+    for (final label in ['Train this chapter', 'Next gap', 'Play as Black']) {
+      if (find.text(label).evaluate().isEmpty) continue;
+      expect(entry(label), isNull, reason: label);
+    }
+    await tester.tapAt(const Offset(5, 700));
+    await tester.pumpAndSettle();
+
+    await showLibrary(tester);
+    await tester.tap(inLibrary(find.text('Main')).last);
+    await tester.pumpAndSettle();
+    await open();
+    expect(entry('New chapter…'), isNotNull);
+    expect(entry('Train this chapter'), isNotNull);
+  });
+
+  testWidgets('Actions sits beside the mode menu, at the left', (tester) async {
     await pump(tester);
     final mode = tester.getTopRight(find.text('Repertoire builder').first);
     final actions = tester.getTopLeft(find.text('Actions'));
     expect(actions.dx, greaterThan(mode.dx));
     expect(actions.dx - mode.dx, lessThan(Space.xl * 2));
-    expect(find.byTooltip('Actions (Ctrl+K)'), findsOneWidget);
   });
 
   testWidgets(
@@ -599,16 +638,16 @@ void main() {
   ) async {
     await pump(tester);
     // Shown: `«` in the pane's own top right corner, not the top bar.
-    final hide = find.byTooltip('Hide the list (Ctrl+B)');
+    final hide = find.byTooltip('Hide the list');
     expect(hide, findsOneWidget);
-    expect(find.byTooltip('Show the list (Ctrl+B)'), findsNothing);
+    expect(find.byTooltip('Show the list'), findsNothing);
     final corner = tester.getTopRight(hide);
     expect(corner.dx, closeTo(listColumnWidth, Space.l));
     expect(corner.dy, greaterThan(40));
     await tester.tap(hide);
     await tester.pumpAndSettle();
     // Hidden: `»` at the top bar's left, where the pane would begin.
-    final show = find.byTooltip('Show the list (Ctrl+B)');
+    final show = find.byTooltip('Show the list');
     expect(show, findsOneWidget);
     expect(hide, findsNothing);
     expect(tester.getTopLeft(show).dx, lessThan(Space.l));

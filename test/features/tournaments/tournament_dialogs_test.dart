@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/features/tournaments/setup_dialog.dart';
 import 'package:chess_auto_prep/features/tournaments/tournament_run.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
+import 'package:chess_auto_prep/ui/toggle_chip.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -34,17 +35,17 @@ void main() {
       position: Fen.initial,
     );
     await tester.pumpAndSettle();
-    final blitz = find.widgetWithText(ChoiceChip, 'Blitz');
-    expect(tester.widget<ChoiceChip>(blitz).selected, isFalse);
+    final blitz = find.widgetWithText(ToggleChip, 'Blitz');
+    expect(tester.widget<ToggleChip>(blitz).selected, isFalse);
     expect(
       tester
-          .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '2 s / move'))
+          .widget<ToggleChip>(find.widgetWithText(ToggleChip, '2 s / move'))
           .selected,
       isTrue,
     );
     await tester.tap(blitz);
     await tester.pumpAndSettle();
-    expect(tester.widget<ChoiceChip>(blitz).selected, isTrue);
+    expect(tester.widget<ToggleChip>(blitz).selected, isTrue);
     expect(find.text('Initial clock (ms)'), findsOneWidget);
     await tester.enterText(
       find.widgetWithText(TextField, 'Name'),

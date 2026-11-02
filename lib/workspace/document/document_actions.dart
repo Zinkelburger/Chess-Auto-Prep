@@ -8,6 +8,7 @@ import '../../ui/app_action.dart';
 import 'document_session.dart';
 import '../analysis/engine_analysis.dart';
 import '../../ui/app_keys.dart';
+import '../../ui/app_icons.dart';
 
 /// What can be done to the document on the board, whatever mode opened it:
 /// the Actions menu's second half. Each entry is off when there is nothing
@@ -25,8 +26,7 @@ List<AppAction> documentActions({
     AppAction(
       editing.value ? 'Done editing' : 'Edit',
       when(open, () => editing.value = !editing.value),
-      icon: editing.value ? Icons.check : Icons.edit_outlined,
-      shortcut: AppKey.edit.label,
+      icon: editing.value ? AppIcons.done : AppIcons.edit,
       group: 'Document',
     ),
     if (!session.holdsEdits || session.canUndo || editing.value)
@@ -35,15 +35,15 @@ List<AppAction> documentActions({
         when(session.canUndo, () => unawaited(session.undo())),
         shortcut: AppKey.undo.label,
         group: 'Document',
-        icon: Icons.undo,
+        icon: AppIcons.undo,
       ),
     if (session.hasHeldEdits) ...[
       AppAction(
-        'Save changes',
+        AppKey.save.action,
         onSaveHeld ?? session.keepHeld,
         shortcut: AppKey.save.label,
         group: 'Document',
-        icon: Icons.save_outlined,
+        icon: AppIcons.save,
       ),
       AppAction('Discard changes', session.discardHeld, group: 'Document'),
     ],
@@ -51,7 +51,7 @@ List<AppAction> documentActions({
       'Save a copy…',
       when(session.source != null, onSaveCopy),
       group: 'Document',
-      icon: Icons.save_outlined,
+      icon: AppIcons.saveCopy,
     ),
     AppAction(
       'Flip board',
@@ -59,8 +59,8 @@ List<AppAction> documentActions({
       shortcut: AppKey.flip.label,
       group: 'Board',
     ),
-    // Off at any time, on only while the whole game is on view, as E is:
-    // the engine would read a hidden puzzle answer out.
+    // Off at any time, on only while the whole game is on view: the engine
+    // would read a hidden puzzle answer out.
     AppAction(
       analysis.enabled ? 'Engine off' : 'Engine on',
       when(
@@ -69,20 +69,19 @@ List<AppAction> documentActions({
           analysis.enabled ? analysis.disable() : analysis.enable(),
         ),
       ),
-      shortcut: AppKey.engine.label,
       group: 'Board',
     ),
     AppAction(
       'Copy game PGN',
       when(open, () => _copy(gameText(session))),
       group: 'Copy',
-      icon: Icons.content_copy,
+      icon: AppIcons.copy,
     ),
     AppAction(
       'Copy FEN',
       when(open, () => _copy(session.cursor.fen.value)),
       group: 'Copy',
-      icon: Icons.content_copy,
+      icon: AppIcons.copy,
     ),
   ];
 }
