@@ -98,8 +98,8 @@ void main() {
       );
       expect(
         tester
-            .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Use this book'),
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Use this book'),
             )
             .onPressed,
         isNull,

@@ -5,7 +5,6 @@ import '../../chess/fen.dart';
 import '../../chess/typed_move.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/theme.dart';
-import '../../ui/app_icons.dart';
 
 /// The typed-move field's words and focus.
 ///
@@ -198,16 +197,9 @@ class _MoveFieldState extends State<MoveField> {
               ),
               decoration: InputDecoration(
                 isDense: true,
-                // What the box is for, as the search fields show their
-                // magnifier: an empty box says nothing by itself.
-                prefixIcon: Icon(
-                  AppIcons.keyboard,
-                  size: IconSize.menu,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                prefixIconConstraints: const BoxConstraints(
-                  minWidth: IconSize.menu + 2 * Space.s,
-                ),
+                // The box's name on its border, as every field has.
+                labelText: 'Move',
+                floatingLabelBehavior: FloatingLabelBehavior.always,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: Space.s,
                   vertical: Space.s,

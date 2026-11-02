@@ -532,6 +532,7 @@ ThemeData darkTheme() {
     // Every field is an outlined box with its name on the border: the
     // search, choice and number controls and a dialog's text fields alike.
     inputDecorationTheme: const InputDecorationTheme(
+      isDense: true,
       border: OutlineInputBorder(),
     ),
     popupMenuTheme: _popupMenu(_sized(base.textTheme)),

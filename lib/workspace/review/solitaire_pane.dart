@@ -309,7 +309,7 @@ class _Done extends StatelessWidget {
     spacing: Space.s,
     runSpacing: Space.s,
     children: [
-      FilledButton.icon(
+      OutlinedButton.icon(
         key: const ValueKey('solitaire-copy-pgn'),
         onPressed: () async {
           final pgn = solitaire.reviewPgn;
@@ -333,7 +333,8 @@ class _Done extends StatelessWidget {
           icon: const Icon(AppIcons.add, size: IconSize.action),
           label: const Text('Add game to study…'),
         ),
-      TextButton(onPressed: solitaire.stop, child: const Text('Done')),
+      // Done ends the session: the one filled button, never the copy.
+      FilledButton(onPressed: solitaire.stop, child: const Text('Done')),
     ],
   );
 }

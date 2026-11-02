@@ -231,7 +231,7 @@ class _Actions extends StatelessWidget {
           ),
         Tooltip(
           message: 'Open ${place.file.name} in the builder at this position',
-          child: FilledButton.icon(
+          child: OutlinedButton.icon(
             onPressed: () => onReadBook(place),
             icon: const Icon(AppIcons.openElsewhere, size: IconSize.action),
             label: const Text('Open in builder'),

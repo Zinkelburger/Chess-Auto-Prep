@@ -126,7 +126,7 @@ class _BoardAndCounterState extends State<BoardAndCounter>
     final onMove = widget.onMove;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final room = navRowHeight + moveFeedbackHeight + Space.s + _engineRoom;
+        final room = navRowHeight + moveFeedbackHeight + Space.m + _engineRoom;
         final noteRoom = widget.editing != null || widget.noteEditable
             ? moveNoteMinHeight + Space.s
             : 0.0;
@@ -173,10 +173,14 @@ class _BoardAndCounterState extends State<BoardAndCounter>
                     );
                   },
                 ),
-                const SizedBox(height: Space.s),
-                SizedBox(height: _engineRoom, child: _engine()),
+                // Room for the field's name on its border.
+                const SizedBox(height: Space.m),
+                // The move field right under the board it plays on; the
+                // engine's room after it keeps its height on or off, so
+                // nothing here moves when the engine is switched.
                 _navigation(),
                 MoveFeedback(entry: widget.moves),
+                SizedBox(height: _engineRoom, child: _engine()),
                 if (below >= moveNoteMinHeight) _note(side, below),
               ],
             ),

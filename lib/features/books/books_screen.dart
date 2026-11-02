@@ -441,7 +441,8 @@ class _BookEditorState extends State<_BookEditor> {
               ),
             )
           else
-            FilledButton(
+            // One per row, so never the filled one.
+            OutlinedButton(
               onPressed: books.changingReferences
                   ? null
                   : () => books.activate(book),

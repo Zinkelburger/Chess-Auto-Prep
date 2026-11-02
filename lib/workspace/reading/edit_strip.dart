@@ -213,15 +213,29 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
     );
   }
 
+  /// Whether the strip offers Save: edits are held off the file.
+  bool get _held => widget.session.hasHeldEdits || widget.session.holdsEdits;
+
   Widget _stateRow(bool editing, SaveState state) => Row(
     children: [
       if (editing) ...[
         if (widget.done) ...[
-          FilledButton(
-            onPressed: () => widget.editing.value = false,
-            style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
-            child: const Text('Done'),
-          ),
+          // Save, while there is something to save, is the filled one.
+          _held
+              ? OutlinedButton(
+                  onPressed: () => widget.editing.value = false,
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  child: const Text('Done'),
+                )
+              : FilledButton(
+                  onPressed: () => widget.editing.value = false,
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  child: const Text('Done'),
+                ),
           const SizedBox(width: Space.s),
         ],
         ToolButton(
@@ -253,7 +267,7 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
           onPressed: widget.session.retrySave,
           child: const Text('Retry save'),
         ),
-      if (widget.session.hasHeldEdits || widget.session.holdsEdits) ...[
+      if (_held) ...[
         TextButton(
           onPressed: widget.session.hasHeldEdits ? _discard : null,
           child: const Text('Discard'),

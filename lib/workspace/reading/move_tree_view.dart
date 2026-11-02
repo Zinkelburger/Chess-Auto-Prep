@@ -141,14 +141,17 @@ class _MoveTreeViewState extends State<MoveTreeView>
                   ),
                   child: heading,
                 ),
-              Expanded(
-                child: Center(
-                  child: Text(
-                    widget.preview == null
-                        ? 'No moves'
-                        : 'Make your first move',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
+              // Where the first move will be, as every empty list says so.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  readingCardInset,
+                  Space.s,
+                  readingCardInset,
+                  0,
+                ),
+                child: Text(
+                  widget.preview == null ? 'No moves' : 'Make your first move',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
             ],
