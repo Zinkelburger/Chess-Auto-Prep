@@ -58,7 +58,7 @@ Bughouse mode is offered when its engine assets are present.
   `TrainingOutline` and `TrainingHome` live inside the existing three panels.
   `TrainingOptions` persists the repertoire, review choice and parent pauses.
   Analysis/Explorer help opens a scratch study detour at the lesson position;
-  Return to training restores the retained lesson. A mode, tab or file detour suspends the current lesson and its
+  Resume restores the retained lesson. A mode, tab or file detour suspends the current lesson and its
   timers; Resume reclaims the board in the visible Train pane. Back to lines
   ends it explicitly. Accepted ratings finish saving while paused; a changed
   source invalidates the retained lesson. Training records remain under Documents.
@@ -67,11 +67,11 @@ Bughouse mode is offered when its engine assets are present.
   Ctrl+V reads by content: a FEN (quoted, a `[FEN "…"]` tag, or cut short and
   filled in as `w - - 0 1`), a PGN or bare moves becomes an analysis board,
   except a PGN in the builder or trainer with a chapter up, which becomes a
-  repertoire; Ctrl+Shift+V takes a FEN only. A FEN faces the side to move. A
+  repertoire; Actions ▸ `Paste FEN` takes a FEN only. A FEN faces the side to move. A
   blank board (nothing played or edited) is reused rather than opening another
   tab. Tactics, the trainer and the modes without a board send the board to the
-  Repertoire builder; Bughouse names its own paste. `Set up position…`
-  (Ctrl+Shift+E) opens the shared `workspace/board/board_editor.dart` on the board's
+  Repertoire builder; Bughouse names its own paste. `Edit position…`
+  opens the shared `workspace/board/board_editor.dart` on the board's
   position and returns an analysis board the same way up. While the Analysis
   tab is up, both fill that tab's scratch game instead.
 - The viewer and Study share `_ReadingView` (`app/document_views.dart`): one
@@ -188,7 +188,7 @@ Bughouse mode is offered when its engine assets are present.
   while browsing source games. Writes participate in exit settling. Actions offers
   Reset workspace layout, board width and active pane sizing; tab context menus
   also open with Shift+F10. Mode navigation is grouped and searchable through
-  Find a mode and the Actions palette. The reading surface names its Tools menu.
+  Find a mode and the Actions menu. The reading surface names its Tools menu.
 - Engine jobs publish a named kind through `EngineJobs`; the top bar's running
   task button returns to the owning tool without starting a second job. Discard
   of held edits confirms the named document and refuses stale dialog callbacks.

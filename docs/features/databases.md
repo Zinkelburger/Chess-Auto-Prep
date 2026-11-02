@@ -40,14 +40,13 @@ Reached from the mode menu (`Databases`, in the `Data & engines` group of
   PGN to browse games.` (`Import a PGN to add your own games here.` without
   TWIC) or `No games match these filters.`
 - **Pager** — `Page N`, `Previous`, `Next`; 100 games a page.
-- **Actions menu** — `Refresh databases` and `Import PGN…` in a `Databases`
+- **Actions menu** — `Refresh` and `Import PGN…` in a `Databases`
   group.
 
 ## Actions
 
-**Download TWIC** — `Download TWIC…` here, or `Download TWIC database` in the
-explorer when the TWIC source has no database → dialog `Download TWIC
-database` with `Weeks` (1–520, default 52) → reads theweekinchess.com/twic for
+**Download TWIC** — `Download TWIC…` here, or in the
+explorer when the TWIC source has no database → dialog `Download TWIC` with `Weeks` (1–520, default 52) → reads theweekinchess.com/twic for
 the newest issue and imports issues newest first, skipping ones already in the
 file, so the same action starts the database and brings it up to date. Status
 reads `Finding the latest TWIC issue…`, `Downloading TWIC 1612 · 3 of 52`,

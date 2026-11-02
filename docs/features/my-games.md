@@ -60,7 +60,7 @@ the list instead.
 
 **Get games** — the Tactics download and review, unchanged (see
 [Tactics](tactics.md)): 200 games are asked for while fewer than 200 of an
-account's games are saved, else 20. Actions: `Get my games` / `Pause the
+account's games are saved, else 20. Actions: `Get games` / `Pause the
 review`, `My accounts…`.
 
 **Check** — showing the column or Book tab, a download, a username change, a

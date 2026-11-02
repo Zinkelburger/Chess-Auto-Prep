@@ -43,13 +43,13 @@ panel on the right: 440–640 px beside board 1 alone, 440–480 px beside both.
   right-drag draws an arrow and a right-click a circle, green, or red with
   Shift, blue with Alt, yellow with Ctrl; a left click or a new position
   takes them away.
-- **Panel** — `1 board` | `2 boards`, and `Edit board` at the right of that
+- **Panel** — `1 board` | `2 boards`, and `Edit position…` at the right of that
   row. Under it, in the same compact segments, who may sit: `A + B may sit`
   | `C + D may sit`, or with one board `White may sit` | `Black may sit`
   (the default is C + D, Black). Hivemind has no case where neither may:
   its one clock input says whether the searched team may sit, and its
   search gives the other team the opposite. The tooltips explain each.
-- **Engine bar** — a switch (`Toggle engine (E)`), the score in 18 px mono,
+- **Engine bar** — a switch (`Turn engine on`), the score in 18 px mono,
   then `Hivemind · 12,400 nodes` (the size of the search the rows come from,
   both teams' together with two boards), or why the engine stopped, in the
   error colour. While the engine searches, a 2 px bar under it fills towards
@@ -102,7 +102,7 @@ back off it takes it off. Presses while the board is on an edit nothing
 follows yet are one edit, and one that comes back to nothing is gone. Made
 where the board already goes on, like a different move, it starts a
 variation.
-**Edit board** — opens the shared board editor on board 1 (one board) or the
+**Edit position…** — opens the shared board editor on board 1 (one board) or the
 board last clicked (two boards), without the hands → `Use this position` sets
 that board's pieces, side to move and castling, keeps both hands and starts a
 new line. A board no game can go on from: `That board cannot be played from.`
@@ -123,8 +123,8 @@ away; the search's next report on the same table keeps it.
 one board, board 1's moves; with two, every move of both boards before it in
 order. All or nothing: `That line no longer fits the position.` Clicking the
 row outside its moves plays its move on that board; a `sit` row plays
-nothing. Space plays the first row's move on the board last used, as on
-lila. The right button
+nothing. Actions ▸ `Play best move` plays the first row's move on the board
+last used. The right button
 on a row offers `Copy line PGN`: the moves on the boards now followed by the
 line, as far as it plays, in the same form as a move's.
 **Move menu** — the right button on a move or hand edit in a board's list, as
@@ -142,7 +142,7 @@ hand edit a comment where it was made, `{ +P +B }`. Lichess imports it by
 crazyhouse rules, where a piece taken stays in the taker's hand and an edit is
 only a comment, so its import stops at a drop of a piece from a hand edit.
 With two boards it is the BPGN `Copy moves` writes.
-**Engine switch** (E, or `Toggle engine`) — Hivemind runs only while the switch
+**Engine switch** (or Actions ▸ `Engine on`) — Hivemind runs only while the switch
 is on and the mode is on screen. Each team searched gets one continuous search
 on its own engine process; the two processes share the mode's cores. The
 score, rows and node count follow the search about four times a second, the
@@ -159,7 +159,7 @@ board count or clock cuts the searches short. Finished searches are remembered f
 session. Leaving the mode quits the engines. An engine build that cannot
 report while it searches is asked in passes of 800, 4,000 and 20,000 nodes on
 one process, the rows changing as each pass ends.
-**Actions menu** — `Toggle engine`, `New game` (start position, clock kept),
+**Actions menu** — `Engine on` / `Engine off`, `Play best move`, `New game` (start position, clock kept),
 `Flip board(s)`, `Copy dual FEN`, `Paste FEN or dual FEN` (one board's FEN
 sets board 1 and starts board 2 afresh), `Copy moves`, `Paste moves`. A FEN
 is copied and saved as Lichess writes one, the hand a ninth rank after the

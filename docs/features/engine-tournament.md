@@ -23,10 +23,10 @@ running-task button while a tournament holds the engine job, and from an open
 request. Without tournament storage the screen reads `Tournament storage is
 unavailable.`
 
-- **Top row**: `Engine tournament`, `New tournament` (filled), `Engines`, a
+- **Top row**: `Engine tournament`, `New tournament…` (filled), `Engines…`, a
   refresh icon (`Refresh tournaments`), and while a run plays `Stop` (`Stopping
   after this move…` once pressed). After a failed save, `Retry save`.
-  `New tournament` is disabled while a run plays or a save waits for retry.
+  `New tournament…` is disabled while a run plays or a save waits for retry.
 - **Problem line**: selectable error text for the last failure, then one line
   per unreadable tournament (`Cannot read tournament <id>: …`).
 - **History** (left, 280 px): a search box (`Name, engine or opening`) that
@@ -37,7 +37,7 @@ unavailable.`
   4.5`). A `running` row has a progress bar. Status is the stored word:
   `pending`, `running`, `completed`, `stopped`.
 - **Detail** (right): `No tournaments yet` when nothing is selected. Otherwise
-  the name with `Run again` and a trash icon (`Move tournament to trash`),
+  the name with `Run again…` and a bin icon (`Delete tournament…`),
   `<status> · 4/10 games`, the time label and format label (`Blitz · 60 s +
   0.6 s`, `Round robin · 10 games per pairing`), and any stored error.
 - **Live game** (selected tournament running): `Game 3 · 41 plies · Nf6` above
@@ -56,7 +56,7 @@ unavailable.`
 
 ## Actions
 
-**Register an engine** — `Engines` → `Tournament engines` dialog: a fixed
+**Register an engine** — `Engines…` → `Tournament engines` dialog: a fixed
 `Bundled Stockfish` entry (`Always available; add named settings below.`), one
 row per registered engine (`<cores> cores · <MB> MB · <path or Bundled
 Stockfish>`) with edit and remove icons, `Add UCI engine…`, `Close`. Add and
@@ -75,7 +75,7 @@ bestmove within 20 s`, above the first 40 lines the process printed. Edits are
 refused while a run plays (`Wait for the tournament to finish.`).
 **Remove an engine** — confirm `Remove <name> from the registry? Saved runs
 retain their engine settings.`
-**Set up a run** — `New tournament` (or `Run again`, titled `Configure next
+**Set up a run** — `New tournament…` (or `Run again…`, titled `Configure next
 run` and prefilled from that run) opens one dialog: `Name`; `Engines` (two
 seats default, `Stockfish A` and `Stockfish B`; each a typeable choice of the
 bundled Stockfish and the registry; `Add engine`; remove disabled at two);
@@ -107,7 +107,7 @@ games in flight play to their result, and shows the error with `Retry save`, whi
 start until it succeeds.
 **Open games** — a game row, or `Browse games` (game 1), opens `games.pgn` in
 the PGN Viewer at that game, so Prev/Next walk the whole run.
-**Delete** — trash icon → `Move <name> and its games to the tournament trash?`
+**Delete** — bin icon → `Delete tournament “<name>”?` (`Its games go to the tournament trash.`)
 → the folder moves to `.trash/`. Disabled while a run plays or awaits retry;
 refused with `The tournament changed. Refresh before deleting it.` if the files
 changed.

@@ -85,7 +85,7 @@ its line at the current position. Analysis and Explorer can then be used
 alongside Train, with the normal database choices and resizable pane controls.
 The dedicated trainer's Analysis tab is its only engine surface and uses the
 shared engine on that board; exploration never edits the repertoire.
-**Return to training** restores the
+**Resume** restores the
 retained lesson position and conceals answers again. Engine startup failure
 stays in the normal engine controls and does not prevent returning.
 

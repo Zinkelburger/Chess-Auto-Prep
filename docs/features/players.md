@@ -27,11 +27,11 @@ A full page (no board), capped at `playersPageWidth`.
 - **`All players` / `Groups`** switch; inside a group, `← Groups`, the group
   name and `2026-10-10 · 5 rounds · 18 players · 5 prepared` instead.
 - **Toolbar** — search (`Search name, ID or account` / `Search groups`), the one
-  filled button (`Add player`, `Add players` in a group, `New group` over the
-  groups), `Paste players`, and in a group `Open group study` and
+  filled button (`Add player…`, `Add players…` in a group, `New group…` over
+  the groups), `Paste players…`, and in a group `Open group study` and
   `Train group study`. The `⋯` (`More actions`) holds, in a group, `Edit group…`,
   `Copy prep sheet`, `Export prep sheet…`, `Unlink group study`; always
-  `Update US Chess ratings`, `Reload players and groups`.
+  `Update US Chess ratings`, `Refresh`.
 - **Notices** — a fixed-height progress line, the rating lookup status with
   `Stop`, unreadable player rows and group files, and a failed save with `Retry save` /
   `Discard failed edit and reload` (or `Try again` for a failed load).
@@ -61,8 +61,8 @@ The column (`AnalysisPanel`) beside the shared board; pane tabs
   `Filters` fold (`Filters (n)` when some are on).
 - **`Positions` / `Games` / `Findings`** switch, pinned while its list scrolls.
 - With nobody chosen: the searchable saved-player list (`PlayerPicker`), or
-  `Add player` and `Players & prep` on first run.
-- No game yet: `Get games` (with an account) and `Add PGN…`.
+  `Add player…` and `Players & prep` on first run.
+- No game yet: `Get games…` (with an account) and `Add PGN…`.
 
 Lists:
 
@@ -77,7 +77,7 @@ Lists:
 Tabs:
 
 - **Player openings** — `<name> as White · n games` with
-  `Save line to prep study`, a move table (`Move`, `Games`,
+  `Add line to prep study`, a move table (`Move`, `Games`,
   `White / Draw / Black` bar) for the board position, then the games reaching
   it. Off their games: `None of these games reached the position on the board.`
   with `Go to the first move`.
@@ -87,7 +87,7 @@ Tabs:
 
 ## Actions
 
-**Add or edit a player** — `Add player` / `Edit player…` → dialog with `Name`,
+**Add or edit a player** — `Add player…` / `Edit player…` → dialog with `Name`,
 `Chess.com usernames`, `Lichess usernames` (comma-separated), `Names used in PGN
 files` (semicolon-separated), `US Chess ID`, `FIDE ID`, `Rating`, `Prep notes`,
 and linked `PGN files` as removable chips → `Save player`. Refusals:
@@ -103,7 +103,7 @@ alias, and fill only empty fields; aliases, PGN files and game sets are unioned.
 Refusals: `Include column headings, such as Name, Rating, Chess.com and
 Lichess.`, `Include a Name column.`, `Every player needs a name.`
 
-**Groups** — `New group` / `Edit group…` → `Group name`, `Event date (YYYY-MM-DD,
+**Groups** — `New group…` / `Edit group…` → `Group name`, `Event date (YYYY-MM-DD,
 optional)`, `Rounds` (default 5) → `Save group`. `Add players` picks from the
 directory. `Remove group…` moves the group file to `opponents/.removed/`;
 players, games and studies stay.
@@ -121,7 +121,7 @@ links is adopted; an unreadable one is reported, never replaced.
 `Link study…` picks a PGN and adds it to `studies`; a chip opens it (at its
 chapter when the link names one).
 
-**Save line to prep study** — Player openings button or Actions → the board's
+**Add line to prep study** — Player openings button or Actions → the board's
 line, with comments, becomes a new chapter `<name> · As <our side>` in the prep
 study, which then opens.
 

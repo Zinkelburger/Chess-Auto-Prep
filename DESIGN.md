@@ -239,6 +239,39 @@ active pane's a brighter grey. Dividers between panes are 1px lines with a
 - **Disabled:** Disabled Fill / Disabled Ink. Options that cannot apply are hidden with a one-line reason rather than shown greyed.
 - **Hover / Focus:** no splash and no highlight wash; Material's state layer only.
 
+### Verbs and symbols
+One name and one symbol per action, everywhere it appears. `lib/ui/app_icons.dart` owns every symbol; outlined variants, a filled one only for a toggle's on state.
+
+| Verb | Symbol | Wording |
+|---|---|---|
+| New / Add | add | `New repertoire…` makes one; `Add player…` puts one in a set |
+| Open / Import | file_open_outlined | `Open PGN file…` reads into a tab; `Import course PGN…` copies into the library |
+| Save | save_outlined | `Save` |
+| Save a copy / Export | save_as_outlined | `Save a copy…`, `Export games…` |
+| Send | cloud_upload_outlined | `Send to Lichess…` |
+| Download | download | `Get games`, `Download TWIC…` |
+| Copy / Paste | content_copy / content_paste | `Copy FEN`, `Copy line PGN`, `Paste PGN or FEN` |
+| Edit / Rename | edit_outlined | `Rename…`, `Edit player…`; the board editor is always `Edit position…` |
+| Delete | delete_outline | `Delete <thing>…`, also for things that can be restored |
+| Remove | close | takes a thing off a list; the thing survives |
+| Run / Resume | play_arrow | the action's name; `Resume` when going on |
+| Pause / Stop | pause / stop | Pause keeps the progress, Stop ends |
+| Settings | settings_outlined | tooltip `<Pane> settings` |
+| Filter | filter_list | `Filters (n)` |
+| Back | arrow_back | icon only, tooltip `Back to <place>` |
+| Open elsewhere | open_in_new | `Open in builder` |
+| Restore / Undo / Refresh / Search | restore_from_trash_outlined / undo / refresh / search | `Refresh` |
+| Try again / Retry save | none | `Try again` reads again, `Retry save` writes again; always outlined |
+| Cancel / Close / Done | none | Cancel discards input; Close when there is nothing to lose |
+
+1. Only `ui/app_icons.dart` names a Material icon (`scripts/check_architecture.py` rejects `Icons.` elsewhere); board, pane and fold symbols get a semantic name there too.
+2. A labelled button carries a symbol only for a verb in the table, at `IconSize.action`; Cancel, Close, Done and Try again never do.
+3. Icon-only buttons live in bars and list headers and always have a tooltip. Where a key does the same, the tooltip comes from `AppKey.tip`, and the label is the AppKey's own wording, so one key has one name.
+4. `…` exactly when the command asks something (a name, a file, a confirmation) before acting; the same label in button and menu form.
+5. Every button that creates, imports or runs in a mode is also an entry in that mode's Actions menu.
+6. A menu keeps a 16px symbol slot on every row once any row has a symbol.
+7. The filled button completes the pane's task: never a retry, never a copy, never one per list row; one per pane.
+
 ### Pane tabs
 - **Style:** 34px tall, up to 220px wide and never wider than the strip (a long title ends in an ellipsis), 6px radius; the chosen tab filled in Selection Grey; a 2px line shows where a dragged tab will land. Tabs close from the right-click menu. The list column's Repertoires / Chapters / Positions tabs use the same height and inset.
 

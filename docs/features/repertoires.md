@@ -28,7 +28,7 @@ outline (only while a whole-file repertoire chapter is open and no training
 sitting is on the board), then the workspace. When the window is too narrow
 for both, the list and the outline share one column as two pages.
 
-- **List header** — `Your repertoires`, a `+` (`New repertoire`), and
+- **List header** — `Your repertoires`, a `+` (`New repertoire…`), and
   `Search repertoires` (filters names as typed).
 - **Repertoire row** — chevron, name, `3 chapters · Modified 4h ago`; row
   actions `Rename…`, `New chapter…`, `Delete…`. Rows are sorted by name.
@@ -39,12 +39,12 @@ for both, the list and the outline share one column as two pages.
 - **List foot** — `Deleted chapters`, which swaps the list for the deleted
   chapters view (`Back to repertoires`, one row per chapter with `Restore`;
   empty: `Nothing deleted` / `Chapters you delete can be restored here.`).
-- **List states** — `No repertoires yet.` with `New repertoire`;
+- **List states** — `No repertoires yet.` with `New repertoire…`;
   `Nothing matches "q".`; `Could not load repertoires. Please try again.` with
   `Retry`; a folder that could not be read is named above the list
   (`<name> could not be read: <reason>`).
-- **Outline header** — `Chapters`, a filter toggle `At this position`, a `+`
-  (`New chapter`), and `Find a chapter or line`.
+- **Outline header** — `Chapters`, a filter toggle (`Show only lines through the board position`), a `+`
+  (`New chapter…`), and `Find a chapter or line`.
 - **Outline chapter row** — name (bold and accented when open; muted with
   `Proposed` for a draft), `12 lines`, and the chapter's root moves under the
   name when it does not start at the initial position. Lines may be dropped on
@@ -55,8 +55,8 @@ for both, the list and the outline share one column as two pages.
   moves.`; `No chapter or line matches "q".`; `No lines match this search.`;
   `No line reaches this position.`; `Empty — add lines to fill this chapter.`;
   `Some chapters could not be searched.`
-- **Outline foot** — `Version history`; while a cross-file line move is
-  unresolved, `The line move still needs retrying.` with `Retry line move` and
+- **Outline foot** — `Version history…`; while a cross-file line move is
+  unresolved, `The line move still needs retrying.` with `Retry save` and
   `Discard`.
 - **Workspace** — board, move note card (editable here, including the
   chapter introduction) and the action panes. The builder opens two panes:
@@ -83,7 +83,7 @@ for both, the list and the outline share one column as two pages.
 
 ## Actions
 
-**New repertoire** — list `+` or `New repertoire` → `Create repertoire` name
+**New repertoire** — list `+` or `New repertoire…` → `Create repertoire` name
 dialog → `<name>/Main.pgn` with no side, opened at once (the side question
 follows) → `A repertoire named "X" already exists.` /
 `Could not create the repertoire.`
@@ -143,7 +143,7 @@ is read again, on an undo, or when a line is deleted, put back, moved or
 reordered, even among lines whose headers are alike. A cross-file move
 writes both PGNs and the training files as one recoverable transaction,
 pinning `[LineID]` first; Ctrl+Z restores both chapters. A failed write keeps
-the move for `Retry line move` and blocks other catalog changes until it is
+the move for `Retry save` and blocks other catalog changes until it is
 retried or discarded. Accepting proposed lines from a draft is this move.
 
 **Rename / delete a line** — the line's `⋯`; deletion is undoable with Ctrl+Z.

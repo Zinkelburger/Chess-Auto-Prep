@@ -27,7 +27,7 @@ starts with the engine off, no card heading and no game counter.
   username` / `Chess.com username`) with `Change`, `Bullet` / `Blitz` /
   `Rapid` / `Classical` chips, the transport button (`Get games` / `Pause` /
   `Resume`) and one status line.
-- **Play** — `Play ({n})`, `Continue session` while a sitting is parked, or
+- **Play** — `Play ({n})`, `Resume` while a sitting is parked, or
   `Show puzzle` while one is up. The only filled button in the column once
   the set has puzzles; the accounts buttons are outlined then.
 - **Count line** — `{queued} of {total}`, the kinds it holds (`14 blunders,
@@ -79,7 +79,7 @@ saved in settings (`myGameSpeeds`), drops the paused queue. A game with no
 readable `TimeControl` always passes; daily/correspondence counts as
 `Classical`.
 
-**Get games** — the transport button or Actions `Get my games` → one pausable
+**Get games** — the transport button or Actions `Get games` → one pausable
 job per press. For each account: download (200 games while fewer than 200 are
 saved, else 20), save into the games cache, then take the newest 20 saved
 games of the chosen speeds that no review has done. Each is judged by a
@@ -128,7 +128,7 @@ skipped in the sitting.
 **Reset / Next / Previous / End** — reset icon (an attempt already made
 stands); `Skip`/`Next` or ↓; ↑ or `‹` goes back; `End session` or Esc ends
 the sitting and shows the recap. Leaving the mode parks the sitting with its
-results; `Continue session` (column or Actions) resumes it.
+results; `Resume` (column or Actions) resumes it.
 
 **Rate** — 1–5 stars after finishing, written as `StarRating`; clicking the
 current star clears it. One star means `hidden from training` (with `Hide
@@ -137,7 +137,7 @@ one-star` on); the sitting under way is not changed.
 **Analyze** — after finishing, `Analyze` opens the `Moves` tab with the engine
 on. The engine cannot be switched on while the answer is hidden.
 
-**Game tab moves** — clicking a move or `Analyze game` opens the source game on
+**Game tab moves** — clicking a move or `Open on analysis board` opens the source game on
 a new analysis board at that ply with the engine on.
 
 **Row menu** — `Analyze in the game` (the source game, or the puzzle alone, on
@@ -149,7 +149,7 @@ with the backups and the game stays reviewed. Failure: `Could not delete the
 puzzle: {reason}` (e.g. `The puzzles changed on disk. Try again.`).
 
 **Keys** — Space show solution, ↓/↑ next/previous puzzle, Esc end sitting,
-F flip, E engine (only once the answer is shown). Actions also has `Copy FEN`
+F flip; Actions ▸ `Engine on` only once the answer is shown. Actions also has `Copy FEN`
 and the card's tabs.
 
 ## Data
