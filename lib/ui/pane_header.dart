@@ -22,7 +22,7 @@ class PaneHeader extends StatelessWidget {
   /// Before the name: the way back to the list this one was opened from.
   final Widget? leading;
 
-  /// After the name, at the end of the row.
+  /// Right after the name: what is done to the whole list (`+`, `⋯`).
   final List<Widget> actions;
 
   /// In the corner, after [actions].
@@ -39,14 +39,23 @@ class PaneHeader extends StatelessWidget {
     child: Row(
       children: [
         ?leading,
+        // Room for the controls first: a narrow column cuts the name,
+        // which otherwise has all the row leaves it.
         Expanded(
-          child: Text(
-            title,
-            style: Theme.of(context).textTheme.labelSmall,
-            overflow: TextOverflow.ellipsis,
+          child: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.labelSmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (actions.isNotEmpty) const SizedBox(width: Space.xs),
+              ...actions,
+            ],
           ),
         ),
-        ...actions,
         ?trailing,
       ],
     ),

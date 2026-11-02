@@ -13,6 +13,7 @@ import 'library_state.dart';
 import '../../ui/list_message.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/tool_button.dart';
+import '../../ui/pane_header.dart';
 
 /// The chapters the user deleted under the repertoire each came from, newest
 /// first, each with `Restore`. It
@@ -87,7 +88,15 @@ class _DeletedChaptersViewState extends State<DeletedChaptersView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _Header(onBack: widget.onBack, trailing: widget.trailing),
+        PaneHeader(
+          'Deleted',
+          leading: ToolButton(
+            icon: AppIcons.back,
+            tooltip: 'Back to repertoires',
+            onPressed: widget.onBack,
+          ),
+          trailing: widget.trailing,
+        ),
         Expanded(
           child: ListenableBuilder(
             listenable: widget.library,
@@ -115,7 +124,7 @@ class _DeletedChaptersViewState extends State<DeletedChaptersView> {
         for (final MapEntry(key: repertoire, value: deleted) in _byRepertoire(
           chapters,
         ).entries) ...[
-          _RepertoireHeading(repertoire),
+          SectionLabel(repertoire),
           for (final chapter in deleted)
             _DeletedRow(
               chapter: chapter,
@@ -136,55 +145,6 @@ Map<String, List<DeletedChapter>> _byRepertoire(List<DeletedChapter> chapters) {
     (groups[chapter.repertoire] ??= []).add(chapter);
   }
   return groups;
-}
-
-class _RepertoireHeading extends StatelessWidget {
-  const _RepertoireHeading(this.name);
-
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, 0),
-      child: Text(
-        name,
-        style: Theme.of(context).textTheme.labelSmall,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  const _Header({required this.onBack, required this.trailing});
-
-  final VoidCallback onBack;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, Space.s, Space.m, Space.s),
-      child: Row(
-        children: [
-          ToolButton(
-            icon: AppIcons.back,
-            tooltip: 'Back to repertoires',
-            onPressed: onBack,
-          ),
-          Expanded(
-            child: Text(
-              'Deleted',
-              style: Theme.of(context).textTheme.labelSmall,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          ?trailing,
-        ],
-      ),
-    );
-  }
 }
 
 class _DeletedRow extends StatelessWidget {

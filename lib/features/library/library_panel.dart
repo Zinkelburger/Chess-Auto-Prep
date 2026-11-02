@@ -11,6 +11,7 @@ import 'repertoire_tile.dart';
 import '../../ui/list_message.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/tool_button.dart';
+import '../../ui/pane_header.dart';
 
 /// The repertoires, searchable, each opening to its chapters. Tapping a
 /// chapter asks the host to open it in the workspace.
@@ -182,49 +183,31 @@ class _Toolbar extends StatelessWidget {
   final Widget? trailing;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, Space.s),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              // Room for the buttons first: a narrow pane cuts the label,
-              // which otherwise has all the row leaves it.
-              Expanded(
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        'Your repertoires',
-                        style: Theme.of(context).textTheme.labelSmall,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: Space.xs),
-                    if (onCreate case final create?)
-                      ToolButton(
-                        icon: AppIcons.add,
-                        tooltip: 'New repertoire…',
-                        onPressed: busy ? null : create,
-                      ),
-                  ],
-                ),
-              ),
-              ?trailing,
-            ],
-          ),
-          const SizedBox(height: Space.xs),
-          SearchField(
-            controller: search,
-            hint: 'Search repertoires',
-            onChanged: onSearch,
-          ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      PaneHeader(
+        'Your repertoires',
+        actions: [
+          if (onCreate case final create?)
+            ToolButton(
+              icon: AppIcons.add,
+              tooltip: 'New repertoire…',
+              onPressed: busy ? null : create,
+            ),
         ],
+        trailing: trailing,
       ),
-    );
-  }
+      Padding(
+        padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.m, Space.s),
+        child: SearchField(
+          controller: search,
+          hint: 'Search repertoires',
+          onChanged: onSearch,
+        ),
+      ),
+    ],
+  );
 }
 
 /// The way to the deleted chapters, under the list where it is out of the

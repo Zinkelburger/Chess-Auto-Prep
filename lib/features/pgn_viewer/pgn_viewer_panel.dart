@@ -20,6 +20,7 @@ import '../../ui/list_message.dart';
 import '../../ui/list_row.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/tool_button.dart';
+import '../../ui/pane_header.dart';
 
 /// Opens a PGN file in the workspace with its first game on the board.
 typedef OpenPgnFile = void Function(ChapterRef file);
@@ -139,13 +140,7 @@ class _PgnViewerPanelState extends State<PgnViewerPanel>
     }
     return ListView(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, 0),
-          child: Text(
-            'Recent files',
-            style: Theme.of(context).textTheme.labelSmall,
-          ),
-        ),
+        const SectionLabel('Recent files'),
         for (final path in recent)
           _RecentRow(
             path: path,
@@ -227,28 +222,13 @@ class _PgnViewerPanelState extends State<PgnViewerPanel>
 
   /// How far the filter narrows the list, and the way back to every game.
   Widget _narrowed(BuildContext context) {
-    final theme = Theme.of(context);
     final filter = widget.filter;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, 0, Space.xs, 0),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              filter.busy ? 'Filtering…' : '${filter.kept} of ${filter.total}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () => filter.apply(GameFilter.none),
-            style: const ButtonStyle(visualDensity: VisualDensity.compact),
-            child: const Text('Clear filters'),
-          ),
-        ],
+    return CountLine(
+      filter.busy ? 'Filtering…' : '${filter.kept} of ${filter.total}',
+      action: TextButton(
+        onPressed: () => filter.apply(GameFilter.none),
+        style: const ButtonStyle(visualDensity: VisualDensity.compact),
+        child: const Text('Clear filters'),
       ),
     );
   }

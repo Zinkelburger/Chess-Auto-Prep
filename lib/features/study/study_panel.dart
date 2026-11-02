@@ -27,6 +27,7 @@ import '../../ui/list_message.dart';
 import '../../ui/list_row.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/tool_button.dart';
+import '../../ui/pane_header.dart';
 
 /// Opens one chapter of a study in the workspace.
 typedef OpenChapter = void Function(ChapterRef study, int chapter);
@@ -536,73 +537,67 @@ class _Toolbar extends StatelessWidget {
   );
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.s, Space.s),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              if (currentName != null)
-                ToolButton(
-                  icon: AppIcons.back,
-                  tooltip: 'Back to studies',
-                  onPressed: onChooseStudy,
-                ),
-              // Room for the buttons first: a narrow pane cuts the label,
-              // which otherwise has all the row leaves it.
-              Expanded(
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        currentName ?? 'Your studies',
-                        style: Theme.of(context).textTheme.labelSmall,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: Space.xs),
-                    RowActions(tooltip: 'Study actions', children: _actions),
-                  ],
-                ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      PaneHeader(
+        currentName ?? 'Your studies',
+        leading: currentName == null
+            ? null
+            : ToolButton(
+                icon: AppIcons.back,
+                tooltip: 'Back to studies',
+                onPressed: onChooseStudy,
               ),
-              ?trailing,
-            ],
-          ),
-          const SizedBox(height: Space.xs),
-          if (currentName == null)
-            SearchField(
-              controller: search,
-              hint: 'Search studies',
-              onChanged: onSearch,
-            ),
-          const SizedBox(height: Space.s),
-          if (!hasOpenStudy)
-            FilledButton.icon(
-              onPressed: busy ? null : onNewStudy,
-              icon: const Icon(AppIcons.add, size: IconSize.action),
-              label: const Text('New study…'),
-            ),
-          _transfers(),
-          if (hasOpenStudy && onTrain != null)
-            OutlinedButton(
-              onPressed: busy ? null : onTrain,
-              child: const Text('Train study'),
-            ),
-          if (hasOpenStudy)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: busy ? null : onNewChapter,
-                icon: const Icon(AppIcons.add, size: IconSize.action),
-                label: const Text('New chapter…'),
-              ),
-            ),
-        ],
+        actions: [RowActions(tooltip: 'Study actions', children: _actions)],
+        trailing: trailing,
       ),
-    );
-  }
+      Padding(
+        padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.s, Space.s),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (currentName == null) ...[
+              SearchField(
+                controller: search,
+                hint: 'Search studies',
+                onChanged: onSearch,
+              ),
+              const SizedBox(height: Space.s),
+            ],
+            // As wide as their words, as every list's buttons are.
+            if (!hasOpenStudy)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.icon(
+                  onPressed: busy ? null : onNewStudy,
+                  icon: const Icon(AppIcons.add, size: IconSize.action),
+                  label: const Text('New study…'),
+                ),
+              ),
+            _transfers(),
+            if (hasOpenStudy && onTrain != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton(
+                  onPressed: busy ? null : onTrain,
+                  child: const Text('Train study'),
+                ),
+              ),
+            if (hasOpenStudy)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: busy ? null : onNewChapter,
+                  icon: const Icon(AppIcons.add, size: IconSize.action),
+                  label: const Text('New chapter…'),
+                ),
+              ),
+          ],
+        ),
+      ),
+    ],
+  );
 }
 
 /// One study in the list. The open one is highlighted and its chapters are

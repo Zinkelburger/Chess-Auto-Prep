@@ -20,6 +20,7 @@ import 'finds.dart';
 import '../board/line_preview.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/segments.dart';
+import '../../ui/pane_header.dart';
 
 /// The Positions column: everything the searches have pointed out, one row
 /// a position, in the column a mode keeps its own list in.
@@ -158,14 +159,16 @@ class _FindsPanelState extends State<FindsPanel> {
         builder: (context, _) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Toolbar(
-              chapter: _chapterPositions == null
-                  ? null
-                  : ToggleChip(
-                      label: 'This chapter',
-                      selected: _thisChapter,
-                      onSelected: _showThisChapter,
-                    ),
+            PaneHeader(
+              'Positions',
+              actions: [
+                if (_chapterPositions != null)
+                  ToggleChip(
+                    label: 'This chapter',
+                    selected: _thisChapter,
+                    onSelected: _showThisChapter,
+                  ),
+              ],
               trailing: widget.trailing,
             ),
             _Order(finds: finds),
@@ -220,33 +223,6 @@ class _FindsPanelState extends State<FindsPanel> {
       },
     );
   }
-}
-
-/// The column's name, the chapter switch and the host's controls in the
-/// corner.
-class _Toolbar extends StatelessWidget {
-  const _Toolbar({required this.chapter, required this.trailing});
-
-  final Widget? chapter;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.s, 0),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            'Positions',
-            style: Theme.of(context).textTheme.labelSmall,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        ?chapter,
-        ?trailing,
-      ],
-    ),
-  );
 }
 
 class _Order extends StatelessWidget {
@@ -328,15 +304,7 @@ class _CountLine extends StatelessWidget {
       FindsUnsaved() => ' · search positions not saved',
       null => '',
     };
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, Space.xs),
-      child: Text(
-        '$count$last',
-        style: Theme.of(context).textTheme.labelSmall,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
+    return CountLine('$count$last');
   }
 
   static String _positions(int n) => n == 1 ? '1 position' : '$n positions';

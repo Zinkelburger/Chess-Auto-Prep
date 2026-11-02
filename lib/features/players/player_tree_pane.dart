@@ -10,6 +10,7 @@ import '../../workspace/explorer/explorer_pane.dart' show ResultBar;
 import 'player_analysis.dart';
 import '../../ui/list_message.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/pane_header.dart';
 
 /// The Player openings tab: what the chosen player's games did from the
 /// position on the board, as the Explorer tab draws a database — a row per
@@ -86,7 +87,7 @@ class PlayerTreePane extends StatelessWidget {
               total: total,
               onTap: () => session.playMove(move.uci),
             ),
-          const _Heading('Games'),
+          const SectionLabel('Games'),
           for (final game in answer.games)
             _GameRow(
               game: game,
@@ -225,18 +226,6 @@ class _MoveRow extends StatelessWidget {
       ),
     );
   }
-}
-
-class _Heading extends StatelessWidget {
-  const _Heading(this.words);
-
-  final String words;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(Space.m, Space.l, Space.m, Space.xs),
-    child: Text(words, style: Theme.of(context).textTheme.labelSmall),
-  );
 }
 
 /// One game that reached the position: the players, how it ended and when.

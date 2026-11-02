@@ -18,6 +18,7 @@ import 'tactics_set.dart';
 import '../../ui/list_message.dart';
 import '../../ui/list_row.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/pane_header.dart';
 
 /// The Tactics column: the one button that starts a sitting, the filters
 /// beside the count they change, and the puzzles they let through, which
@@ -102,7 +103,7 @@ class _TacticsPanelState extends State<TacticsPanel> {
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Toolbar(trailing: widget.trailing),
+          PaneHeader('Tactics', trailing: widget.trailing),
           // With puzzles to play, Play is the column's one filled button.
           MyGamesBlock(
             games: widget.myGames,
@@ -166,7 +167,7 @@ class _TacticsPanelState extends State<TacticsPanel> {
   Widget _list(List<Puzzle> queue, List<Puzzle> shown) => CustomScrollView(
     slivers: [
       SliverToBoxAdapter(
-        child: _CountLine(
+        child: _PuzzleCount(
           queue: queue,
           total: widget.set.puzzles.length,
           filtersOpen: _filtersOpen,
@@ -293,36 +294,10 @@ extension on _TacticsPanelState {
   }
 }
 
-/// The panel's name and the host's toggle in the corner.
-class _Toolbar extends StatelessWidget {
-  const _Toolbar({required this.trailing});
-
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.s, 0),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'Tactics',
-              style: Theme.of(context).textTheme.labelSmall,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          ?trailing,
-        ],
-      ),
-    );
-  }
-}
-
 /// How many puzzles the filters let through and what they are, with the
 /// way to the filters beside it.
-class _CountLine extends StatelessWidget {
-  const _CountLine({
+class _PuzzleCount extends StatelessWidget {
+  const _PuzzleCount({
     required this.queue,
     required this.total,
     required this.filtersOpen,
@@ -336,38 +311,29 @@ class _CountLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.xs, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${queue.length} of $total',
-                  style: text.labelSmall,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              TextButton.icon(
-                onPressed: onFilters,
-                icon: Icon(
-                  filtersOpen ? AppIcons.showLess : AppIcons.showMore,
-                  size: IconSize.action,
-                ),
-                iconAlignment: IconAlignment.end,
-                label: const Text('Filters'),
-              ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        CountLine(
+          '${queue.length} of $total',
+          action: TextButton.icon(
+            onPressed: onFilters,
+            icon: Icon(
+              filtersOpen ? AppIcons.showLess : AppIcons.showMore,
+              size: IconSize.action,
+            ),
+            iconAlignment: IconAlignment.end,
+            label: const Text('Filters'),
           ),
-          Padding(
-            padding: const EdgeInsets.only(right: Space.s),
-            child: Text(_kinds(queue), style: text.labelSmall),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(Space.m, 0, Space.m, 0),
+          child: Text(
+            _kinds(queue),
+            style: Theme.of(context).textTheme.labelSmall,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

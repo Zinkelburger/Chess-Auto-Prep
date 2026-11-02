@@ -12,6 +12,7 @@ import 'game_book.dart';
 import '../../ui/list_message.dart';
 import '../../ui/list_row.dart';
 import '../../ui/segments.dart';
+import '../../ui/pane_header.dart';
 
 /// The two ways the column lists what the book says: game by game, or
 /// grouped by where the games left it, most often first.
@@ -97,7 +98,7 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Toolbar(trailing: widget.trailing),
+          PaneHeader('My games', trailing: widget.trailing),
           widget.accounts,
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: Space.s),
@@ -173,8 +174,8 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
             onChanged: widget.book.search,
           ),
         ),
-        _CountLine(
-          words: query.isEmpty
+        CountLine(
+          query.isEmpty
               ? '$all games, newest first'
               : '${shown.length} of $all games',
         ),
@@ -195,48 +196,6 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
       ],
     );
   }
-}
-
-/// The panel's name and the host's toggle in the corner.
-class _Toolbar extends StatelessWidget {
-  const _Toolbar({required this.trailing});
-
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.s, 0),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'My games',
-              style: Theme.of(context).textTheme.labelSmall,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          ?trailing,
-        ],
-      ),
-    );
-  }
-}
-
-class _CountLine extends StatelessWidget {
-  const _CountLine({required this.words});
-
-  final String words;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.m, Space.xs),
-    child: Text(
-      words,
-      style: Theme.of(context).textTheme.labelSmall,
-      overflow: TextOverflow.ellipsis,
-    ),
-  );
 }
 
 /// One game: who it was against, how it went and when on the first line,
@@ -344,7 +303,7 @@ class _Openings extends StatelessWidget {
     for (final kind in Deviation.values) {
       final ways = checked.waysOf(kind);
       if (ways.isEmpty) continue;
-      items.add(_Heading('${deviationHeading(kind)} (${ways.length})'));
+      items.add(SectionLabel('${deviationHeading(kind)} (${ways.length})'));
       for (final way in ways) {
         items.add(_WayRow(way: way, onOpen: () => onOpen(way.games.first)));
       }
@@ -354,18 +313,6 @@ class _Openings extends StatelessWidget {
     }
     return ListView(children: items);
   }
-}
-
-class _Heading extends StatelessWidget {
-  const _Heading(this.words);
-
-  final String words;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(Space.m, Space.m, Space.m, Space.xs),
-    child: Text(words, style: Theme.of(context).textTheme.labelSmall),
-  );
 }
 
 /// One way games left the book: the move and how many games, then what the

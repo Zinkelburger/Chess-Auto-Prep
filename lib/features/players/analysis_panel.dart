@@ -25,6 +25,7 @@ import '../../ui/problem_line.dart';
 import '../../ui/progress_line.dart';
 import '../../ui/segments.dart';
 import '../../ui/tool_button.dart';
+import '../../ui/pane_header.dart';
 
 /// The Player analysis column: who is being prepared for and where their
 /// games stand, the colour they are looked at from, then the search and the
@@ -240,7 +241,7 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
           ),
         ),
         SliverToBoxAdapter(
-          child: _CountLine(
+          child: _GameCount(
             games: shown.length,
             filters: AnalysisFilters.active(owner),
             filtersOpen: _filtersOpen,
@@ -512,8 +513,8 @@ class _NoGames extends StatelessWidget {
 
 /// How many games the colour, the search and the filters let through, with
 /// the way to the filters beside it.
-class _CountLine extends StatelessWidget {
-  const _CountLine({
+class _GameCount extends StatelessWidget {
+  const _GameCount({
     required this.games,
     required this.filters,
     required this.filtersOpen,
@@ -528,27 +529,16 @@ class _CountLine extends StatelessWidget {
   final VoidCallback onFilters;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.xs, 0),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            '$games ${games == 1 ? 'game' : 'games'}',
-            style: Theme.of(context).textTheme.labelSmall,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        TextButton.icon(
-          onPressed: onFilters,
-          icon: Icon(
-            filtersOpen ? AppIcons.showLess : AppIcons.showMore,
-            size: IconSize.action,
-          ),
-          iconAlignment: IconAlignment.end,
-          label: Text(filters == 0 ? 'Filters' : 'Filters ($filters)'),
-        ),
-      ],
+  Widget build(BuildContext context) => CountLine(
+    '$games ${games == 1 ? 'game' : 'games'}',
+    action: TextButton.icon(
+      onPressed: onFilters,
+      icon: Icon(
+        filtersOpen ? AppIcons.showLess : AppIcons.showMore,
+        size: IconSize.action,
+      ),
+      iconAlignment: IconAlignment.end,
+      label: Text(filters == 0 ? 'Filters' : 'Filters ($filters)'),
     ),
   );
 }

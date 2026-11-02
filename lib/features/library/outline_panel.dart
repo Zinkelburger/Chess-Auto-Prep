@@ -24,6 +24,7 @@ import '../../ui/list_message.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/progress_line.dart';
 import '../../ui/tool_button.dart';
+import '../../ui/pane_header.dart';
 
 /// The chapters of the open repertoire and, under the open one, its lines.
 ///
@@ -447,47 +448,39 @@ class _Toolbar extends StatelessWidget {
   final ValueChanged<bool> onAtPosition;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.s, Space.s),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Chapters',
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-              ),
-              ToolButton(
-                key: const ValueKey('outline-at-position'),
-                icon: AppIcons.filter,
-                tooltip: atPosition
-                    ? 'Show every line'
-                    : 'Show only lines through the board position',
-                selected: atPosition,
-                onPressed: () => onAtPosition(!atPosition),
-              ),
-              if (onCreate case final create?)
-                ToolButton(
-                  icon: AppIcons.add,
-                  tooltip: 'New chapter…',
-                  onPressed: create,
-                ),
-            ],
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      PaneHeader(
+        'Chapters',
+        actions: [
+          ToolButton(
+            key: const ValueKey('outline-at-position'),
+            icon: AppIcons.filter,
+            tooltip: atPosition
+                ? 'Show every line'
+                : 'Show only lines through the board position',
+            selected: atPosition,
+            onPressed: () => onAtPosition(!atPosition),
           ),
-          const SizedBox(height: Space.xs),
-          SearchField(
-            controller: search,
-            hint: 'Find a chapter or line',
-            onChanged: onSearch,
-          ),
+          if (onCreate case final create?)
+            ToolButton(
+              icon: AppIcons.add,
+              tooltip: 'New chapter…',
+              onPressed: create,
+            ),
         ],
       ),
-    );
-  }
+      Padding(
+        padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.s, Space.s),
+        child: SearchField(
+          controller: search,
+          hint: 'Find a chapter or line',
+          onChanged: onSearch,
+        ),
+      ),
+    ],
+  );
 }
 
 /// Where Move to chapter sends lines: a chapter already there, or a new one.
