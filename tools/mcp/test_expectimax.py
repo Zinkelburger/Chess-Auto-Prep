@@ -239,7 +239,7 @@ class ReplyCutTest(unittest.TestCase):
         return ArgvTest._chain(self)
 
     def test_the_cut_matches_the_apps_constants(self):
-        dart = (ex.REPO_ROOT / "lib" / "workspace" / "fill_states.dart").read_text(
+        dart = (ex.REPO_ROOT / "lib" / "workspace" / "search" / "fill_states.dart").read_text(
             encoding="utf-8"
         )
         import re

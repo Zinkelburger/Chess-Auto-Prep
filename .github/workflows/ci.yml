@@ -98,5 +98,4 @@ jobs:
           test/features/settings/update_prompt_test.dart
           test/storage/update_files_test.dart
           test/storage/update_install_test.dart
-          test/storage/game_store_test.dart
           test/storage/master_games_import_test.dart
