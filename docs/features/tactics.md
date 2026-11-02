@@ -23,7 +23,7 @@ starts with the engine off, no card heading and no game counter.
 
 - **Accounts block** (top of the column, shared with My games) — with no
   username: `Add your Lichess or Chess.com username to turn your mistakes into
-  puzzles.` and `Add accounts`. Otherwise each username (tooltip `Lichess
+  puzzles.` and `Add accounts…`. Otherwise each username (tooltip `Lichess
   username` / `Chess.com username`) with `Change`, `Bullet` / `Blitz` /
   `Rapid` / `Classical` chips, the transport button (`Get games` / `Pause` /
   `Resume`) and one status line.
@@ -70,7 +70,7 @@ starts with the engine off, no card heading and no game counter.
 
 ## Actions
 
-**Add / change accounts** — `Add accounts`, `Change` or Actions `My accounts…`
+**Add / change accounts** — `Add accounts…`, `Change` or Actions `My accounts…`
 → dialog `My accounts` with `Lichess username`, `Chess.com username` and
 `Only your username: your games are public. Leave one blank if you do not play
 there.` → `Save` stores them; nothing downloads. A changed or cleared name

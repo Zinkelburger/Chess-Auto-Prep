@@ -265,16 +265,8 @@ class _ScreenState extends State<TournamentsScreen> {
       ],
     ),
   );
-  Future<void> _new([TournamentConfig? previous]) async {
-    final config = await tournamentSetup(
-      context,
-      engines: run.engines,
-      position: widget.position,
-      previous: previous,
-    );
-    if (!mounted || config == null) return;
-    unawaited(run.start(config));
-  }
+  Future<void> _new([TournamentConfig? previous]) =>
+      newTournament(context, run, widget.position, previous: previous);
 
   Future<void> _remove(Tournament t) async {
     if (await confirmAction(
@@ -303,3 +295,21 @@ String _ending(String reason) => switch (reason) {
   'aborted' => 'Stopped',
   _ => reason,
 };
+
+/// The setup for a tournament, then its run: from the page's button, its
+/// `Run again…` with the last one's settings, or the Actions menu.
+Future<void> newTournament(
+  BuildContext context,
+  TournamentRun run,
+  Fen position, {
+  TournamentConfig? previous,
+}) async {
+  final config = await tournamentSetup(
+    context,
+    engines: run.engines,
+    position: position,
+    previous: previous,
+  );
+  if (!context.mounted || config == null) return;
+  unawaited(run.start(config));
+}

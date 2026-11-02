@@ -64,17 +64,21 @@ List<AppAction> myGamesActions(
   MyGames games, {
   required VoidCallback onAccounts,
 }) => [
+  // The same three states as the button: Pause while it runs, Resume
+  // after a pause, else Get games.
+  if (games.running)
+    AppAction('Pause', games.pause, icon: AppIcons.pause, group: 'My games')
+  else
+    AppAction(
+      games.queued > 0 ? 'Resume' : 'Get games',
+      games.accounts.isEmpty || games.savingAccounts
+          ? null
+          : () => unawaited(games.start()),
+      icon: games.queued > 0 ? AppIcons.run : AppIcons.download,
+      group: 'My games',
+    ),
   AppAction(
-    games.running ? 'Pause' : 'Get games',
-    games.running
-        ? games.pause
-        : games.accounts.isEmpty
-        ? null
-        : () => unawaited(games.start()),
-    group: 'My games',
-  ),
-  AppAction(
-    'My accounts…',
+    games.accounts.isEmpty ? 'Add accounts…' : 'My accounts…',
     games.running ? null : onAccounts,
     group: 'My games',
   ),

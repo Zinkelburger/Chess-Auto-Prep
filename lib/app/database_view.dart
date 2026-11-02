@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../features/databases/database_library.dart';
 import '../features/databases/databases_screen.dart';
+import '../features/databases/twic_download_dialog.dart';
 import '../storage/master_corpus.dart';
 import '../ui/app_action.dart';
 import '../ui/screen_keys.dart';
@@ -38,20 +39,35 @@ final class DatabasesView extends ModeView {
   @override
   Widget list(Widget toggle) => const SizedBox.shrink();
 
+  /// The page's own buttons, in the same order and on the same terms.
   @override
   List<AppAction> actions(ModeMenu menu) => [
-    AppAction(
-      'Refresh',
-      () => unawaited(library.refresh()),
-      icon: AppIcons.refresh,
-      group: 'Databases',
-    ),
+    if (library.offersDownload)
+      AppAction(
+        'Download TWIC…',
+        library.activity == DatabaseActivity.importing
+            ? null
+            : () => unawaited(showTwicDownload(menu.context, library)),
+        icon: AppIcons.download,
+        group: 'Databases',
+      ),
     AppAction(
       'Import PGN…',
-      library.activity == DatabaseActivity.idle && !library.busy
+      library.activity == DatabaseActivity.idle &&
+              !library.busy &&
+              library.path != null
           ? () => unawaited(library.importFile())
           : null,
       icon: AppIcons.open,
+      group: 'Databases',
+    ),
+    AppAction(
+      'Refresh',
+      () {
+        unawaited(library.refresh());
+        unawaited(library.measure());
+      },
+      icon: AppIcons.refresh,
       group: 'Databases',
     ),
   ];

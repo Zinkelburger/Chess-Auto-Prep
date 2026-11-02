@@ -58,12 +58,16 @@ class MyGamesBlock extends StatelessWidget {
         style: Theme.of(context).textTheme.bodySmall,
       ),
       const SizedBox(height: Space.s),
-      _action(
-        primary: primary,
-        onPressed: games.savingAccounts
-            ? null
-            : () => unawaited(editAccounts(context, games)),
-        label: 'Add accounts',
+      // As wide as its words, as every list's one button is.
+      Align(
+        alignment: Alignment.centerLeft,
+        child: _action(
+          primary: primary,
+          onPressed: games.savingAccounts
+              ? null
+              : () => unawaited(editAccounts(context, games)),
+          label: 'Add accounts…',
+        ),
       ),
       const SizedBox(height: Space.s),
       const Divider(height: 1),

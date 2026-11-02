@@ -103,8 +103,11 @@ void main() {
     expect(find.text('Positions'), findsWidgets);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(SubmenuButton, 'Layout'));
+    final layoutMenu = find.widgetWithText(SubmenuButton, 'Layout');
+    await tester.ensureVisible(layoutMenu);
+    await tester.tap(layoutMenu);
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Reset workspace layout'));
     await tester.tap(find.text('Reset workspace layout'));
     await tester.pumpAndSettle();
     expect(tester.widget<NavigationPages>(navigation).selected, 1);

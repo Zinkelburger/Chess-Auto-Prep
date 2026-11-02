@@ -15,9 +15,9 @@ import '../../workspace/document/document_session.dart';
 import 'chapter_outline.dart';
 import 'backup_history_dialog.dart';
 import 'library.dart';
+import 'library_actions.dart';
 import 'library_messages.dart';
 import 'library_state.dart';
-import 'new_chapter_dialog.dart';
 import 'outline_rows.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/list_message.dart';
@@ -88,29 +88,8 @@ class _OutlinePanelState extends State<OutlinePanel> {
   /// A chapter made with the board on a position can start there: that is
   /// how a chapter for one opening is set up, and its root is what the
   /// outline then prints under its name.
-  Future<void> _newChapter() async {
-    final into = widget.outline.repertoire;
-    final chapter = widget.session.chapter;
-    if (into == null) return;
-    final wanted = await showNewChapterDialog(
-      context,
-      fromBoard: chapter == null
-          ? null
-          : rootMovesFromBoard(chapter, widget.session.cursor.value),
-    );
-    if (wanted == null || !mounted) return;
-    await announce(
-      context,
-      widget.library.createChapter(
-        into,
-        wanted.name,
-        rootMoves: wanted.rootMoves,
-      ),
-      thing: 'chapter',
-      name: wanted.name,
-      failed: 'Could not create the chapter.',
-    );
-  }
+  Future<void> _newChapter() =>
+      newChapter(context, widget.library, widget.outline, widget.session);
 
   Future<void> _rename(OutlineLine line) async {
     final name = await showNameDialog(

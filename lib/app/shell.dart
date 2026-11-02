@@ -262,6 +262,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     inspecting: () => _inspecting,
     settingRows: widget.settingRows,
     settingsAlso: widget.settingsAlso,
+    importCourse: () => unawaited(_trainDoors.importCourse()),
   );
 
   /// The window's keys over the workspace's, and the mouse's buttons.
@@ -428,6 +429,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
 
   void _saveHeld() => _actions.saveHeld(context);
 
+  /// A context under the window's status scope.
+  final _statusContext = GlobalKey();
+
   /// The mode and the status are the requests'; a change to either redraws
   /// the window, as a change of mode must.
   @override
@@ -438,6 +442,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         child: StatusScope(
           say: _requests.say,
           child: ListenableBuilder(
+            key: _statusContext,
             listenable: Listenable.merge([_requests, widget.labs.offered]),
             builder: (context, _) => _requests.mode == Mode.repertoires
                 ? PgnDropRegion(
@@ -475,7 +480,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         // A mode with a screen of its own has no list to show or hide.
         listShown: _columns.listShown || screen != null,
         onToggleList: _columns.toggleList,
-        actions: () => _actions.entries(context),
+        // Under the status scope: a mode's own dialog run from the menu
+        // says what became of it in the bar, as from its button.
+        actions: () => _actions.entries(_statusContext.currentContext!),
         // What the entries' enabled states read, heard only while the
         // menu is open: the bar itself shows none of it.
         actionsChange: Listenable.merge([

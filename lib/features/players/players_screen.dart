@@ -63,28 +63,8 @@ class _PlayersScreenState extends State<PlayersScreen> {
   }
 
   Players get owner => widget.players;
-  Future<void> _group({PlayerGroup? old}) async {
-    final group = await editGroup(context, group: old);
-    if (!mounted || group == null) return;
-    if (await owner.saveGroup(group, expected: old) && mounted) {
-      owner.showGroup(group.id);
-    }
-  }
-
-  Future<void> _addMember(PlayerGroup group) async {
-    final player = await showChoiceDialog<Player>(
-      context,
-      title: 'Add to ${group.name}',
-      options: owner.players.where((p) => !group.contains(p.id)).toList(),
-      label: (p) => p.name,
-      hint: 'Search players',
-      empty:
-          'Everyone is already in this group. Add a new player from All players.',
-    );
-    if (player != null && mounted) {
-      await owner.saveGroup(group.member(player.id), expected: group);
-    }
-  }
+  Future<void> _group({PlayerGroup? old}) =>
+      saveGroupFrom(context, owner, old: old);
 
   Future<void> _remove(Player player) async {
     final group = owner.group;
@@ -243,7 +223,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
               : groups
               ? () => _group()
               : group != null
-              ? () => _addMember(group)
+              ? () => addToGroup(context, owner, group)
               : () => editPlayer(context, owner),
           icon: const Icon(AppIcons.add, size: IconSize.action),
           label: Text(
@@ -508,5 +488,38 @@ class _Notices extends StatelessWidget {
           ),
       ],
     );
+  }
+}
+
+/// A group made, or [old] changed, from its dialog; the group then shown.
+Future<void> saveGroupFrom(
+  BuildContext context,
+  Players players, {
+  PlayerGroup? old,
+}) async {
+  final group = await editGroup(context, group: old);
+  if (!context.mounted || group == null) return;
+  if (await players.saveGroup(group, expected: old) && context.mounted) {
+    players.showGroup(group.id);
+  }
+}
+
+/// One of everyone into [group], picked by name.
+Future<void> addToGroup(
+  BuildContext context,
+  Players players,
+  PlayerGroup group,
+) async {
+  final player = await showChoiceDialog<Player>(
+    context,
+    title: 'Add to ${group.name}',
+    options: players.players.where((p) => !group.contains(p.id)).toList(),
+    label: (p) => p.name,
+    hint: 'Search players',
+    empty:
+        'Everyone is already in this group. Add a new player from All players.',
+  );
+  if (player != null && context.mounted) {
+    await players.saveGroup(group.member(player.id), expected: group);
   }
 }

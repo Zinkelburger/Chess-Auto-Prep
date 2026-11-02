@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../storage/chapter_files.dart';
-import '../../ui/name_dialog.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'deleted_chapters_view.dart';
 import 'library.dart';
-import 'library_messages.dart';
+import 'library_actions.dart';
 import 'library_state.dart';
 import 'repertoire_tile.dart';
 import '../../ui/list_message.dart';
@@ -65,26 +64,8 @@ class _LibraryPanelState extends State<LibraryPanel> {
     });
   }
 
-  /// One question, the name. Which side it is for is asked when its
-  /// chapter opens, which is now: the new repertoire opens at once.
-  Future<void> _newRepertoire() async {
-    final name = await showNameDialog(
-      context,
-      title: 'Create repertoire',
-      label: 'Repertoire name',
-      confirm: 'Create',
-    );
-    if (name == null || !mounted) return;
-    final result = await announce(
-      context,
-      widget.library.createRepertoire(name),
-      thing: 'repertoire',
-      name: name,
-      failed: 'Could not create the repertoire.',
-    );
-    if (!mounted || result is! LibraryAdded) return;
-    widget.onOpen(result.first);
-  }
+  Future<void> _newRepertoire() =>
+      newRepertoire(context, widget.library, widget.onOpen);
 
   @override
   Widget build(BuildContext context) {

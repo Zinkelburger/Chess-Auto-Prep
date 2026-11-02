@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../features/players/analysis_panel.dart';
 import '../features/players/player_book_pane.dart';
+import '../features/players/player_dialogs.dart';
 import '../features/players/player_games.dart';
 import '../features/players/player_analysis.dart';
 import '../features/players/player_tree_pane.dart';
@@ -147,6 +148,7 @@ final class PlayerAnalysisView extends ModeView {
     AppAction('Players & prep', players.showDirectory, group: 'Player'),
     AppAction(
       'Get games',
+      icon: AppIcons.download,
       players.analysis.player?.accounts.isNotEmpty == true &&
               !players.analysis.busy
           ? () => unawaited(
@@ -156,7 +158,8 @@ final class PlayerAnalysisView extends ModeView {
       group: 'Player',
     ),
     AppAction(
-      'Add PGN games…',
+      'Add PGN…',
+      icon: AppIcons.open,
       players.analysis.player == null
           ? null
           : () => unawaited(players.importPgn()),
@@ -214,15 +217,49 @@ final class PlayersView extends ModeView {
   @override
   Listenable get changes =>
       Listenable.merge([players.directory, players.saved]);
+
+  /// The page's own buttons: adding to whatever is listed, pasting a list
+  /// of people, and reading it all again.
   @override
-  List<AppAction> actions(ModeMenu menu) => [
-    AppAction(
-      'Refresh',
-      () => unawaited(players.directory.load()),
-      icon: AppIcons.refresh,
-      group: 'Players',
-    ),
-  ];
+  List<AppAction> actions(ModeMenu menu) {
+    final owner = players.directory;
+    final blocked = owner.busy || owner.needsRetry;
+    final groups = owner.showingGroups;
+    final group = owner.group;
+    final context = menu.context;
+    return [
+      AppAction(
+        groups
+            ? 'New group…'
+            : group != null
+            ? 'Add players…'
+            : 'Add player…',
+        blocked
+            ? null
+            : groups
+            ? () => unawaited(saveGroupFrom(context, owner))
+            : group != null
+            ? () => unawaited(addToGroup(context, owner, group))
+            : () => unawaited(editPlayer(context, owner)),
+        icon: AppIcons.add,
+        group: 'Players',
+      ),
+      if (!groups)
+        AppAction(
+          'Paste players…',
+          blocked ? null : () => unawaited(importPlayers(context, owner)),
+          icon: AppIcons.paste,
+          group: 'Players',
+        ),
+      AppAction(
+        'Refresh',
+        () => unawaited(owner.load()),
+        icon: AppIcons.refresh,
+        group: 'Players',
+      ),
+    ];
+  }
+
   @override
   Widget screen(Map<ShortcutActivator, VoidCallback> windowKeys) => ScreenKeys(
     bindings: windowKeys,

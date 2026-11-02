@@ -433,6 +433,37 @@ void main() {
     await searchFromHere();
   });
 
+  testWidgets('Actions offers the list\'s own buttons, and the repertoire '
+      'entries are off on the analysis board', (tester) async {
+    await pump(tester);
+    VoidCallback? entry(String label) => tester
+        .widget<MenuItemButton>(find.widgetWithText(MenuItemButton, label))
+        .onPressed;
+    Future<void> open() async {
+      await tester.tap(find.text('Actions'));
+      await tester.pumpAndSettle();
+    }
+
+    await open();
+    expect(w.session.isScratch, isTrue);
+    expect(entry('New repertoire…'), isNotNull);
+    expect(entry('Import course PGN…'), isNotNull);
+    expect(entry('New chapter…'), isNull, reason: 'no repertoire open');
+    for (final label in ['Train this chapter', 'Next gap', 'Play as Black']) {
+      if (find.text(label).evaluate().isEmpty) continue;
+      expect(entry(label), isNull, reason: label);
+    }
+    await tester.tapAt(const Offset(5, 700));
+    await tester.pumpAndSettle();
+
+    await showLibrary(tester);
+    await tester.tap(inLibrary(find.text('Main')).last);
+    await tester.pumpAndSettle();
+    await open();
+    expect(entry('New chapter…'), isNotNull);
+    expect(entry('Train this chapter'), isNotNull);
+  });
+
   testWidgets('Actions sits beside the mode menu, at the left', (tester) async {
     await pump(tester);
     final mode = tester.getTopRight(find.text('Repertoire builder').first);

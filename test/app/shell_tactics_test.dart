@@ -204,7 +204,7 @@ void main() {
       'Get my games and downloads nothing', (tester) async {
     await toTactics(tester);
     expect(find.text('Get games'), findsNothing);
-    await tester.tap(find.text('Add accounts'));
+    await tester.tap(find.text('Add accounts…'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextField, 'Lichess username'),

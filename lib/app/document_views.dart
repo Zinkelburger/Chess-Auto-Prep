@@ -5,11 +5,14 @@ import 'package:flutter/material.dart';
 
 import '../chess/explorer_choice.dart';
 import '../chess/pgn/game_tree.dart' show NodePath;
+import '../features/library/library_actions.dart';
 import '../features/library/library_panel.dart';
 import '../features/pgn_viewer/filter_pane.dart';
 import '../features/pgn_viewer/pgn_viewer_panel.dart';
 import '../features/pgn_viewer/player_side_choice.dart';
 import '../features/study/quiz_menu.dart';
+import '../features/study/studies_state.dart';
+import '../features/study/study_actions.dart';
 import '../features/study/study_panel.dart';
 import '../features/trainer/trainer.dart';
 import '../features/trainer/trainer_state.dart';
@@ -60,8 +63,13 @@ abstract base class _DocumentModeView extends ModeView {
     workspace.fill,
   ]);
 
+  /// What the mode's list makes or brings in, as its buttons do: first in
+  /// the File group.
+  List<AppAction> makes(ModeMenu menu) => const [];
+
   @override
   List<AppAction> actions(ModeMenu menu) => [
+    ...makes(menu),
     AppAction(
       AppKey.openFile.action,
       () => unawaited(requests.openPgnFile()),
@@ -86,14 +94,19 @@ abstract base class _DocumentModeView extends ModeView {
         workspace.fill.canStart ? dialogs.search : null,
         group: 'Repertoire',
       ),
+      // The analysis board is no repertoire: nothing to train, no gaps.
       AppAction(
         'Train this chapter',
-        session.chapter == null ? null : () => show(WorkspaceTab.train),
+        session.chapter == null || session.isScratch
+            ? null
+            : () => show(WorkspaceTab.train),
         group: 'Repertoire',
       ),
       AppAction(
         'Next gap',
-        workspace.gaps.canNextGap ? workspace.gaps.nextGap : null,
+        workspace.gaps.canNextGap && !session.isScratch
+            ? workspace.gaps.nextGap
+            : null,
         group: 'Repertoire',
       ),
       if (workspace.audit case final audit?)
@@ -110,7 +123,9 @@ abstract base class _DocumentModeView extends ModeView {
       if (session.chapter case final chapter? when chapter.game == null)
         AppAction(
           chapter.side == Side.white ? 'Play as Black' : 'Play as White',
-          () => setSide(session, chapter.side.opposite),
+          session.isScratch
+              ? null
+              : () => setSide(session, chapter.side.opposite),
           group: 'Repertoire',
         ),
     ];
@@ -131,6 +146,55 @@ abstract base class _LibraryView extends _DocumentModeView {
   }) : super(opensBeside: true);
 
   final DocumentModes _modes;
+
+  @override
+  Listenable get changes =>
+      Listenable.merge([super.changes, _modes.library, _modes.outline]);
+
+  /// The builder's list makes repertoires and chapters; the trainer's
+  /// only brings a course in.
+  @override
+  List<AppAction> makes(ModeMenu menu) => [
+    if (this is RepertoiresView) ..._creates(menu.context),
+    AppAction(
+      'Import course PGN…',
+      menu.dialogs.importCourse,
+      icon: AppIcons.open,
+      group: 'File',
+    ),
+  ];
+
+  List<AppAction> _creates(BuildContext context) => [
+    AppAction(
+      'New repertoire…',
+      _modes.library.busy
+          ? null
+          : () => unawaited(
+              newRepertoire(
+                context,
+                _modes.library,
+                (ref) => unawaited(requests.open(ref)),
+              ),
+            ),
+      icon: AppIcons.add,
+      group: 'File',
+    ),
+    AppAction(
+      'New chapter…',
+      _modes.library.busy || _modes.outline.repertoire == null
+          ? null
+          : () => unawaited(
+              newChapter(
+                context,
+                _modes.library,
+                _modes.outline,
+                workspace.session,
+              ),
+            ),
+      icon: AppIcons.add,
+      group: 'File',
+    ),
+  ];
 
   @override
   Widget list(Widget toggle) => ListenableBuilder(
@@ -175,11 +239,44 @@ final class TrainerView extends _LibraryView {
     Workspace workspace,
     WorkspaceRequests requests,
     DocumentModes modes,
+    this._trainer,
   ) : super(workspace, trainerTabs(), requests, modes, analysisInPanes: true);
+
+  final Trainer _trainer;
 
   /// Coming here is coming to train, whichever tab was left up.
   @override
   void entered() => show(WorkspaceTab.train);
+
+  @override
+  Listenable get changes => Listenable.merge([super.changes, _trainer]);
+
+  /// The Train tab's two sittings, as its buttons start them.
+  @override
+  List<AppAction> actions(ModeMenu menu) {
+    final ready = switch (_trainer.state) {
+      TrainerReady(:final progress) => !progress.stale,
+      _ => false,
+    };
+    void sit(VoidCallback start) {
+      show(WorkspaceTab.train);
+      start();
+    }
+
+    return [
+      AppAction(
+        'Learn',
+        ready && _trainer.learnCount > 0 ? () => sit(_trainer.learn) : null,
+        group: 'Training',
+      ),
+      AppAction(
+        'Review',
+        ready && _trainer.reviewCount > 0 ? () => sit(_trainer.review) : null,
+        group: 'Training',
+      ),
+      ...super.actions(menu),
+    ];
+  }
 }
 
 /// The PGN Viewer and Study: one card for reading a game and editing it.
@@ -600,6 +697,70 @@ final class StudyView extends _ReadingView {
   @override
   MoveMenu get moveMenu =>
       (path) => [...quizMenuItems(workspace.session, path), ..._addLine(path)];
+
+  @override
+  Listenable get changes => Listenable.merge([super.changes, _modes.studies]);
+
+  /// The study panel's own buttons, from the menu.
+  @override
+  List<AppAction> makes(ModeMenu menu) {
+    final studies = _modes.studies;
+    final busy = studies.busy;
+    final open = studies.open != null;
+    final context = menu.context;
+    return [
+      AppAction(
+        'New study…',
+        busy ? null : () => unawaited(newStudy(context, studies, _became)),
+        icon: AppIcons.add,
+        group: 'File',
+      ),
+      AppAction(
+        'New chapter…',
+        busy || !open
+            ? null
+            : () => unawaited(
+                newStudyChapter(context, workspace.session, requests.say),
+              ),
+        icon: AppIcons.add,
+        group: 'File',
+      ),
+      AppAction(
+        'Import chapters…',
+        busy
+            ? null
+            : () => unawaited(importChapters(context, studies, _became)),
+        icon: AppIcons.open,
+        group: 'File',
+      ),
+      if (studies.sender != null)
+        AppAction(
+          'Send to Lichess…',
+          busy || !open
+              ? null
+              : () => unawaited(
+                  sendStudyToLichess(
+                    context,
+                    studies,
+                    workspace.session,
+                    onLogIn: lichessLogin,
+                  ),
+                ),
+          icon: AppIcons.send,
+          group: 'File',
+        ),
+    ];
+  }
+
+  /// What a change from the menu became: the sentence when it did not
+  /// happen, the study it made or filled opened when it did.
+  void _became(StudyResult result) => switch (result) {
+    StudyProblem(:final sentence) => requests.say(sentence),
+    StudyDone(:final opened?, :final chapter) => unawaited(
+      requests.open(opened, game: chapter ?? 0),
+    ),
+    StudyDone() => null,
+  };
 
   @override
   Widget list(Widget toggle) => StudyPanel(

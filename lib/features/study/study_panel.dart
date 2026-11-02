@@ -3,7 +3,6 @@ import '../../chess/pgn/study_cleanup.dart';
 import 'chapter_dialogs.dart';
 import 'dart:async';
 
-import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -17,14 +16,12 @@ import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import '../../workspace/board/board_editor.dart';
 import '../../workspace/document/document_session.dart';
-import 'new_chapter_dialog.dart';
 import 'studies.dart';
 import 'studies_state.dart';
 import 'study_commands.dart';
 import 'study_chapter_list.dart';
 import 'chapter_position_dialog.dart';
-import 'study_import_dialog.dart';
-import 'study_send_dialog.dart';
+import 'study_actions.dart';
 import 'study_recovery_dialog.dart';
 import '../../ui/list_message.dart';
 import '../../ui/list_row.dart';
@@ -67,7 +64,12 @@ class StudyPanel extends StatefulWidget {
 
 class _StudyPanelState extends State<StudyPanel> {
   final _search = TextEditingController();
-  bool _choosingStudy = false;
+
+  /// The study that was open when the list of studies was asked for: the
+  /// list shows until another study opens, from here or the Actions menu.
+  String? _choosingFrom;
+  bool get _choosingStudy =>
+      _choosingFrom != null && _choosingFrom == _studies.open?.path;
 
   @override
   void dispose() {
@@ -95,31 +97,15 @@ class _StudyPanelState extends State<StudyPanel> {
         _say(sentence);
       case StudyDone(:final opened, :final chapter):
         if (opened != null) {
-          setState(() => _choosingStudy = false);
+          setState(() => _choosingFrom = null);
           widget.onOpen(opened, chapter ?? 0);
         }
     }
   }
 
-  Future<void> _newStudy() async {
-    final name = await showNameDialog(
-      context,
-      title: 'New study',
-      label: 'Study name',
-      confirm: 'Create',
-    );
-    if (name == null || !mounted) return;
-    _became(await _studies.create(name));
-  }
+  Future<void> _newStudy() => newStudy(context, _studies, _became);
 
-  Future<void> _import() async {
-    final result = await showStudyImport(
-      context,
-      _studies,
-      append: _studies.open != null,
-    );
-    if (result != null && mounted) _became(result);
-  }
+  Future<void> _import() => importChapters(context, _studies, _became);
 
   Future<void> _renameStudy() async {
     final study = _studies.open;
@@ -153,19 +139,12 @@ class _StudyPanelState extends State<StudyPanel> {
     _became(await _studies.exportPgn(name));
   }
 
-  Future<void> _sendToLichess() async {
-    final sender = _studies.sender;
-    final chapter = widget.session.snapshot();
-    final study = _studies.open;
-    if (sender == null || chapter == null || study == null) return;
-    await showSendToLichess(
-      context,
-      sender: sender,
-      study: chapter,
-      name: study.name,
-      onLogIn: widget.onLichessLogin,
-    );
-  }
+  Future<void> _sendToLichess() => sendStudyToLichess(
+    context,
+    _studies,
+    widget.session,
+    onLogIn: widget.onLichessLogin,
+  );
 
   ChapterLine? _line(StudyChapter chapter) =>
       widget.session.chapter?.lines.elementAtOrNull(chapter.index);
@@ -271,20 +250,7 @@ class _StudyPanelState extends State<StudyPanel> {
     await Clipboard.setData(ClipboardData(text: text));
   }
 
-  Future<void> _newChapter() async {
-    final wanted = await showNewChapterDialog(context);
-    if (wanted == null || !mounted) return;
-    _edited(
-      addStudyChapter(
-        widget.session,
-        name: wanted.name,
-        orientation:
-            wanted.orientation ??
-            (wanted.root.whiteToMove ? Side.white : Side.black),
-        root: wanted.root,
-      ),
-    );
-  }
+  Future<void> _newChapter() => newStudyChapter(context, widget.session, _say);
 
   Future<void> _renameChapter(StudyChapter chapter) async {
     final name = await showNameDialog(
@@ -370,7 +336,8 @@ class _StudyPanelState extends State<StudyPanel> {
         children: [
           _Toolbar(
             currentName: !_choosingStudy ? _studies.open?.name : null,
-            onChooseStudy: () => setState(() => _choosingStudy = true),
+            onChooseStudy: () =>
+                setState(() => _choosingFrom = _studies.open?.path),
             busy: _studies.busy,
             hasOpenStudy: _studies.open != null,
             search: _search,
@@ -459,7 +426,7 @@ class _StudyPanelState extends State<StudyPanel> {
           open: open,
           busy: _studies.busy,
           onOpen: () {
-            setState(() => _choosingStudy = false);
+            setState(() => _choosingFrom = null);
             widget.onOpen(study, 0);
           },
           onCopyPgn: () => _copy(_studies.pgnOfOpenStudy()),

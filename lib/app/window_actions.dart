@@ -43,6 +43,7 @@ final class WindowActions {
     required this.inspecting,
     required this.settingRows,
     required this.settingsAlso,
+    required this.importCourse,
   });
 
   final WorkspaceRequests requests;
@@ -65,6 +66,9 @@ final class WindowActions {
   /// besides the store they are built from: the Lichess account.
   final List<SettingGroup> Function() settingRows;
   final Listenable settingsAlso;
+
+  /// A course PGN into the repertoires, then its Train tab.
+  final VoidCallback importCourse;
 
   ModeView get _view => view();
 
@@ -153,7 +157,9 @@ final class WindowActions {
             accounts: () => unawaited(editAccounts(context, training.myGames)),
             newBook: () =>
                 unawaited(newBook(context, workspace.books, say: requests.say)),
+            importCourse: importCourse,
           ),
+          context: context,
         ));
 
   Future<void> settings(BuildContext context) => showSettingsDialog(
