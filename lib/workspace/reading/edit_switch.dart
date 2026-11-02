@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../ui/app_keys.dart';
 import '../document/document_session.dart';
 
 /// `Read | Edit` at the foot of the card in the PGN Viewer and Study: the
@@ -17,16 +16,16 @@ class EditSwitch extends StatelessWidget {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: Listenable.merge([session, editing]),
     builder: (context, _) => SegmentedButton<bool>(
-      segments: [
-        const ButtonSegment(
+      segments: const [
+        ButtonSegment(
           value: false,
           label: Text('Read'),
           tooltip: 'Read the game: moves played stay off the file',
         ),
         ButtonSegment(
           value: true,
-          label: const Text('Edit'),
-          tooltip: AppKey.edit.tip('Edit the game: changes save as you go'),
+          label: Text('Edit'),
+          tooltip: 'Edit the game: changes save as you go',
         ),
       ],
       selected: {editing.value},

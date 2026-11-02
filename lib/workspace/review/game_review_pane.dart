@@ -9,6 +9,7 @@ import '../../chess/pgn/move_label.dart';
 import '../../ui/theme.dart';
 import 'game_review.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/app_icons.dart';
 
 /// The game's evaluation as a graph, the old viewer's way: White's
 /// advantage light above the middle, Black's dark below, each marked move a
@@ -527,7 +528,7 @@ class _ReviewControls extends StatelessWidget {
               onPressed: review.running
                   ? review.stop
                   : () => unawaited(review.start()),
-              icon: Icon(review.running ? Icons.stop : Icons.play_arrow),
+              icon: Icon(review.running ? AppIcons.stop : AppIcons.run),
               label: Text(
                 review.running
                     ? 'Stop'

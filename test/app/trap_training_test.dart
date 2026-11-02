@@ -8,7 +8,6 @@ import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_files.dart';
@@ -80,10 +79,7 @@ void main() {
       elo: 1800,
     );
     await w.pumpShell(tester);
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.pumpAndSettle();
+    await choosePanel(tester, 'Positions');
   }
 
   /// The Positions list the open chapter's finds by default; a trap the
@@ -175,10 +171,7 @@ void main() {
       elo: 1800,
     );
     await w.pumpShell(tester);
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.pumpAndSettle();
+    await choosePanel(tester, 'Positions');
     await listEveryFind(tester);
     await trainTheTrap(tester);
 

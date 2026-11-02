@@ -4,6 +4,7 @@ import '../../chess/pgn/study.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
+import '../../ui/app_icons.dart';
 
 typedef ChapterActions = ({
   VoidCallback rename,
@@ -84,7 +85,7 @@ class ChapterRow extends StatelessWidget {
   }
 
   List<Widget> get _menuItems => [
-    rowAction('Rename…', actions.rename, busy: busy, icon: Icons.edit_outlined),
+    rowAction('Rename…', actions.rename, busy: busy, icon: AppIcons.edit),
     rowAction('PGN tags…', actions.tags, busy: busy),
     rowAction('Set starting position…', actions.root, busy: busy),
     const Divider(),
@@ -104,20 +105,20 @@ class ChapterRow extends StatelessWidget {
       'Move up',
       () => actions.move(-1),
       busy: busy,
-      icon: Icons.arrow_upward,
+      icon: AppIcons.moveUp,
     ),
     rowAction(
       'Move down',
       () => actions.move(1),
       busy: busy,
-      icon: Icons.arrow_downward,
+      icon: AppIcons.moveDown,
     ),
     const Divider(),
     rowAction(
       'Copy chapter PGN',
       actions.copyPgn,
       busy: busy,
-      icon: Icons.content_copy,
+      icon: AppIcons.copy,
     ),
     const Divider(),
     rowAction(
@@ -130,7 +131,7 @@ class ChapterRow extends StatelessWidget {
       'Delete chapter…',
       actions.remove,
       busy: busy,
-      icon: Icons.delete_outline,
+      icon: AppIcons.delete,
     ),
   ];
 }

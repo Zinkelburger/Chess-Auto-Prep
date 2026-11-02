@@ -6,6 +6,7 @@ import '../../ui/theme.dart';
 import 'player_analysis.dart';
 import 'player_games.dart';
 import 'player_hunt.dart';
+import '../../ui/app_icons.dart';
 
 /// The names over the positions table, which are also how it is sorted:
 /// Games puts the most played first, Score the worst score and then, pressed
@@ -100,7 +101,7 @@ class _Sorter extends StatelessWidget {
           children: [
             if (active)
               Icon(
-                ascending ? Icons.arrow_upward : Icons.arrow_downward,
+                ascending ? AppIcons.sortAscending : AppIcons.sortDescending,
                 size: IconSize.sort,
                 color: ink,
               ),

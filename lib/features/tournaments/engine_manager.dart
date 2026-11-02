@@ -9,6 +9,7 @@ import '../../ui/number_field.dart';
 import '../../ui/theme.dart';
 import 'engine_check.dart';
 import 'tournament_run.dart';
+import '../../ui/app_icons.dart';
 
 Future<void> manageTournamentEngines(
   BuildContext context,
@@ -42,14 +43,14 @@ Future<void> manageTournamentEngines(
                         onPressed: run.registryBusy || run.running
                             ? null
                             : () => unawaited(_edit(context, run, engine)),
-                        icon: const Icon(Icons.edit_outlined),
+                        icon: const Icon(AppIcons.edit),
                       ),
                       IconButton(
                         tooltip: 'Remove ${engine.name}',
                         onPressed: run.registryBusy || run.running
                             ? null
                             : () => unawaited(_remove(context, run, engine)),
-                        icon: const Icon(Icons.delete_outline),
+                        icon: const Icon(AppIcons.remove),
                       ),
                     ],
                   ),
@@ -174,7 +175,7 @@ class _EditorState extends State<_Editor> {
                 ),
                 TextButton.icon(
                   onPressed: _busy ? null : () => unawaited(_pick()),
-                  icon: const Icon(Icons.folder_open_outlined),
+                  icon: const Icon(AppIcons.open),
                   label: const Text('Choose file…'),
                 ),
               ],

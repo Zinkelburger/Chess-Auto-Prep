@@ -60,9 +60,15 @@ final class BughouseView extends ModeView {
     final lab = _labs.lab;
     return [
       AppAction(
-        'Toggle engine',
+        _labs.engine.on ? 'Engine off' : 'Engine on',
         _labs.engine.toggle,
-        shortcut: AppKey.engine.label,
+        group: 'Bughouse',
+      ),
+      AppAction(
+        'Play best move',
+        _labs.engine.rowsOn(lab.focus).isEmpty
+            ? null
+            : () => _labs.engine.playBest(lab.focus),
         group: 'Bughouse',
       ),
       AppAction('New game', lab.newGame, group: 'Bughouse'),

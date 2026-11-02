@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/chess/pgn/board_shapes.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
@@ -149,10 +151,8 @@ void main() {
         home: Scaffold(
           body: WorkspaceKeys(
             session: session,
-            analysis: analysis,
             editing: editing,
             tabs: tabs,
-            moves: moves,
             child: WorkspaceView(
               workspace: workspace(),
               tabs: layout?.tabs ?? tabs,
@@ -218,11 +218,9 @@ void main() {
     expect(find.text('Engine'), findsOneWidget, reason: 'off keeps the switch');
   });
 
-  testWidgets('Ctrl+E opens the edit strip and Done closes it', (tester) async {
+  testWidgets('the edit strip opens and Done closes it', (tester) async {
     await pump(tester);
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    editing.value = true;
     await tester.pumpAndSettle();
     expect(editing.value, isTrue);
     expect(comment, findsOneWidget);
@@ -406,11 +404,11 @@ void main() {
       lessThan(560),
       reason: 'the board is held by the window\'s height',
     );
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+    await tester.tap(find.byTooltip('Turn engine on'));
     await tester.pumpAndSettle();
     expect(analysis.enabled, isTrue);
     expect(boardAndField(tester), off);
-    await tester.tap(find.byTooltip('Turn engine off (E)'));
+    await tester.tap(find.byTooltip('Turn engine off'));
     await tester.pumpAndSettle();
     expect(boardAndField(tester), off);
     expect(tester.takeException(), isNull);
@@ -442,7 +440,7 @@ void main() {
     await short(tester);
     final off = boardAndField(tester);
     expect(find.text('Engine'), findsNothing);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+    unawaited(analysis.enable());
     await tester.pumpAndSettle();
     expect(find.text('Engine'), findsOneWidget);
     expect(boardAndField(tester), off);
@@ -466,14 +464,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('F turns the board over; E asks for the engine', (tester) async {
+  testWidgets('F turns the board over', (tester) async {
     await pump(tester);
     expect(session.orientation.name, 'black');
     await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
     expect(session.orientation.name, 'white');
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
-    await tester.pumpAndSettle();
-    expect(analysis.state, isA<EngineFailed>(), reason: 'it was asked');
   });
 
   testWidgets('up and down walk the games of a viewed file, under the '

@@ -12,6 +12,7 @@ import '../../ui/app_keys.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
 import 'bughouse_lab.dart';
+import '../../ui/app_icons.dart';
 
 /// A board's moves read like the workspace's move list: its main line as
 /// running text, each variation an indented block right after the move it
@@ -49,25 +50,25 @@ class BoardMoves extends StatelessWidget {
         Row(
           children: [
             _step(
-              Icons.first_page,
+              AppIcons.first,
               AppKey.firstMove.tip('First move'),
               at != null,
               () => lab.goTo(board, null),
             ),
             _step(
-              Icons.chevron_left,
+              AppIcons.previous,
               AppKey.stepBack.tip('Back'),
               at != null,
               () => lab.stepOn(board, -1),
             ),
             _step(
-              Icons.chevron_right,
+              AppIcons.next,
               AppKey.stepForward.tip('Forward'),
               ahead,
               () => lab.stepOn(board, 1),
             ),
             _step(
-              Icons.last_page,
+              AppIcons.last,
               AppKey.lastMove.tip('Last move'),
               ahead,
               () => lab.goTo(board, line.lineOf(board).last),
@@ -229,33 +230,33 @@ List<AppAction> moveMenu(BughouseLab lab, int node) {
     AppAction(
       'Promote variation',
       main ? null : () => lab.promote(node),
-      icon: Icons.arrow_upward,
+      icon: AppIcons.promote,
     ),
     AppAction(
       'Make main line',
       main ? null : () => lab.makeMainLine(node),
-      icon: Icons.check,
+      icon: AppIcons.mainLine,
     ),
     AppAction(
       'Delete from here',
       () => lab.deleteFrom(node),
-      icon: Icons.delete_outline,
+      icon: AppIcons.delete,
     ),
     AppAction(
       'Copy line PGN',
       () => _copy(lab.linePgnThrough(node)),
-      icon: Icons.content_copy,
+      icon: AppIcons.copy,
     ),
     AppAction(
       'Copy FEN',
       after == null ? null : () => _copy(lichessFen(after.board(board).fen)),
-      icon: Icons.content_copy,
+      icon: AppIcons.copy,
     ),
     if (!lab.single)
       AppAction(
         'Copy dual FEN',
         after == null ? null : () => _copy(after.lichessDualFen),
-        icon: Icons.content_copy,
+        icon: AppIcons.copy,
       ),
   ];
 }

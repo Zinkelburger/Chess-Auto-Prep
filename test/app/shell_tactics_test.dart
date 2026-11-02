@@ -2,7 +2,6 @@ import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/features/tactics/my_games.dart';
 import 'package:chess_auto_prep/features/tactics/puzzle_pane.dart';
-import 'package:chess_auto_prep/workspace/reading/comment_field.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
@@ -146,19 +145,12 @@ void main() {
     }
     await tester.tap(find.text('Play (4)'));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Turn engine off (E)'), findsNothing);
+    expect(find.byTooltip('Turn engine off'), findsNothing);
     expect(find.byTooltip('Previous puzzle (↑)'), findsOneWidget);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
-    await tester.pumpAndSettle();
-    expect(
-      w.analysis.state,
-      isNot(isA<EngineFailed>()),
-      reason: 'E is not heard while the answer is hidden',
-    );
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.pumpAndSettle();
     expect(
-      find.byTooltip('Turn engine off (E)'),
+      find.byTooltip('Turn engine off'),
       findsNothing,
       reason: 'off stays collapsed after revealing the answer',
     );
@@ -178,24 +170,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(w.trainer.up?.puzzle.index, 1);
     expect(w.trainer.up?.finished, isFalse);
-  });
-
-  testWidgets('Ctrl+E does not open the edit strip over a hidden answer', (
-    tester,
-  ) async {
-    await toTactics(tester);
-    await tester.tap(find.text('Play (4)'));
-    await tester.pumpAndSettle();
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.pumpAndSettle();
-    // The answer shown, nothing is hidden any more: the strip would be up
-    // now had the key opened it.
-    await tester.sendKeyEvent(LogicalKeyboardKey.space);
-    await tester.pumpAndSettle();
-    expect(find.text('Solution: e5 Nf3 Nc6'), findsOneWidget);
-    expect(find.byType(CommentField), findsNothing);
   });
 
   testWidgets('the Explorer tab is empty while the answer is hidden', (
@@ -224,22 +198,6 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.pumpAndSettle();
     expect(find.byType(ExplorerPane), findsOneWidget);
-  });
-
-  testWidgets('Ctrl+G starts no search in Tactics, which has no Search tab '
-      'to show it in', (tester) async {
-    await toTactics(tester);
-    await tester.tap(find.text('Play (4)'));
-    await tester.pumpAndSettle();
-    await tester.sendKeyEvent(LogicalKeyboardKey.space);
-    await tester.pumpAndSettle();
-    expect(w.session.shownTo, isNull, reason: 'a search could start here');
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.pumpAndSettle();
-    expect(w.fill.running, isFalse);
-    expect(w.analysis.paused, isFalse);
   });
 
   testWidgets('with no username the column asks for one; saving it offers '

@@ -11,6 +11,7 @@ import 'puzzle_state.dart';
 import 'puzzle_trainer.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/app_icons.dart';
 
 /// The Puzzle tab of the reading card: whose move it is and what went wrong
 /// in the game, what the last move came to, the three buttons in fixed
@@ -299,19 +300,19 @@ class _Buttons extends StatelessWidget {
         if (up.finished)
           _button(
             'Analyze',
-            Icons.insights,
+            AppIcons.analyze,
             onAnalyze,
             tip: 'Open the game with the engine on',
           )
         else
           _button(
             'Show solution',
-            Icons.lightbulb_outline,
+            AppIcons.hint,
             trainer.showSolution,
             tip: AppKey.play.tip('Show solution'),
           ),
         IconButton(
-          icon: const Icon(Icons.replay, size: IconSize.action),
+          icon: const Icon(AppIcons.again, size: IconSize.action),
           tooltip: 'Try it again from the start',
           onPressed: atStart ? null : trainer.reset,
         ),
@@ -320,7 +321,7 @@ class _Buttons extends StatelessWidget {
             message: AppKey.nextGame.tip('Next puzzle'),
             child: FilledButton.icon(
               onPressed: next,
-              icon: const Icon(Icons.arrow_forward, size: IconSize.action),
+              icon: const Icon(AppIcons.forward, size: IconSize.action),
               iconAlignment: IconAlignment.end,
               label: const Text('Next'),
             ),
@@ -328,7 +329,7 @@ class _Buttons extends StatelessWidget {
         else
           _button(
             'Skip',
-            Icons.skip_next,
+            AppIcons.skip,
             next,
             tip: AppKey.nextGame.tip('Skip this puzzle'),
             iconAfter: true,
@@ -375,7 +376,7 @@ class _Stars extends StatelessWidget {
         for (var star = 1; star <= 5; star++)
           IconButton(
             icon: Icon(
-              star <= rating ? Icons.star : Icons.star_border,
+              star <= rating ? AppIcons.rated : AppIcons.unrated,
               size: IconSize.action,
             ),
             tooltip: star == 1
@@ -422,7 +423,7 @@ class _Progress extends StatelessWidget {
     return Row(
       children: [
         IconButton(
-          icon: const Icon(Icons.chevron_left, size: IconSize.action),
+          icon: const Icon(AppIcons.previous, size: IconSize.action),
           tooltip: AppKey.previousGame.tip('Previous puzzle'),
           onPressed: trainer.hasPrevious
               ? () => unawaited(trainer.previous())

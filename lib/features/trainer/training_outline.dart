@@ -11,6 +11,7 @@ import '../../ui/theme.dart';
 import 'trainer.dart';
 import 'trainer_state.dart';
 import 'training_scope.dart';
+import '../../ui/app_icons.dart';
 
 /// One repertoire's outline. The general library stays in the builder.
 class TrainingOutline extends StatefulWidget {
@@ -91,7 +92,7 @@ class _TrainingOutlineState extends State<TrainingOutline> {
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
               onPressed: widget.onImport,
-              icon: const Icon(Icons.file_open_outlined),
+              icon: const Icon(AppIcons.open),
               label: const Text('Import course PGN…'),
             ),
           ),
@@ -171,7 +172,7 @@ class _TrainingOutlineState extends State<TrainingOutline> {
           selected: selection.chapter == chapter.ref && selection.line == null,
           leading: IconButton(
             tooltip: open ? 'Collapse chapter' : 'Expand chapter',
-            icon: Icon(open ? Icons.expand_more : Icons.chevron_right),
+            icon: Icon(open ? AppIcons.expanded : AppIcons.collapsed),
             onPressed: () => setState(
               () => open
                   ? _expanded.remove(chapter.ref)

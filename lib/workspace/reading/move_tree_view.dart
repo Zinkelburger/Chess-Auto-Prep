@@ -22,6 +22,7 @@ import '../document/document_session.dart';
 import '../review/game_review_pane.dart' show markColor;
 import '../board/line_preview.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/app_icons.dart';
 
 /// The move list, read like a book: the main line as running text, each
 /// comment as a paragraph of its own under the move it is on, each
@@ -378,40 +379,28 @@ final class _LineBuilder {
           : [
               MenuItemButton(
                 onPressed: () => promoteVariation(session, path),
-                leadingIcon: const Icon(
-                  Icons.arrow_upward,
-                  size: IconSize.menu,
-                ),
+                leadingIcon: const Icon(AppIcons.promote, size: IconSize.menu),
                 child: const Text('Promote variation'),
               ),
               MenuItemButton(
                 onPressed: () => makeMainLine(session, path),
-                leadingIcon: const Icon(Icons.check, size: IconSize.menu),
+                leadingIcon: const Icon(AppIcons.mainLine, size: IconSize.menu),
                 child: const Text('Make main line'),
               ),
               MenuItemButton(
                 onPressed: () => onDeleteFrom(path),
-                leadingIcon: const Icon(
-                  Icons.delete_outline,
-                  size: IconSize.menu,
-                ),
+                leadingIcon: const Icon(AppIcons.delete, size: IconSize.menu),
                 child: const Text('Delete from here'),
               ),
               const Divider(),
               MenuItemButton(
                 onPressed: () => _copy(writeLineTo(session.tree!, path)),
-                leadingIcon: const Icon(
-                  Icons.content_copy,
-                  size: IconSize.menu,
-                ),
+                leadingIcon: const Icon(AppIcons.copy, size: IconSize.menu),
                 child: const Text('Copy line PGN'),
               ),
               MenuItemButton(
                 onPressed: () => _copy(node.fen.value),
-                leadingIcon: const Icon(
-                  Icons.content_copy,
-                  size: IconSize.menu,
-                ),
+                leadingIcon: const Icon(AppIcons.copy, size: IconSize.menu),
                 child: const Text('Copy FEN'),
               ),
               ...moveMenu(path),
@@ -590,11 +579,7 @@ class _MoveTokenState extends State<_MoveToken>
     mainAxisSize: MainAxisSize.min,
     children: [
       if (widget.quizStarts)
-        Icon(
-          Icons.play_arrow,
-          size: IconSize.menu,
-          color: scheme.onSurfaceVariant,
-        ),
+        Icon(AppIcons.run, size: IconSize.menu, color: scheme.onSurfaceVariant),
       // A pane dragged narrower than one move cuts the move rather than
       // spilling past its edge.
       Flexible(
@@ -627,7 +612,11 @@ class _MoveTokenState extends State<_MoveToken>
         ),
       ),
       if (widget.quizEnds)
-        Icon(Icons.stop, size: IconSize.menu, color: scheme.onSurfaceVariant),
+        Icon(
+          AppIcons.stop,
+          size: IconSize.menu,
+          color: scheme.onSurfaceVariant,
+        ),
     ],
   );
 

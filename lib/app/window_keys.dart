@@ -11,7 +11,6 @@ import '../workspace/workspace_tabs.dart';
 import 'board_doors.dart';
 import 'full_screen.dart';
 import 'mode_view.dart';
-import 'search_door.dart';
 import 'window_actions.dart';
 import 'window_columns.dart';
 import 'workspace_requests.dart';
@@ -25,7 +24,6 @@ final class WindowKeys {
     required this.puzzles,
     required this.columns,
     required this.doors,
-    required this.search,
     required this.actions,
     required this.fullScreen,
     required this.view,
@@ -37,7 +35,6 @@ final class WindowKeys {
   final PuzzleTrainer puzzles;
   final WindowColumns columns;
   final BoardDoors doors;
-  final SearchDoor search;
   final WindowActions actions;
 
   /// Whether the window fills the screen: F11, Esc and the Actions menu.
@@ -54,29 +51,21 @@ final class WindowKeys {
     // before it steps back in the file.
     if (!inspecting()) ...AppKey.back.bind(workspace.tree.back),
     ...screen(context),
-    ...AppKey.toggleList.bind(columns.toggleList),
-    ...AppKey.positions.bind(columns.togglePositions),
     ...AppKey.openFile.bind(() => unawaited(requests.openPgnFile())),
     ...AppKey.paste.bind(() => unawaited(doors.paste())),
-    ...AppKey.pastePosition.bind(
-      () => unawaited(doors.paste(positionOnly: true)),
-    ),
-    ...AppKey.setUpPosition.bind(() => unawaited(doors.setUp(context))),
     ...AppKey.analysisBoard.bind(() => unawaited(actions.analyze())),
-    ...AppKey.search.bind(() => unawaited(search.search(view().layout))),
     ...AppKey.play.bind(_space),
     ...AppKey.nextGame.bind(() => _walk(1)),
     ...AppKey.previousGame.bind(() => _walk(-1)),
   };
 
   /// The window's keys a mode with a screen of its own keeps: the settings,
-  /// the actions typed for, full screen, and Alt+← and Alt+→ back to where
+  /// full screen, and Alt+← and Alt+→ back to where
   /// the last jump came from and forward again. The rest are the
   /// workspace's, but for the paste ([BoardDoors.onScreen]).
   Map<ShortcutActivator, VoidCallback> screen(BuildContext context) => {
     ...AppKey.fullScreen.bind(fullScreen.toggle),
     ...AppKey.settings.bind(() => unawaited(actions.settings(context))),
-    ...AppKey.actions.bind(() => unawaited(actions.palette(context))),
     ...AppKey.historyBack.bind(back),
     ...AppKey.historyForward.bind(forward),
   };

@@ -8,6 +8,7 @@ import '../board/line_preview.dart';
 import '../board/preview_target.dart';
 import 'replies.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/app_icons.dart';
 
 /// The Replies tab of the reading card: what the opponent plays at the
 /// position on the board, how often, and whether the chapter answers it.
@@ -214,7 +215,7 @@ class _Status extends StatelessWidget {
             ),
             OutlinedButton.icon(
               onPressed: gaps.canNextGap ? gaps.nextGap : null,
-              icon: const Icon(Icons.skip_next, size: IconSize.action),
+              icon: const Icon(AppIcons.skip, size: IconSize.action),
               label: const Text('Next gap'),
             ),
           ],
@@ -315,7 +316,7 @@ class _ReplyRow extends StatelessWidget {
     final scheme = theme.colorScheme;
     if (row.inRepertoire) {
       return Icon(
-        Icons.check,
+        AppIcons.tick,
         size: IconSize.menu,
         color: scheme.onSurfaceVariant,
       );

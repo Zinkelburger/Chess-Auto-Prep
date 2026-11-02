@@ -590,8 +590,8 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// The clipboard — a PGN, bare moves or a FEN — as a new analysis board.
   Future<RequestResult> pasteOntoBoard() => _paste();
 
-  /// Ctrl+Shift+V: a FEN on the clipboard, and nothing else, as a new
-  /// analysis board.
+  /// Actions ▸ Paste FEN: a FEN on the clipboard, and nothing else, as a
+  /// new analysis board.
   Future<RequestResult> pasteFen() => _paste(positionOnly: true);
 
   Future<RequestResult> _paste({

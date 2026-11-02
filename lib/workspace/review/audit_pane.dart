@@ -7,6 +7,7 @@ import '../../chess/fen.dart';
 import '../../ui/theme.dart';
 import 'chapter_audit.dart';
 import '../document/document_session.dart';
+import '../../ui/app_icons.dart';
 
 /// The Audit tab: the chapter's own moves checked against the engine.
 ///
@@ -77,7 +78,7 @@ class _AuditPaneState extends State<AuditPane> {
           if (running)
             FilledButton.icon(
               onPressed: stopping ? null : audit.stop,
-              icon: const Icon(Icons.pause),
+              icon: const Icon(AppIcons.pause),
               label: const Text('Stop'),
             )
           else
@@ -85,7 +86,7 @@ class _AuditPaneState extends State<AuditPane> {
               message: 'Check the chapter\'s moves and the replies it misses',
               child: FilledButton.icon(
                 onPressed: audit.canStart ? () => unawaited(_start()) : null,
-                icon: const Icon(Icons.play_arrow),
+                icon: const Icon(AppIcons.run),
                 label: const Text('Audit'),
               ),
             ),
@@ -266,7 +267,7 @@ class _FindingRow extends StatelessWidget {
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.close, size: IconSize.action),
+              icon: const Icon(AppIcons.close, size: IconSize.action),
               tooltip: 'Dismiss',
               visualDensity: VisualDensity.compact,
               onPressed: onDismiss,

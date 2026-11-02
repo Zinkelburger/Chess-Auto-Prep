@@ -20,6 +20,7 @@ import 'opening_names.dart';
 import '../book/repertoire_tree.dart';
 import '../book/tree_pane.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/app_icons.dart';
 
 /// The Explorer tab of the reading card, lila's opening explorer: what a
 /// database has seen played from the position on the board.
@@ -435,7 +436,7 @@ class _MoveRow extends StatelessWidget {
   /// A tick for a move the chapter plays here; the room for one otherwise,
   /// so the bars line up.
   Widget? _tick(ColorScheme scheme) => row.inRepertoire
-      ? Icon(Icons.check, size: IconSize.menu, color: scheme.onSurfaceVariant)
+      ? Icon(AppIcons.tick, size: IconSize.menu, color: scheme.onSurfaceVariant)
       : null;
 }
 

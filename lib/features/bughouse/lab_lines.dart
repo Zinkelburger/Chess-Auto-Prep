@@ -14,6 +14,7 @@ import '../../workspace/board/preview_target.dart';
 import 'bughouse_lab.dart';
 import 'lab_engine.dart';
 import 'pocket.dart';
+import '../../ui/app_icons.dart';
 
 /// The board a hovered engine move floats: the board it was played on,
 /// after it, with its hands.
@@ -164,7 +165,7 @@ class _BoardLineRowsState extends State<BoardLineRows> {
           final all = _steps(row, row.pv.length * 2);
           final text = lab.linePgnWith(pvMovesTo(all, all.length - 1));
           unawaited(Clipboard.setData(ClipboardData(text: text)));
-        }, icon: Icons.content_copy),
+        }, icon: AppIcons.copy),
       ],
     );
   }

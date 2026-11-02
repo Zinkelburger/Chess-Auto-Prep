@@ -58,11 +58,11 @@ class WorkspaceView extends StatelessWidget {
   final ActionLayout? layout;
 
   /// Whether the edit strip is open. The shell owns it: the Actions menu
-  /// and Ctrl+E turn it, and the strip's Done turns it off.
+  /// turns it, and the strip's Done turns it off.
   final ValueNotifier<bool> editing;
 
   /// The words and focus of the move field under the board. The shell owns
-  /// them: its `/` focuses the field and a lesson types into it.
+  /// them: a lesson types into it.
   final MoveEntry moves;
 
   /// What the mode on screen and the shell add.

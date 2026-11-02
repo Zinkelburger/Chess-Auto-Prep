@@ -6,6 +6,7 @@ import '../../chess/players/player.dart';
 import '../../chess/tactics/game_ids.dart';
 import '../../ui/theme.dart';
 import 'players.dart';
+import '../../ui/app_icons.dart';
 
 /// What the account research found for a person, folded under their row:
 /// each suggested account with the evidence for it and the button that
@@ -58,7 +59,7 @@ class _PlayerLookupState extends State<PlayerLookup> {
             TextButton.icon(
               onPressed: _toggle,
               icon: Icon(
-                _open ? Icons.expand_less : Icons.expand_more,
+                _open ? AppIcons.showLess : AppIcons.showMore,
                 size: IconSize.action,
               ),
               iconAlignment: IconAlignment.end,

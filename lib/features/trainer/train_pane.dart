@@ -9,6 +9,7 @@ import 'trainer_state.dart';
 import 'trainer_words.dart';
 import 'training_home.dart';
 import '../../ui/list_message.dart';
+import '../../ui/app_icons.dart';
 
 /// The Train tab of the reading card: the lines of the chapter, or of its
 /// repertoire, with where each stands and the two ways in — Review what is
@@ -154,7 +155,7 @@ class _TrainPaneState extends State<TrainPane> {
               const SizedBox(height: Space.m),
               FilledButton.icon(
                 onPressed: widget.onImport,
-                icon: const Icon(Icons.file_open_outlined),
+                icon: const Icon(AppIcons.open),
                 label: const Text('Import course PGN…'),
               ),
               const SizedBox(height: Space.s),

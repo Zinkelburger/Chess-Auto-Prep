@@ -63,6 +63,9 @@ WRITE_CALL = re.compile(r"\b(writeAsString|writeAsBytes|openWrite|\.create\(|\.d
 # A file that builds a `File(` is one that could write outside the store; a
 # method that only has File in its name, such as `importFile(`, is not.
 FILE_CONSTRUCTOR = re.compile(r"\bFile\(")
+# One symbol per verb: every Material icon is named once, in ui/app_icons.dart.
+ICONS_FILE = "ui/app_icons.dart"
+MATERIAL_ICON = re.compile(r"\bIcons\.")
 
 
 def relative_folder(path: Path) -> str:
@@ -406,6 +409,15 @@ def check_parts(path: Path, source: str, findings: list[str]) -> None:
         findings.append(f"{where}: a part may contain only complete collaborator classes")
 
 
+def check_icons(relative: str, lines: list[str], findings: list[str]) -> None:
+    """[relative] is the path under lib/; only the icon file names `Icons.`."""
+    if relative == ICONS_FILE:
+        return
+    for n, line in enumerate(lines, 1):
+        if MATERIAL_ICON.search(line.split("//")[0]):
+            findings.append(f"lib/{relative}:{n}: `Icons.` outside {ICONS_FILE} (use AppIcons)")
+
+
 def check_file(path: Path, findings: list[str]) -> None:
     lines = path.read_text().splitlines()
     where = path.relative_to(REPO)
@@ -426,6 +438,7 @@ def check_file(path: Path, findings: list[str]) -> None:
         if is_lib and not writer and WRITE_CALL.search(code) and FILE_CONSTRUCTOR.search("".join(lines)):
             findings.append(f"{where}:{n}: file write outside storage/")
     if is_lib:
+        check_icons(path.relative_to(LIB).as_posix(), lines, findings)
         check_imports(path, lines, findings)
         check_classes(str(where), "\n".join(lines), findings)
         check_members(str(where), "\n".join(lines), findings)

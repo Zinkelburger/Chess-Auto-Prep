@@ -4,6 +4,7 @@ import '../../chess/pgn/game_text.dart';
 import '../../chess/pgn/study.dart';
 import '../../chess/pgn/study_cleanup.dart';
 import '../../ui/theme.dart';
+import '../../ui/app_icons.dart';
 
 /// The chapter's tags to edit, the game's own first: who played, the
 /// result, when and where, ready to fill in from a scoresheet. A tag left
@@ -89,7 +90,7 @@ class _TagsState extends State<_Tags> {
                           });
                         }
                       },
-                      icon: const Icon(Icons.close),
+                      icon: const Icon(AppIcons.remove),
                     ),
                   ],
                 ),
@@ -98,7 +99,7 @@ class _TagsState extends State<_Tags> {
               onPressed: () {
                 if (mounted) setState(() => _rows.add(_TagRow('', '')));
               },
-              icon: const Icon(Icons.add),
+              icon: const Icon(AppIcons.add),
               label: const Text('Add tag'),
             ),
             if (_problem case final message?)

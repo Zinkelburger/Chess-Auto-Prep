@@ -5,14 +5,14 @@ import '../../chess/fen.dart';
 import '../../chess/typed_move.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/theme.dart';
+import '../../ui/app_icons.dart';
 
 /// The typed-move field's words and focus.
 ///
 /// The window keeps one for the life of the workspace instead of the field
 /// keeping its own: the field under the board is built anew as a lesson
 /// takes the board and gives it back, and keys reach it from outside the
-/// field — `/` from anywhere in the workspace, a move's first letter from a
-/// lesson that is asking for one.
+/// field — a move's first letter from a lesson that is asking for one.
 final class MoveEntry {
   final words = TextEditingController();
   final problem = ValueNotifier<String?>(null);
@@ -168,7 +168,7 @@ class _MoveFieldState extends State<MoveField> {
       skipTraversal: true,
       onKeyEvent: _key,
       child: Tooltip(
-        message: AppKey.typeMove.tip('Type a move'),
+        message: 'Type a move',
         child: ValueListenableBuilder(
           valueListenable: _words,
           builder: (context, value, _) {
@@ -201,7 +201,7 @@ class _MoveFieldState extends State<MoveField> {
                 // What the box is for, as the search fields show their
                 // magnifier: an empty box says nothing by itself.
                 prefixIcon: Icon(
-                  Icons.keyboard_outlined,
+                  AppIcons.keyboard,
                   size: IconSize.menu,
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -229,7 +229,7 @@ class _MoveFieldState extends State<MoveField> {
   }
 
   /// What a move can be written with: SAN and UCI letters, digits, and the
-  /// marks the reading ignores. Space and `/` are keys, never words here.
+  /// marks the reading ignores. Space is a key, never a word here.
   static final _moveCharacters = RegExp(r'[a-hA-HKkQqRrNnOox0-9=+#!?:-]');
 
   /// `exd8=Q+!` is eight; nothing a move is written as is longer.

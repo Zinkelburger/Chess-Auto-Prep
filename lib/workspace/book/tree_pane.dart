@@ -12,6 +12,7 @@ import '../board/preview_target.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/list_message.dart';
+import '../../ui/app_icons.dart';
 
 /// The explorer's Book: the active book's chapters as an opening
 /// explorer. For the position on the board, every move any of the book's
@@ -178,14 +179,14 @@ class _Summary extends StatelessWidget {
               iconSize: IconSize.menu,
               visualDensity: VisualDensity.compact,
               onPressed: tree.back,
-              icon: const Icon(Icons.undo),
+              icon: const Icon(AppIcons.undo),
             ),
             IconButton(
               tooltip: 'Back to the file',
               iconSize: IconSize.menu,
               visualDensity: VisualDensity.compact,
               onPressed: tree.backToFile,
-              icon: const Icon(Icons.close),
+              icon: const Icon(AppIcons.back),
             ),
           ],
         ],

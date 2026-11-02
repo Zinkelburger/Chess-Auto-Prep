@@ -92,13 +92,13 @@ class Shell extends StatefulWidget {
 
 class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// Whether the edit strip is open: `Read | Edit` in the viewer and
-  /// Study, Ctrl+E and the strip's own Done elsewhere. Each mode keeps its
+  /// Study, Actions ▸ Edit and the strip's own Done elsewhere. Each mode keeps its
   /// own, in [_editingIn] while another is on screen.
   final _editing = ValueNotifier(false);
   final _editingIn = <Mode, bool>{};
 
-  /// The words and the focus of the move field under the board, which `/`
-  /// and a lesson reach as well as the field.
+  /// The words and the focus of the move field under the board, which a
+  /// lesson reaches as well as the field.
   final _moves = MoveEntry();
 
   /// Who holds the board: a lesson first, then the explorer Book's free
@@ -246,13 +246,12 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   final _listContentKey = GlobalKey();
   final _outlineContentKey = GlobalKey();
 
-  /// What the Actions menu and the palette offer, and the dialogs they open.
+  /// What the Actions menu offers, and the dialogs it opens.
   late final _actions = WindowActions(
     requests: _requests,
     workspace: _ws,
     documents: _docs,
     training: _train,
-    labs: widget.labs,
     columns: _columns,
     layoutMemory: _layoutMemory,
     doors: _doors,
@@ -272,7 +271,6 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     puzzles: _train.puzzles,
     columns: _columns,
     doors: _doors,
-    search: _search,
     actions: _actions,
     fullScreen: widget.fullScreen,
     view: () => _view,
@@ -500,10 +498,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
             screen ??
             WorkspaceKeys(
               session: _boardWorkspace.session,
-              analysis: _boardWorkspace.analysis,
               editing: _editing,
               tabs: _tabs,
-              moves: _moves,
               extra: _keys.all(context),
               leave: _keys.leave,
               save: _inspecting ? null : _saveHeld,

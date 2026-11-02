@@ -5,6 +5,7 @@ import '../../ui/name_dialog.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'study_choice.dart';
+import '../../ui/app_icons.dart';
 
 /// The answer of [showStudyPicker]: the study, and the chapter's name when
 /// one chapter is going in (empty for `Chapter N`).
@@ -114,7 +115,7 @@ class _StudyPickerState extends State<_StudyPicker> {
             const SizedBox(height: Space.s),
             ListTile(
               dense: true,
-              leading: const Icon(Icons.add, size: IconSize.action),
+              leading: const Icon(AppIcons.add, size: IconSize.action),
               title: const Text('New study…'),
               onTap: () => _newStudy(),
             ),

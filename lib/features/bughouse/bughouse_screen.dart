@@ -15,8 +15,7 @@ import '../../ui/screen_keys.dart';
 /// and the move lists on the right. The boards take what the window leaves.
 ///
 /// ← → step the board last moved or stepped on, Home / PgUp and End / PgDn
-/// go to its ends, F flips the boards, E switches the engine and Space
-/// plays the engine's best move on that board.
+/// go to its ends and F flips the boards.
 class BughouseScreen extends StatelessWidget {
   const BughouseScreen({
     super.key,
@@ -56,7 +55,6 @@ class BughouseScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return _LabKeys(
       lab: lab,
-      engine: engine,
       windowKeys: windowKeys,
       child: Padding(
         padding: const EdgeInsets.all(Space.l),
@@ -103,13 +101,11 @@ class BughouseScreen extends StatelessWidget {
 class _LabKeys extends StatefulWidget {
   const _LabKeys({
     required this.lab,
-    required this.engine,
     required this.windowKeys,
     required this.child,
   });
 
   final BughouseLab lab;
-  final LabEngine engine;
   final Map<ShortcutActivator, VoidCallback> windowKeys;
   final Widget child;
 
@@ -136,8 +132,6 @@ class _LabKeysState extends State<_LabKeys> {
     ...AppKey.closePreview.bind(() => lab.preview.value = null),
     ...AppKey.flipBoards.bind(lab.flip),
     ...widget.windowKeys,
-    ...AppKey.bughouseEngine.bind(widget.engine.toggle),
-    ...AppKey.playBest.bind(() => widget.engine.playBest(lab.focus)),
   };
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {

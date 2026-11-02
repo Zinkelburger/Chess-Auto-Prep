@@ -5,6 +5,7 @@ import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/study.dart';
 import '../../ui/theme.dart';
 import '../../workspace/document/document_session.dart';
+import '../../ui/app_icons.dart';
 
 /// What a right-click on a move offers in a study: where training starts
 /// asking, and where it stops.
@@ -20,12 +21,12 @@ List<Widget> quizMenuItems(DocumentSession session, NodePath path) {
   return [
     _item(
       starts ? 'Do not start a quiz here' : 'Start quiz from this move',
-      Icons.play_arrow,
+      AppIcons.run,
       () => session.setMarker(path, quizStartMarker, on: !starts),
     ),
     _item(
       ends ? 'Do not end a quiz here' : 'End quiz after this move',
-      Icons.stop,
+      AppIcons.stop,
       () => session.setMarker(path, quizEndMarker, on: !ends),
     ),
   ];

@@ -8,6 +8,7 @@ import '../../ui/theme.dart';
 import '../../ui/toggle_chip.dart';
 import 'my_games.dart';
 import 'my_games_words.dart';
+import '../../ui/app_icons.dart';
 
 /// The top of the Tactics column: whose games these are, the one button
 /// that fetches and reviews them, and one line saying where that stands.
@@ -190,18 +191,18 @@ class _Transport extends StatelessWidget {
     final (label, icon, tip) = games.running
         ? (
             'Pause',
-            Icons.pause,
+            AppIcons.pause,
             'Stop after the game being looked at; press again to carry on',
           )
         : games.queued > 0
         ? (
             'Resume',
-            Icons.play_arrow,
+            AppIcons.run,
             'Carry on with the ${games.queued} games still to look at',
           )
         : (
             'Get games',
-            Icons.download,
+            AppIcons.download,
             'Download your new games on each account and turn your '
                 'mistakes in the newest $reviewWindow into puzzles',
           );

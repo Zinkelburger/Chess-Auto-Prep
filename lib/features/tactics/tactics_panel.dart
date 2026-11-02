@@ -16,6 +16,7 @@ import 'puzzle_trainer.dart';
 import 'source_games.dart';
 import 'tactics_set.dart';
 import '../../ui/list_message.dart';
+import '../../ui/app_icons.dart';
 
 /// The Tactics column: the one button that starts a sitting, the filters
 /// beside the count they change, and the puzzles they let through, which
@@ -139,7 +140,7 @@ class _TacticsPanelState extends State<TacticsPanel> {
             onPressed: shown.isEmpty && widget.trainer.run == null
                 ? null
                 : () => widget.onPlay(),
-            icon: const Icon(Icons.play_arrow, size: IconSize.action),
+            icon: const Icon(AppIcons.run, size: IconSize.action),
             label: Text(
               widget.trainer.up != null
                   ? 'Show puzzle'
@@ -348,7 +349,7 @@ class _CountLine extends StatelessWidget {
               TextButton.icon(
                 onPressed: onFilters,
                 icon: Icon(
-                  filtersOpen ? Icons.expand_less : Icons.expand_more,
+                  filtersOpen ? AppIcons.showLess : AppIcons.showMore,
                   size: IconSize.action,
                 ),
                 iconAlignment: IconAlignment.end,

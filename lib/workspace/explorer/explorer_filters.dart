@@ -5,6 +5,7 @@ import '../../ui/choice_field.dart';
 import '../../ui/fold_button.dart';
 import '../../ui/theme.dart';
 import 'explorer.dart';
+import '../../ui/app_icons.dart';
 
 /// The top of the Explorer tab: the databases side by side, the chosen one
 /// pressed, and at the end `Filters` for the one that can be narrowed.
@@ -71,7 +72,7 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
                   widget.onDownload != null)
                 TextButton.icon(
                   onPressed: widget.onDownload,
-                  icon: const Icon(Icons.download, size: IconSize.menu),
+                  icon: const Icon(AppIcons.download, size: IconSize.menu),
                   label: const Text('Download more'),
                 ),
               if (summary != null)

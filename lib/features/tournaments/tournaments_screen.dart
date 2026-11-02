@@ -16,6 +16,7 @@ import 'setup_dialog.dart';
 import 'tournament_run.dart';
 import 'standings_table.dart';
 import 'history_list.dart';
+import '../../ui/app_icons.dart';
 
 class TournamentsScreen extends StatefulWidget {
   const TournamentsScreen({
@@ -57,7 +58,7 @@ class _ScreenState extends State<TournamentsScreen> {
                 onPressed: run.running || run.canRetry
                     ? null
                     : () => unawaited(_new()),
-                icon: const Icon(Icons.add),
+                icon: const Icon(AppIcons.add),
                 label: const Text('New tournament'),
               ),
               TextButton(
@@ -68,7 +69,7 @@ class _ScreenState extends State<TournamentsScreen> {
               IconButton(
                 tooltip: 'Refresh tournaments',
                 onPressed: () => unawaited(run.refresh()),
-                icon: const Icon(Icons.refresh),
+                icon: const Icon(AppIcons.refresh),
               ),
               if (run.running)
                 OutlinedButton(
@@ -194,7 +195,7 @@ class _ScreenState extends State<TournamentsScreen> {
             onPressed: run.running || run.canRetry
                 ? null
                 : () => unawaited(_remove(t)),
-            icon: const Icon(Icons.delete_outline),
+            icon: const Icon(AppIcons.delete),
           ),
         ],
       ),
@@ -229,7 +230,7 @@ class _ScreenState extends State<TournamentsScreen> {
       ),
       TextButton.icon(
         onPressed: t.games.isEmpty ? null : () => widget.open(t, 0),
-        icon: const Icon(Icons.open_in_new),
+        icon: const Icon(AppIcons.openElsewhere),
         label: const Text('Browse games'),
       ),
       SelectableText(
@@ -258,7 +259,7 @@ class _ScreenState extends State<TournamentsScreen> {
             subtitle: Text(
               '${g.result} · ${_ending(g.termination)}${g.detail.isEmpty ? "" : " · ${g.detail}"}',
             ),
-            trailing: const Icon(Icons.open_in_new),
+            trailing: const Icon(AppIcons.openElsewhere),
             onTap: () => widget.open(t, g.index),
           ),
         ),

@@ -92,9 +92,7 @@ void main() {
   testWidgets('the bar shows the Positions beside the gear', (tester) async {
     var shown = 0;
     await pump(tester, onShowPositions: () => shown++);
-    await tester.tap(
-      find.byTooltip('Show the positions the searches found (Ctrl+P)'),
-    );
+    await tester.tap(find.byTooltip('Show the positions the searches found'));
     expect(shown, 1);
     expect(tester.takeException(), isNull);
   });
@@ -510,7 +508,7 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Resume'), findsNothing);
     expect(find.widgetWithText(FilledButton, 'Deeper'), findsOneWidget);
     expect(
-      find.byTooltip('Searched 2 half-moves deep here; search 3 (Ctrl+G)'),
+      find.byTooltip('Searched 2 half-moves deep here; search 3'),
       findsOneWidget,
     );
     // Six root moves keep every legal move, weak ones included.

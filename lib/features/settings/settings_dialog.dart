@@ -6,6 +6,7 @@ import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'setting_controls.dart';
 import 'setting_rows.dart';
+import '../../ui/app_icons.dart';
 
 /// Opens the settings over the workspace. Every change has already
 /// happened by the time it closes; the close button, Esc or outside click dismisses it.
@@ -216,7 +217,7 @@ class _TitleBar extends StatelessWidget {
           ),
         ),
         IconButton(
-          icon: const Icon(Icons.close, size: IconSize.action),
+          icon: const Icon(AppIcons.close, size: IconSize.action),
           tooltip: AppKey.closeDialog.tip('Close'),
           onPressed: onClose,
           visualDensity: VisualDensity.compact,
@@ -241,14 +242,17 @@ class _Place extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final icon = switch (name) {
-      'Look' => Icons.palette_outlined,
-      'Engine' => Icons.memory_outlined,
-      'Repertoire' => Icons.menu_book_outlined,
-      'Files' => Icons.folder_outlined,
-      'Accounts' => Icons.person_outline,
-      'App' => Icons.settings_outlined,
-      'Shortcuts' => Icons.keyboard_outlined,
-      _ => Icons.tune,
+      'Look' => AppIcons.look,
+      'Engine' => AppIcons.engine,
+      'Repertoire' => AppIcons.book,
+      'Files' => AppIcons.files,
+      'Accounts' => AppIcons.accounts,
+      'App' => AppIcons.settings,
+      'Shortcuts' => AppIcons.keyboard,
+      'Expectimax' => AppIcons.expectimax,
+      'Tactics' => AppIcons.tactics,
+      'Training' => AppIcons.training,
+      _ => AppIcons.settings,
     };
     return Padding(
       padding: const EdgeInsets.only(bottom: Space.xs),

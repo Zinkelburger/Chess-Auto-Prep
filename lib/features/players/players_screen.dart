@@ -14,6 +14,7 @@ import 'player_dialogs.dart';
 import 'players.dart';
 import 'saved_games.dart';
 import '../../ui/list_message.dart';
+import '../../ui/app_icons.dart';
 
 /// The Players & prep page: everyone the user prepares for, or the groups
 /// they are collected in for an event, as one dense list. A row has the two
@@ -190,7 +191,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
             _search.clear();
             owner.showGroup(null);
           },
-          icon: const Icon(Icons.arrow_back, size: IconSize.action),
+          icon: const Icon(AppIcons.back, size: IconSize.action),
           label: const Text('Groups'),
         ),
         const SizedBox(width: Space.s),

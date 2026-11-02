@@ -10,6 +10,7 @@ import '../../ui/number_field.dart';
 import '../../ui/theme.dart';
 import 'database_library.dart';
 import 'twic_download_dialog.dart';
+import '../../ui/app_icons.dart';
 
 class DatabasesScreen extends StatelessWidget {
   const DatabasesScreen({
@@ -72,7 +73,7 @@ class DatabasesScreen extends StatelessWidget {
               message:
                   'Weekly issues of The Week in Chess from theweekinchess.com',
               child: FilledButton.icon(
-                icon: const Icon(Icons.download),
+                icon: const Icon(AppIcons.download),
                 onPressed: library.activity == DatabaseActivity.importing
                     ? null
                     : () => unawaited(showTwicDownload(context, library)),
@@ -82,7 +83,7 @@ class DatabasesScreen extends StatelessWidget {
           Tooltip(
             message: 'Adds a PGN file’s games to the master games',
             child: OutlinedButton.icon(
-              icon: const Icon(Icons.file_open),
+              icon: const Icon(AppIcons.open),
               onPressed:
                   library.activity == DatabaseActivity.idle &&
                       !library.busy &&
@@ -99,7 +100,7 @@ class DatabasesScreen extends StatelessWidget {
               unawaited(library.refresh());
               unawaited(library.measure());
             },
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(AppIcons.refresh),
           ),
         ],
       ),
@@ -321,7 +322,7 @@ class _CorpusFiltersState extends State<_CorpusFilters> {
           controller: controller,
           decoration: InputDecoration(
             labelText: controller == _since ? '$label (YYYY.MM.DD)' : label,
-            prefixIcon: const Icon(Icons.search),
+            prefixIcon: const Icon(AppIcons.search),
           ),
           onChanged: _changed,
         ),
@@ -381,7 +382,7 @@ class _StorageButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TextButton.icon(
     key: const ValueKey('storage'),
-    icon: const Icon(Icons.storage),
+    icon: const Icon(AppIcons.storage),
     onPressed: () => unawaited(
       showDialog<void>(
         context: context,
@@ -439,7 +440,7 @@ class _StorageDialog extends StatelessWidget {
                                 library.removing != null || store.bytes == 0
                                 ? null
                                 : () => unawaited(_remove(context, store)),
-                            icon: const Icon(Icons.delete_outline),
+                            icon: const Icon(AppIcons.delete),
                           ),
                       ],
                     ),

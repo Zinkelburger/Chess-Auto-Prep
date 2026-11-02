@@ -10,6 +10,7 @@ import 'library_messages.dart';
 import 'library_state.dart';
 import 'repertoire_tile.dart';
 import '../../ui/list_message.dart';
+import '../../ui/app_icons.dart';
 
 /// The repertoires, searchable, each opening to its chapters. Tapping a
 /// chapter asks the host to open it in the workspace.
@@ -216,7 +217,7 @@ class _Toolbar extends StatelessWidget {
                     ),
                     const SizedBox(width: Space.xs),
                     IconButton(
-                      icon: const Icon(Icons.add, size: IconSize.action),
+                      icon: const Icon(AppIcons.add, size: IconSize.action),
                       tooltip: 'New repertoire',
                       onPressed: busy ? null : onCreate,
                       visualDensity: VisualDensity.compact,
@@ -254,7 +255,7 @@ class _DeletedLink extends StatelessWidget {
         alignment: Alignment.centerLeft,
         child: TextButton.icon(
           onPressed: onPressed,
-          icon: const Icon(Icons.restore_from_trash, size: IconSize.action),
+          icon: const Icon(AppIcons.restore, size: IconSize.action),
           label: const Text('Deleted chapters'),
         ),
       ),

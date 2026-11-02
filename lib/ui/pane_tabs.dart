@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'listening_state.dart';
 import 'app_keys.dart';
 import 'theme.dart';
+import 'app_icons.dart';
 
 /// One thing a pane can show, by an identity that never changes — an enum
 /// value, so the pane's body can switch over every tab — what the tab is
@@ -323,7 +324,7 @@ class _PaneTabStripState<K extends Object> extends State<PaneTabStrip<K>>
                 tooltip: widget.onAdd == null ? 'Open tab' : 'New analysis tab',
                 onPressed:
                     widget.onAdd ?? (menu.isOpen ? menu.close : menu.open),
-                icon: const Icon(Icons.add, size: IconSize.menu),
+                icon: const Icon(AppIcons.add, size: IconSize.menu),
                 visualDensity: VisualDensity.compact,
               ),
             ),
@@ -528,7 +529,7 @@ class _Tab extends StatelessWidget {
                           ),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        icon: const Icon(Icons.close, size: IconSize.menu),
+                        icon: const Icon(AppIcons.close, size: IconSize.menu),
                       )
                     else
                       const SizedBox(width: Space.m),

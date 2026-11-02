@@ -36,7 +36,7 @@ final class BoardDoors {
   /// Whether the Analysis tab is the board on screen.
   final bool Function() inspecting;
 
-  /// Ctrl+V, or Ctrl+Shift+V for [positionOnly].
+  /// Ctrl+V, or Actions ▸ Paste FEN for [positionOnly].
   Future<void> paste({bool positionOnly = false}) async {
     final inspection = workspace.inspection;
     if (inspection == null || !inspecting()) {
@@ -54,21 +54,19 @@ final class BoardDoors {
     requests.say(await inspection.paste(text, positionOnly: positionOnly));
   }
 
-  /// [screen], a mode's own, with Ctrl+V and Ctrl+Shift+V answered there
-  /// too — they say why such a mode cannot take what the clipboard holds,
-  /// or take it to the builder — unless a text field has the caret, whose
-  /// paste they are then.
+  /// [screen], a mode's own, with Ctrl+V answered there too — it says why
+  /// such a mode cannot take what the clipboard holds, or takes it to the
+  /// builder — unless a text field has the caret, whose paste it is then.
   Widget? onScreen(Widget? screen) => screen == null
       ? null
       : Focus(
           canRequestFocus: false,
           skipTraversal: true,
           onKeyEvent: (_, event) {
-            final positionOnly = AppKey.pastePosition.accepts(event);
-            if (_typing || !(positionOnly || AppKey.paste.accepts(event))) {
+            if (_typing || !AppKey.paste.accepts(event)) {
               return KeyEventResult.ignored;
             }
-            unawaited(paste(positionOnly: positionOnly));
+            unawaited(paste());
             return KeyEventResult.handled;
           },
           child: screen,
@@ -138,15 +136,13 @@ final class BoardDoors {
             group: 'Board',
           )
         : AppAction(
-            AppKey.pastePosition.action,
+            'Paste FEN',
             () => unawaited(this.paste(positionOnly: true)),
-            shortcut: AppKey.pastePosition.label,
             group: 'Board',
           ),
     AppAction(
-      'Set up position…',
+      'Edit position…',
       () => unawaited(setUp(context)),
-      shortcut: AppKey.setUpPosition.label,
       group: 'Board',
     ),
   ];
@@ -170,7 +166,7 @@ List<AppAction> boardActions(
   return [
     if (onAnalyze != null)
       AppAction(
-        'Open Analysis tab',
+        AppKey.analysisBoard.action,
         onAnalyze,
         shortcut: AppKey.analysisBoard.label,
         group: 'Board',

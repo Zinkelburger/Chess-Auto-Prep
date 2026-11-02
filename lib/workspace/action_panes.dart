@@ -9,6 +9,7 @@ import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import 'action_layout.dart';
 import 'workspace_tabs.dart';
+import '../ui/app_icons.dart';
 
 /// Docking affordances appear during a drag, leaving the reading area quiet.
 class ActionPanes extends StatefulWidget {
@@ -379,10 +380,7 @@ class _ActionPanesState extends State<ActionPanes> {
         ],
         MenuItemButton(
           onPressed: layout.canAddPane ? () => layout.addPane(index) : null,
-          leadingIcon: const Icon(
-            Icons.horizontal_split_outlined,
-            size: IconSize.menu,
-          ),
+          leadingIcon: const Icon(AppIcons.newPane, size: IconSize.menu),
           child: const Text('New pane'),
         ),
         if (index != 0)
@@ -410,12 +408,12 @@ class _ActionPanesState extends State<ActionPanes> {
       message: 'Open tools and arrange panes',
       child: labeled
           ? TextButton.icon(
-              icon: const Icon(Icons.add, size: IconSize.menu),
+              icon: const Icon(AppIcons.add, size: IconSize.menu),
               label: const Text('Tools'),
               onPressed: toggle,
             )
           : IconButton(
-              icon: const Icon(Icons.add, size: IconSize.menu),
+              icon: const Icon(AppIcons.add, size: IconSize.menu),
               onPressed: toggle,
             ),
     );

@@ -6,6 +6,7 @@ import '../ui/action_context_menu.dart';
 import '../ui/theme.dart';
 import 'mode.dart';
 import '../ui/app_keys.dart';
+import '../ui/app_icons.dart';
 
 /// The row over the window: the mode menu and, beside it, the Actions menu —
 /// one menu of everything that can be done now, the same shape in every mode.
@@ -78,7 +79,7 @@ class TopBar extends StatelessWidget {
         children: [
           if (!listShown) ListToggle(shown: false, onPressed: onToggleList),
           IconButton(
-            icon: const Icon(Icons.arrow_back, size: IconSize.action),
+            icon: const Icon(AppIcons.back, size: IconSize.action),
             tooltip: AppKey.historyBack.tip(
               backTo == null ? 'Back' : 'Back to $backTo',
             ),
@@ -86,7 +87,7 @@ class TopBar extends StatelessWidget {
             visualDensity: VisualDensity.compact,
           ),
           IconButton(
-            icon: const Icon(Icons.arrow_forward, size: IconSize.action),
+            icon: const Icon(AppIcons.forward, size: IconSize.action),
             tooltip: AppKey.historyForward.tip(
               forwardTo == null ? 'Forward' : 'Forward to $forwardTo',
             ),
@@ -111,7 +112,7 @@ class TopBar extends StatelessWidget {
               ),
             ),
           IconButton(
-            icon: const Icon(Icons.settings_outlined, size: IconSize.action),
+            icon: const Icon(AppIcons.settings, size: IconSize.action),
             tooltip: AppKey.settings.tip('Settings'),
             onPressed: onSettings,
             visualDensity: VisualDensity.compact,
@@ -169,7 +170,7 @@ class _ModeMenu extends StatelessWidget {
               MenuItemButton(
                 onPressed: () => onMode(named),
                 leadingIcon: named == mode
-                    ? const Icon(Icons.check, size: IconSize.menu)
+                    ? const Icon(AppIcons.tick, size: IconSize.menu)
                     : const SizedBox(width: IconSize.menu),
                 child: Text(named.label),
               ),
@@ -177,16 +178,15 @@ class _ModeMenu extends StatelessWidget {
       ],
       builder: (context, controller, _) => TextButton.icon(
         onPressed: controller.isOpen ? controller.close : controller.open,
-        icon: const Icon(Icons.menu, size: IconSize.action),
+        icon: const Icon(AppIcons.modeMenu, size: IconSize.action),
         label: Text(mode.label),
       ),
     );
   }
 }
 
-/// Named sections for the work and submenus for secondary controls.
-/// Ctrl+K opens the same list as something to type into. The entries are
-/// made when the menu opens and kept up to date only while it is open.
+/// Named sections for the work and submenus for secondary controls. The
+/// entries are made when the menu opens and kept up to date only while it is open.
 class _ActionsMenu extends StatefulWidget {
   const _ActionsMenu({required this.actions, required this.changes});
 
@@ -303,11 +303,11 @@ class _ActionsMenuState extends State<_ActionsMenu> {
 
   /// Keep the document's work in view; secondary controls expand beside it.
   static const _secondary = {
-    'Copy': Icons.content_copy,
-    'Panels': Icons.tab_outlined,
-    'Action Tabs': Icons.tab,
-    'Layout': Icons.grid_view,
-    'Window': Icons.fullscreen,
+    'Copy': AppIcons.copy,
+    'Panels': AppIcons.panels,
+    'Action Tabs': AppIcons.paneTabs,
+    'Layout': AppIcons.layout,
+    'Window': AppIcons.window,
   };
 
   @override
@@ -318,15 +318,11 @@ class _ActionsMenuState extends State<_ActionsMenu> {
       menuChildren: _heard == null
           ? const []
           : _entries(Theme.of(context).textTheme),
-      // Ctrl+K opens the same actions as a list to type into.
-      builder: (context, controller, _) => Tooltip(
-        message: AppKey.actions.tip('Actions'),
-        child: TextButton.icon(
-          onPressed: controller.isOpen ? controller.close : controller.open,
-          icon: const Icon(Icons.arrow_drop_down, size: IconSize.action),
-          iconAlignment: IconAlignment.end,
-          label: const Text('Actions'),
-        ),
+      builder: (context, controller, _) => TextButton.icon(
+        onPressed: controller.isOpen ? controller.close : controller.open,
+        icon: const Icon(AppIcons.dropDown, size: IconSize.action),
+        iconAlignment: IconAlignment.end,
+        label: const Text('Actions'),
       ),
     );
   }
@@ -343,12 +339,10 @@ class ListToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) => IconButton(
     icon: Icon(
-      shown
-          ? Icons.keyboard_double_arrow_left
-          : Icons.keyboard_double_arrow_right,
+      shown ? AppIcons.hideList : AppIcons.showList,
       size: IconSize.action,
     ),
-    tooltip: AppKey.toggleList.tip(shown ? 'Hide the list' : 'Show the list'),
+    tooltip: shown ? 'Hide the list' : 'Show the list',
     onPressed: onPressed,
     visualDensity: VisualDensity.compact,
   );

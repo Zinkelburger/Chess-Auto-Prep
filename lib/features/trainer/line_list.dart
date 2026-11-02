@@ -19,6 +19,7 @@ import 'trainer_state.dart';
 import 'study_training_controls.dart';
 import 'trainer_words.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/app_icons.dart';
 
 /// The trainer between sittings: the scope, where its lines stand, Review
 /// and Learn, and the lines themselves — or the wrong answers given in
@@ -394,14 +395,14 @@ class _Header extends StatelessWidget {
           'Import course PGN…',
           onImport!,
           busy: false,
-          icon: Icons.file_open_outlined,
+          icon: AppIcons.open,
         ),
       if (onSettings != null)
         rowAction(
           'Training settings…',
           onSettings!,
           busy: false,
-          icon: Icons.settings_outlined,
+          icon: AppIcons.settings,
         ),
       rowAction(
         'Mark every line known',

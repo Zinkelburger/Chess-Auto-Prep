@@ -41,7 +41,6 @@ List<AppAction> tacticsActions({
               analysis.enabled ? analysis.disable() : analysis.enable(),
             )
           : null,
-      shortcut: AppKey.engine.label,
       group: 'Board',
     ),
     AppAction(

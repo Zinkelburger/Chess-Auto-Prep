@@ -9,7 +9,6 @@ import '../features/settings/settings_dialog.dart';
 import '../features/tactics/my_games_block.dart';
 import '../ui/app_action.dart';
 import '../ui/app_keys.dart';
-import '../ui/choice_dialog.dart';
 import '../workspace/document/copy_name_dialog.dart';
 import '../workspace/document/document_actions.dart';
 import '../workspace/workspace.dart';
@@ -25,16 +24,15 @@ import 'search_door.dart';
 import 'window_columns.dart';
 import 'workspace_requests.dart';
 
-/// What the Actions menu offers in the mode on screen, the same actions
-/// typed for in the palette, and the dialogs they open: the settings, a
-/// copy of the file, the held moves saved, the PGN exported.
+/// What the Actions menu offers in the mode on screen, and the dialogs they
+/// open: the settings, a copy of the file, the held moves saved, the PGN
+/// exported.
 final class WindowActions {
   WindowActions({
     required this.requests,
     required this.workspace,
     required this.documents,
     required this.training,
-    required this.labs,
     required this.columns,
     required this.layoutMemory,
     required this.doors,
@@ -51,7 +49,6 @@ final class WindowActions {
   final Workspace workspace;
   final DocumentModes documents;
   final TrainingModes training;
-  final LabModes labs;
   final WindowColumns columns;
   final LayoutMemory layoutMemory;
   final BoardDoors doors;
@@ -104,7 +101,6 @@ final class WindowActions {
       AppAction(
         columns.positionsUp ? 'Back to the list' : 'Positions',
         columns.togglePositions,
-        shortcut: AppKey.positions.label,
         group: 'Panels',
       ),
     if (_view is! ViewerView)
@@ -159,27 +155,6 @@ final class WindowActions {
                 unawaited(newBook(context, workspace.books, say: requests.say)),
           ),
         ));
-
-  /// The same actions, typed for: a searchable list that the enter key
-  /// takes the one match of.
-  Future<void> palette(BuildContext context) async {
-    final actions = [
-      for (final mode in Mode.values)
-        if (mode != Mode.bughouse || labs.offered.value)
-          AppAction('Go to ${mode.label}', () => requests.switchTo(mode)),
-      for (final a in entries(context))
-        if (a.run != null) a,
-    ];
-    final chosen = await showChoiceDialog<AppAction>(
-      context,
-      title: 'Actions',
-      options: actions,
-      label: (action) => action.labelWithKey,
-      hint: 'Type an action',
-      empty: 'Nothing to do yet',
-    );
-    chosen?.run?.call();
-  }
 
   Future<void> settings(BuildContext context) => showSettingsDialog(
     context,

@@ -9,6 +9,7 @@ import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
 import 'library.dart';
 import 'library_messages.dart';
+import '../../ui/app_icons.dart';
 
 /// One repertoire in the list, and its chapters when it is open.
 class RepertoireTile extends StatelessWidget {
@@ -133,19 +134,19 @@ class _RepertoireRow extends StatelessWidget {
       'Rename…',
       () => _rename(context),
       busy: library.busy,
-      icon: Icons.edit_outlined,
+      icon: AppIcons.edit,
     ),
     rowAction(
       'New chapter…',
       () => _newChapter(context),
       busy: library.busy,
-      icon: Icons.add,
+      icon: AppIcons.add,
     ),
     rowAction(
       'Delete…',
       () => _delete(context),
       busy: library.busy,
-      icon: Icons.delete_outline,
+      icon: AppIcons.delete,
     ),
   ];
 
@@ -164,7 +165,7 @@ class _RepertoireRow extends StatelessWidget {
         child: Row(
           children: [
             Icon(
-              expanded ? Icons.expand_more : Icons.chevron_right,
+              expanded ? AppIcons.expanded : AppIcons.collapsed,
               size: IconSize.action,
             ),
             const SizedBox(width: Space.xs),
@@ -298,7 +299,7 @@ class _ChapterRow extends StatelessWidget {
                     'Rename…',
                     () => _rename(context),
                     busy: library.busy,
-                    icon: Icons.edit_outlined,
+                    icon: AppIcons.edit,
                   ),
                   rowAction(
                     'Move to…',
@@ -309,7 +310,7 @@ class _ChapterRow extends StatelessWidget {
                     'Delete…',
                     () => _delete(context),
                     busy: library.busy,
-                    icon: Icons.delete_outline,
+                    icon: AppIcons.delete,
                   ),
                 ],
               ),

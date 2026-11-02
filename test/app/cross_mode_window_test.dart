@@ -42,7 +42,7 @@ void main() {
       );
       final node = NodePath.of([0]);
       app.session.cursor.goTo(node);
-      await _ctrl(tester, LogicalKeyboardKey.keyE);
+      await chooseAction(tester, 'Edit');
       final field = find.descendant(
         of: find.byType(CommentField),
         matching: find.byType(TextField),
@@ -153,13 +153,6 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
-}
-
-Future<void> _ctrl(WidgetTester tester, LogicalKeyboardKey key) async {
-  await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-  await tester.sendKeyEvent(key);
-  await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-  await tester.pumpAndSettle();
 }
 
 final class SocketFailure implements Exception {

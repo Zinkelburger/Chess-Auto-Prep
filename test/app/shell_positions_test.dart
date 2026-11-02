@@ -5,7 +5,6 @@ import 'package:chess_auto_prep/features/library/library_panel.dart';
 import 'package:chess_auto_prep/workspace/search/finds_panel.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/window_fixture.dart';
@@ -24,14 +23,7 @@ void main() {
   setUp(() => w = WindowFixture());
   tearDown(() => w.dispose());
 
-  Future<void> ctrlP(WidgetTester tester) async {
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.pumpAndSettle();
-  }
-
-  testWidgets('Ctrl+P swaps the list for the Positions; a click puts the '
+  testWidgets('Positions swaps the list for the finds; a click puts the '
       'line on a board at the position', (tester) async {
     // A search from after 1.e4 e5 in which only 2.Nf3 holds.
     await w.parts.workspace.finds.record(
@@ -57,7 +49,7 @@ void main() {
     await w.pumpShell(tester);
     expect(find.byType(LibraryPanel), findsOneWidget);
 
-    await ctrlP(tester);
+    await choosePanel(tester, 'Positions');
     expect(find.byType(FindsPanel), findsOneWidget);
     expect(find.byType(LibraryPanel), findsNothing);
     expect(
@@ -72,20 +64,17 @@ void main() {
     expect(w.session.cursor.currentMove?.san, 'e5');
     expect(w.session.orientation, Side.white);
 
-    await ctrlP(tester);
+    await choosePanel(tester, 'Back to the list');
     expect(find.byType(LibraryPanel), findsOneWidget);
   });
 
-  testWidgets('Positions lives under Actions and keeps its keyboard shortcut', (
-    tester,
-  ) async {
+  testWidgets('Positions lives under Actions ▸ Panels', (tester) async {
     await w.pumpShell(tester);
     expect(find.text('Positions'), findsNothing);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(SubmenuButton, 'Panels'));
     await tester.pumpAndSettle();
-    expect(find.text('Ctrl+P'), findsOneWidget);
     await tester.tap(find.widgetWithText(MenuItemButton, 'Positions'));
     await tester.pumpAndSettle();
     expect(find.byType(FindsPanel), findsOneWidget);

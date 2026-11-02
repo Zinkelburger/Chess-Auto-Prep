@@ -5,8 +5,8 @@ import '../workspace/action_layout.dart';
 import '../workspace/workspace_tabs.dart';
 import 'workspace_requests.dart';
 
-/// The way into a search from outside the Search tab — the Actions entry
-/// and Ctrl+G: the tab comes up and the search starts with the numbers it
+/// The way into a search from outside the Search tab — the Actions entry:
+/// the tab comes up and the search starts with the numbers it
 /// last had, the Replies tab's rating and the tab's depth.
 final class SearchDoor {
   SearchDoor({

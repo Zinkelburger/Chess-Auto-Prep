@@ -17,6 +17,7 @@ import '../../workspace/explorer/file_filter.dart';
 import 'pgn_viewer.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/list_message.dart';
+import '../../ui/app_icons.dart';
 
 /// Opens a PGN file in the workspace with its first game on the board.
 typedef OpenPgnFile = void Function(ChapterRef file);
@@ -170,7 +171,7 @@ class _PgnViewerPanelState extends State<PgnViewerPanel>
               if (widget.onFilter case final filter?)
                 IconButton(
                   key: const ValueKey('filter-games'),
-                  icon: const Icon(Icons.filter_list, size: IconSize.action),
+                  icon: const Icon(AppIcons.filter, size: IconSize.action),
                   tooltip: 'Filter games',
                   isSelected: widget.filter.narrowing,
                   visualDensity: VisualDensity.compact,
@@ -413,7 +414,7 @@ class _ChapterRow extends StatelessWidget {
                 child: switch (unfolded) {
                   null => null,
                   final open => Icon(
-                    open ? Icons.expand_more : Icons.chevron_right,
+                    open ? AppIcons.expanded : AppIcons.collapsed,
                     size: IconSize.action,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -478,7 +479,7 @@ class _Toolbar extends StatelessWidget {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.add, size: IconSize.action),
+            icon: const Icon(AppIcons.open, size: IconSize.action),
             tooltip: AppKey.openFile.tip('Open PGN file…'),
             onPressed: onBrowse,
             visualDensity: VisualDensity.compact,

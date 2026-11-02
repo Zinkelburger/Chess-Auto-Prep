@@ -9,6 +9,7 @@ import '../../workspace/board/board_view.dart';
 import '../../workspace/explorer/file_filter.dart';
 import 'export_dialog.dart';
 import 'pgn_viewer.dart';
+import '../../ui/app_icons.dart';
 
 /// The Filter tab: which of the open file's games the list shows. How many
 /// pass, one Field / Rule / Value row per rule starting with a blank one,
@@ -103,7 +104,7 @@ class ViewerFilterPane extends StatelessWidget {
         onPressed: () => filter.apply(
           editing.copyWith(rules: [...rules, const HeaderRule()]),
         ),
-        icon: const Icon(Icons.add, size: IconSize.menu),
+        icon: const Icon(AppIcons.add, size: IconSize.menu),
         label: const Text('Add rule'),
       ),
       if (filter.applied.position case final position?)
@@ -115,7 +116,7 @@ class ViewerFilterPane extends StatelessWidget {
       else
         TextButton.icon(
           onPressed: onPosition ?? filter.reachingBoardPosition,
-          icon: const Icon(Icons.grid_on, size: IconSize.menu),
+          icon: const Icon(AppIcons.position, size: IconSize.menu),
           label: const Text('Reaching this position'),
         ),
       if (rules.length > 1)
@@ -211,7 +212,7 @@ class _PositionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => InputChip(
-    avatar: const Icon(Icons.grid_on, size: IconSize.menu),
+    avatar: const Icon(AppIcons.position, size: IconSize.menu),
     label: Tooltip(
       richMessage: WidgetSpan(
         child: SizedBox(
@@ -276,7 +277,7 @@ class _RuleRow extends StatelessWidget {
       onChanged: (typed) => onChanged(rule.copyWith(value: typed)),
     );
     final remove = IconButton(
-      icon: const Icon(Icons.close, size: IconSize.menu),
+      icon: const Icon(AppIcons.remove, size: IconSize.menu),
       tooltip: 'Remove this rule',
       visualDensity: VisualDensity.compact,
       onPressed: onRemove,

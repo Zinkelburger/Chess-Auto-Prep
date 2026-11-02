@@ -314,8 +314,8 @@ class _Typed extends StatelessWidget {
 }
 
 /// The move field seen only while it has the keys or words in it. It keeps
-/// its place and stays in the tree either way, so `/` finds it and nothing
-/// beside it moves when it comes.
+/// its place and stays in the tree either way, so a lesson's letters find it
+/// and nothing beside it moves when it comes.
 class _WhenUsed extends StatefulWidget {
   const _WhenUsed({required this.moves, required this.child});
 

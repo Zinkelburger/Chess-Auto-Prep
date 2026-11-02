@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../diagnostics/log.dart';
 import 'theme.dart';
+import 'app_icons.dart';
 
 /// A button beside the sentence in the [StatusBar]: the way out the sentence
 /// names, such as Reload.
@@ -72,7 +73,7 @@ class StatusBar extends StatelessWidget {
         IconButton(
           onPressed: onClose,
           icon: Icon(
-            Icons.close,
+            AppIcons.close,
             size: IconSize.menu,
             color: scheme.onSurfaceVariant,
           ),

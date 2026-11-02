@@ -8,6 +8,7 @@ import '../../chess/fen.dart';
 import '../../chess/position_setup.dart';
 import '../../ui/theme.dart';
 import 'board_view.dart';
+import '../../ui/app_icons.dart';
 
 /// What a press on the editor's board does.
 sealed class EditorTool {
@@ -183,7 +184,7 @@ class _BoardEditorState extends State<BoardEditor> {
               border: const OutlineInputBorder(),
               suffixIcon: IconButton(
                 tooltip: 'Copy FEN',
-                icon: const Icon(Icons.copy, size: IconSize.menu),
+                icon: const Icon(AppIcons.copy, size: IconSize.menu),
                 onPressed: () =>
                     Clipboard.setData(ClipboardData(text: _fen.text)),
               ),
@@ -349,7 +350,7 @@ class _SpareStrip extends StatelessWidget {
             tooltip: 'Move pieces',
             selected: tool is PointerTool,
             onTap: () => onPick(const PointerTool()),
-            child: const Icon(Icons.pan_tool_alt_outlined),
+            child: const Icon(AppIcons.movePieces),
           ),
           for (final role in _roles)
             _spare(Piece(color: side, role: role), '$colour ${role.name}'),
@@ -357,7 +358,7 @@ class _SpareStrip extends StatelessWidget {
             tooltip: 'Erase pieces',
             selected: tool is EraserTool,
             onTap: () => onPick(const EraserTool()),
-            child: const Icon(Icons.delete_outline),
+            child: const Icon(AppIcons.delete),
           ),
         ],
       ),
@@ -431,7 +432,7 @@ class _Slot extends StatelessWidget {
 Future<Fen?> showBoardEditor(
   BuildContext context, {
   required Fen initial,
-  String title = 'Set up a position',
+  String title = 'Edit position',
   Side orientation = Side.white,
 }) => showDialog<Fen>(
   context: context,

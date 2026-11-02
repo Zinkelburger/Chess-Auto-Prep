@@ -27,6 +27,7 @@ import 'study_import_dialog.dart';
 import 'study_send_dialog.dart';
 import 'study_recovery_dialog.dart';
 import '../../ui/list_message.dart';
+import '../../ui/app_icons.dart';
 
 /// Opens one chapter of a study in the workspace.
 typedef OpenChapter = void Function(ChapterRef study, int chapter);
@@ -518,31 +519,26 @@ class _Toolbar extends StatelessWidget {
   /// Making and removing whole studies, and taking one away as text. The
   /// two that need a study open are off until one is.
   List<Widget> get _actions => [
-    rowAction('New study…', onNewStudy, busy: busy, icon: Icons.add),
-    rowAction(
-      'Import chapters…',
-      onImport,
-      busy: busy,
-      icon: Icons.file_open_outlined,
-    ),
+    rowAction('New study…', onNewStudy, busy: busy, icon: AppIcons.add),
+    rowAction('Import chapters…', onImport, busy: busy, icon: AppIcons.open),
     rowAction(
       'Rename study…',
       onRenameStudy,
       busy: busy || !hasOpenStudy,
-      icon: Icons.edit_outlined,
+      icon: AppIcons.edit,
     ),
     rowAction(
       'Save study PGN as…',
       onExportStudy,
       busy: busy || !hasOpenStudy,
-      icon: Icons.save_outlined,
+      icon: AppIcons.save,
     ),
     if (onSendToLichess case final send?)
       rowAction(
         'Send to Lichess…',
         send,
         busy: busy || !hasOpenStudy,
-        icon: Icons.cloud_upload_outlined,
+        icon: AppIcons.send,
       ),
     if (onRetrySave != null)
       rowAction('Retry study save', onRetrySave!, busy: busy),
@@ -552,13 +548,13 @@ class _Toolbar extends StatelessWidget {
       'Copy study PGN',
       onCopyStudy,
       busy: busy || !hasOpenStudy,
-      icon: Icons.content_copy,
+      icon: AppIcons.copy,
     ),
     rowAction(
       'Delete study…',
       onDeleteStudy,
       busy: busy || !hasOpenStudy,
-      icon: Icons.delete_outline,
+      icon: AppIcons.delete,
     ),
   ];
 
@@ -592,7 +588,7 @@ class _Toolbar extends StatelessWidget {
                 IconButton(
                   tooltip: 'All studies',
                   onPressed: onChooseStudy,
-                  icon: const Icon(Icons.arrow_back, size: IconSize.menu),
+                  icon: const Icon(AppIcons.back, size: IconSize.menu),
                   visualDensity: VisualDensity.compact,
                 ),
               // Room for the buttons first: a narrow pane cuts the label,
@@ -639,7 +635,7 @@ class _Toolbar extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
                 onPressed: busy ? null : onNewChapter,
-                icon: const Icon(Icons.add, size: IconSize.menu),
+                icon: const Icon(AppIcons.add, size: IconSize.menu),
                 label: const Text('New chapter'),
               ),
             ),
@@ -701,13 +697,13 @@ class StudyRow extends StatelessWidget {
                         'Copy study PGN',
                         onCopyPgn,
                         busy: busy || !open,
-                        icon: Icons.content_copy,
+                        icon: AppIcons.copy,
                       ),
                       rowAction(
                         'Delete study…',
                         onDelete,
                         busy: busy,
-                        icon: Icons.delete_outline,
+                        icon: AppIcons.delete,
                       ),
                     ],
                   ),

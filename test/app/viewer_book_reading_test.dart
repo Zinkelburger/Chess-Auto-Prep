@@ -98,7 +98,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Ctrl+E turns the card to Edit: the strip and the board\'s '
+  testWidgets('Edit turns the card to Edit: the strip and the board\'s '
       'tools come, and Read puts them away again', (tester) async {
     await openViewer(tester);
     SegmentedButton<bool> switchOf() => tester.widget<SegmentedButton<bool>>(
@@ -106,9 +106,7 @@ void main() {
     );
     expect(switchOf().selected, {false});
     expect(find.byTooltip('Good move'), findsNothing);
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.tap(find.text('Edit'));
     await tester.pumpAndSettle();
     expect(switchOf().selected, {true});
     expect(find.byTooltip('Good move'), findsOneWidget);

@@ -32,6 +32,7 @@ import '../workspace/workspace_tabs.dart';
 import 'mode.dart';
 import 'mode_view.dart';
 import 'workspace_requests.dart';
+import '../ui/app_icons.dart';
 
 /// The three modes whose list opens a document: the builder, the viewer and
 /// Study. They share the Actions menu and differ in the list and in the one
@@ -83,7 +84,6 @@ abstract base class _DocumentModeView extends ModeView {
       AppAction(
         'Expectimax from here',
         workspace.fill.canStart ? dialogs.search : null,
-        shortcut: AppKey.search.label,
         group: 'Repertoire',
       ),
       AppAction(
@@ -298,8 +298,8 @@ abstract base class _ReadingView extends _DocumentModeView {
   @override
   bool get quietBoard => !editing.value;
 
-  /// The engine, which a quiet board has no control on screen for: here
-  /// with its key, so it can be found.
+  /// The engine, which a quiet board has no control on screen for: here,
+  /// so it can be found.
   @override
   List<AppAction> paneActions(ValueNotifier<bool> editing) => [
     for (final action in documentActions(
@@ -308,7 +308,7 @@ abstract base class _ReadingView extends _DocumentModeView {
       editing: editing,
       onSaveCopy: () {},
     ))
-      if (action.shortcut == AppKey.engine.label) action,
+      if (action.label case 'Engine on' || 'Engine off') action,
   ];
 
   /// After a solitaire game, the next one to play: the next game of the
@@ -362,19 +362,19 @@ abstract base class _ReadingView extends _DocumentModeView {
         !open || (_solitaire?.active == true && _solitaire?.finished == false)
             ? null
             : analyze,
-        icon: Icons.query_stats,
+        icon: AppIcons.run,
         group: 'Game',
       ),
       AppAction(
         'Analyze all games',
         workspace.review?.canReviewAll == true ? _analyzeAll : null,
-        icon: Icons.query_stats,
+        icon: AppIcons.run,
         group: 'Game',
       ),
       AppAction(
         _solitaire?.active == true ? 'Stop solitaire' : 'Solitaire chess',
         !open || workspace.review?.running == true ? null : solitaire,
-        icon: Icons.psychology_alt_outlined,
+        icon: AppIcons.solitaire,
         group: 'Game',
       ),
       AppAction(
@@ -400,7 +400,7 @@ abstract base class _ReadingView extends _DocumentModeView {
     MenuItemButton(
       onPressed: () =>
           unawaited(requests.addToStudy([?lineDraft(workspace.session, path)])),
-      leadingIcon: const Icon(Icons.playlist_add, size: IconSize.menu),
+      leadingIcon: const Icon(AppIcons.add, size: IconSize.menu),
       child: const Text('Add line to study…'),
     ),
   ];
@@ -482,7 +482,7 @@ final class ViewerView extends _ReadingView {
     AppAction(
       'Filter games',
       _modes.viewer.file == null ? null : () => show(WorkspaceTab.filter),
-      icon: Icons.filter_list,
+      icon: AppIcons.filter,
       group: 'File',
     ),
     AppAction(

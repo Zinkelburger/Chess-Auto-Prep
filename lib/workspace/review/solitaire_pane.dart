@@ -7,6 +7,7 @@ import '../../ui/theme.dart';
 import 'solitaire.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/app_icons.dart';
 
 /// The Solitaire tab: the setup before a start, the guess being made while
 /// one runs, and what was missed once the game is through.
@@ -121,7 +122,7 @@ class _Setup extends StatelessWidget {
         FilledButton.icon(
           key: const ValueKey('solitaire-begin'),
           onPressed: count == 0 ? null : solitaire.start,
-          icon: const Icon(Icons.play_arrow),
+          icon: const Icon(AppIcons.run),
           label: const Text('Start solitaire'),
         ),
       ],
@@ -220,14 +221,14 @@ class _Guessing extends StatelessWidget {
         child: OutlinedButton.icon(
           key: const ValueKey('solitaire-hint'),
           onPressed: solitaire.canHint ? solitaire.showHint : null,
-          icon: const Icon(Icons.lightbulb_outline),
+          icon: const Icon(AppIcons.hint),
           label: const Text('Hint'),
         ),
       ),
       OutlinedButton.icon(
         key: const ValueKey('solitaire-reveal'),
         onPressed: solitaire.canReveal ? solitaire.reveal : null,
-        icon: const Icon(Icons.visibility_outlined),
+        icon: const Icon(AppIcons.reveal),
         label: const Text('Give up this move'),
       ),
       Tooltip(
@@ -318,7 +319,7 @@ class _Done extends StatelessWidget {
           await Clipboard.setData(ClipboardData(text: pgn));
           say('Session PGN copied.', problem: false);
         },
-        icon: const Icon(Icons.copy_outlined),
+        icon: const Icon(AppIcons.copy),
         label: const Text('Copy session PGN'),
       ),
       OutlinedButton(
@@ -345,7 +346,7 @@ class _Crown extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     children: [
       Icon(
-        Icons.emoji_events_outlined,
+        AppIcons.won,
         size: IconSize.menu,
         color: Theme.of(context).colorScheme.primary,
       ),

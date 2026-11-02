@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../../chess/bughouse/hivemind.dart';
 import '../../chess/fen.dart';
 import '../../chess/bughouse/table.dart';
-import '../../ui/app_keys.dart';
 import '../../ui/engine_switch.dart';
 import '../../ui/theme.dart';
 import '../../workspace/board/board_editor.dart';
@@ -90,7 +89,7 @@ class _BoardsSwitch extends StatelessWidget {
             : 'Place, move or remove pieces on ${lab.focus.label.toLowerCase()}',
         child: OutlinedButton(
           onPressed: () => _edit(context),
-          child: const Text('Edit board'),
+          child: const Text('Edit position…'),
         ),
       ),
     ],
@@ -233,7 +232,7 @@ class _EngineBar extends StatelessWidget {
           child: Row(
             children: [
               Tooltip(
-                message: AppKey.bughouseEngine.tip('Toggle engine'),
+                message: engine.on ? 'Turn engine off' : 'Turn engine on',
                 child: EngineSwitch(
                   value: engine.on,
                   onChanged: (_) => engine.toggle(),

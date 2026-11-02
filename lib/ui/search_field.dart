@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'theme.dart';
+import 'app_icons.dart';
 
 /// The one search input: a magnifier, the words typed into it, and a clear
 /// action once there is something to clear.
@@ -47,11 +48,11 @@ class SearchField extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyMedium,
             decoration: InputDecoration(
               isDense: true,
-              prefixIcon: const Icon(Icons.search, size: IconSize.action),
+              prefixIcon: const Icon(AppIcons.search, size: IconSize.action),
               suffixIcon: value.text.isEmpty
                   ? null
                   : IconButton(
-                      icon: const Icon(Icons.close, size: IconSize.menu),
+                      icon: const Icon(AppIcons.close, size: IconSize.menu),
                       tooltip: 'Clear search',
                       onPressed: () {
                         controller.clear();

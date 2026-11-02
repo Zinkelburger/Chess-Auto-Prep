@@ -12,6 +12,7 @@ import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import '../../workspace/book/books.dart';
 import '../../workspace/book/repertoire_catalog.dart';
+import '../../ui/app_icons.dart';
 
 /// The Books mode: the user's books on the left, the one picked on the
 /// right with every repertoire and its chapters to tick in or out. A book
@@ -168,7 +169,7 @@ class _BookList extends StatelessWidget {
                 onPressed: books.changingReferences
                     ? null
                     : () => unawaited(newBook(context, books)),
-                icon: const Icon(Icons.add, size: IconSize.menu),
+                icon: const Icon(AppIcons.add, size: IconSize.menu),
                 tooltip: 'New opening book',
               ),
             ],
@@ -442,10 +443,7 @@ class _BookEditorState extends State<_BookEditor> {
                 onPressed: books.changingReferences
                     ? null
                     : () => unawaited(_rename(context, books, book)),
-                leadingIcon: const Icon(
-                  Icons.edit_outlined,
-                  size: IconSize.menu,
-                ),
+                leadingIcon: const Icon(AppIcons.edit, size: IconSize.menu),
                 child: const Text('Rename…'),
               ),
               if (inUse)
@@ -459,10 +457,7 @@ class _BookEditorState extends State<_BookEditor> {
                 onPressed: books.changingReferences
                     ? null
                     : () => unawaited(_delete(context, books, book)),
-                leadingIcon: const Icon(
-                  Icons.delete_outline,
-                  size: IconSize.menu,
-                ),
+                leadingIcon: const Icon(AppIcons.delete, size: IconSize.menu),
                 child: const Text('Delete…'),
               ),
             ],
@@ -518,7 +513,7 @@ class _FolderRow extends StatelessWidget {
                   : (_) => onTick!(share != BookShare.all),
             ),
             Icon(
-              open ? Icons.expand_more : Icons.chevron_right,
+              open ? AppIcons.expanded : AppIcons.collapsed,
               size: IconSize.menu,
             ),
             const SizedBox(width: Space.xs),
@@ -572,7 +567,7 @@ class _ChapterRow extends StatelessWidget {
             iconSize: IconSize.menu,
             visualDensity: VisualDensity.compact,
             onPressed: onOpen,
-            icon: const Icon(Icons.open_in_new),
+            icon: const Icon(AppIcons.openElsewhere),
           ),
           const SizedBox(width: Space.s),
         ],

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/theme.dart';
 import '../document/document_session.dart';
+import '../../ui/app_icons.dart';
 
 /// The four buttons under the moves that walk the line: start, back,
 /// forward, end. Each says its key, because each has one.
@@ -35,7 +36,7 @@ class NavRow extends StatelessWidget {
                   valueListenable: book,
                   builder: (context, open, _) => IconButton(
                     icon: Icon(
-                      open ? Icons.menu_book : Icons.menu_book_outlined,
+                      open ? AppIcons.bookOpen : AppIcons.book,
                       size: IconSize.action,
                     ),
                     tooltip: open
@@ -47,25 +48,25 @@ class NavRow extends StatelessWidget {
                   ),
                 ),
               _button(
-                Icons.first_page,
+                AppIcons.first,
                 AppKey.start.tip('Start'),
                 open,
                 session.cursor.toStart,
               ),
               _button(
-                Icons.chevron_left,
+                AppIcons.previous,
                 AppKey.back.tip('Back'),
                 open,
                 session.cursor.back,
               ),
               _button(
-                Icons.chevron_right,
+                AppIcons.next,
                 AppKey.forward.tip('Forward'),
                 open,
                 session.cursor.forward,
               ),
               _button(
-                Icons.last_page,
+                AppIcons.last,
                 AppKey.end.tip('End'),
                 open,
                 session.cursor.toEnd,

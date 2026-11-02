@@ -22,6 +22,7 @@ import 'search_settings.dart';
 import 'search_table.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/choice_field.dart';
+import '../../ui/app_icons.dart';
 
 /// The Expectimax panel: the expectimax search from the
 /// board and its values.
@@ -295,10 +296,11 @@ class _SearchPaneState extends State<SearchPane>
                   const Spacer(),
                   if (widget.onShowPositions case final show?)
                     IconButton(
-                      icon: const Icon(Icons.list_alt, size: IconSize.action),
-                      tooltip: AppKey.positions.tip(
-                        'Show the positions the searches found',
+                      icon: const Icon(
+                        AppIcons.positions,
+                        size: IconSize.action,
                       ),
+                      tooltip: 'Show the positions the searches found',
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                       onPressed: show,
                     ),
@@ -380,12 +382,12 @@ class _SearchPaneState extends State<SearchPane>
   );
 
   Widget _gear(BuildContext context) => IconButton(
-    icon: const Icon(Icons.settings, size: IconSize.action),
+    icon: const Icon(AppIcons.settings, size: IconSize.action),
     tooltip: _settingsOpen ? 'Show results' : 'Expectimax settings',
     isSelected: _settingsOpen,
     color: Theme.of(context).colorScheme.onSurfaceVariant,
     selectedIcon: Icon(
-      Icons.settings,
+      AppIcons.settings,
       size: IconSize.action,
       color: Theme.of(context).colorScheme.primary,
     ),
@@ -403,7 +405,7 @@ class _SearchPaneState extends State<SearchPane>
       return Tooltip(
         message: 'Finish the current position, then pause and keep the results',
         child: FilledButton.icon(
-          icon: const Icon(Icons.pause),
+          icon: const Icon(AppIcons.pause),
           onPressed: running.stopping ? null : fill.finish,
           label: const Text('Pause'),
         ),
@@ -420,25 +422,21 @@ class _SearchPaneState extends State<SearchPane>
         depth < ExpectimaxOptions.maxDepth &&
         searchedTo(node!, depth)) {
       return Tooltip(
-        message: AppKey.search.tip(
-          'Searched $depth half-moves deep here; search ${depth + 1}',
-        ),
+        message: 'Searched $depth half-moves deep here; search ${depth + 1}',
         child: FilledButton.icon(
           onPressed: fill.canStart ? () => unawaited(_deeper(depth)) : null,
-          icon: const Icon(Icons.play_arrow),
+          icon: const Icon(AppIcons.run),
           label: const Text('Deeper'),
         ),
       );
     }
     return Tooltip(
-      message: AppKey.search.tip(
-        resumable
-            ? 'Go on from the search at this board'
-            : 'Search from the board',
-      ),
+      message: resumable
+          ? 'Go on from the search at this board'
+          : 'Search from the board',
       child: FilledButton.icon(
         onPressed: fill.canStart ? () => unawaited(_search()) : null,
-        icon: const Icon(Icons.play_arrow),
+        icon: const Icon(AppIcons.run),
         label: Text(
           resumable
               ? 'Resume'
@@ -480,7 +478,7 @@ class _SearchPaneState extends State<SearchPane>
           padding: const EdgeInsets.symmetric(horizontal: Space.s),
         ),
         onPressed: widget.fill.running ? null : widget.session.flip,
-        icon: const Icon(Icons.swap_vert, size: IconSize.action),
+        icon: const Icon(AppIcons.flip, size: IconSize.action),
         label: Text(white ? 'White' : 'Black'),
       ),
     );
@@ -573,7 +571,7 @@ class _SearchPaneState extends State<SearchPane>
     }
     if (_found case final count?) {
       return Tooltip(
-        message: AppKey.positions.tip('Show the positions this search found'),
+        message: 'Show the positions this search found',
         child: TextButton(
           style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
           onPressed: widget.onShowPositions,

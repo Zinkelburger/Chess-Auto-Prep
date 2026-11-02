@@ -20,6 +20,7 @@ import 'new_chapter_dialog.dart';
 import 'outline_rows.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/list_message.dart';
+import '../../ui/app_icons.dart';
 
 /// The chapters of the open repertoire and, under the open one, its lines.
 ///
@@ -314,7 +315,7 @@ class _OutlinePanelState extends State<OutlinePanel> {
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
                 onPressed: widget.library.busy ? null : _history,
-                icon: const Icon(Icons.history, size: IconSize.action),
+                icon: const Icon(AppIcons.history, size: IconSize.action),
                 label: const Text('Version history'),
               ),
             ),
@@ -426,12 +427,12 @@ class _OutlinePanelState extends State<OutlinePanel> {
         ),
         MenuItemButton(
           onPressed: () => _rename(line),
-          leadingIcon: const Icon(Icons.edit_outlined, size: IconSize.menu),
+          leadingIcon: const Icon(AppIcons.edit, size: IconSize.menu),
           child: const Text('Rename line…'),
         ),
         MenuItemButton(
           onPressed: () => _delete(line),
-          leadingIcon: const Icon(Icons.delete_outline, size: IconSize.menu),
+          leadingIcon: const Icon(AppIcons.delete, size: IconSize.menu),
           child: const Text('Delete line'),
         ),
         MenuItemButton(
@@ -479,12 +480,9 @@ class _Toolbar extends StatelessWidget {
                 key: const ValueKey('outline-at-position'),
                 onPressed: () => onAtPosition(!atPosition),
                 isSelected: atPosition,
-                icon: const Icon(
-                  Icons.filter_alt_outlined,
-                  size: IconSize.action,
-                ),
+                icon: const Icon(AppIcons.filter, size: IconSize.action),
                 selectedIcon: const Icon(
-                  Icons.filter_alt,
+                  AppIcons.filter,
                   size: IconSize.action,
                 ),
                 tooltip: 'At this position',
@@ -492,7 +490,7 @@ class _Toolbar extends StatelessWidget {
               ),
               IconButton(
                 onPressed: onCreate,
-                icon: const Icon(Icons.add, size: IconSize.action),
+                icon: const Icon(AppIcons.add, size: IconSize.action),
                 tooltip: 'New chapter',
                 visualDensity: VisualDensity.compact,
               ),

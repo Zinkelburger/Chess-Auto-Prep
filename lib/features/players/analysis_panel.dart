@@ -20,6 +20,7 @@ import 'player_hunt.dart';
 import 'player_picker.dart';
 import 'players.dart';
 import '../../ui/list_message.dart';
+import '../../ui/app_icons.dart';
 
 /// The Player analysis column: who is being prepared for and where their
 /// games stand, the colour they are looked at from, then the search and the
@@ -137,7 +138,7 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
                 _menu(player)
               else if (widget.players.players.isNotEmpty)
                 IconButton(
-                  icon: const Icon(Icons.add, size: IconSize.action),
+                  icon: const Icon(AppIcons.add, size: IconSize.action),
                   tooltip: 'Add player',
                   onPressed: _add,
                   visualDensity: VisualDensity.compact,
@@ -533,7 +534,7 @@ class _CountLine extends StatelessWidget {
         TextButton.icon(
           onPressed: onFilters,
           icon: Icon(
-            filtersOpen ? Icons.expand_less : Icons.expand_more,
+            filtersOpen ? AppIcons.showLess : AppIcons.showMore,
             size: IconSize.action,
           ),
           iconAlignment: IconAlignment.end,

@@ -7,6 +7,7 @@ import '../../ui/number_field.dart';
 import '../../ui/theme.dart';
 import 'player_analysis.dart';
 import 'player_hunt.dart';
+import '../../ui/app_icons.dart';
 
 /// The top of the Findings list: the button that runs the engine over the
 /// player's most played positions, its settings folded beside it, how far
@@ -106,7 +107,7 @@ class _EngineRunState extends State<EngineRun> {
       IconButton(
         onPressed: _toggleSettings,
         isSelected: _settingsOpen,
-        icon: const Icon(Icons.settings, size: IconSize.action),
+        icon: const Icon(AppIcons.settings, size: IconSize.action),
         tooltip: _settingsOpen
             ? 'Hide the analysis settings'
             : 'Analysis settings',
@@ -298,7 +299,7 @@ class FindingRow extends StatelessWidget {
             IconButton(
               tooltip: dismissed ? 'Restore finding' : 'Dismiss finding',
               icon: Icon(
-                dismissed ? Icons.undo : Icons.close,
+                dismissed ? AppIcons.undo : AppIcons.close,
                 size: IconSize.menu,
               ),
               onPressed: onToggle,
