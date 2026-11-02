@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import '../../chess/tactics/puzzle.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/status_bar.dart';
-import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'my_games.dart';
@@ -16,6 +15,7 @@ import 'puzzle_trainer.dart';
 import 'source_games.dart';
 import 'tactics_set.dart';
 import '../../ui/list_message.dart';
+import '../../ui/list_row.dart';
 import '../../ui/app_icons.dart';
 
 /// The Tactics column: the one button that starts a sitting, the filters
@@ -93,7 +93,11 @@ class _TacticsPanelState extends State<TacticsPanel> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([widget.set, widget.trainer]),
+      listenable: Listenable.merge([
+        widget.set,
+        widget.trainer,
+        widget.myGames,
+      ]),
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -105,13 +109,16 @@ class _TacticsPanelState extends State<TacticsPanel> {
           ),
           Expanded(
             child: switch (widget.set.state) {
-              SetLoading() => const ListMessage('Reading puzzles…'),
+              SetLoading() => const ListMessage.loading('Reading puzzles…'),
+              // With no account yet, the block above already says what to
+              // do; saying it again here would be the same words twice.
+              SetMissing() when widget.myGames.accounts.isEmpty =>
+                const SizedBox.shrink(),
               SetMissing() => const ListMessage(
-                'No puzzles yet. Get your games above: the mistakes you made '
-                'in them become puzzles here.',
+                'Get games to turn your mistakes into puzzles.',
               ),
               SetUnreadable(:final detail) => ListMessage(
-                'The puzzle set could not be read: $detail',
+                'Could not read the puzzles: $detail',
                 action: OutlinedButton(
                   onPressed: () => unawaited(widget.set.load()),
                   child: const Text('Try again'),
@@ -239,36 +246,33 @@ class _TacticsPanelState extends State<TacticsPanel> {
 
 extension on _TacticsPanelState {
   /// What can be done to one puzzle besides playing it.
-  Widget _menu(Puzzle puzzle) => RowActions(
-    tooltip: 'Puzzle actions',
-    children: [
-      MenuItemButton(
-        onPressed: () => widget.onAnalyze(puzzle),
-        child: const Text('Analyze in the game'),
-      ),
-      MenuItemButton(
-        onPressed: () =>
-            unawaited(Clipboard.setData(ClipboardData(text: puzzle.fen.value))),
-        leadingIcon: const Icon(AppIcons.copy, size: IconSize.menu),
-        child: const Text('Copy FEN'),
-      ),
-      MenuItemButton(
-        onPressed: () => unawaited(_copyGame(puzzle)),
-        leadingIcon: const Icon(AppIcons.copy, size: IconSize.menu),
-        child: const Text('Copy game PGN'),
-      ),
-      MenuItemButton(
-        onPressed: () => widget.onAddToStudy(puzzle),
-        leadingIcon: const Icon(AppIcons.add, size: IconSize.menu),
-        child: const Text('Add game to study…'),
-      ),
-      MenuItemButton(
-        onPressed: () => unawaited(_delete(puzzle)),
-        leadingIcon: const Icon(AppIcons.delete, size: IconSize.menu),
-        child: const Text('Delete puzzle…'),
-      ),
-    ],
-  );
+  List<Widget> _menu(Puzzle puzzle) => [
+    MenuItemButton(
+      onPressed: () => widget.onAnalyze(puzzle),
+      child: const Text('Analyze in the game'),
+    ),
+    MenuItemButton(
+      onPressed: () =>
+          unawaited(Clipboard.setData(ClipboardData(text: puzzle.fen.value))),
+      leadingIcon: const Icon(AppIcons.copy, size: IconSize.menu),
+      child: const Text('Copy FEN'),
+    ),
+    MenuItemButton(
+      onPressed: () => unawaited(_copyGame(puzzle)),
+      leadingIcon: const Icon(AppIcons.copy, size: IconSize.menu),
+      child: const Text('Copy game PGN'),
+    ),
+    MenuItemButton(
+      onPressed: () => widget.onAddToStudy(puzzle),
+      leadingIcon: const Icon(AppIcons.add, size: IconSize.menu),
+      child: const Text('Add game to study…'),
+    ),
+    MenuItemButton(
+      onPressed: () => unawaited(_delete(puzzle)),
+      leadingIcon: const Icon(AppIcons.delete, size: IconSize.menu),
+      child: const Text('Delete puzzle…'),
+    ),
+  ];
 
   /// The game the puzzle came from; the puzzle's own game when it came from
   /// none the app knows.
@@ -395,7 +399,7 @@ class _PuzzleRow extends StatelessWidget {
   final Puzzle puzzle;
 
   /// The row's ⋯ menu.
-  final Widget menu;
+  final List<Widget> menu;
 
   /// This is the puzzle on the board.
   final bool open;
@@ -412,26 +416,14 @@ class _PuzzleRow extends StatelessWidget {
     // A new puzzle says nothing: most are, and a column of `new` is noise.
     final record = stats.isNew ? '' : '${stats.successes}/${stats.reviews}';
     final tried = stats.reviews == 1 ? '1 try' : '${stats.reviews} tries';
-    return Material(
-      color: open ? theme.colorScheme.surfaceContainerHighest : null,
-      child: InkWell(
-        onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.only(left: Space.m),
-          child: Row(
-            children: [
-              Expanded(
-                child: _lines(
-                  theme,
-                  record,
-                  'Solved ${stats.successes} of $tried',
-                ),
-              ),
-              menu,
-            ],
-          ),
-        ),
-      ),
+    return ListRow(
+      selected: open,
+      onTap: onOpen,
+      height: puzzleRowHeight,
+      padding: const EdgeInsets.only(left: Space.m),
+      menu: menu,
+      menuTooltip: 'Puzzle actions',
+      child: _lines(theme, record, 'Solved ${stats.successes} of $tried'),
     );
   }
 }

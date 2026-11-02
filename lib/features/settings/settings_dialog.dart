@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../storage/settings_store.dart';
+import '../../ui/problem_line.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
@@ -117,7 +118,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   List<Widget> _saveStatus(ThemeData theme) => [
     if (widget.store.problem case final problem?)
-      _Problem(problem)
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Space.l),
+        child: ProblemLine(problem),
+      )
     else
       Padding(
         padding: const EdgeInsets.symmetric(
@@ -261,9 +265,7 @@ class _Place extends StatelessWidget {
         button: true,
         child: Material(
           borderRadius: BorderRadius.circular(readingCardRadius),
-          color: selected
-              ? scheme.primary.withValues(alpha: 0.12)
-              : Colors.transparent,
+          color: selected ? scheme.secondaryContainer : Colors.transparent,
           child: InkWell(
             borderRadius: BorderRadius.circular(readingCardRadius),
             onTap: onTap,
@@ -292,26 +294,6 @@ class _Place extends StatelessWidget {
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Problem extends StatelessWidget {
-  const _Problem(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.l, Space.s, Space.l, Space.s),
-      child: Text(
-        text,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.error,
         ),
       ),
     );

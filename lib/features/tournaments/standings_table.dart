@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../chess/tournament/result.dart';
 import '../../chess/tournament/standings.dart';
+import '../../ui/list_message.dart';
 
 class TournamentStandingsTable extends StatefulWidget {
   const TournamentStandingsTable({super.key, required this.tournament});
@@ -26,7 +27,7 @@ class _TableState extends State<TournamentStandingsTable> {
           onChanged: (v) => setState(() => _statistics = v ?? false),
         ),
         if (rows.every((r) => r.score.played == 0))
-          const Text('No games yet — the crosstable fills in as they finish.')
+          const ListMessage('No games finished yet.', inset: 0)
         else
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,

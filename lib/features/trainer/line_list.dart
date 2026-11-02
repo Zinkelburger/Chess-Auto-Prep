@@ -9,6 +9,7 @@ import '../../chess/training/schedule.dart';
 import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
 import '../../storage/training_progress.dart';
+import '../../ui/problem_line.dart';
 import '../../ui/relative_time.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
@@ -112,15 +113,18 @@ class _LineListState extends State<LineList> {
                     unawaited(_change(write, doing: doing)),
               ),
               if (progress.stale)
-                _Problem(
+                ProblemLine(
                   progressProblem(
                     const ProgressConflict(),
                     doing: 'save training progress',
                   ),
-                  action: ('Reload', () => unawaited(widget.trainer.reload())),
+                  action: TextButton(
+                    onPressed: () => unawaited(widget.trainer.reload()),
+                    child: const Text('Reload'),
+                  ),
                 )
               else if (_problem case final problem?)
-                _Problem(problem),
+                ProblemLine(problem),
               const SizedBox(height: Space.m),
               _toolbar(progress),
               if (_showing == _Showing.lines && _orders.length > 1) ...[
@@ -233,7 +237,11 @@ class _LineListState extends State<LineList> {
   Widget _lines(TrainingProgress progress) {
     final lines = _visibleLines(progress);
     if (lines.isEmpty) {
-      return _Muted(_query.isEmpty ? 'No lines here yet.' : 'No line matches.');
+      return _Muted(
+        _query.isEmpty
+            ? 'No lines here yet.'
+            : 'Nothing matches "${_search.text.trim()}".',
+      );
     }
     final many = widget.ready.chapters.length > 1;
     // Worked out over the rows shown, so a search never trims a row
@@ -608,35 +616,6 @@ class _MistakeRow extends StatelessWidget {
   static String _number(Attempt mistake) => mistake.fen.whiteToMove
       ? '${mistake.fen.fullMove}.'
       : '${mistake.fen.fullMove}...';
-}
-
-class _Problem extends StatelessWidget {
-  const _Problem(this.sentence, {this.action});
-
-  final String sentence;
-  final (String, VoidCallback)? action;
-
-  @override
-  Widget build(BuildContext context) {
-    final error = Theme.of(context).colorScheme.error;
-    return Padding(
-      padding: const EdgeInsets.only(top: Space.s),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              sentence,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: error),
-            ),
-          ),
-          if (action case (final label, final run))
-            TextButton(onPressed: run, child: Text(label)),
-        ],
-      ),
-    );
-  }
 }
 
 class _Muted extends StatelessWidget {

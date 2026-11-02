@@ -5,6 +5,7 @@ import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'players.dart';
 import '../../ui/list_message.dart';
+import '../../ui/list_row.dart';
 import '../../ui/app_icons.dart';
 
 /// The Player analysis column before anyone is chosen: the saved players to
@@ -82,10 +83,10 @@ class _PlayerPickerState extends State<PlayerPicker> {
           ),
           Expanded(
             child: shown.isEmpty
-                ? ListMessage('Nobody matches "${_search.text.trim()}".')
+                ? ListMessage('Nothing matches "${_search.text.trim()}".')
                 : ListView.builder(
                     itemCount: shown.length,
-                    itemExtent: puzzleRowHeight,
+                    itemExtent: twoLineRowHeight,
                     itemBuilder: (context, at) => _PlayerRow(
                       player: shown[at],
                       onChoose: () => widget.onChoose(shown[at]),
@@ -124,28 +125,26 @@ class _PlayerRow extends StatelessWidget {
         '${account.site.label} ${account.username}',
       if (files > 0) '$files PGN ${files == 1 ? 'file' : 'files'}',
     ];
-    return InkWell(
+    return ListRow(
       onTap: onChoose,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: Space.m),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              player.name,
-              style: theme.textTheme.bodyMedium,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            Text(
-              sources.isEmpty ? 'No games linked yet' : sources.join(' · '),
-              style: theme.textTheme.labelSmall,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
+      height: twoLineRowHeight,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            player.name,
+            style: theme.textTheme.bodyMedium,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            sources.isEmpty ? 'No games linked yet' : sources.join(' · '),
+            style: theme.textTheme.labelSmall,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }

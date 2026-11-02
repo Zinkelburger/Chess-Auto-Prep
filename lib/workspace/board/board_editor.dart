@@ -9,6 +9,7 @@ import '../../chess/position_setup.dart';
 import '../../ui/theme.dart';
 import 'board_view.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/problem_line.dart';
 
 /// What a press on the editor's board does.
 sealed class EditorTool {
@@ -148,7 +149,6 @@ class _BoardEditorState extends State<BoardEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return SizedBox(
       width: BoardEditor.width,
       child: Column(
@@ -190,20 +190,9 @@ class _BoardEditorState extends State<BoardEditor> {
               ),
             ),
           ),
-          // One line held for the reason, so the dialog does not grow
+          // The line is held for the reason, so the dialog does not grow
           // and shrink as the position turns legal and back.
-          SizedBox(
-            height: editorProblemHeight,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                _problem ?? '',
-                style: TextStyle(color: scheme.error),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
+          ProblemLine(_problem),
         ],
       ),
     );

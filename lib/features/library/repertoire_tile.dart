@@ -5,6 +5,7 @@ import '../../ui/choice_dialog.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/relative_time.dart';
+import '../../ui/list_row.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
 import 'library.dart';
@@ -153,37 +154,32 @@ class _RepertoireRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    return InkWell(
+    return ListRow(
       onTap: onToggle,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          Space.s,
-          Space.xs,
-          Space.xs,
-          Space.xs,
-        ),
-        child: Row(
-          children: [
-            Icon(
-              expanded ? AppIcons.expanded : AppIcons.collapsed,
-              size: IconSize.action,
+      height: twoLineRowHeight,
+      padding: const EdgeInsets.fromLTRB(Space.s, 0, Space.xs, 0),
+      menu: _actions(context),
+      child: Row(
+        children: [
+          Icon(
+            expanded ? AppIcons.expanded : AppIcons.collapsed,
+            size: IconSize.action,
+          ),
+          const SizedBox(width: Space.xs),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Tooltip(
+                  message: folder.name,
+                  child: Text(folder.name, overflow: TextOverflow.ellipsis),
+                ),
+                Text(_subtitle, style: text.labelSmall),
+              ],
             ),
-            const SizedBox(width: Space.xs),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Tooltip(
-                    message: folder.name,
-                    child: Text(folder.name, overflow: TextOverflow.ellipsis),
-                  ),
-                  Text(_subtitle, style: text.labelSmall),
-                ],
-              ),
-            ),
-            RowActions(children: _actions(context)),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -273,50 +269,28 @@ class _ChapterRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: open ? scheme.surfaceContainerHighest : Colors.transparent,
-      child: InkWell(
-        onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            Space.l + Space.m,
-            Space.xs,
-            Space.xs,
-            Space.xs,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Tooltip(
-                  message: chapter.name,
-                  child: Text(chapter.name, overflow: TextOverflow.ellipsis),
-                ),
-              ),
-              RowActions(
-                children: [
-                  rowAction(
-                    'Rename…',
-                    () => _rename(context),
-                    busy: library.busy,
-                    icon: AppIcons.edit,
-                  ),
-                  rowAction(
-                    'Move to…',
-                    () => _move(context),
-                    busy: library.busy,
-                  ),
-                  rowAction(
-                    'Delete…',
-                    () => _delete(context),
-                    busy: library.busy,
-                    icon: AppIcons.delete,
-                  ),
-                ],
-              ),
-            ],
-          ),
+    return ListRow(
+      selected: open,
+      onTap: onOpen,
+      padding: const EdgeInsets.fromLTRB(Space.l + Space.m, 0, Space.xs, 0),
+      menu: [
+        rowAction(
+          'Rename…',
+          () => _rename(context),
+          busy: library.busy,
+          icon: AppIcons.edit,
         ),
+        rowAction('Move to…', () => _move(context), busy: library.busy),
+        rowAction(
+          'Delete…',
+          () => _delete(context),
+          busy: library.busy,
+          icon: AppIcons.delete,
+        ),
+      ],
+      child: Tooltip(
+        message: chapter.name,
+        child: Text(chapter.name, overflow: TextOverflow.ellipsis),
       ),
     );
   }

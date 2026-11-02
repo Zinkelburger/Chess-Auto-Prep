@@ -101,7 +101,7 @@ class _MoveNoteState extends State<MoveNote> with CommentPreviews<MoveNote> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _header(context, move, edit: edit, finding: finding),
-                  if (edit) CommentField(session: session),
+                  if (edit) CommentField(session: session, labelled: false),
                   if (!edit) ...[
                     for (final (comment, at, from) in notes)
                       _comment(comment, at, from),

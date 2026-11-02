@@ -7,6 +7,8 @@ import '../../ui/theme.dart';
 import 'app_updates.dart';
 import 'update_offer.dart';
 import 'update_rows.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/progress_line.dart';
 
 /// Puts the "is available" question over the app when a check the app made
 /// by itself finds a new version: Update now, When I close the app (or
@@ -211,12 +213,11 @@ class _UpdateDialogState extends State<_UpdateDialog>
 
   Widget _progress(BuildContext context) {
     final status = widget.updates.status;
-    final failed = status is UpdateFailed;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        LinearProgressIndicator(
+        ProgressLine(
           value: switch (status) {
             UpdateDownloading(:final fraction) => fraction,
             UpdateFailed() => 0,
@@ -224,17 +225,14 @@ class _UpdateDialogState extends State<_UpdateDialog>
           },
         ),
         const SizedBox(height: Space.m),
-        Text(
-          switch (status) {
+        if (status case UpdateFailed(:final problem))
+          ProblemLine(problemText(problem))
+        else
+          Text(switch (status) {
             UpdateDownloading(:final fraction) =>
               'Downloading… ${(fraction * 100).floor()}%',
-            UpdateFailed(:final problem) => problemText(problem),
             _ => 'Starting the installer…',
-          },
-          style: failed
-              ? TextStyle(color: Theme.of(context).colorScheme.error)
-              : null,
-        ),
+          }),
       ],
     );
   }

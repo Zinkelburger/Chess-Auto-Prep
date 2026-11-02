@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import '../../chess/explorer_answer.dart';
 import '../../chess/explorer_choice.dart';
 import '../../chess/openings.dart';
+import '../../ui/list_message.dart';
+import '../../ui/list_row.dart';
 import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
 import '../document/document_session.dart';
@@ -300,46 +302,43 @@ class _Sentence extends StatelessWidget {
   final Future<void> Function()? download;
 
   @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(Space.m),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+  Widget build(BuildContext context) => SingleChildScrollView(
+    child: ListMessage(words, inset: Space.m, action: _action()),
+  );
+
+  Widget? _action() {
+    if (logIn case final login?) {
+      return Wrap(
         children: [
-          Text(words, style: text.bodySmall),
-          if (logIn case final login?)
-            Wrap(
-              children: [
-                TextButton(
-                  onPressed: () => unawaited(login()),
-                  child: const Text('Log in to Lichess…'),
-                ),
-                if (offline case final twic?)
-                  Tooltip(
-                    message: 'Master games on this machine; no login needed',
-                    child: TextButton(
-                      onPressed: () => unawaited(twic()),
-                      child: const Text('Use TWIC'),
-                    ),
-                  ),
-              ],
-            )
-          else if (download case final start?)
-            TextButton.icon(
-              onPressed: () => unawaited(start()),
-              icon: const Icon(AppIcons.download, size: IconSize.action),
-              label: const Text('Download TWIC…'),
-            )
-          else if (retry case final again?)
-            OutlinedButton(
-              onPressed: () => unawaited(again()),
-              child: const Text('Try again'),
+          TextButton(
+            onPressed: () => unawaited(login()),
+            child: const Text('Log in to Lichess…'),
+          ),
+          if (offline case final twic?)
+            Tooltip(
+              message: 'Master games on this machine; no login needed',
+              child: TextButton(
+                onPressed: () => unawaited(twic()),
+                child: const Text('Use TWIC'),
+              ),
             ),
         ],
-      ),
-    );
+      );
+    }
+    if (download case final start?) {
+      return TextButton.icon(
+        onPressed: () => unawaited(start()),
+        icon: const Icon(AppIcons.download, size: IconSize.action),
+        label: const Text('Download TWIC…'),
+      );
+    }
+    if (retry case final again?) {
+      return OutlinedButton(
+        onPressed: () => unawaited(again()),
+        child: const Text('Try again'),
+      );
+    }
+    return null;
   }
 }
 
@@ -611,42 +610,34 @@ class _GameRow extends StatelessWidget {
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: scheme.onSurfaceVariant,
     );
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: SizedBox(
-          height: listRowHeight,
-          child: Row(
-            children: [
-              const SizedBox(width: Space.m),
-              Expanded(
-                child: Text(
-                  '${_player(game.white, game.whiteElo)} – '
-                  '${_player(game.black, game.blackElo)}',
-                  style: muted,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: Space.m),
-              Text(
-                game.result,
-                style: monoText.copyWith(color: scheme.onSurfaceVariant),
-              ),
-              const SizedBox(width: Space.m),
-              SizedBox(
-                width: explorerGamesWidth / 2,
-                child: Text(
-                  fetching ? 'Fetching…' : '${game.year ?? ''}',
-                  style: muted,
-                  textAlign: TextAlign.right,
-                ),
-              ),
-              const SizedBox(width: Space.m),
-            ],
+    return ListRow(
+      onTap: onTap,
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '${_player(game.white, game.whiteElo)} – '
+              '${_player(game.black, game.blackElo)}',
+              style: muted,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-        ),
+          const SizedBox(width: Space.m),
+          Text(
+            game.result,
+            style: monoText.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(width: Space.m),
+          SizedBox(
+            width: explorerGamesWidth / 2,
+            child: Text(
+              fetching ? 'Fetching…' : '${game.year ?? ''}',
+              style: muted,
+              textAlign: TextAlign.right,
+            ),
+          ),
+        ],
       ),
     );
   }

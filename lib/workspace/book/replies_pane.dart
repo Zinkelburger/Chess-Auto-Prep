@@ -253,7 +253,7 @@ class _ReplyRow extends StatelessWidget {
     final scheme = theme.colorScheme;
     final muted = TextStyle(color: scheme.onSurfaceVariant);
     return Material(
-      color: marked ? scheme.surfaceContainerHighest : Colors.transparent,
+      color: marked ? scheme.secondaryContainer : Colors.transparent,
       child: PreviewTarget(
         onHover: onHover,
         onLeave: onLeave,

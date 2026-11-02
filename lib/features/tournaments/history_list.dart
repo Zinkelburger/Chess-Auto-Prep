@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../chess/tournament/result.dart';
+import '../../ui/list_message.dart';
+import '../../ui/progress_line.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'tournament_run.dart';
@@ -42,10 +44,12 @@ class _HistoryState extends State<TournamentHistory> {
             onChanged: (value) => setState(() => _query = value),
           ),
         ),
-        if (history.isEmpty && _query.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.all(Space.m),
-            child: Text('No tournament matches "$_query".'),
+        if (history.isEmpty)
+          ListMessage(
+            _query.isEmpty
+                ? 'No tournaments yet.'
+                : 'Nothing matches "$_query".',
+            inset: Space.m,
           ),
         Expanded(
           child: ListView.builder(
@@ -73,9 +77,7 @@ class _HistoryState extends State<TournamentHistory> {
                     onTap: () => widget.run.select(t),
                   ),
                   if (t.status == 'running' && t.config.gameCount > 0)
-                    LinearProgressIndicator(
-                      value: t.games.length / t.config.gameCount,
-                    ),
+                    ProgressLine(value: t.games.length / t.config.gameCount),
                 ],
               );
             },

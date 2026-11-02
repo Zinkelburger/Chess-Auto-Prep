@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../chess/bughouse/hivemind.dart';
 import '../../chess/fen.dart';
 import '../../chess/bughouse/table.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/progress_line.dart';
 import '../../ui/engine_switch.dart';
 import '../../ui/theme.dart';
 import '../../workspace/board/board_editor.dart';
@@ -257,14 +259,9 @@ class _EngineBar extends StatelessWidget {
             ],
           ),
         ),
-        SizedBox(
-          height: labThinkingHeight,
-          child: lines is LinesOn && lines.thinking
-              ? LinearProgressIndicator(
-                  minHeight: labThinkingHeight,
-                  value: lines.progress,
-                )
-              : null,
+        ProgressLine(
+          active: lines is LinesOn && lines.thinking,
+          value: lines is LinesOn ? lines.progress : null,
         ),
       ],
     );
@@ -282,21 +279,10 @@ class _ProblemLine extends StatelessWidget {
   final BughouseLab lab;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: labStatusHeight,
-    child: Align(
-      alignment: Alignment.centerLeft,
-      child: Text(
-        switch (lab.problem) {
-          final problem? => _refused(problem),
-          null => '',
-        },
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: Theme.of(context).colorScheme.error),
-      ),
-    ),
-  );
+  Widget build(BuildContext context) => ProblemLine(switch (lab.problem) {
+    final problem? => _refused(problem),
+    null => null,
+  });
 
   static String _refused(TableRefusal refusal) => switch (refusal) {
     DropRefused() => 'That drop is not legal.',

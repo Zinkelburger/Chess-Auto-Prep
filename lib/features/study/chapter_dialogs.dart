@@ -5,6 +5,7 @@ import '../../chess/pgn/study.dart';
 import '../../chess/pgn/study_cleanup.dart';
 import '../../ui/theme.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/problem_line.dart';
 
 /// The chapter's tags to edit, the game's own first: who played, the
 /// result, when and where, ready to fill in from a scoresheet. A tag left
@@ -102,11 +103,7 @@ class _TagsState extends State<_Tags> {
               icon: const Icon(AppIcons.add, size: IconSize.action),
               label: const Text('Add tag'),
             ),
-            if (_problem case final message?)
-              Text(
-                message,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
+            if (_problem case final message?) ProblemLine(message),
           ],
         ),
       ),

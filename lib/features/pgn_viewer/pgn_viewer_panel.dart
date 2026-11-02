@@ -17,6 +17,7 @@ import '../../workspace/explorer/file_filter.dart';
 import 'pgn_viewer.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/list_message.dart';
+import '../../ui/list_row.dart';
 import '../../ui/app_icons.dart';
 
 /// Opens a PGN file in the workspace with its first game on the board.
@@ -280,7 +281,9 @@ class _PgnViewerPanelState extends State<PgnViewerPanel>
   /// Why the list is empty, and the way back to every game when a filter
   /// emptied it.
   Widget _nothingShown() {
-    if (widget.filter.busy) return const ListMessage('Filtering games…');
+    if (widget.filter.busy) {
+      return const ListMessage.loading('Filtering games…');
+    }
     if (widget.filter.problem case final problem?) return ListMessage(problem);
     if (_viewer.games.isEmpty) {
       return const ListMessage('No games in this file.');
@@ -400,48 +403,46 @@ class _ChapterRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Material(
-      color: count == null && holdsCurrent
-          ? theme.colorScheme.surfaceContainerHighest
-          : null,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(Space.xs, 0, Space.m, 0),
-          child: Row(
-            children: [
-              SizedBox(
-                width: IconSize.action + Space.xs,
-                child: switch (unfolded) {
-                  null => null,
-                  final open => Icon(
-                    open ? AppIcons.expanded : AppIcons.collapsed,
-                    size: IconSize.action,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                },
+    return ListRow(
+      selected: count == null && holdsCurrent,
+      onTap: onTap,
+      padding: const EdgeInsets.fromLTRB(Space.xs, 0, Space.m, 0),
+      child: Row(
+        children: [
+          SizedBox(
+            width: IconSize.action + Space.xs,
+            child: switch (unfolded) {
+              null => null,
+              final open => Icon(
+                open ? AppIcons.expanded : AppIcons.collapsed,
+                size: IconSize.action,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-              Expanded(
-                child: Text(
-                  title,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontWeight: holdsCurrent ? FontWeight.w600 : null,
-                    color: holdsCurrent ? theme.colorScheme.primary : null,
-                  ),
-                ),
-              ),
-              if (count case final games?)
-                Padding(
-                  padding: const EdgeInsets.only(left: Space.s),
-                  child: Text(
-                    games == 1 ? '1 game' : '$games games',
-                    style: theme.textTheme.labelSmall,
-                  ),
-                ),
-            ],
+            },
           ),
-        ),
+          Expanded(
+            child: Text(
+              title,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontWeight: holdsCurrent ? FontWeight.w600 : null,
+                // A folded chapter holding the game says so; an open
+                // one-game chapter is the selected row.
+                color: holdsCurrent && count != null
+                    ? theme.colorScheme.primary
+                    : null,
+              ),
+            ),
+          ),
+          if (count case final games?)
+            Padding(
+              padding: const EdgeInsets.only(left: Space.s),
+              child: Text(
+                games == 1 ? '1 game' : '$games games',
+                style: theme.textTheme.labelSmall,
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -525,50 +526,43 @@ class _GameRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Material(
-      color: open ? theme.colorScheme.surfaceContainerHighest : null,
-      child: InkWell(
-        onTap: onOpen,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            indented ? Space.m + IconSize.action : Space.m,
-            0,
-            Space.m,
-            0,
+    return ListRow(
+      selected: open,
+      onTap: onOpen,
+      padding: EdgeInsets.fromLTRB(
+        indented ? Space.m + IconSize.action : Space.m,
+        0,
+        Space.m,
+        0,
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: gameOrdinalWidth,
+            child: Tooltip(
+              message: 'Game ${index + 1} in file',
+              child: Text('${ordinal + 1}', style: theme.textTheme.labelSmall),
+            ),
           ),
-          child: Row(
-            children: [
-              SizedBox(
-                width: gameOrdinalWidth,
-                child: Tooltip(
-                  message: 'Game ${index + 1} in file',
-                  child: Text(
-                    '${ordinal + 1}',
-                    style: theme.textTheme.labelSmall,
-                  ),
-                ),
+          if (followed case (:final side, opponent: _)) ...[
+            _SideMark(side),
+            const SizedBox(width: Space.s),
+          ],
+          Expanded(
+            child: Tooltip(
+              message: game.title,
+              child: Text(
+                followed?.opponent ?? game.title,
+                overflow: TextOverflow.ellipsis,
               ),
-              if (followed case (:final side, opponent: _)) ...[
-                _SideMark(side),
-                const SizedBox(width: Space.s),
-              ],
-              Expanded(
-                child: Tooltip(
-                  message: game.title,
-                  child: Text(
-                    followed?.opponent ?? game.title,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              if (game.result.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(left: Space.s),
-                  child: Text(game.result, style: theme.textTheme.labelSmall),
-                ),
-            ],
+            ),
           ),
-        ),
+          if (game.result.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: Space.s),
+              child: Text(game.result, style: theme.textTheme.labelSmall),
+            ),
+        ],
       ),
     );
   }
@@ -619,24 +613,20 @@ class _RecentRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    return InkWell(
+    return ListRow(
       onTap: onOpen,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: Space.m,
-          vertical: Space.xs,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(p.basename(path), overflow: TextOverflow.ellipsis),
-            Text(
-              folderShown,
-              style: text.labelSmall,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
+      height: twoLineRowHeight,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(p.basename(path), overflow: TextOverflow.ellipsis),
+          Text(
+            folderShown,
+            style: text.labelSmall,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }

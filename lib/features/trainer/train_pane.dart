@@ -131,7 +131,7 @@ class _TrainPaneState extends State<TrainPane> {
       );
     }
     return switch (trainer.state) {
-      TrainerIdle() || TrainerLoading() => const ListMessage(
+      TrainerIdle() || TrainerLoading() => const ListMessage.loading(
         'Reading training progress…',
         inset: Space.m,
       ),

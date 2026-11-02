@@ -14,6 +14,7 @@ class RowActions extends StatelessWidget {
     super.key,
     required this.children,
     this.tooltip = 'Actions',
+    this.controller,
   });
 
   /// The menu's items, usually `MenuItemButton`s.
@@ -23,9 +24,13 @@ class RowActions extends StatelessWidget {
   /// things on the panel.
   final String tooltip;
 
+  /// Opens the menu from elsewhere: a right click on the row it ends.
+  final MenuController? controller;
+
   @override
   Widget build(BuildContext context) {
     return MenuAnchor(
+      controller: controller,
       menuChildren: children,
       builder: (context, controller, _) => IconButton(
         icon: const Icon(AppIcons.more, size: IconSize.action),

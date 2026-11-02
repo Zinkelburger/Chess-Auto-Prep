@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import '../../storage/backup_history.dart';
 import '../../storage/backups.dart';
 import '../../storage/chapter_files.dart';
+import '../../ui/list_message.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/progress_line.dart';
 
 /// Pick and inspect exact archived PGN before restoring it as a separate copy.
 Future<String?> showBackupHistory(
@@ -110,19 +113,15 @@ class _HistoryState extends State<_History> {
           const Text(
             'Restore a version as a new repertoire to inspect its chapters and lines.',
           ),
-          if (_busy) const LinearProgressIndicator(),
-          if (_problem != null)
-            Text(
-              _problem!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
+          ProgressLine(active: _busy),
+          if (_problem != null) ProblemLine(_problem),
           Expanded(
             child: Row(
               children: [
                 SizedBox(
                   width: 210,
                   child: _versions.isEmpty
-                      ? const Center(child: Text('No earlier versions.'))
+                      ? const ListMessage('No earlier versions.', inset: 0)
                       : ListView.builder(
                           itemCount: _versions.length,
                           itemBuilder: (_, index) {

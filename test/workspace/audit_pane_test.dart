@@ -127,8 +127,7 @@ void main() {
     await pump(tester);
     await runAudit(tester);
     const warning =
-        'Dismissals could not be saved; they last only until you audit '
-        'again.';
+        'Could not save the dismissals; they last until you audit again.';
     expect(find.text(warning), findsNothing);
     await tester.tap(find.byTooltip('Hide this finding').last);
     await tester.pump();

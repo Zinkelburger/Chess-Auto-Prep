@@ -6,6 +6,8 @@ import '../../chess/pgn/chapter.dart';
 import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
 import 'study_sender.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/progress_line.dart';
 
 /// Asks where on Lichess the open study goes, sends it, and says what
 /// Lichess now holds. One question: a new study, or one already there.
@@ -211,7 +213,7 @@ class _Outcome extends StatelessWidget {
         Sending(:final done, :final total) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            LinearProgressIndicator(value: total == 0 ? null : done / total),
+            ProgressLine(value: total == 0 ? null : done / total),
             const SizedBox(height: Space.s),
             Text('Sending chapter ${done + 1} of $total…'),
           ],
@@ -246,16 +248,14 @@ class _Outcome extends StatelessWidget {
               ),
             ],
           ),
-        SendFailed(:final sentence, :final login) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(sentence, style: TextStyle(color: theme.colorScheme.error)),
-            if (login && onLogIn != null)
-              TextButton(
-                onPressed: onLogIn,
-                child: const Text('Log in to Lichess…'),
-              ),
-          ],
+        SendFailed(:final sentence, :final login) => ProblemLine(
+          sentence,
+          action: login && onLogIn != null
+              ? TextButton(
+                  onPressed: onLogIn,
+                  child: const Text('Log in to Lichess…'),
+                )
+              : null,
         ),
       },
     );

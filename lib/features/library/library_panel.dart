@@ -102,7 +102,12 @@ class _LibraryPanelState extends State<LibraryPanel> {
         children: [
           _Toolbar(
             busy: widget.library.busy,
-            onCreate: _newRepertoire,
+            // The empty list has its own button; one is enough.
+            onCreate: switch (widget.library.state) {
+              LibraryLoaded() when widget.library.repertoires.isNotEmpty =>
+                _newRepertoire,
+              _ => null,
+            },
             search: _search,
             onSearch: widget.library.search,
             trailing: widget.trailing,
@@ -117,9 +122,9 @@ class _LibraryPanelState extends State<LibraryPanel> {
   Widget _body(BuildContext context) {
     final library = widget.library;
     return switch (library.state) {
-      LibraryLoading() => const Center(child: CircularProgressIndicator()),
+      LibraryLoading() => const ListMessage.loading('Reading repertoires…'),
       LibraryLoadFailed() => ListMessage(
-        'Could not load repertoires. Please try again.',
+        'Could not read your repertoires.',
         action: OutlinedButton(
           onPressed: library.refresh,
           child: const Text('Try again'),
@@ -142,19 +147,12 @@ class _LibraryPanelState extends State<LibraryPanel> {
 
   Widget _listed(Library library) {
     if (library.repertoires.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(Space.l),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('No repertoires yet.'),
-            const SizedBox(height: Space.m),
-            FilledButton.icon(
-              onPressed: library.busy ? null : _newRepertoire,
-              icon: const Icon(AppIcons.add, size: IconSize.action),
-              label: const Text('New repertoire…'),
-            ),
-          ],
+      return ListMessage(
+        'No repertoires yet.',
+        action: FilledButton.icon(
+          onPressed: library.busy ? null : _newRepertoire,
+          icon: const Icon(AppIcons.add, size: IconSize.action),
+          label: const Text('New repertoire…'),
         ),
       );
     }
@@ -190,7 +188,9 @@ class _Toolbar extends StatelessWidget {
   });
 
   final bool busy;
-  final VoidCallback onCreate;
+
+  /// Null while the list is empty or not read: the header's + then waits.
+  final VoidCallback? onCreate;
   final TextEditingController search;
   final ValueChanged<String> onSearch;
   final Widget? trailing;
@@ -217,12 +217,13 @@ class _Toolbar extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: Space.xs),
-                    IconButton(
-                      icon: const Icon(AppIcons.add, size: IconSize.action),
-                      tooltip: 'New repertoire…',
-                      onPressed: busy ? null : onCreate,
-                      visualDensity: VisualDensity.compact,
-                    ),
+                    if (onCreate case final create?)
+                      IconButton(
+                        icon: const Icon(AppIcons.add, size: IconSize.action),
+                        tooltip: 'New repertoire…',
+                        onPressed: busy ? null : create,
+                        visualDensity: VisualDensity.compact,
+                      ),
                   ],
                 ),
               ),

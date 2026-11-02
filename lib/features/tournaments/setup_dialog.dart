@@ -12,6 +12,7 @@ import '../../ui/number_field.dart';
 import '../../ui/theme.dart';
 import '../../workspace/board/board_editor.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/problem_line.dart';
 
 Future<TournamentConfig?> tournamentSetup(
   BuildContext context, {
@@ -119,11 +120,7 @@ class _SetupState extends State<_Setup> {
               title: const Text('Adjudication'),
               children: _adjudication(),
             ),
-            if (_problem != null)
-              Text(
-                _problem!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
+            if (_problem != null) ProblemLine(_problem),
           ],
         ),
       ),

@@ -5,6 +5,7 @@ import '../../ui/theme.dart';
 import '../../chess/players/player.dart';
 import 'players.dart';
 import 'saved_games.dart';
+import '../../ui/problem_line.dart';
 
 /// What removing a person from the directory takes with it.
 enum Removal { keepGames, withGames }
@@ -237,11 +238,7 @@ class _PlayerDialogState extends State<_PlayerDialog> {
                   ],
                 ),
               ],
-              if (_error != null)
-                Text(
-                  _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
+              if (_error != null) ProblemLine(_error),
             ],
           ),
         ),
@@ -357,11 +354,7 @@ class _ImportDialogState extends State<_ImportDialog> {
             },
           ),
           const SizedBox(height: Space.m),
-          if (_error != null)
-            Text(
-              _error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
+          if (_error != null) ProblemLine(_error),
           if (_preview case final preview?) ...[
             Align(
               alignment: Alignment.centerLeft,
@@ -375,7 +368,7 @@ class _ImportDialogState extends State<_ImportDialog> {
             Expanded(
               child: ListView.builder(
                 itemCount: preview.length,
-                itemExtent: puzzleRowHeight,
+                itemExtent: twoLineRowHeight,
                 itemBuilder: (context, i) => _previewRow(preview[i]),
               ),
             ),

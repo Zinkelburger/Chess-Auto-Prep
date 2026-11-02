@@ -14,6 +14,9 @@ import 'player_dialogs.dart';
 import 'players.dart';
 import 'saved_games.dart';
 import '../../ui/list_message.dart';
+import '../../ui/list_row.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/progress_line.dart';
 import '../../ui/app_icons.dart';
 
 /// The Players & prep page: everyone the user prepares for, or the groups
@@ -320,9 +323,9 @@ class _PlayersScreenState extends State<PlayersScreen> {
     if (groups.isEmpty) {
       return ListMessage(
         owner.query.isNotEmpty
-            ? 'No groups match this search.'
-            : 'No groups yet. A group collects the players of an event, with '
-                  'a prep sheet and a study for the whole field.',
+            ? 'Nothing matches "${owner.query}".'
+            : 'No groups yet; a group holds an event’s players, its prep '
+                  'sheet and a study.',
       );
     }
     return ListView.separated(
@@ -358,12 +361,10 @@ class _PlayersScreenState extends State<PlayersScreen> {
     if (players.isEmpty) {
       return ListMessage(
         owner.query.isNotEmpty
-            ? 'No players match this search.'
+            ? 'Nothing matches "${owner.query}".'
             : owner.group == null
-            ? 'No players yet. Add a player with an online account, or paste '
-                  'a player list.'
-            : 'Nobody in this group yet. Add players from your directory, or '
-                  'paste the event’s player list.',
+            ? 'No players yet.'
+            : 'Nobody in this group yet.',
       );
     }
     return ListView.separated(
@@ -416,51 +417,40 @@ class _GroupRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    return InkWell(
+    return ListRow(
       onTap: onOpen,
-      child: SizedBox(
-        height: puzzleRowHeight,
-        child: Row(
-          children: [
-            const SizedBox(width: Space.m),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    group.name,
-                    style: text.bodyMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    groupLine(group),
-                    style: text.labelSmall,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            RowActions(
-              tooltip: 'Group actions',
-              children: [
-                MenuItemButton(
-                  onPressed: busy ? null : onEdit,
-                  leadingIcon: const Icon(AppIcons.edit, size: IconSize.menu),
-                  child: const Text('Edit group…'),
-                ),
-                MenuItemButton(
-                  onPressed: busy ? null : onRemove,
-                  leadingIcon: const Icon(AppIcons.remove, size: IconSize.menu),
-                  child: const Text('Remove group…'),
-                ),
-              ],
-            ),
-            const SizedBox(width: Space.s),
-          ],
+      height: twoLineRowHeight,
+      padding: const EdgeInsets.only(left: Space.m, right: Space.s),
+      menuTooltip: 'Group actions',
+      menu: [
+        MenuItemButton(
+          onPressed: busy ? null : onEdit,
+          leadingIcon: const Icon(AppIcons.edit, size: IconSize.menu),
+          child: const Text('Edit group…'),
         ),
+        MenuItemButton(
+          onPressed: busy ? null : onRemove,
+          leadingIcon: const Icon(AppIcons.remove, size: IconSize.menu),
+          child: const Text('Remove group…'),
+        ),
+      ],
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            group.name,
+            style: text.bodyMedium,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            groupLine(group),
+            style: text.labelSmall,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
@@ -478,18 +468,12 @@ class _Notices extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final wrong = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.error,
-    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(vertical: Space.s),
-          child: SizedBox(
-            height: progressLineHeight,
-            child: players.busy ? const LinearProgressIndicator() : null,
-          ),
+          child: ProgressLine(active: players.busy),
         ),
         if (players.lookupStatus case final status?)
           Row(
@@ -502,28 +486,29 @@ class _Notices extends StatelessWidget {
                 ),
             ],
           ),
-        for (final warning in players.warnings) Text(warning, style: wrong),
+        for (final warning in players.warnings) ProblemLine(warning),
         if (players.error case final error?)
-          Wrap(
-            spacing: Space.s,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(error, style: wrong),
-              if (players.needsRetry) ...[
-                OutlinedButton(
-                  onPressed: players.busy ? null : players.retry,
-                  child: const Text('Retry save'),
-                ),
-                TextButton(
-                  onPressed: players.busy ? null : players.discardFailed,
-                  child: const Text('Discard failed edit and reload'),
-                ),
-              ] else
-                OutlinedButton(
-                  onPressed: players.load,
-                  child: const Text('Try again'),
-                ),
-            ],
+          ProblemLine(
+            error,
+            action: players.needsRetry
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      OutlinedButton(
+                        onPressed: players.busy ? null : players.retry,
+                        child: const Text('Retry save'),
+                      ),
+                      const SizedBox(width: Space.s),
+                      TextButton(
+                        onPressed: players.busy ? null : players.discardFailed,
+                        child: const Text('Discard failed edit and reload'),
+                      ),
+                    ],
+                  )
+                : OutlinedButton(
+                    onPressed: players.load,
+                    child: const Text('Try again'),
+                  ),
           ),
       ],
     );

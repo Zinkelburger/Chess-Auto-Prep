@@ -9,7 +9,9 @@ import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/tree_edit.dart' show positionOf;
 import '../../storage/finds_store.dart';
 import '../../ui/choice_field.dart';
-import '../../ui/row_actions.dart';
+import '../../ui/list_message.dart';
+import '../../ui/list_row.dart';
+import '../../ui/problem_line.dart';
 import '../../ui/theme.dart';
 import '../../ui/toggle_chip.dart';
 import '../document/document_session.dart';
@@ -168,9 +170,15 @@ class _FindsPanelState extends State<FindsPanel> {
             _Kinds(finds: finds),
             _CountLine(finds: finds),
             if (finds.canRetry)
-              OutlinedButton(
-                onPressed: () => unawaited(finds.retry()),
-                child: const Text('Retry save'),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Space.m),
+                child: ProblemLine(
+                  'Could not save the positions.',
+                  action: OutlinedButton(
+                    onPressed: () => unawaited(finds.retry()),
+                    child: const Text('Retry save'),
+                  ),
+                ),
               ),
             Expanded(child: _list(context, finds)),
           ],
@@ -182,22 +190,17 @@ class _FindsPanelState extends State<FindsPanel> {
   Widget _list(BuildContext context, Finds finds) {
     final shown = finds.shown;
     if (shown.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(Space.l),
-        child: Text(
-          finds.all.isEmpty
-              ? 'Nothing found yet. Run a search from the Expectimax tab; '
-                    'what it points out is listed here.'
-              : finds.narrowed
-              ? 'None in this chapter.'
-              : 'None of these kinds.',
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
+      return ListMessage(
+        finds.all.isEmpty
+            ? 'What a search from the Expectimax tab finds is listed here.'
+            : finds.narrowed
+            ? 'None in this chapter.'
+            : 'None of these kinds.',
       );
     }
     return ListView.builder(
       itemCount: shown.length,
-      itemExtent: trainRowHeight,
+      itemExtent: twoLineRowHeight,
       itemBuilder: (context, at) {
         final kept = shown[at];
         return _FindRow(
@@ -380,58 +383,43 @@ class _FindRow extends StatelessWidget {
     return MouseRegion(
       onEnter: (_) => onHover(_anchor(context)),
       onExit: (_) => onLeave(),
-      child: Material(
-        color: open ? scheme.secondaryContainer : Colors.transparent,
-        child: InkWell(
-          onTap: onOpen,
-          child: Padding(
-            padding: const EdgeInsets.only(left: Space.m, right: Space.xs),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text.rich(
-                        TextSpan(
-                          children: [
-                            TextSpan(
-                              text: displaySan(context, keyMoveText(kept)),
-                              style: monoText.copyWith(color: scheme.onSurface),
-                            ),
-                            TextSpan(text: '  ${kindName(find.kind)}'),
-                          ],
-                        ),
-                        style: theme.textTheme.bodyMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        findNumbers(kept),
-                        style: theme.textTheme.labelSmall,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                RowActions(
-                  children: [
-                    if (onTrain case final train?)
-                      MenuItemButton(
-                        onPressed: train,
-                        child: const Text('Train this line'),
-                      ),
-                    MenuItemButton(
-                      onPressed: onRemove,
-                      child: const Text('Remove'),
-                    ),
-                  ],
-                ),
-              ],
+      child: ListRow(
+        selected: open,
+        onTap: onOpen,
+        height: null,
+        menu: [
+          if (onTrain case final train?)
+            MenuItemButton(
+              onPressed: train,
+              child: const Text('Train this line'),
             ),
-          ),
+          MenuItemButton(onPressed: onRemove, child: const Text('Remove')),
+        ],
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: displaySan(context, keyMoveText(kept)),
+                    style: monoText.copyWith(color: scheme.onSurface),
+                  ),
+                  TextSpan(text: '  ${kindName(find.kind)}'),
+                ],
+              ),
+              style: theme.textTheme.bodyMedium,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              findNumbers(kept),
+              style: theme.textTheme.labelSmall,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
       ),
     );

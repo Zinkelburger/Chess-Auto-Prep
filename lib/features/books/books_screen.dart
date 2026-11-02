@@ -7,6 +7,9 @@ import '../../storage/chapter_files.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/status_bar.dart';
 import '../../ui/name_dialog.dart';
+import '../../ui/list_message.dart';
+import '../../ui/list_row.dart';
+import '../../ui/problem_line.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
@@ -51,7 +54,7 @@ class BooksScreen extends StatelessWidget {
           const VerticalDivider(width: 1),
           Expanded(
             child: editing == null
-                ? _NoBooks(books: books)
+                ? const SizedBox.shrink()
                 : _BookEditor(
                     key: ValueKey(editing.id),
                     books: books,
@@ -154,25 +157,33 @@ class _BookList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final active = books.active;
+    final empty = books.books.isEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.s, 0),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text('Opening books', style: theme.textTheme.titleSmall),
-              ),
-              IconButton(
-                onPressed: books.changingReferences
-                    ? null
-                    : () => unawaited(newBook(context, books)),
-                icon: const Icon(AppIcons.add, size: IconSize.action),
-                tooltip: 'New opening book…',
-              ),
-            ],
+          child: SizedBox(
+            height: listRowHeight,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Opening books',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
+                // The empty list has its own button; one is enough.
+                if (!empty)
+                  IconButton(
+                    onPressed: books.changingReferences
+                        ? null
+                        : () => unawaited(newBook(context, books)),
+                    icon: const Icon(AppIcons.add, size: IconSize.action),
+                    tooltip: 'New opening book…',
+                  ),
+              ],
+            ),
           ),
         ),
         if (books.changingReferences)
@@ -185,67 +196,61 @@ class _BookList extends StatelessWidget {
           ),
         if (books.problem case final problem?)
           Padding(
-            padding: const EdgeInsets.all(Space.m),
-            child: Text(
+            padding: const EdgeInsets.symmetric(horizontal: Space.m),
+            child: ProblemLine(
               problem,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.error,
-              ),
+              action: books.canRetry
+                  ? OutlinedButton(
+                      onPressed: books.changingReferences
+                          ? null
+                          : () => unawaited(books.retry()),
+                      child: const Text('Retry save'),
+                    )
+                  : null,
             ),
           ),
-        if (books.canRetry && books.problem != null)
-          OutlinedButton(
-            onPressed: books.changingReferences
-                ? null
-                : () => unawaited(books.retry()),
-            child: const Text('Retry save'),
-          ),
-        Expanded(
-          child: ListView(
-            children: [
-              for (final book in books.books)
-                ListTile(
-                  key: ValueKey(book.id),
-                  dense: true,
-                  selected: book.id == editing?.id,
-                  title: Text(book.name, overflow: TextOverflow.ellipsis),
-                  subtitle: book.id == active?.id ? const Text('In use') : null,
-                  onTap: () => books.edit(book),
-                ),
-            ],
-          ),
-        ),
+        Expanded(child: _list(context)),
       ],
     );
   }
-}
 
-/// Where the editor would be before there is any book.
-class _NoBooks extends StatelessWidget {
-  const _NoBooks({required this.books});
-
-  final Books books;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'No opening books yet.',
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
-        const SizedBox(height: Space.m),
-        FilledButton.icon(
-          onPressed: books.loaded && !books.changingReferences
-              ? () => unawaited(newBook(context, books))
-              : null,
+  /// The books, or the one sentence and button in their place.
+  Widget _list(BuildContext context) {
+    if (!books.loaded) {
+      return const ListMessage.loading('Reading opening books…');
+    }
+    if (books.books.isEmpty) {
+      return ListMessage(
+        'No opening books yet.',
+        action: FilledButton.icon(
+          onPressed: books.changingReferences
+              ? null
+              : () => unawaited(newBook(context, books)),
           icon: const Icon(AppIcons.add, size: IconSize.action),
           label: const Text('New opening book…'),
         ),
+      );
+    }
+    final inUse = Theme.of(context).textTheme.labelSmall;
+    return ListView(
+      children: [
+        for (final book in books.books)
+          ListRow(
+            key: ValueKey(book.id),
+            selected: book.id == editing?.id,
+            onTap: () => books.edit(book),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(book.name, overflow: TextOverflow.ellipsis),
+                ),
+                if (book.id == books.active?.id) Text('In use', style: inUse),
+              ],
+            ),
+          ),
       ],
-    ),
-  );
+    );
+  }
 }
 
 /// One book: its name, whether it is in use, and every repertoire with a
@@ -494,40 +499,37 @@ class _FolderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return InkWell(
+    return ListRow(
       onTap: onToggle,
-      child: SizedBox(
-        height: bookRowHeight,
-        child: Row(
-          children: [
-            const SizedBox(width: Space.s),
-            Checkbox(
-              tristate: true,
-              value: switch (share) {
-                BookShare.all => true,
-                BookShare.some => null,
-                BookShare.none => false,
-              },
-              // A part-ticked box ticks the rest.
-              onChanged: onTick == null
-                  ? null
-                  : (_) => onTick!(share != BookShare.all),
+      height: bookRowHeight,
+      padding: const EdgeInsets.only(left: Space.s, right: Space.l),
+      child: Row(
+        children: [
+          Checkbox(
+            tristate: true,
+            value: switch (share) {
+              BookShare.all => true,
+              BookShare.some => null,
+              BookShare.none => false,
+            },
+            // A part-ticked box ticks the rest.
+            onChanged: onTick == null
+                ? null
+                : (_) => onTick!(share != BookShare.all),
+          ),
+          Icon(
+            open ? AppIcons.expanded : AppIcons.collapsed,
+            size: IconSize.menu,
+          ),
+          const SizedBox(width: Space.xs),
+          Expanded(child: Text(folder.name, overflow: TextOverflow.ellipsis)),
+          Text(
+            '$chapters of $of',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-            Icon(
-              open ? AppIcons.expanded : AppIcons.collapsed,
-              size: IconSize.menu,
-            ),
-            const SizedBox(width: Space.xs),
-            Expanded(child: Text(folder.name, overflow: TextOverflow.ellipsis)),
-            Text(
-              '$chapters of $of',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(width: Space.l),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -548,31 +550,29 @@ class _ChapterRow extends StatelessWidget {
   final VoidCallback onOpen;
 
   @override
-  Widget build(BuildContext context) => InkWell(
+  Widget build(BuildContext context) => ListRow(
     onTap: onTick == null ? null : () => onTick!(!inBook),
-    child: SizedBox(
-      height: bookRowHeight,
-      child: Row(
-        children: [
-          const SizedBox(width: Space.s + bookChapterIndent),
-          Checkbox(
-            value: inBook,
-            onChanged: onTick == null
-                ? null
-                : (value) => onTick!(value ?? false),
-          ),
-          const SizedBox(width: Space.xs),
-          Expanded(child: Text(chapter.name, overflow: TextOverflow.ellipsis)),
-          IconButton(
-            tooltip: 'Open in builder',
-            iconSize: IconSize.menu,
-            visualDensity: VisualDensity.compact,
-            onPressed: onOpen,
-            icon: const Icon(AppIcons.openElsewhere),
-          ),
-          const SizedBox(width: Space.s),
-        ],
-      ),
+    height: bookRowHeight,
+    padding: const EdgeInsets.only(
+      left: Space.s + bookChapterIndent,
+      right: Space.s,
+    ),
+    child: Row(
+      children: [
+        Checkbox(
+          value: inBook,
+          onChanged: onTick == null ? null : (value) => onTick!(value ?? false),
+        ),
+        const SizedBox(width: Space.xs),
+        Expanded(child: Text(chapter.name, overflow: TextOverflow.ellipsis)),
+        IconButton(
+          tooltip: 'Open in builder',
+          iconSize: IconSize.menu,
+          visualDensity: VisualDensity.compact,
+          onPressed: onOpen,
+          icon: const Icon(AppIcons.openElsewhere),
+        ),
+      ],
     ),
   );
 }

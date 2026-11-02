@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../chess/tactics/puzzle.dart';
 import '../../chess/tactics/puzzle_run.dart';
 import '../../ui/check_row.dart';
+import '../../ui/list_message.dart';
 import '../../ui/theme.dart';
 import 'puzzle_state.dart';
 import 'puzzle_trainer.dart';
@@ -71,27 +72,26 @@ class _Idle extends StatelessWidget {
   final PuzzleTrainer trainer;
   final int available;
 
+  /// One quiet line, no heading: the list column already says how to get
+  /// puzzles, so with none to play there is nothing to add here.
   @override
   Widget build(BuildContext context) {
-    final parked = trainer.run != null;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          parked ? 'Session paused' : 'Practice your mistakes',
-          style: Theme.of(context).textTheme.titleMedium,
+    if (trainer.run != null) {
+      return ListMessage(
+        'Session paused; your results are kept.',
+        inset: 0,
+        action: TextButton(
+          onPressed: trainer.end,
+          child: const Text('End session'),
         ),
-        const SizedBox(height: Space.s),
-        Text(
-          parked
-              ? 'Your results are kept. Resume from the list or select a puzzle.'
-              : available > 0
-              ? '$available puzzles ready. Choose Play in the list, then find the best move on the board.'
-              : 'Get your games in the left panel to create puzzles, or adjust the filters if you already have some.',
-        ),
-        if (parked)
-          TextButton(onPressed: trainer.end, child: const Text('End session')),
-      ],
+      );
+    }
+    if (available == 0) return const SizedBox.shrink();
+    return ListMessage(
+      available == 1
+          ? '1 puzzle ready to play.'
+          : '$available puzzles ready to play.',
+      inset: 0,
     );
   }
 }

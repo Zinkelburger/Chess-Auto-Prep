@@ -78,7 +78,10 @@ void main() {
     await tester.tap(find.widgetWithText(MenuItemButton, 'Positions'));
     await tester.pumpAndSettle();
     expect(find.byType(FindsPanel), findsOneWidget);
-    expect(find.textContaining('Nothing found yet'), findsOneWidget);
+    expect(
+      find.textContaining('What a search from the Expectimax tab finds'),
+      findsOneWidget,
+    );
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(SubmenuButton, 'Panels'));

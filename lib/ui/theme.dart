@@ -129,10 +129,21 @@ const proseMaxWidth = 640.0;
 /// tokens, little enough that a line still reads as a line.
 const moveTokenPadding = EdgeInsets.symmetric(horizontal: 4, vertical: 1);
 
-/// The corners of a move's tint, under the pointer or for the move shown,
-/// and how strong the pointer's tint is.
+/// The corners of a move's tint, under the pointer or for the move shown.
 const moveTokenRadius = BorderRadius.all(Radius.circular(3));
-const moveHoverAlpha = 0.1;
+
+/// The accent seen through, in three strengths: under the pointer (a move
+/// hovered, a row dragged lines would land on, a focused tab), one of
+/// several picked (lines picked with Ctrl or Shift, a switch that is on)
+/// and the move at the cursor. A selected row is not tinted: it is filled in
+/// Selection Grey ([ColorScheme.secondaryContainer]).
+final hoverTint = _accent.withValues(alpha: 0.1);
+final selectedTint = _accent.withValues(alpha: 0.25);
+final cursorTint = _accent.withValues(alpha: 0.35);
+
+/// The border of the pane the keys go to when there are several: a
+/// brighter grey than the others', not a colour.
+final activePaneBorder = _muted.withValues(alpha: 0.55);
 
 /// The reading column is a card: its corners, and the room between its
 /// edge and the words.
@@ -270,12 +281,10 @@ const engineArrowWidth = 15.0;
 const engineArrowCutoff = 0.2;
 
 /// The board editor: its board, the column of controls beside it, the
-/// width of a side's name before its castling boxes, and the line held
-/// under the FEN for why the position cannot be played.
+/// and the width of a side's name before its castling boxes.
 const editorBoardSize = 320.0;
 const editorControlsWidth = 280.0;
 const editorSideLabelWidth = 48.0;
-const editorProblemHeight = 24.0;
 
 /// The small board beside a FEN field that shows the position it holds.
 const setupPreviewSize = 120.0;
@@ -510,6 +519,12 @@ ThemeData darkTheme() {
       ),
     ),
     popupMenuTheme: _popupMenu(_sized(base.textTheme)),
+    // A selected tile is filled in Selection Grey, its words in ink: the
+    // same as every other selected row, not words in the accent.
+    listTileTheme: const ListTileThemeData(
+      selectedTileColor: _selection,
+      selectedColor: _text,
+    ),
     menuButtonTheme: MenuButtonThemeData(
       style: ButtonStyle(
         minimumSize: const WidgetStatePropertyAll(
@@ -613,12 +628,15 @@ const settingChoiceWidth = 240.0;
 /// file. Small enough that a long list is one screen, tall enough to hit.
 const listRowHeight = 34.0;
 
+/// A row of two lines: a name over what is known of it.
+const twoLineRowHeight = 44.0;
+
 /// A row of the trainer's lists: a name over a line of moves.
-const trainRowHeight = 44.0;
+const trainRowHeight = twoLineRowHeight;
 
 /// A row of the puzzle list: the move and its result on one line, the
 /// opponent and the date under it.
-const puzzleRowHeight = 44.0;
+const puzzleRowHeight = twoLineRowHeight;
 
 /// The box the Tactics filters take a number of days in.
 const dayCountWidth = 44.0;
@@ -714,18 +732,13 @@ const labHandStepInk = Color(0xFFFFFFFF);
 const labTableRowHeight = 28.0;
 const labScoreWidth = 60.0;
 
-/// The engine's score beside its switch, in mono at the title size, and
-/// the thin bar under the switch while a deeper search runs.
+/// The engine's score beside its switch, in mono at the title size.
 const labPearlWidth = 72.0;
 const labPearlText = TextStyle(
   fontFamily: 'SourceCodePro',
   fontSize: 18,
   fontWeight: FontWeight.w600,
 );
-const labThinkingHeight = 2.0;
-
-/// The line that says why a move, a step or a paste was refused.
-const labStatusHeight = 30.0;
 
 /// The turn dot of the seat to move: White's plain white, Black's black in
 /// a grey ring so it shows on the dark panel. A fact, not decoration.
@@ -798,6 +811,10 @@ const fieldControlWidth = 144.0;
 /// The bar that says a download or an engine pass is running: a line, not
 /// a stripe.
 const progressLineHeight = 2.0;
+
+/// The line that says what could not be done: two lines of small text, so
+/// a long reason is cut rather than pushing what is under it down.
+const problemLineHeight = 36.0;
 
 /// The mark on the move a puzzle is about, in the review's colours: the
 /// same blue, amber and red the game review draws them in.

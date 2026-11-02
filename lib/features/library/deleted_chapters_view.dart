@@ -98,16 +98,16 @@ class _DeletedChaptersViewState extends State<DeletedChaptersView> {
   }
 
   Widget _body(BuildContext context) => switch (_listing) {
-    null => const Center(child: CircularProgressIndicator()),
+    null => const ListMessage.loading('Reading deleted chapters…'),
     DeletedUnreadable() => ListMessage(
-      'Could not read the deleted chapters. Please try again.',
+      'Could not read the deleted chapters.',
       action: OutlinedButton(
         onPressed: _reload,
         child: const Text('Try again'),
       ),
     ),
     DeletedChapters(:final chapters) when chapters.isEmpty => const ListMessage(
-      'Nothing deleted\nChapters you delete can be restored here.',
+      'Chapters you delete can be restored here.',
     ),
     DeletedChapters(:final chapters) => ListView(
       children: [

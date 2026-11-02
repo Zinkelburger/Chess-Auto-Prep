@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../storage/chapter_files.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/search_field.dart';
+import '../../ui/list_message.dart';
 import '../../ui/theme.dart';
 import 'study_choice.dart';
 import '../../ui/app_icons.dart';
@@ -121,14 +122,11 @@ class _StudyPickerState extends State<_StudyPicker> {
             ),
             Expanded(
               child: matches.isEmpty
-                  ? Padding(
-                      padding: const EdgeInsets.all(Space.m),
-                      child: Text(
-                        widget.studies.isEmpty
-                            ? 'No studies yet'
-                            : 'Nothing matches "$_query".',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
+                  ? ListMessage(
+                      widget.studies.isEmpty
+                          ? 'No studies yet.'
+                          : 'Nothing matches "$_query".',
+                      inset: Space.m,
                     )
                   : ListView.builder(
                       itemCount: matches.length,

@@ -8,6 +8,7 @@ import '../../chess/fen.dart';
 import '../../chess/tournament/config.dart';
 import '../../chess/tournament/result.dart';
 import '../../ui/confirm_dialog.dart';
+import '../../ui/problem_line.dart';
 import '../../storage/settings_store.dart';
 import '../../storage/tournaments.dart';
 import '../../ui/theme.dart';
@@ -89,11 +90,8 @@ class _ScreenState extends State<TournamentsScreen> {
         ),
         if (run.problem case final message?)
           Padding(
-            padding: const EdgeInsets.all(Space.s),
-            child: SelectableText(
-              message,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: Space.m),
+            child: ProblemLine(message),
           ),
         for (final warning in run.historyWarnings)
           Padding(
@@ -109,7 +107,7 @@ class _ScreenState extends State<TournamentsScreen> {
               const VerticalDivider(width: 1),
               Expanded(
                 child: run.selected == null
-                    ? const Center(child: Text('No tournaments yet'))
+                    ? const SizedBox.shrink()
                     : _details(run.selected!),
               ),
             ],

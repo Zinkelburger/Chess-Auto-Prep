@@ -121,7 +121,10 @@ class _TreePaneState extends State<TreePane> {
   }
 
   Widget _body() => switch (widget.tree.state) {
-    TreeReading() => const ListMessage('Reading your book…', inset: Space.m),
+    TreeReading() => const ListMessage.loading(
+      'Reading your book…',
+      inset: Space.m,
+    ),
     TreeNothing(:final sentence) => ListMessage(sentence, inset: Space.m),
     TreeShown(:final rows) => ListView.builder(
       itemCount: rows.length + 1,

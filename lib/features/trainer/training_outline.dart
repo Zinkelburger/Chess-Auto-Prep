@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../chess/training/training_line.dart';
 import '../../storage/chapter_files.dart';
 import '../../ui/choice_field.dart';
+import '../../ui/list_message.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
@@ -105,15 +106,14 @@ class _TrainingOutlineState extends State<TrainingOutline> {
     final trainer = widget.trainer;
     final state = trainer.state;
     if (state is! TrainerReady) {
-      return Padding(
-        padding: const EdgeInsets.all(Space.m),
-        child: Text(
-          trainer.selection.root.isEmpty
-              ? 'Choose a repertoire above, or import a course.'
-              : state is TrainerLoading
-              ? 'Loading chapters…'
-              : 'No trainable chapters available.',
-        ),
+      if (trainer.selection.root.isNotEmpty && state is TrainerLoading) {
+        return const ListMessage.loading('Reading chapters…', inset: Space.m);
+      }
+      return ListMessage(
+        trainer.selection.root.isEmpty
+            ? 'Choose a repertoire above, or import a course.'
+            : 'No chapters with lines to train.',
+        inset: Space.m,
       );
     }
     return ListenableBuilder(
@@ -134,9 +134,11 @@ class _TrainingOutlineState extends State<TrainingOutline> {
               onTap: () => trainer.selection.select(),
             ),
             if (chapters.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(Space.m),
-                child: Text('No chapters or lines match.'),
+              ListMessage(
+                _query.isEmpty
+                    ? 'No chapters with lines to train.'
+                    : 'Nothing matches "${_search.text.trim()}".',
+                inset: Space.m,
               ),
             for (final chapter in chapters) _chapter(state, chapter),
           ],

@@ -14,6 +14,7 @@ import '../../ui/theme.dart';
 import 'trainer.dart';
 import 'trainer_state.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/problem_line.dart';
 
 /// The selected scope's training desk, inside the shared Train pane.
 class TrainingHome extends StatefulWidget {
@@ -407,10 +408,5 @@ class _TrainingHomeState extends State<TrainingHome> {
       ),
   ];
 
-  Widget _problem(BuildContext context, String text) => Text(
-    text,
-    style: Theme.of(
-      context,
-    ).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error),
-  );
+  Widget _problem(BuildContext context, String text) => ProblemLine(text);
 }

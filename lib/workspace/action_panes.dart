@@ -200,7 +200,7 @@ class _ActionPanesState extends State<ActionPanes> {
             shape: RoundedRectangleBorder(
               side: BorderSide(
                 color: layout.active == index && layout.count > 1
-                    ? scheme.onSurfaceVariant.withValues(alpha: 0.55)
+                    ? activePaneBorder
                     : scheme.outlineVariant,
               ),
               borderRadius: BorderRadius.circular(paneTabRadius),

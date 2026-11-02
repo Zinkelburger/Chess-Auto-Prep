@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../storage/deleted_chapters.dart';
+import '../../ui/list_message.dart';
 import '../../ui/name_dialog.dart';
+import '../../ui/progress_line.dart';
 import '../../ui/theme.dart';
 import 'studies.dart';
 import 'studies_state.dart';
@@ -73,16 +75,23 @@ class _RecoveryState extends State<_Recovery> {
     AsyncSnapshot<DeletedListing> snapshot,
   ) {
     if (snapshot.hasError || snapshot.data is DeletedUnreadable) {
-      return const Center(
-        child: Text('Could not read deleted studies. Try Refresh.'),
+      return ListMessage(
+        'Could not read the deleted studies.',
+        inset: 0,
+        action: OutlinedButton(
+          onPressed: _busy
+              ? null
+              : () => setState(() => _listing = widget.studies.deleted()),
+          child: const Text('Try again'),
+        ),
       );
     }
     final listing = snapshot.data;
     if (listing is! DeletedChapters) {
-      return const Center(child: CircularProgressIndicator());
+      return const ListMessage.loading('Reading deleted studies…', inset: 0);
     }
     if (listing.chapters.isEmpty) {
-      return const Center(child: Text('No deleted studies.'));
+      return const ListMessage('No deleted studies.', inset: 0);
     }
     return ListView.builder(
       itemCount: listing.chapters.length,
@@ -136,7 +145,7 @@ class _RecoveryState extends State<_Recovery> {
             const Text(
               'Restore a study with all its chapters and annotations.',
             ),
-            if (_busy) const LinearProgressIndicator(),
+            ProgressLine(active: _busy),
             if (_message != null)
               Semantics(liveRegion: true, child: Text(_message!)),
             if (widget.studies.canRetryRestore)

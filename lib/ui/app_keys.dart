@@ -8,7 +8,7 @@ enum KeyPlace {
   window('Window'),
   board('Board and moves'),
   squares('Chessboard square focus'),
-  tabs('Focused tabs'),
+  tabs('Focused tabs and list rows'),
   comment('Comment box'),
   moveBox('Move box'),
   trainer('Repertoire trainer'),
@@ -92,7 +92,7 @@ enum AppKey {
   squareClear('Clear selected piece', KeyPlace.squares, [
     SingleActivator(LogicalKeyboardKey.escape),
   ]),
-  tabMenu('Open tab menu', KeyPlace.tabs, [
+  focusMenu('Open the tab or row menu', KeyPlace.tabs, [
     SingleActivator(LogicalKeyboardKey.f10, shift: true),
     SingleActivator(LogicalKeyboardKey.contextMenu),
   ]),

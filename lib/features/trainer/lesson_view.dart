@@ -19,6 +19,7 @@ import 'trainer_state.dart';
 import 'trainer_words.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/problem_line.dart';
 
 /// The Train tab while a sitting runs: the line and how far the sitting has
 /// to go, what the lesson wants now, the moves played so far with the note
@@ -474,21 +475,12 @@ class _Control extends StatelessWidget {
         asked: !short,
       ),
       SavingLine() => Text('Saving…', style: text.bodySmall),
-      LineNotSaved(:final failure) => Row(
-        children: [
-          Expanded(
-            child: Text(
-              progressProblem(failure, doing: 'save the rating'),
-              style: text.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.error,
-              ),
-            ),
-          ),
-          OutlinedButton(
-            onPressed: lesson.retry,
-            child: const Text('Try again'),
-          ),
-        ],
+      LineNotSaved(:final failure) => ProblemLine(
+        progressProblem(failure, doing: 'save the rating'),
+        action: OutlinedButton(
+          onPressed: lesson.retry,
+          child: const Text('Try again'),
+        ),
       ),
       _ => const SizedBox(height: Space.xl),
     };

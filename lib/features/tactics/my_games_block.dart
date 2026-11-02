@@ -9,6 +9,7 @@ import '../../ui/toggle_chip.dart';
 import 'my_games.dart';
 import 'my_games_words.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/problem_line.dart';
 
 /// The top of the Tactics column: whose games these are, the one button
 /// that fetches and reviews them, and one line saying where that stands.
@@ -38,13 +39,7 @@ class MyGamesBlock extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (games.accountProblem case final problem?)
-              Text(
-                problem,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.error,
-                ),
-              ),
+            if (games.accountProblem case final problem?) ProblemLine(problem),
             games.accounts.isEmpty ? _setUp(context) : _ready(context),
           ],
         ),

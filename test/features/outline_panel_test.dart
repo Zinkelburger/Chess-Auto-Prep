@@ -553,16 +553,13 @@ void main() {
 
     await tester.enterText(find.byType(TextField), 'benoni');
     await tester.pumpAndSettle();
-    expect(find.text('No chapter or line matches "benoni".'), findsOneWidget);
+    expect(find.text('Nothing matches "benoni".'), findsOneWidget);
   });
 
   testWidgets('a chapter with no lines says so', (tester) async {
     await show(tester, text: '// Book\n// Color: White\n\n');
 
-    expect(
-      find.text('Empty — add lines to fill this chapter.'),
-      findsOneWidget,
-    );
+    expect(find.text('No lines yet.'), findsOneWidget);
   });
 
   testWidgets('a new chapter can be made from the column', (tester) async {

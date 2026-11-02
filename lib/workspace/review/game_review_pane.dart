@@ -10,6 +10,7 @@ import '../../ui/theme.dart';
 import 'game_review.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/problem_line.dart';
 
 /// The game's evaluation as a graph, the old viewer's way: White's
 /// advantage light above the middle, Black's dark below, each marked move a
@@ -589,14 +590,7 @@ class _ReviewControls extends StatelessWidget {
               ),
             ),
           ),
-        if (review.problem case final problem?)
-          Padding(
-            padding: const EdgeInsets.only(top: Space.s),
-            child: Text(
-              problem,
-              style: TextStyle(color: theme.colorScheme.error),
-            ),
-          ),
+        if (review.problem case final problem?) ProblemLine(problem),
       ],
     );
   }

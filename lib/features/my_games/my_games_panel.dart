@@ -10,6 +10,7 @@ import '../../workspace/document/document_session.dart';
 import 'book_words.dart';
 import 'game_book.dart';
 import '../../ui/list_message.dart';
+import '../../ui/list_row.dart';
 
 /// The two ways the column lists what the book says: game by game, or
 /// grouped by where the games left it, most often first.
@@ -106,16 +107,14 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
           ),
           Expanded(
             child: switch (widget.book.state) {
-              BookReading() when widget.book.problem != null => Column(
-                children: [
-                  const ListMessage('Could not compare your games.'),
-                  OutlinedButton(
-                    onPressed: () => unawaited(widget.book.retry()),
-                    child: const Text('Try again'),
-                  ),
-                ],
+              BookReading() when widget.book.problem != null => ListMessage(
+                'Could not compare your games.',
+                action: OutlinedButton(
+                  onPressed: () => unawaited(widget.book.retry()),
+                  child: const Text('Try again'),
+                ),
               ),
-              BookReading() => const ListMessage(
+              BookReading() => const ListMessage.loading(
                 'Reading your games and repertoires…',
               ),
               BookNoAccounts() => const SizedBox.shrink(),
@@ -189,7 +188,7 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
               ? ListMessage('Nothing matches "$query".')
               : ListView.builder(
                   itemCount: shown.length,
-                  itemExtent: puzzleRowHeight,
+                  itemExtent: twoLineRowHeight,
                   itemBuilder: (context, at) => _GameRow(
                     checked: shown[at],
                     mistakes: widget.book.mistakesOf(shown[at]),
@@ -268,39 +267,35 @@ class _GameRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final game = checked.game;
-    return Material(
-      color: open ? theme.colorScheme.surfaceContainerHighest : null,
-      child: InkWell(
-        onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Space.m),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    return ListRow(
+      selected: open,
+      onTap: onOpen,
+      height: twoLineRowHeight,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      gameLine(game),
-                      style: theme.textTheme.bodySmall,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (mistakes case final counts?) ...[
-                    const SizedBox(width: Space.s),
-                    Tooltip(
-                      message: counts.words,
-                      child: Text(counts.glyphs, style: monoText),
-                    ),
-                  ],
-                ],
+              Expanded(
+                child: Text(
+                  gameLine(game),
+                  style: theme.textTheme.bodySmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              _Tag(checked: checked),
+              if (mistakes case final counts?) ...[
+                const SizedBox(width: Space.s),
+                Tooltip(
+                  message: counts.words,
+                  child: Text(counts.glyphs, style: monoText),
+                ),
+              ],
             ],
           ),
-        ),
+          _Tag(checked: checked),
+        ],
       ),
     );
   }
@@ -391,43 +386,36 @@ class _WayRow extends StatelessWidget {
     final theme = Theme.of(context);
     final count = way.games.length;
     final (move, book) = wayLines(way.verdict, way.games.first.game);
-    return SizedBox(
-      height: puzzleRowHeight,
-      child: InkWell(
-        onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Space.m),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    return ListRow(
+      onTap: onOpen,
+      height: twoLineRowHeight,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      move,
-                      style: monoText.copyWith(
-                        color: theme.colorScheme.onSurface,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: Space.s),
-                  Text(
-                    count == 1 ? '1 game' : '$count games',
-                    style: theme.textTheme.labelSmall,
-                  ),
-                ],
+              Expanded(
+                child: Text(
+                  move,
+                  style: monoText.copyWith(color: theme.colorScheme.onSurface),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
+              const SizedBox(width: Space.s),
               Text(
-                book,
+                count == 1 ? '1 game' : '$count games',
                 style: theme.textTheme.labelSmall,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
-        ),
+          Text(
+            book,
+            style: theme.textTheme.labelSmall,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }

@@ -338,9 +338,7 @@ class _MoveTokenState extends State<_MoveToken> {
           child: Container(
             padding: moveTokenPadding,
             decoration: BoxDecoration(
-              color: widget.selected
-                  ? scheme.primary.withValues(alpha: 0.35)
-                  : null,
+              color: widget.selected ? cursorTint : null,
               borderRadius: moveTokenRadius,
             ),
             child: Text.rich(

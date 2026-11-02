@@ -27,6 +27,7 @@ import 'study_import_dialog.dart';
 import 'study_send_dialog.dart';
 import 'study_recovery_dialog.dart';
 import '../../ui/list_message.dart';
+import '../../ui/list_row.dart';
 import '../../ui/app_icons.dart';
 
 /// Opens one chapter of a study in the workspace.
@@ -416,9 +417,9 @@ class _StudyPanelState extends State<StudyPanel> {
   }
 
   Widget _body(BuildContext context) => switch (_studies.state) {
-    StudiesLoading() => const Center(child: CircularProgressIndicator()),
+    StudiesLoading() => const ListMessage.loading('Reading studies…'),
     StudiesLoadFailed() => ListMessage(
-      'Could not read your studies folder. Please try again.',
+      'Could not read your studies folder.',
       action: OutlinedButton(
         onPressed: _studies.refresh,
         child: const Text('Try again'),
@@ -443,9 +444,7 @@ class _StudyPanelState extends State<StudyPanel> {
       );
     }
     if (_studies.studies.isEmpty) {
-      return const ListMessage(
-        'No studies yet\nCreate one, or import a Lichess study.',
-      );
+      return const ListMessage('No studies yet.');
     }
     if (_studies.visible.isEmpty) {
       return ListMessage('Nothing matches "${_studies.query}".');
@@ -663,50 +662,24 @@ class StudyRow extends StatelessWidget {
   final VoidCallback onDelete;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Semantics(
-      selected: open,
-      child: Material(
-        color: open ? scheme.surfaceContainerHighest : Colors.transparent,
-        child: InkWell(
-          onTap: onOpen,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(Space.s, 0, Space.xs, 0),
-            child: SizedBox(
-              height: listRowHeight,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Tooltip(
-                      message: study.name,
-                      child: Text(study.name, overflow: TextOverflow.ellipsis),
-                    ),
-                  ),
-                  RowActions(
-                    children: [
-                      // Only the open study's text is in hand; another one
-                      // would have to be read from disk first.
-                      rowAction(
-                        'Copy study PGN',
-                        onCopyPgn,
-                        busy: busy || !open,
-                        icon: AppIcons.copy,
-                      ),
-                      rowAction(
-                        'Delete study…',
-                        onDelete,
-                        busy: busy,
-                        icon: AppIcons.delete,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+  Widget build(BuildContext context) => ListRow(
+    selected: open,
+    onTap: onOpen,
+    padding: const EdgeInsets.fromLTRB(Space.s, 0, Space.xs, 0),
+    menu: [
+      // Only the open study's text is in hand; another one would have to be
+      // read from disk first.
+      rowAction(
+        'Copy study PGN',
+        onCopyPgn,
+        busy: busy || !open,
+        icon: AppIcons.copy,
       ),
-    );
-  }
+      rowAction('Delete study…', onDelete, busy: busy, icon: AppIcons.delete),
+    ],
+    child: Tooltip(
+      message: study.name,
+      child: Text(study.name, overflow: TextOverflow.ellipsis),
+    ),
+  );
 }

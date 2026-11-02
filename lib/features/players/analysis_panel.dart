@@ -21,6 +21,8 @@ import 'player_picker.dart';
 import 'players.dart';
 import '../../ui/list_message.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/progress_line.dart';
 
 /// The Player analysis column: who is being prepared for and where their
 /// games stand, the colour they are looked at from, then the search and the
@@ -309,7 +311,7 @@ extension on _AnalysisPanelState {
       )
     else
       SliverFixedExtentList.builder(
-        itemExtent: puzzleRowHeight,
+        itemExtent: twoLineRowHeight,
         itemCount: indexes.length,
         itemBuilder: (context, i) => PlayerGameRow(
           game: owner.corpus!.games[indexes[i]],
@@ -407,9 +409,6 @@ class _Status extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final wrong = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.error,
-    );
     final status = analysis.status;
     return Padding(
       padding: const EdgeInsets.fromLTRB(Space.m, 0, Space.m, Space.s),
@@ -433,11 +432,11 @@ class _Status extends StatelessWidget {
                 ),
               ],
             ),
-            const LinearProgressIndicator(minHeight: progressLineHeight),
+            const ProgressLine(),
           ] else if (status != null)
             Text(status, style: theme.textTheme.labelSmall),
           if (analysis.error case final error?) ...[
-            Text(error, style: wrong),
+            ProblemLine(error),
             Wrap(
               spacing: Space.s,
               children: [
@@ -467,7 +466,7 @@ class _Status extends StatelessWidget {
               ],
             ),
           ],
-          for (final warning in analysis.warnings) Text(warning, style: wrong),
+          for (final warning in analysis.warnings) ProblemLine(warning),
         ],
       ),
     );
@@ -576,10 +575,10 @@ class _ListSwitch extends SliverPersistentHeaderDelegate {
   final Color color;
 
   @override
-  double get minExtent => trainRowHeight;
+  double get minExtent => twoLineRowHeight;
 
   @override
-  double get maxExtent => trainRowHeight;
+  double get maxExtent => twoLineRowHeight;
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlaps) =>

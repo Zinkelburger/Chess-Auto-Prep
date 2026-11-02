@@ -21,6 +21,7 @@ import 'outline_rows.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/list_message.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/progress_line.dart';
 
 /// The chapters of the open repertoire and, under the open one, its lines.
 ///
@@ -275,7 +276,13 @@ class _OutlinePanelState extends State<OutlinePanel> {
           _Toolbar(
             search: _search,
             onSearch: widget.outline.search,
-            onCreate: widget.outline.repertoire == null ? null : _newChapter,
+            // The empty outline has its own button; one is enough.
+            onCreate:
+                widget.outline.repertoire == null ||
+                    widget.outline.chapters.isEmpty &&
+                        widget.outline.query.trim().isEmpty
+                ? null
+                : _newChapter,
             atPosition: widget.outline.atPosition,
             onAtPosition: widget.outline.showAtPosition,
           ),
@@ -328,17 +335,28 @@ class _OutlinePanelState extends State<OutlinePanel> {
     final outline = widget.outline;
     final chapters = outline.chapters;
     if (chapters.isEmpty) {
+      if (outline.query.trim().isNotEmpty) {
+        return ListMessage(
+          'Nothing matches "${outline.query}".',
+          inset: Space.m,
+        );
+      }
       return ListMessage(
-        outline.query.trim().isEmpty
-            ? 'No chapters yet\nCreate a chapter, then add your moves.'
-            : 'No chapter or line matches "${outline.query}".',
+        'No chapters yet.',
         inset: Space.m,
+        action: outline.repertoire == null
+            ? null
+            : OutlinedButton.icon(
+                onPressed: _newChapter,
+                icon: const Icon(AppIcons.add, size: IconSize.action),
+                label: const Text('New chapter…'),
+              ),
       );
     }
     // A book-sized chapter has thousands of lines, so each row is built when
     // it scrolls into view rather than all of them up front.
     final rows = [
-      if (outline.searching) (_) => const LinearProgressIndicator(),
+      if (outline.searching) (_) => const ProgressLine(),
       if (outline.searchProblem case final problem?)
         (_) => ListMessage(problem, inset: Space.m),
       for (final chapter in chapters) ..._chapterRows(outline, chapter),
@@ -389,10 +407,10 @@ class _OutlinePanelState extends State<OutlinePanel> {
       if (lines.isEmpty)
         (_) => ListMessage(
           outline.query.trim().isNotEmpty
-              ? 'No lines match this search.'
+              ? 'Nothing matches "${outline.query}".'
               : outline.atPosition
               ? 'No line reaches this position.'
-              : 'Empty — add lines to fill this chapter.',
+              : 'No lines yet.',
           inset: Space.m,
         ),
       for (final line in lines) (_) => _lineRow(line, chapter.ref),
@@ -486,12 +504,13 @@ class _Toolbar extends StatelessWidget {
                     : 'Show only lines through the board position',
                 visualDensity: VisualDensity.compact,
               ),
-              IconButton(
-                onPressed: onCreate,
-                icon: const Icon(AppIcons.add, size: IconSize.action),
-                tooltip: 'New chapter…',
-                visualDensity: VisualDensity.compact,
-              ),
+              if (onCreate case final create?)
+                IconButton(
+                  onPressed: create,
+                  icon: const Icon(AppIcons.add, size: IconSize.action),
+                  tooltip: 'New chapter…',
+                  visualDensity: VisualDensity.compact,
+                ),
             ],
           ),
           const SizedBox(height: Space.xs),

@@ -8,6 +8,8 @@ import '../../ui/theme.dart';
 import 'player_analysis.dart';
 import 'player_hunt.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/progress_line.dart';
 
 /// The top of the Findings list: the button that runs the engine over the
 /// player's most played positions, its settings folded beside it, how far
@@ -45,9 +47,6 @@ class _EngineRunState extends State<EngineRun> {
   Widget build(BuildContext context) {
     final hunt = widget.hunt;
     final theme = Theme.of(context);
-    final wrong = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.error,
-    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.xs, Space.xs),
       child: Column(
@@ -63,15 +62,14 @@ class _EngineRunState extends State<EngineRun> {
             const SizedBox(height: Space.s),
             Padding(
               padding: const EdgeInsets.only(right: Space.s),
-              child: LinearProgressIndicator(
-                minHeight: progressLineHeight,
+              child: ProgressLine(
                 value: hunt.total == 0 ? null : hunt.done / hunt.total,
               ),
             ),
           ],
           if (hunt.practicalWarning case final warning?)
             Text(warning, style: theme.textTheme.bodySmall),
-          if (hunt.error case final error?) Text(error, style: wrong),
+          if (hunt.error case final error?) ProblemLine(error),
           _summary(hunt, theme),
         ],
       ),

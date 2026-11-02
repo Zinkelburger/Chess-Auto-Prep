@@ -205,14 +205,12 @@ class _InlineMove extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: moveTokenRadius,
-        hoverColor: scheme.primary.withValues(alpha: moveHoverAlpha),
+        hoverColor: hoverTint,
         child: ValueListenableBuilder<CommentLine?>(
           valueListenable: shown,
           builder: (context, line, child) => DecoratedBox(
             decoration: BoxDecoration(
-              color: line != null && line.shows(from, move)
-                  ? scheme.primary.withValues(alpha: 0.35)
-                  : null,
+              color: line != null && line.shows(from, move) ? cursorTint : null,
               borderRadius: moveTokenRadius,
             ),
             child: child,

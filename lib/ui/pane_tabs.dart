@@ -415,7 +415,7 @@ class _TabSlot<K extends Object> extends StatelessWidget {
       canRequestFocus: false,
       skipTraversal: true,
       onKeyEvent: (node, event) {
-        if (onContextMenu == null || !AppKey.tabMenu.accepts(event)) {
+        if (onContextMenu == null || !AppKey.focusMenu.accepts(event)) {
           return KeyEventResult.ignored;
         }
         final box = context.findRenderObject() as RenderBox;
@@ -492,8 +492,8 @@ class _Tab extends StatelessWidget {
               borderRadius: shape,
               splashFactory: NoSplash.splashFactory,
               highlightColor: Colors.transparent,
-              hoverColor: scheme.onSurface.withValues(alpha: 0.06),
-              focusColor: scheme.onSurface.withValues(alpha: 0.10),
+              hoverColor: hoverTint,
+              focusColor: hoverTint,
               child: Padding(
                 padding: const EdgeInsets.only(left: Space.m, right: Space.xs),
                 child: Row(
@@ -520,7 +520,7 @@ class _Tab extends StatelessWidget {
                         style: ButtonStyle(
                           overlayColor: WidgetStateProperty.resolveWith(
                             (states) => states.contains(WidgetState.focused)
-                                ? scheme.primary.withValues(alpha: 0.25)
+                                ? selectedTint
                                 : Colors.transparent,
                           ),
                           minimumSize: const WidgetStatePropertyAll(

@@ -5,6 +5,8 @@ import 'studies.dart';
 import 'studies_state.dart';
 import 'study_import_source.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/progress_line.dart';
 
 Future<StudyResult?> showStudyImport(
   BuildContext context,
@@ -206,21 +208,9 @@ class _ImportState extends State<_Import> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               ..._sourceFields(),
-              if (_busy) const LinearProgressIndicator(),
+              ProgressLine(active: _busy),
               if (_data case final data?) ..._destination(data),
-              if (_problem != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: Space.m),
-                  child: Semantics(
-                    liveRegion: true,
-                    child: Text(
-                      _problem!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  ),
-                ),
+              if (_problem != null) ProblemLine(_problem),
             ],
           ),
         ),

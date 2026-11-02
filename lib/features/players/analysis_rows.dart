@@ -148,7 +148,7 @@ class PositionRow extends StatelessWidget {
       onTap: onOpen,
       child: Container(
         // As tall as a row of the other lists; taller when the moves wrap.
-        constraints: const BoxConstraints(minHeight: puzzleRowHeight),
+        constraints: const BoxConstraints(minHeight: twoLineRowHeight),
         padding: const EdgeInsets.symmetric(
           horizontal: Space.m,
           vertical: Space.xs,

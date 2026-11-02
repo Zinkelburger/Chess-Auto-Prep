@@ -8,6 +8,7 @@ import '../../ui/theme.dart';
 import 'chapter_audit.dart';
 import '../document/document_session.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/problem_line.dart';
 
 /// The Audit tab: the chapter's own moves checked against the engine.
 ///
@@ -180,15 +181,10 @@ class _AuditPaneState extends State<AuditPane> {
   }
 
   Widget _notKept(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, 0),
-      child: Text(
-        'Dismissals could not be saved; they last only until you audit '
-        'again.',
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: theme.colorScheme.error,
-        ),
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: Space.m),
+      child: ProblemLine(
+        'Could not save the dismissals; they last until you audit again.',
       ),
     );
   }

@@ -92,7 +92,7 @@ void main() {
       final chapter = app.parts.session.chapter;
       app.requests.switchTo(Mode.engineTournament);
       await tester.pumpAndSettle();
-      expect(find.text('No tournaments yet'), findsOneWidget);
+      expect(find.text('No tournaments yet.'), findsOneWidget);
       await tester.tap(find.text('New tournament…'));
       await tester.pumpAndSettle();
       expect(find.text('Start new run'), findsOneWidget);

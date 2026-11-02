@@ -6,6 +6,8 @@ import 'database_library.dart';
 import 'twic_download.dart';
 import '../../ui/theme.dart';
 import '../../ui/number_field.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/progress_line.dart';
 
 /// Downloads through [library], which keeps it from running beside an
 /// import. Shown only where the library offers a download.
@@ -69,7 +71,7 @@ class _TwicDialogState extends State<_TwicDialog> {
                     ],
                   ),
                 if (download.running) ...[
-                  LinearProgressIndicator(
+                  ProgressLine(
                     value: download.total == 0
                         ? null
                         : download.done / download.total,
@@ -84,13 +86,7 @@ class _TwicDialogState extends State<_TwicDialog> {
                   )
                 else if (download.status.isNotEmpty)
                   Text(download.status),
-                if (download.problem case final problem?)
-                  Text(
-                    problem,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
+                if (download.problem case final problem?) ProblemLine(problem),
               ],
             ),
           ),
