@@ -92,7 +92,7 @@ class _StudyPickerState extends State<_StudyPicker> {
             : 'Add to study',
       ),
       content: SizedBox(
-        width: nameDialogWidth,
+        width: dialogNarrow,
         height: choiceDialogHeight + Space.xl * 2,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

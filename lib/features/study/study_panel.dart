@@ -232,7 +232,7 @@ class _StudyPanelState extends State<StudyPanel> {
     final count = studyContentCount(tree);
     final yes = await confirmAction(
       context,
-      title: annotations ? 'Clear annotations' : 'Clear variations',
+      title: annotations ? 'Clear annotations?' : 'Clear variations?',
       message: annotations
           ? 'Remove ${count.comments} comments and all glyphs and shapes from "${chapter.name}"? The moves stay.'
           : 'Remove ${count.sidelines} sideline moves and their annotations from "${chapter.name}"? The main line and its notes stay.',
@@ -251,7 +251,7 @@ class _StudyPanelState extends State<StudyPanel> {
   Future<void> _deleteStudy(ChapterRef study) async {
     final yes = await confirmAction(
       context,
-      title: 'Delete study "${study.name}"?',
+      title: 'Delete study “${study.name}”?',
       message:
           'The PGN file, with every chapter in it, will be moved to Chess '
           'Auto Prep recovery storage.',
@@ -307,7 +307,7 @@ class _StudyPanelState extends State<StudyPanel> {
     }
     final yes = await confirmAction(
       context,
-      title: 'Delete chapter "${chapter.name}"?',
+      title: 'Delete chapter “${chapter.name}”?',
       message:
           'Its moves and comments go with it. The rest of the study is '
           'untouched.',

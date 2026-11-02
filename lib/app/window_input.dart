@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
-import '../workspace/document/side_dialog.dart';
+import '../ui/options_dialog.dart';
 import '../workspace/document/study_picker.dart';
 
 /// What the workspace's requests read from the person at the window: the
@@ -44,7 +44,12 @@ final class DialogInput implements WindowInput {
       log.w('ask which side $chapter is for', 'the window is not on screen');
       return null;
     }
-    return showSideDialog(context, chapter: chapter);
+    // Asked once per file, when the file does not say.
+    return showOptionsDialog(
+      context,
+      title: 'Which side is $chapter for?',
+      options: const [(Side.white, 'White'), (Side.black, 'Black')],
+    );
   }
 
   @override

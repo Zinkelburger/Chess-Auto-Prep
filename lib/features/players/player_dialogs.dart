@@ -5,7 +5,7 @@ import '../../ui/theme.dart';
 import '../../chess/players/player.dart';
 import 'players.dart';
 import 'saved_games.dart';
-import '../../ui/problem_line.dart';
+import '../../ui/form_dialog.dart';
 
 /// What removing a person from the directory takes with it.
 enum Removal { keepGames, withGames }
@@ -23,24 +23,29 @@ Future<Removal?> removePlayer(
   return showDialog<Removal>(
     context: context,
     builder: (context) => AlertDialog(
-      title: Text('Remove ${player.name}?'),
-      content: Text(
-        deleted == 0
-            ? [
-                'Saved games and studies stay on disk.',
-                if (saved != null && !saved.keptKnown)
-                  'Downloads can’t be deleted while your accounts can’t be '
-                      'read.',
-              ].join(' ')
-            : [
-                'Linked studies stay on disk. Their $deleted downloaded '
-                    '${deleted == 1 ? 'game' : 'games'} can go to the '
-                    'recovery folder too.',
-                if (saved!.kept.isNotEmpty) keptLine(saved.kept),
-              ].join(' '),
+      title: Text('Remove “${player.name}”?'),
+      content: SizedBox(
+        width: dialogNarrow,
+        child: Text(
+          deleted == 0
+              ? [
+                  'Saved games and studies stay on disk.',
+                  if (saved != null && !saved.keptKnown)
+                    'Downloads can’t be deleted while your accounts can’t be '
+                        'read.',
+                ].join(' ')
+              : [
+                  'Linked studies stay on disk. Their $deleted downloaded '
+                      '${deleted == 1 ? 'game' : 'games'} can go to the '
+                      'recovery folder too.',
+                  if (saved!.kept.isNotEmpty) keptLine(saved.kept),
+                ].join(' '),
+        ),
       ),
+      // Cancel starts focused: Enter and Escape both keep the person.
       actions: [
         TextButton(
+          autofocus: true,
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
@@ -200,60 +205,50 @@ class _PlayerDialogState extends State<_PlayerDialog> {
   ];
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text(
-      widget.player == null ? 'Add player' : 'Edit ${widget.player!.name}',
-    ),
-    content: SizedBox(
-      width: 480,
-      child: SingleChildScrollView(
-        child: Form(
-          key: _form,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final row in _rows())
-                Padding(
-                  padding: const EdgeInsets.only(bottom: Space.m),
-                  child: row,
-                ),
-              if (_files.isNotEmpty) ...[
-                Text('PGN files', style: Theme.of(context).textTheme.bodySmall),
-                const SizedBox(height: Space.xs),
-                Wrap(
-                  spacing: Space.s,
-                  children: [
-                    for (final file in _files)
-                      InputChip(
-                        label: Text(p.basename(file)),
-                        onDeleted: _saving
-                            ? null
-                            : () {
-                                if (mounted) {
-                                  setState(() => _files.remove(file));
-                                }
-                              },
-                      ),
-                  ],
-                ),
-              ],
-              if (_error != null) ProblemLine(_error),
+  Widget build(BuildContext context) => FormDialog(
+    title: widget.player == null ? 'Add player' : 'Edit ${widget.player!.name}',
+    width: dialogMedium,
+    confirm: _saving ? 'Saving…' : 'Save player',
+    onConfirm: _save,
+    busy: _saving,
+    canFail: true,
+    problem: _error,
+    body: SingleChildScrollView(
+      child: Form(
+        key: _form,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final row in _rows())
+              Padding(
+                padding: const EdgeInsets.only(bottom: Space.m),
+                child: row,
+              ),
+            if (_files.isNotEmpty) ...[
+              Text('PGN files', style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: Space.xs),
+              Wrap(
+                spacing: Space.s,
+                children: [
+                  for (final file in _files)
+                    InputChip(
+                      label: Text(p.basename(file)),
+                      onDeleted: _saving
+                          ? null
+                          : () {
+                              if (mounted) {
+                                setState(() => _files.remove(file));
+                              }
+                            },
+                    ),
+                ],
+              ),
             ],
-          ),
+          ],
         ),
       ),
     ),
-    actions: [
-      TextButton(
-        onPressed: _saving ? null : () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton(
-        onPressed: _saving ? null : _save,
-        child: Text(_saving ? 'Saving…' : 'Save player'),
-      ),
-    ],
   );
 }
 
@@ -335,11 +330,22 @@ class _ImportDialogState extends State<_ImportDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Paste players'),
-    content: SizedBox(
-      width: 560,
-      height: 420,
+  Widget build(BuildContext context) => FormDialog(
+    title: 'Paste players',
+    width: dialogWide,
+    confirm: _preview == null
+        ? 'Preview players'
+        : _saving
+        ? 'Saving…'
+        : widget.players.group == null
+        ? 'Add players'
+        : 'Add to group',
+    onConfirm: _preview == null ? _read : _save,
+    busy: _saving,
+    canFail: true,
+    problem: _error,
+    body: SizedBox(
+      height: dialogListHeight,
       child: Column(
         children: [
           TextField(
@@ -354,7 +360,6 @@ class _ImportDialogState extends State<_ImportDialog> {
             },
           ),
           const SizedBox(height: Space.m),
-          if (_error != null) ProblemLine(_error),
           if (_preview case final preview?) ...[
             Align(
               alignment: Alignment.centerLeft,
@@ -376,24 +381,5 @@ class _ImportDialogState extends State<_ImportDialog> {
         ],
       ),
     ),
-    actions: [
-      TextButton(
-        onPressed: _saving ? null : () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      if (_preview == null)
-        FilledButton(onPressed: _read, child: const Text('Preview players'))
-      else
-        FilledButton(
-          onPressed: _saving ? null : _save,
-          child: Text(
-            _saving
-                ? 'Saving…'
-                : widget.players.group == null
-                ? 'Add players'
-                : 'Add to group',
-          ),
-        ),
-    ],
   );
 }

@@ -450,7 +450,7 @@ void main() {
     await openPlayerMenu(tester);
     await tester.tap(find.text('Delete saved games…'));
     await tester.pumpAndSettle();
-    expect(find.text('Delete Alex’s saved games?'), findsOneWidget);
+    expect(find.text('Delete the saved games of “Alex”?'), findsOneWidget);
     await tester.tap(find.text('Delete games'));
     await settle();
     expect(w.store.deleted.keys, [download]);

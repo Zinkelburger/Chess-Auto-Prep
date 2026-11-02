@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'file_names.dart';
+import 'form_dialog.dart';
 import 'theme.dart';
 
 /// One more control under the name field, for a dialog that asks for a little
@@ -82,42 +83,33 @@ class _NameDialogState extends State<_NameDialog> {
   @override
   Widget build(BuildContext context) {
     final extra = widget.extra;
-    return AlertDialog(
-      title: Text(widget.title),
-      content: SizedBox(
-        width: nameDialogWidth,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _field,
-              autofocus: true,
-              decoration: InputDecoration(
-                labelText: widget.label,
-                errorText: _problem,
-              ),
-              onChanged: (_) {
-                if (mounted && _problem != null) {
-                  setState(() => _problem = null);
-                }
-              },
-              onSubmitted: (_) => _submit(),
+    return FormDialog(
+      title: widget.title,
+      confirm: widget.confirm,
+      onConfirm: _submit,
+      body: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _field,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: widget.label,
+              errorText: _problem,
             ),
-            if (extra != null) ...[
-              const SizedBox(height: Space.l),
-              extra(context, _changed),
-            ],
+            onChanged: (_) {
+              if (mounted && _problem != null) {
+                setState(() => _problem = null);
+              }
+            },
+          ),
+          if (extra != null) ...[
+            const SizedBox(height: Space.l),
+            extra(context, _changed),
           ],
-        ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(onPressed: _submit, child: Text(widget.confirm)),
-      ],
     );
   }
 }

@@ -91,7 +91,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
     if (group != null) {
       if (!await confirmAction(
             context,
-            title: 'Remove from ${group.name}?',
+            title: 'Remove “${player.name}” from “${group.name}”?',
             message: 'Saved games and studies stay on disk.',
             confirm: 'Remove',
           ) ||
@@ -124,7 +124,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
     final deleted = saved.deletable;
     if (await confirmAction(
           context,
-          title: 'Delete ${player.name}’s saved games?',
+          title: 'Delete the saved games of “${player.name}”?',
           message: [
             'Moves $deleted downloaded ${deleted == 1 ? 'game' : 'games'} to '
                 'the recovery folder and deletes their analysis. Linked PGN '
@@ -347,7 +347,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
   Future<void> _removeGroup(PlayerGroup group) async {
     if (await confirmAction(
           context,
-          title: 'Remove ${group.name}?',
+          title: 'Remove group “${group.name}”?',
           message: 'Players, saved games and studies stay in your library.',
           confirm: 'Remove',
         ) &&

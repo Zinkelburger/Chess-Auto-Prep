@@ -175,7 +175,7 @@ void main() {
     await listEveryFind(tester);
     await trainTheTrap(tester);
 
-    expect(find.textContaining('Add it to Main (draft 2)'), findsOneWidget);
+    expect(find.text('Add this line to “Main (draft 2)”?'), findsOneWidget);
     await tester.tap(find.text('Add and train'));
     await tester.pumpAndSettle();
 
@@ -222,7 +222,7 @@ void main() {
     await listEveryFind(tester);
     await trainTheTrap(tester);
 
-    expect(find.textContaining('Add it to Main (draft 2)'), findsOneWidget);
+    expect(find.text('Add this line to “Main (draft 2)”?'), findsOneWidget);
     await tester.tap(find.text('Add and train'));
     await tester.pumpAndSettle();
 
@@ -245,7 +245,7 @@ void main() {
     await listEveryFind(tester);
     await trainTheTrap(tester);
 
-    expect(find.textContaining('Add it to Main (draft 2)'), findsOneWidget);
+    expect(find.text('Add this line to “Main (draft 2)”?'), findsOneWidget);
     await tester.tap(find.text('Add and train'));
     await tester.pumpAndSettle();
 
@@ -261,10 +261,7 @@ void main() {
     await openBeside(tester, const {});
     await listEveryFind(tester);
     await trainTheTrap(tester);
-    expect(
-      find.textContaining('Add it to Main (draft) first?'),
-      findsOneWidget,
-    );
+    expect(find.text('Add this line to “Main (draft)”?'), findsOneWidget);
 
     final made = inKid('Main (draft 2)');
     w.store.documents[made] = Opened(

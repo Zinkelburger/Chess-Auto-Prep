@@ -241,7 +241,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete…'));
     await tester.pumpAndSettle();
-    expect(find.text('Delete repertoire "benko"?'), findsOneWidget);
+    expect(find.text('Delete repertoire “benko”?'), findsOneWidget);
     expect(
       find.text(
         'Its chapters can be restored from Deleted chapters under this '

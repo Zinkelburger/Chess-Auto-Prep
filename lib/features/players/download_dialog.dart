@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../chess/players/download_range.dart';
 import '../../chess/players/player.dart';
 import '../../ui/field_row.dart';
+import '../../ui/form_dialog.dart';
 import '../../ui/number_field.dart';
 import '../../ui/theme.dart';
 import '../../ui/toggle_chip.dart';
@@ -44,65 +45,57 @@ class _DownloadDialogState extends State<_DownloadDialog> {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    return AlertDialog(
-      title: Text('Get ${widget.player.name}’s games'),
-      content: SizedBox(
-        width: nameDialogWidth,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                widget.player.accounts
-                    .map((a) => '${a.site.label} ${a.username}')
-                    .join(' · '),
-                style: text.bodySmall,
+    return FormDialog(
+      title: 'Get ${widget.player.name}’s games',
+      confirm: 'Get games',
+      onConfirm: speeds.isEmpty
+          ? null
+          : () => Navigator.pop(
+              context,
+              PlayerDownloadRange(
+                max: count,
+                months: months ? monthCount : null,
+                speeds: speeds,
               ),
-              const SizedBox(height: Space.m),
-              SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(value: false, label: Text('Last games')),
-                  ButtonSegment(value: true, label: Text('Recent months')),
-                ],
-                selected: {months},
-                showSelectedIcon: false,
-                onSelectionChanged: (v) {
-                  if (mounted) setState(() => months = v.single);
-                },
-              ),
-              const SizedBox(height: Space.s),
-              _amount(),
-              const SizedBox(height: Space.s),
-              ..._timeControls(context),
-            ],
-          ),
+            ),
+      canFail: true,
+      problem: speeds.isEmpty ? 'Choose at least one time control.' : null,
+      body: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.player.accounts
+                  .map((a) => '${a.site.label} ${a.username}')
+                  .join(' · '),
+              style: text.bodySmall,
+            ),
+            const SizedBox(height: Space.m),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('Last games')),
+                ButtonSegment(value: true, label: Text('Recent months')),
+              ],
+              selected: {months},
+              showSelectedIcon: false,
+              onSelectionChanged: (v) {
+                if (mounted) setState(() => months = v.single);
+              },
+            ),
+            const SizedBox(height: Space.s),
+            _amount(),
+            const SizedBox(height: Space.s),
+            ..._timeControls(context),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: speeds.isEmpty
-              ? null
-              : () => Navigator.pop(
-                  context,
-                  PlayerDownloadRange(
-                    max: count,
-                    months: months ? monthCount : null,
-                    speeds: speeds,
-                  ),
-                ),
-          child: const Text('Get games'),
-        ),
-      ],
     );
   }
 
-  /// The time controls to download, and the line under them: always
-  /// there, so the buttons do not move when the last chip goes off.
+  /// The time controls to download, and what a download does with them.
+  /// With none chosen the dialog's problem line says so, held empty
+  /// otherwise, so the buttons do not move when the last chip goes off.
   List<Widget> _timeControls(BuildContext context) {
     final small = Theme.of(context).textTheme.bodySmall;
     return [
@@ -121,14 +114,7 @@ class _DownloadDialogState extends State<_DownloadDialog> {
         ],
       ),
       const SizedBox(height: Space.s),
-      Text(
-        speeds.isEmpty
-            ? 'Choose at least one time control.'
-            : 'New games are added to the ones already saved.',
-        style: small?.copyWith(
-          color: speeds.isEmpty ? Theme.of(context).colorScheme.error : null,
-        ),
-      ),
+      Text('New games are added to the ones already saved.', style: small),
     ];
   }
 

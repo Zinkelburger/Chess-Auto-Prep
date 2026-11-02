@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../diagnostics/log.dart';
+import '../ui/theme.dart';
 import '../workspace/document/document_saver.dart';
 
 /// What the user said about words that are not on disk.
@@ -372,30 +373,41 @@ final class DraftDialog implements DraftQuestion {
 }
 
 /// Escape and a click outside leave the window open with the save still
-/// going, which is the answer that loses nothing.
+/// going, which is the answer that loses nothing. That answer sits where
+/// Cancel does, focused, so Enter loses nothing either; the filled button
+/// is the way out that keeps the words when there is one.
 class _UnsavedWordsDialog extends StatelessWidget {
   const _UnsavedWordsDialog(this.prompt);
 
   final DraftPrompt prompt;
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Not saved yet'),
-    content: Text(prompt.body),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.of(context).pop(DraftChoice.closeAnyway),
-        child: Text(prompt.leave),
-      ),
-      if (prompt.offerCopy)
+  Widget build(BuildContext context) {
+    void answer(DraftChoice choice) => Navigator.of(context).pop(choice);
+    return AlertDialog(
+      title: const Text('Not saved yet'),
+      content: SizedBox(width: dialogMedium, child: Text(prompt.body)),
+      actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(DraftChoice.saveACopy),
-          child: const Text('Save a copy…'),
+          autofocus: true,
+          onPressed: () => answer(DraftChoice.keepWaiting),
+          child: const Text('Stay here'),
         ),
-      FilledButton(
-        onPressed: () => Navigator.of(context).pop(DraftChoice.keepWaiting),
-        child: const Text('Stay here'),
-      ),
-    ],
-  );
+        if (prompt.offerCopy) ...[
+          TextButton(
+            onPressed: () => answer(DraftChoice.closeAnyway),
+            child: Text(prompt.leave),
+          ),
+          FilledButton(
+            onPressed: () => answer(DraftChoice.saveACopy),
+            child: const Text('Save a copy…'),
+          ),
+        ] else
+          FilledButton(
+            onPressed: () => answer(DraftChoice.closeAnyway),
+            child: Text(prompt.leave),
+          ),
+      ],
+    );
+  }
 }

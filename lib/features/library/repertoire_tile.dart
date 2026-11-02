@@ -112,7 +112,7 @@ class _RepertoireRow extends StatelessWidget {
   Future<void> _delete(BuildContext context) async {
     final yes = await confirmAction(
       context,
-      title: 'Delete repertoire "${folder.name}"?',
+      title: 'Delete repertoire “${folder.name}”?',
       message:
           'Its chapters can be restored from Deleted chapters under this '
           'list.',
@@ -257,7 +257,7 @@ class _ChapterRow extends StatelessWidget {
   Future<void> _delete(BuildContext context) async {
     final yes = await confirmAction(
       context,
-      title: 'Delete chapter "${chapter.name}"?',
+      title: 'Delete chapter “${chapter.name}”?',
       message: library.sharesFile(chapter)
           ? 'Its games, including edits you have just made, will be taken '
                 'out of the course file they share.'

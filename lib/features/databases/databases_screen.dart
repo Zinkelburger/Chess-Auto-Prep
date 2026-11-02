@@ -412,7 +412,7 @@ class _StorageDialog extends StatelessWidget {
       return AlertDialog(
         title: Text('Storage · ${formatBytes(_total(library.storage))}'),
         content: SizedBox(
-          width: 480,
+          width: dialogMedium,
           child: ListView(
             shrinkWrap: true,
             children: [
@@ -465,7 +465,7 @@ class _StorageDialog extends StatelessWidget {
   Future<void> _remove(BuildContext context, StoreUsage store) async {
     final sure = await confirmAction(
       context,
-      title: 'Delete ${store.name}?',
+      title: 'Delete “${store.name}”?',
       message: store.name.startsWith('Leftover')
           ? 'A copy left beside a database the app rebuilds. '
                 'Deleting it frees ${formatBytes(store.bytes)}.'

@@ -135,7 +135,7 @@ Future<void> _delete(BuildContext context, Books books, Book book) async {
   final say = StatusScope.of(context);
   final yes = await confirmAction(
     context,
-    title: 'Delete opening book "${book.name}"?',
+    title: 'Delete opening book “${book.name}”?',
     message: 'Its repertoires and chapters stay where they are.',
     confirm: 'Delete',
   );

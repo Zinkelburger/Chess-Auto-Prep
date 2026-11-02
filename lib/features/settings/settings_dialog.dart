@@ -62,12 +62,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // The shape and the panel colour come from the theme's dialogs.
     return Dialog(
-      backgroundColor: theme.colorScheme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(readingCardRadius),
-        side: BorderSide(color: theme.colorScheme.outline),
-      ),
       child: SizedBox(
         width: settingsDialogWidth,
         height: settingsDialogHeight,

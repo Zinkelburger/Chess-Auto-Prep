@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/study.dart';
+import '../../ui/form_dialog.dart';
 import '../../ui/status_bar.dart';
 import '../../ui/theme.dart';
 import 'trainer.dart';
@@ -136,10 +137,12 @@ class _SidesState extends State<_Sides> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Choose training sides'),
-    content: SizedBox(
-      width: nameDialogWidth * 2,
+  Widget build(BuildContext context) => FormDialog(
+    title: 'Choose training sides',
+    width: dialogWide,
+    confirm: 'Save sides',
+    onConfirm: _sides.isEmpty ? null : () => Navigator.pop(context, _sides),
+    body: SizedBox(
       height: MediaQuery.sizeOf(context).height * 0.5,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -169,15 +172,5 @@ class _SidesState extends State<_Sides> {
         ],
       ),
     ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton(
-        onPressed: _sides.isEmpty ? null : () => Navigator.pop(context, _sides),
-        child: const Text('Save sides'),
-      ),
-    ],
   );
 }

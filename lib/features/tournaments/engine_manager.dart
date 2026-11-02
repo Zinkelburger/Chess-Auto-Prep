@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../../chess/tournament/config.dart';
 import '../../ui/confirm_dialog.dart';
+import '../../ui/form_dialog.dart';
 import '../../ui/number_field.dart';
 import '../../ui/theme.dart';
 import 'engine_check.dart';
@@ -21,7 +22,7 @@ Future<void> manageTournamentEngines(
     builder: (context, _) => AlertDialog(
       title: const Text('Tournament engines'),
       content: SizedBox(
-        width: 600,
+        width: dialogWide,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -63,17 +64,18 @@ Future<void> manageTournamentEngines(
           ),
         ),
       ),
+      // Nothing here waits for an answer, so Close; the action at the right.
       actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
         TextButton.icon(
           onPressed: run.registryBusy || run.running
               ? null
               : () => unawaited(_edit(context, run, null)),
           icon: const Icon(AppIcons.add, size: IconSize.action),
           label: const Text('Add UCI engine…'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
         ),
       ],
     ),
@@ -87,9 +89,8 @@ Future<void> _remove(
 ) async {
   if (await confirmAction(
     context,
-    title: 'Remove ${engine.name}?',
-    message:
-        'Remove ${engine.name} from the registry? Saved runs retain their engine settings.',
+    title: 'Remove “${engine.name}”?',
+    message: 'Saved runs keep their engine settings.',
     confirm: 'Remove',
   )) {
     await run.keepEngines(run.engines.where((e) => e.id != engine.id).toList());
@@ -153,75 +154,63 @@ class _EditorState extends State<_Editor> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text(widget.engine == null ? 'Add UCI engine' : 'Edit engine'),
-    content: SizedBox(
-      width: 600,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _name,
-              onChanged: (_) => _autoName = false,
-              decoration: const InputDecoration(labelText: 'Name'),
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _path,
-                    decoration: const InputDecoration(
-                      labelText: 'Executable path (empty = bundled Stockfish)',
-                    ),
+  Widget build(BuildContext context) => FormDialog(
+    title: widget.engine == null ? 'Add UCI engine' : 'Edit engine',
+    width: dialogWide,
+    confirm: _busy ? 'Testing…' : 'Test and save',
+    onConfirm: () => unawaited(_save()),
+    busy: _busy,
+    canFail: true,
+    problem: _problem,
+    body: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _name,
+            onChanged: (_) => _autoName = false,
+            decoration: const InputDecoration(labelText: 'Name'),
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _path,
+                  decoration: const InputDecoration(
+                    labelText: 'Executable path (empty = bundled Stockfish)',
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: _busy ? null : () => unawaited(_pick()),
-                  icon: const Icon(AppIcons.open, size: IconSize.action),
-                  label: const Text('Choose file…'),
-                ),
-              ],
-            ),
-            _number('Cores', _cores, 1024, (n) => _cores = n),
-            _number('Hash (MB)', _memory, 65536, (n) => _memory = n),
-            TextField(
-              controller: _args,
-              minLines: 1,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Arguments (one per line)',
               ),
-            ),
-            TextField(
-              controller: _options,
-              minLines: 2,
-              maxLines: 6,
-              decoration: const InputDecoration(
-                labelText: 'UCI options (name=value, one per line)',
+              TextButton.icon(
+                onPressed: _busy ? null : () => unawaited(_pick()),
+                icon: const Icon(AppIcons.open, size: IconSize.action),
+                label: const Text('Choose file…'),
               ),
+            ],
+          ),
+          _number('Cores', _cores, 1024, (n) => _cores = n),
+          _number('Hash (MB)', _memory, 65536, (n) => _memory = n),
+          TextField(
+            controller: _args,
+            minLines: 1,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              labelText: 'Arguments (one per line)',
             ),
-            if (_problem case final message?)
-              Padding(
-                padding: const EdgeInsets.only(top: Space.m),
-                child: SelectableText(message),
-              ),
-            if (_output.isNotEmpty) EngineOutput(lines: _output),
-          ],
-        ),
+          ),
+          TextField(
+            controller: _options,
+            minLines: 2,
+            maxLines: 6,
+            decoration: const InputDecoration(
+              labelText: 'UCI options (name=value, one per line)',
+            ),
+          ),
+          if (_output.isNotEmpty) EngineOutput(lines: _output),
+        ],
       ),
     ),
-    actions: [
-      TextButton(
-        onPressed: _busy ? null : () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton(
-        onPressed: _busy ? null : () => unawaited(_save()),
-        child: Text(_busy ? 'Testing…' : 'Test and save'),
-      ),
-    ],
   );
   Widget _number(String name, int value, int max, void Function(int) change) =>
       Row(

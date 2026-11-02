@@ -5,8 +5,7 @@ import 'studies.dart';
 import 'studies_state.dart';
 import 'study_import_source.dart';
 import '../../ui/app_icons.dart';
-import '../../ui/problem_line.dart';
-import '../../ui/progress_line.dart';
+import '../../ui/form_dialog.dart';
 
 Future<StudyResult?> showStudyImport(
   BuildContext context,
@@ -196,37 +195,23 @@ class _ImportState extends State<_Import> {
   ];
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !_busy,
-    child: AlertDialog(
-      title: const Text('Import chapters'),
-      content: SizedBox(
-        width: nameDialogWidth * 2,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ..._sourceFields(),
-              ProgressLine(active: _busy),
-              if (_data case final data?) ..._destination(data),
-              if (_problem != null) ProblemLine(_problem),
-            ],
-          ),
-        ),
+  Widget build(BuildContext context) => FormDialog(
+    title: 'Import chapters',
+    width: dialogWide,
+    busy: _busy,
+    canFail: true,
+    problem: _problem,
+    confirm: _append ? 'Add chapters' : 'Import study',
+    onConfirm: _data == null || (_append && !_data!.complete) ? null : _import,
+    body: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ..._sourceFields(),
+          if (_data case final data?) ..._destination(data),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _busy || _data == null || (_append && !_data!.complete)
-              ? null
-              : _import,
-          child: Text(_append ? 'Add chapters' : 'Import study'),
-        ),
-      ],
     ),
   );
 }

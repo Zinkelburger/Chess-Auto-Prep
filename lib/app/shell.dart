@@ -409,9 +409,10 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
           mounted &&
           await confirmAction(
             context,
-            title: 'Train this line',
-            message: 'No chapter plays this line yet. Add it to $draft first?',
+            title: 'Add this line to “$draft”?',
+            message: 'No chapter plays this line yet; training needs one.',
             confirm: 'Add and train',
+            destructive: false,
           ),
       showTrain: () {
         if (mounted) _views[Mode.repertoires]!.show(WorkspaceTab.train);

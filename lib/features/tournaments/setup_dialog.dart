@@ -12,7 +12,7 @@ import '../../ui/number_field.dart';
 import '../../ui/theme.dart';
 import '../../workspace/board/board_editor.dart';
 import '../../ui/app_icons.dart';
-import '../../ui/problem_line.dart';
+import '../../ui/form_dialog.dart';
 
 Future<TournamentConfig?> tournamentSetup(
   BuildContext context, {
@@ -67,75 +67,57 @@ class _SetupState extends State<_Setup> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text(
-      widget.previous == null ? 'New tournament' : 'Configure next run',
-    ),
-    content: SizedBox(
-      width: 660,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _name,
-              decoration: const InputDecoration(labelText: 'Name'),
-            ),
-            const SizedBox(height: Space.m),
-            Text('Engines', style: Theme.of(context).textTheme.titleMedium),
-            for (var i = 0; i < _seats.length; i++) _seat(i),
-            TextButton.icon(
-              onPressed: () =>
-                  _change(() => _seats.add(TournamentEngine.bundled())),
-              icon: const Icon(AppIcons.add, size: IconSize.action),
-              label: const Text('Add engine'),
-            ),
-            const SizedBox(height: Space.m),
-            _startPosition(),
-            _choices('Format', _values, 'format', {
-              'roundRobin': 'Round robin',
-              'gauntlet': 'Gauntlet',
-            }, 'roundRobin'),
-            _number(
-              'Games per pairing',
-              _values,
-              'gamesPerPairing',
-              10,
-              1,
-              1000,
-            ),
-            _number('Simultaneous games', _values, 'concurrency', 1, 1, 64),
-            _toggle('Alternate colors', _values, 'alternateColors', true),
-            _presets(),
-            _choices('Time control', _time, 'kind', {
-              'movetime': 'Time per move',
-              'incremental': 'Clock + increment',
-              'fixedDepth': 'Fixed depth',
-              'fixedNodes': 'Fixed nodes',
-            }, 'movetime'),
-            ..._limits(),
-            _toggle('Annotate evaluations', _values, 'annotateMoves', false),
-            ExpansionTile(
-              title: const Text('Adjudication'),
-              children: _adjudication(),
-            ),
-            if (_problem != null) ProblemLine(_problem),
-          ],
-        ),
+  Widget build(BuildContext context) => FormDialog(
+    title: widget.previous == null ? 'New tournament' : 'Configure next run',
+    width: dialogWide,
+    confirm: 'Start new run',
+    confirmIcon: AppIcons.run,
+    onConfirm: _start,
+    canFail: true,
+    problem: _problem,
+    body: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _name,
+            decoration: const InputDecoration(labelText: 'Name'),
+          ),
+          const SizedBox(height: Space.m),
+          Text('Engines', style: Theme.of(context).textTheme.titleMedium),
+          for (var i = 0; i < _seats.length; i++) _seat(i),
+          TextButton.icon(
+            onPressed: () =>
+                _change(() => _seats.add(TournamentEngine.bundled())),
+            icon: const Icon(AppIcons.add, size: IconSize.action),
+            label: const Text('Add engine'),
+          ),
+          const SizedBox(height: Space.m),
+          _startPosition(),
+          _choices('Format', _values, 'format', {
+            'roundRobin': 'Round robin',
+            'gauntlet': 'Gauntlet',
+          }, 'roundRobin'),
+          _number('Games per pairing', _values, 'gamesPerPairing', 10, 1, 1000),
+          _number('Simultaneous games', _values, 'concurrency', 1, 1, 64),
+          _toggle('Alternate colors', _values, 'alternateColors', true),
+          _presets(),
+          _choices('Time control', _time, 'kind', {
+            'movetime': 'Time per move',
+            'incremental': 'Clock + increment',
+            'fixedDepth': 'Fixed depth',
+            'fixedNodes': 'Fixed nodes',
+          }, 'movetime'),
+          ..._limits(),
+          _toggle('Annotate evaluations', _values, 'annotateMoves', false),
+          ExpansionTile(
+            title: const Text('Adjudication'),
+            children: _adjudication(),
+          ),
+        ],
       ),
     ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton.icon(
-        onPressed: _start,
-        icon: const Icon(AppIcons.run, size: IconSize.action),
-        label: const Text('Start new run'),
-      ),
-    ],
   );
 
   /// The FEN the games start from beside a small board showing it, greyed
@@ -270,7 +252,7 @@ class _SetupState extends State<_Setup> {
       children: [
         Expanded(child: Text(name)),
         SizedBox(
-          width: 240,
+          width: settingChoiceWidth,
           child: ChoiceField(
             text: options[data[key] ?? fallback] ?? options[fallback]!,
             options: options.values.toList(),

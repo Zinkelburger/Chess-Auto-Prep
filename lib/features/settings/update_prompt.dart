@@ -159,7 +159,7 @@ class _UpdateDialogState extends State<_UpdateDialog>
               : 'Chess Auto Prep ${offer.version} is available',
         ),
         content: SizedBox(
-          width: 440,
+          width: dialogMedium,
           child: _updating ? _progress(context) : _question(),
         ),
         actions: _updating ? _progressActions() : _questionActions(),
@@ -183,7 +183,15 @@ class _UpdateDialogState extends State<_UpdateDialog>
     ],
   );
 
+  /// Later on the left, where Cancel sits, and focused: Enter and Escape
+  /// both leave the app as it is. Update now closes the app, so it is
+  /// pressed, never entered by accident.
   List<Widget> _questionActions() => [
+    TextButton(
+      autofocus: true,
+      onPressed: () => _answer(_Answer.later),
+      child: const Text('Later'),
+    ),
     TextButton(
       onPressed: () => _answer(_Answer.skip),
       child: const Text('Skip this version'),
@@ -193,22 +201,12 @@ class _UpdateDialogState extends State<_UpdateDialog>
         onPressed: () => _answer(_Answer.accept),
         child: const Text('When I close the app'),
       ),
+      FilledButton(onPressed: _updateNow, child: const Text('Update now')),
+    ] else
       FilledButton(
-        autofocus: true,
-        onPressed: _updateNow,
-        child: const Text('Update now'),
-      ),
-    ] else ...[
-      TextButton(
-        onPressed: () => _answer(_Answer.later),
-        child: const Text('Later'),
-      ),
-      FilledButton(
-        autofocus: true,
         onPressed: () => _answer(_Answer.accept),
         child: const Text('Download'),
       ),
-    ],
   ];
 
   Widget _progress(BuildContext context) {

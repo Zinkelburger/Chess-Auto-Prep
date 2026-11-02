@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../chess/fen.dart';
 import '../../ui/file_names.dart';
+import '../../ui/form_dialog.dart';
 import '../../ui/theme.dart';
 import '../../workspace/board/board_editor.dart';
 
@@ -98,7 +99,6 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
     onChanged: (_) {
       if (_nameProblem != null) _change(() => _nameProblem = null);
     },
-    onSubmitted: (_) => _create(),
   );
 
   /// The name, the start and the orientation, in the width of a name
@@ -107,7 +107,7 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
     final label = Theme.of(context).textTheme.labelSmall;
     return SizedBox(
       key: _formKey,
-      width: nameDialogWidth,
+      width: dialogNarrow,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -160,10 +160,13 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
     );
     final beside =
         MediaQuery.sizeOf(context).width >=
-        nameDialogWidth + Space.xl + BoardEditor.width + dialogRoom;
-    return AlertDialog(
-      title: const Text('New chapter'),
-      content: SingleChildScrollView(
+        dialogNarrow + Space.xl + BoardEditor.width + dialogRoom;
+    return FormDialog(
+      title: 'New chapter',
+      width: null,
+      confirm: 'Create',
+      onConfirm: editing && _position == null ? null : _create,
+      body: SingleChildScrollView(
         child: !editing
             ? _form(context)
             : beside
@@ -184,16 +187,6 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
                 ],
               ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: editing && _position == null ? null : _create,
-          child: const Text('Create'),
-        ),
-      ],
     );
   }
 }

@@ -3,11 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'database_library.dart';
-import 'twic_download.dart';
 import '../../ui/theme.dart';
 import '../../ui/number_field.dart';
-import '../../ui/problem_line.dart';
-import '../../ui/progress_line.dart';
+import '../../ui/form_dialog.dart';
 
 /// Downloads through [library], which keeps it from running beside an
 /// import. Shown only where the library offers a download.
@@ -40,86 +38,61 @@ class _TwicDialogState extends State<_TwicDialog> {
       final library = widget.library;
       final download = library.download!;
       final waiting = library.busy && !download.running;
-      return PopScope(
-        canPop: !download.running,
-        child: AlertDialog(
-          title: const Text('Download TWIC'),
-          content: SizedBox(
-            width: 440,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Download recent weekly games from The Week in Chess. '
-                  'Issues already in the database are skipped.',
-                ),
-                const SizedBox(height: Space.m),
-                if (!download.running)
-                  Row(
-                    children: [
-                      const Expanded(child: Text('Weeks')),
-                      NumberField(
-                        label: 'Weeks',
-                        value: _weeks,
-                        min: 1,
-                        max: 520,
-                        onChanged: (value) {
-                          if (mounted) setState(() => _weeks = value);
-                        },
-                      ),
-                    ],
-                  ),
-                if (download.running) ...[
-                  ProgressLine(
-                    value: download.total == 0
-                        ? null
-                        : download.done / download.total,
-                  ),
-                  const SizedBox(height: Space.m),
-                ],
-                if (waiting)
-                  Text(
-                    library.removing != null
-                        ? 'Wait for the deletion to finish.'
-                        : 'Wait for the import to finish.',
-                  )
-                else if (download.status.isNotEmpty)
-                  Text(download.status),
-                if (download.problem case final problem?) ProblemLine(problem),
-              ],
+      return FormDialog(
+        title: 'Download TWIC',
+        width: dialogMedium,
+        busy: download.running,
+        progress: download.total == 0 ? null : download.done / download.total,
+        // While it runs the left button stops it rather than closing.
+        cancel: download.running ? 'Stop' : 'Cancel',
+        onCancel: download.running ? download.stop : null,
+        confirm: 'Download',
+        onConfirm: waiting ? null : _download,
+        canFail: true,
+        problem: download.problem,
+        body: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Download recent weekly games from The Week in Chess. '
+              'Issues already in the database are skipped.',
             ),
-          ),
-          actions: _actions(context, download, waiting: waiting),
+            const SizedBox(height: Space.m),
+            if (!download.running)
+              Row(
+                children: [
+                  const Expanded(child: Text('Weeks')),
+                  NumberField(
+                    label: 'Weeks',
+                    value: _weeks,
+                    min: 1,
+                    max: 520,
+                    onChanged: (value) {
+                      if (mounted) setState(() => _weeks = value);
+                    },
+                  ),
+                ],
+              ),
+            if (waiting)
+              Text(
+                library.removing != null
+                    ? 'Wait for the deletion to finish.'
+                    : 'Wait for the import to finish.',
+              )
+            else if (download.status.isNotEmpty)
+              Text(download.status),
+          ],
         ),
       );
     },
   );
 
-  /// Stop while downloading; otherwise Close and Download, which waits for
-  /// another job on the databases to end.
-  List<Widget> _actions(
-    BuildContext context,
-    TwicDownload download, {
-    required bool waiting,
-  }) => [
-    if (download.running)
-      TextButton(onPressed: download.stop, child: const Text('Stop'))
-    else ...[
-      TextButton(
-        onPressed: () => Navigator.of(context).pop(),
-        child: const Text('Close'),
-      ),
-      FilledButton(
-        onPressed: waiting
-            ? null
-            : () {
-                FocusScope.of(context).unfocus();
-                FocusManager.instance.applyFocusChangesIfNeeded();
-                unawaited(widget.library.downloadTwic(_weeks));
-              },
-        child: Text(download.problem == null ? 'Download' : 'Try again'),
-      ),
-    ],
-  ];
+  /// Starts the download, which waits for another job on the databases to
+  /// end; a number still being typed is taken first.
+  void _download() {
+    FocusScope.of(context).unfocus();
+    FocusManager.instance.applyFocusChangesIfNeeded();
+    unawaited(widget.library.downloadTwic(_weeks));
+  }
 }

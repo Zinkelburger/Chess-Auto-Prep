@@ -9,7 +9,7 @@ import '../../ui/listening_state.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/theme.dart';
 import 'comment_field.dart';
-import '../document/copy_name_dialog.dart';
+import '../document/save_copy.dart';
 import '../document/document_saver.dart';
 import '../document/document_session.dart';
 import '../document/session_results.dart';
@@ -127,7 +127,7 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
   }
 
   Future<void> _saveCopy() async {
-    final name = await showCopyNameDialog(context);
+    final name = await askCopyName(context);
     if (name == null || !mounted) return;
     final result = await widget.session.saveCopy(name);
     if (!mounted) return;

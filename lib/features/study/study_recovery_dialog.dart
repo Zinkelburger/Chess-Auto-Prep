@@ -137,7 +137,7 @@ class _RecoveryState extends State<_Recovery> {
     child: AlertDialog(
       title: const Text('Deleted studies'),
       content: SizedBox(
-        width: nameDialogWidth * 2,
+        width: dialogWide,
         height: MediaQuery.sizeOf(context).height * 0.5,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -167,14 +167,14 @@ class _RecoveryState extends State<_Recovery> {
       ),
       actions: [
         TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+        TextButton(
           onPressed: _busy
               ? null
               : () => setState(() => _listing = widget.studies.deleted()),
           child: const Text('Refresh'),
-        ),
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.pop(context),
-          child: const Text('Close'),
         ),
       ],
     ),

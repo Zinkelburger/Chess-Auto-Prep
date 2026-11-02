@@ -18,7 +18,7 @@ import '../features/study/studies_state.dart';
 import '../storage/chapter_files.dart';
 import '../workspace/book/books.dart';
 import '../workspace/document/chapter_commands.dart';
-import '../workspace/document/copy_name_dialog.dart';
+import '../workspace/document/save_copy.dart';
 import '../workspace/document/document_session.dart';
 import '../workspace/latest.dart';
 import '../chess/explorer_answer.dart' show ExplorerGame;

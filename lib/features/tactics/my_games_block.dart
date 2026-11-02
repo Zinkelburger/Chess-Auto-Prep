@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../chess/tactics/game_ids.dart';
 import '../../storage/my_accounts.dart';
+import '../../ui/form_dialog.dart';
 import '../../ui/theme.dart';
 import '../../ui/toggle_chip.dart';
 import 'my_games.dart';
@@ -288,38 +289,29 @@ class _AccountsDialogState extends State<_AccountsDialog> {
         controller: controller,
         autofocus: first,
         decoration: InputDecoration(labelText: label),
-        onSubmitted: (_) => _save(),
       );
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('My accounts'),
-      content: SizedBox(
-        width: nameDialogWidth,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _field(_lichess, 'Lichess username', true),
-            const SizedBox(height: Space.m),
-            _field(_chesscom, 'Chess.com username', false),
-            const SizedBox(height: Space.m),
-            Text(
-              'Only your username: your games are public. Leave one blank if '
-              'you do not play there.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
+    return FormDialog(
+      title: 'My accounts',
+      confirm: 'Save',
+      onConfirm: _save,
+      body: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _field(_lichess, 'Lichess username', true),
+          const SizedBox(height: Space.m),
+          _field(_chesscom, 'Chess.com username', false),
+          const SizedBox(height: Space.m),
+          Text(
+            'Only your username: your games are public. Leave one blank if '
+            'you do not play there.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(onPressed: _save, child: const Text('Save')),
-      ],
     );
   }
 }

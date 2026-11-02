@@ -9,7 +9,7 @@ import '../features/settings/settings_dialog.dart';
 import '../features/tactics/my_games_block.dart';
 import '../ui/app_action.dart';
 import '../ui/app_keys.dart';
-import '../workspace/document/copy_name_dialog.dart';
+import '../workspace/document/save_copy.dart';
 import '../workspace/document/document_actions.dart';
 import '../workspace/workspace.dart';
 import '../workspace/workspace_tabs.dart';
@@ -178,7 +178,7 @@ final class WindowActions {
   }
 
   Future<void> _saveCopy(BuildContext context) async {
-    final name = await showCopyNameDialog(context);
+    final name = await askCopyName(context);
     if (name == null || !context.mounted) return;
     // A file this app may not write cannot have a copy beside it either.
     final result = await workspace.session.saveCopy(

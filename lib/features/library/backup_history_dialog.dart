@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import '../../storage/backup_history.dart';
 import '../../storage/backups.dart';
 import '../../storage/chapter_files.dart';
+import '../../ui/form_dialog.dart';
 import '../../ui/list_message.dart';
-import '../../ui/problem_line.dart';
-import '../../ui/progress_line.dart';
+import '../../ui/theme.dart';
 
 /// Pick and inspect exact archived PGN before restoring it as a separate copy.
 Future<String?> showBackupHistory(
@@ -102,24 +102,30 @@ class _HistoryState extends State<_History> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text('Version history · ${widget.ref.fileName}'),
-    content: SizedBox(
-      width: 720,
-      height: 420,
+  Widget build(BuildContext context) => FormDialog(
+    title: 'Version history · ${widget.ref.fileName}',
+    width: dialogWide,
+    working: _busy,
+    canFail: true,
+    problem: _problem,
+    confirm: 'Restore as new repertoire',
+    onConfirm: _busy || _text == null
+        ? null
+        : () => Navigator.pop(context, _text),
+    body: SizedBox(
+      height: dialogListHeight,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
             'Restore a version as a new repertoire to inspect its chapters and lines.',
           ),
-          ProgressLine(active: _busy),
-          if (_problem != null) ProblemLine(_problem),
+          const SizedBox(height: Space.s),
           Expanded(
             child: Row(
               children: [
                 SizedBox(
-                  width: 210,
+                  width: dialogSideListWidth,
                   child: _versions.isEmpty
                       ? const ListMessage('No earlier versions.', inset: 0)
                       : ListView.builder(
@@ -162,17 +168,5 @@ class _HistoryState extends State<_History> {
         ],
       ),
     ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Close'),
-      ),
-      FilledButton(
-        onPressed: _busy || _text == null
-            ? null
-            : () => Navigator.pop(context, _text),
-        child: const Text('Restore as new repertoire'),
-      ),
-    ],
   );
 }

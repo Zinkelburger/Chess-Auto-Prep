@@ -89,7 +89,7 @@ class _ChoiceDialogState<T extends Object> extends State<_ChoiceDialog<T>> {
     return AlertDialog(
       title: Text(widget.title),
       content: SizedBox(
-        width: nameDialogWidth,
+        width: dialogNarrow,
         height: choiceDialogHeight,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

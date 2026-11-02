@@ -9,6 +9,7 @@ import '../../chess/position_setup.dart';
 import '../../ui/theme.dart';
 import 'board_view.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/form_dialog.dart';
 import '../../ui/problem_line.dart';
 
 /// What a press on the editor's board does.
@@ -457,9 +458,14 @@ class _BoardEditorDialogState extends State<_BoardEditorDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text(widget.title),
-    content: SingleChildScrollView(
+  Widget build(BuildContext context) => FormDialog(
+    title: widget.title,
+    width: null,
+    confirm: 'Use this position',
+    onConfirm: _position == null
+        ? null
+        : () => Navigator.pop(context, _position),
+    body: SingleChildScrollView(
       child: BoardEditor(
         initial: widget.initial,
         orientation: widget.orientation,
@@ -468,17 +474,5 @@ class _BoardEditorDialogState extends State<_BoardEditorDialog> {
         },
       ),
     ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton(
-        onPressed: _position == null
-            ? null
-            : () => Navigator.pop(context, _position),
-        child: const Text('Use this position'),
-      ),
-    ],
   );
 }

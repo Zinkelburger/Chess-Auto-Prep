@@ -42,9 +42,20 @@ const outlineRootText = TextStyle(
   fontSize: 12,
 );
 
-/// How wide a dialog that asks for one line of text is. Wide enough for a
-/// long chapter name, narrow enough not to fill the window.
-const nameDialogWidth = 360.0;
+/// The three widths a dialog comes in. Narrow asks for a name or a few
+/// values: wide enough for a long chapter name, narrow enough not to fill
+/// the window. Medium holds a form of several fields or a short list.
+/// Wide puts a list beside what it shows, or a long form of rows.
+const dialogNarrow = 360.0;
+const dialogMedium = 480.0;
+const dialogWide = 640.0;
+
+/// How tall a dialog is that shows a list with room to scroll, such as a
+/// file's earlier versions or the players read from pasted text.
+const dialogListHeight = 420.0;
+
+/// The list down the side of a wide dialog, beside what its row shows.
+const dialogSideListWidth = 220.0;
 
 /// Room for action labels with shortcuts in a separate right-hand gutter.
 const actionMenuWidth = 260.0;
@@ -519,6 +530,7 @@ ThemeData darkTheme() {
       ),
     ),
     popupMenuTheme: _popupMenu(_sized(base.textTheme)),
+    dialogTheme: _dialog(_sized(base.textTheme)),
     // A selected tile is filled in Selection Grey, its words in ink: the
     // same as every other selected row, not words in the accent.
     listTileTheme: const ListTileThemeData(
@@ -833,6 +845,21 @@ const readingNumberColor = _muted;
 const boardFocusWidth = 3.0;
 
 const double moveFeedbackHeight = 36;
+
+/// A dialog is a raised panel like a menu: graphite, a 1px outline and the
+/// reading card's radius, with no shadow and no tint, titled in the 18px
+/// title style.
+DialogThemeData _dialog(TextTheme text) => DialogThemeData(
+  backgroundColor: _panel,
+  surfaceTintColor: Colors.transparent,
+  shadowColor: Colors.transparent,
+  elevation: 0,
+  shape: RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(readingCardRadius),
+    side: const BorderSide(color: _outline),
+  ),
+  titleTextStyle: text.titleMedium,
+);
 
 /// The right-click menus, drawn like the top bar's menus.
 PopupMenuThemeData _popupMenu(TextTheme text) => PopupMenuThemeData(
