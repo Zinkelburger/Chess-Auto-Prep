@@ -22,13 +22,39 @@ python3 -m bughouse_arena \
 ```
 
 A side is an engine spec, or `random` / `random,sit=0.2` (random legal moves,
-for checking the harness without an engine). In a spec, `hivemind` is the
-engine the app ships, found as the bughouse MCP server finds it
-(`HIVEMIND_BIN`/`HIVEMIND_MODEL`, the app's unpacked bundle, or
-`assets/bughouse`). `bin=`, `model=` and `lib=` (the directory holding ONNX
-Runtime) point at another build or network, `nodes=` or `movetime=` set the
-search, `name=` labels the side, and any other `Option=value` is sent with
-`setoption`. `--engine PATH` sets `bin=` for both sides.
+for checking the harness without an engine). An engine spec is
+`[KIND,]key=value,...`; `nodes=` or `movetime=` set the search, `name=` labels
+the side, and any other `Option=value` is sent with `setoption`.
+
+| Kind | Engine | Files |
+|---|---|---|
+| `hivemind` (or no kind) | the engine the app ships, found as the bughouse MCP server finds it (`HIVEMIND_BIN`/`HIVEMIND_MODEL`, the app's unpacked bundle, or `assets/bughouse`) | `bin=`, `model=`, `lib=` (the ONNX Runtime directory); `--engine PATH` sets `bin=` |
+| `hypebeast` | the HypeBeast Fairy-Stockfish fork, sent `HypeBeast=true`; `Coordination=false` gives the ablation (default `true`) | `bin=` (default `$HYPEBEAST_HOME/bin/hypebeast`), `net=` |
+| `fsf` | **unmodified FSF bughouse via UCI snapshot adapter** | `bin=` (default `$HYPEBEAST_HOME/bin/fsf-ref`), `net=` |
+
+`model=` and `lib=` apply only to Hivemind. `net=` is sent as `EvalFile`
+(default `$HYPEBEAST_HOME/nets/bughouse-cd8cceab93fe.nnue`;
+`HYPEBEAST_HOME` defaults to `~/Projects/HypeBeast`) and both
+Fairy-Stockfish kinds get `UCI_Variant=bughouse`; they need `nodes=` or
+`movetime=`. The arena sets `UCI_Variant`, `EvalFile`, `HypeBeast`, `Seat`,
+`Clocks`, `Team` and `TimeAdvantage` itself, so a spec cannot.
+
+The three measured comparisons (PLAN rev 7 section 8), with the movetime the
+preflight below recommends in place of `T`:
+
+```bash
+O=bughouse_arena/opening_sets/screen20.txt   # heldout200.txt for the 200-pair runs
+python3 -m bughouse_arena --fixed-sample --openings $O --pairs 20 \
+    --contender hypebeast,movetime=T,name=hb-on --baseline fsf,movetime=T,name=fsf
+python3 -m bughouse_arena --fixed-sample --openings $O --pairs 20 \
+    --contender hypebeast,movetime=T,name=hb-on --baseline hivemind,nodes=400,name=hm-n400
+python3 -m bughouse_arena --fixed-sample --openings $O --pairs 20 \
+    --contender hypebeast,movetime=T,name=hb-on \
+    --baseline hypebeast,movetime=T,Coordination=false,name=hb-off
+```
+
+Run them, like every long job, through `scripts/ci.sh with -- ...` from the
+repository root (prefix `cd tools &&`), at the default `--concurrency 1`.
 
 ## Time model
 
@@ -70,13 +96,41 @@ port Hivemind's `engine/src/environment/board.cc` (unpack
 * An illegal move loses for its team; an engine crash voids the game, and
   `--resume` replays it.
 
+* A sitting HypeBeast seat may ask to be woken: if its search answered
+  `pass` and printed `info string hb_wake_after_ms=N`, the arena asks it
+  again N virtual ms later, or earlier on the react-cost wake or an advantage
+  flip. Intervening wakes keep that first deadline, and each board turn gets
+  at most one, so the wait cannot be renewed indefinitely. Other engines never
+  print it and see no change.
+
 ## Engines
 
 Every seat is its own process, so a team can mix engines, and a per-seat
 engine fits the `Player` interface in `sim.py`: `new_game(board, color)` and
-`decide(view) -> uci | None`, where `None` sits. Hivemind searches a joint
-action for its whole team; each seat keeps the half for its own board, and
-`pass` sits.
+`decide(view) -> uci | None`, where `None` sits. Hivemind and HypeBeast search
+a joint action for their whole team; each seat keeps the half for its own
+board, and `pass` sits.
+
+Hivemind and HypeBeast get `Team`, `TimeAdvantage` and the dual-FEN position
+(`position startpos moves 1e2e4 2d2d4 ...` or `position fen A|B moves ...`).
+`Seat` (`Awhite`/`Ablack`/`Bwhite`/`Bblack`, once per game) and `Clocks`
+(`aW,aB,bW,bB`, the virtual clocks in ms, before every `go`) are sent only
+to engines whose `uci` output advertises them, so Hivemind never receives
+them. The `hypebeast` kind refuses an engine that does not advertise
+`HypeBeast`, `Coordination`, `Seat`, `Team` and `TimeAdvantage`.
+
+The `fsf` kind is labelled **unmodified FSF bughouse via UCI snapshot
+adapter**. Each decision sends the seat's own board as one FEN with the real
+pockets in bracket notation (promoted pieces marked `~`), castling, the
+en-passant square and the referee's counters (`players.fsf_fen`), then `go`,
+and reads an ordinary `bestmove`. It receives actual hands but no pre-root
+repetition history and no CECP partner messages, so it does not measure every
+native team-play feature. When the referee says play goes on but the seat has
+no legal move, the adapter sits without asking the engine. A null (`(none)`,
+`0000`) or illegal answer while legal moves exist goes to the referee
+unchanged and loses as an illegal move; nothing is substituted. The first
+search must report `NNUE evaluation using <net>`, or the seat fails rather
+than play on a classical fallback.
 
 An idle seat must not search on another seat's time. Builds that advertise
 `PermanentBrain` get it turned off; older ones, including the shipped release,
@@ -90,11 +144,110 @@ shipped engine.
 
 The match directory (default
 `~/.local/share/chess-prep/bughouse-arena/<contender>-vs-<baseline>`) holds
-`results.jsonl` (one game per line, with every move, sit and advantage flip
-and the clocks at each), `games.bpgn` (moves with time stamps), and
-`summary.json`: score, Elo with a 95% CI over opening pairs, the pentanomial,
-SPRT state, terminations, and per-side sitting behaviour (sits, seconds sat
-per game, share of decisions taken up on time). Openings are random
-(`--opening-plies` per board) or read from `--openings` (engine-format move
-lists such as `1e2e4 2d2d4`, or dual FENs). The statistics port Hivemind's
-`engine/src/tools/tournament.cc`, so the numbers mean the same thing.
+`results.jsonl` (one game per line, with every move, sit, wake and advantage
+flip and the clocks at each, and each engine seat's searches, nodes, search
+latencies, passes, mandatory sits and wake requests), `games.bpgn` (moves
+with time stamps), `manifest.json` and `summary.json`: score, Elo with a 95%
+CI over opening pairs, the pentanomial, SPRT state, terminations, per-side
+sitting behaviour (sits, seconds sat per game, share of decisions taken up on
+time, timer wakes), per-side search latency (mean/median/p95/max), and the
+`fixed_sample` block below. `--engine-logs` keeps each process's UCI traffic.
+Openings are random (`--opening-plies` per board) or read from `--openings`
+(engine-format move lists such as `1e2e4 2d2d4`, or dual FENs). The legacy
+statistics port Hivemind's `engine/src/tools/tournament.cc`, so those numbers
+mean the same thing.
+
+`manifest.json` pins the run: each side's kind, settings and the SHA-256 of
+its binary, model, ONNX Runtime and net, the engine's own `uci` description
+(id, advertised options and defaults, startup info strings, the options the
+arena sent, and for the Fairy-Stockfish kinds one probe search confirming
+NNUE), the opening file and its hash, clock model, seed, statistics mode,
+arena source hashes and git HEAD, the host (CPU, cores, memory, cgroup CPU
+quota, thread-related environment) and the command line. `--resume` refuses
+to continue if any pin changed. Games voided by an engine crash or timeout
+are moved to `replayed_errors.jsonl` before being replayed, and counted.
+
+## Fixed-sample statistics
+
+The ported SPRT scores each pair by total points rather than by the
+distribution of pair outcomes, so `--fixed-sample` disables it (it refuses
+`--sprt-*`) and plays exactly `--pairs` pairs, one opening each. The
+`fixed_sample` block reports W/D/L, score, the pentanomial (`0-2` ... `2-0`
+pair outcomes), and a 95% interval with opening pairs as the sampling unit:
+the Wilson score interval for the mean pair score with effective sample size
+`pairs / phi`, where `phi` (the variance over its maximum `p(1-p)`) comes from
+the pentanomial with 0.5 pseudocounts per outcome. The pseudocounts touch only
+the dispersion, so the interval always contains the observed score. Unlike
+the paired normal approximation it never has zero width: all pairs won gives
+`[L, 100%]`, all pairs drawn 1-1 a narrow band around 50%. Elo is secondary;
+it is `null` at 0% or 100%, and an interval end at 0% or 100% is unbounded.
+Crashes, timeouts and illegal moves are listed under `reliability`, never
+dropped silently.
+
+## Openings
+
+`opening_sets/` holds pinned sets cut from real FICS games by
+`python3 -m bughouse_arena.openings` (each file's header has the command): the
+first 16 half-moves of a rated game whose four players are all 1800+, in the
+order they were played, so the pockets are the real ones. Positions where a
+side to move is in check, has no legal move, or the game is decided are
+skipped, and at least one pocket must be non-empty. Every second opening has
+its boards swapped, so board roles are balanced across a set; within a match
+each opening is played twice with teams swapped and the same seeded move
+costs per seat.
+
+| File | Use |
+|---|---|
+| `debug.txt` | debugging and tuning only; never report results on it |
+| `preflight.txt` | middlegame positions (32 half-moves) for the latency preflight |
+| `screen20.txt` | 20-pair screening matches |
+| `heldout200.txt` | the fresh 200-pair strength matches; do not inspect or tune on it |
+
+Each comes from a different archive year and no position appears in two sets.
+"Held out" means held out from our own tuning and screening; what Hivemind
+was trained on is not known.
+
+## Hivemind latency preflight
+
+```bash
+python3 -m bughouse_arena.preflight --output ~/.local/share/chess-prep/bughouse-arena/preflight.json
+```
+
+Searches every `preflight.txt` seat on turn with Hivemind at `nodes=400`
+and at `go movetime` 100/250/500/1000 ms, after discarded warm-up searches,
+in one process. It reports mean, median, p95, max and total latency, nodes,
+overruns, whether movetime is honoured (median at least 0.8 M, p95 at most
+M + max(10%, 25 ms)), the host, cgroup CPU quota, the engine's threads,
+backend and hash as it reports them, file hashes, and the local Hivemind
+checkout. Its recommendation: if movetime is honoured, one movetime for every
+arm; otherwise Hivemind keeps `nodes=400` and the Fairy-Stockfish arms get its
+mean latency as total movetime ("matched mean compute"). Run it under the same
+`scripts/ci.sh with` limits as the matches, since the job's CPU quota changes
+the latency.
+
+## Pinned Hivemind
+
+The arena's `hivemind` is whatever `tools/mcp/bughouse/paths.py` finds; on
+the measuring machine that is the app's unpacked bundle in
+`~/.local/share/com.example.chess_auto_prep/bughouse/`, which matches
+`tools/assets.lock.json` (release `engine-v0.2.0`):
+
+| File | SHA-256 | Lock entry |
+|---|---|---|
+| `hivemind-linux` (3,721,512 bytes) | `2d8c6cdb1183c0ef0105368524bea98e03cace3dd5df0a6a1f0f0a4efa97cfe5` | `bughouse-linux:engine` payload |
+| `hivemind.onnx` (54,415,625 bytes) | `61f74ba7d9a79868b565d51ece450519a4dc6b38d697aabd117fc5b843281a2f` | `bughouse-network` payload (fp32) |
+| `libonnxruntime.so.1` | `5715f06d8992ca8eeeddcce43df3a7d38f97d537052126f558e912cb312460ca` | `bughouse-linux:runtime` payload |
+
+It reports `Hivemind 1.0`, backend ONNX Runtime (CPU), batch 8, 4 search
+workers and intra-op threads = cores / 4. It has no `PermanentBrain` option
+(the arena sends `stop` after each `bestmove`) and ignores
+`HIVEMIND_ORT_THREADS`. Every run's manifest records these hashes again.
+
+The source checkout at `~/Projects/hivemind` is not that build: on
+2026-11-06 it was branch `portable-desktop-builds` at `5508ba9` (tag
+`engine-v0.1.0`), one commit behind `engine-v0.2.0` (`0b02588`, MultiPV while
+searching and `go infinite`), with uncommitted edits adding `PermanentBrain`
+and `HIVEMIND_ORT_THREADS`. Its `dist/` and `engine/build-ort/` binaries hash
+differently from the installed one, and its `engine/models/hivemind.onnx`
+(`a0ec548c...`) is not the installed network (its `hivemind-fp32.onnx` is).
+The preflight report records the checkout's state each time it runs.

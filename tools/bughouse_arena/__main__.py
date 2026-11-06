@@ -5,10 +5,23 @@
         --baseline  hivemind,nodes=100,name=n100 \
         --pairs 50 --sprt-elo0 0 --sprt-elo1 20
 
-A side is an engine spec or ``random[,sit=p]``. ``hivemind`` alone is the
-engine the app ships; ``bin=``, ``model=`` and ``lib=`` point at another build
-or network, ``nodes=`` or ``movetime=`` set the search, ``name=`` labels it,
-and any other ``Option=value`` is sent with setoption.
+A side is ``random[,sit=p]`` or an engine spec ``[KIND,]key=value,...``:
+
+  hivemind   the engine the app ships (also a spec with no kind); ``bin=``,
+             ``model=`` and ``lib=`` point at another build, network or ONNX
+             Runtime directory
+  hypebeast  the HypeBeast fork (``HypeBeast=true``; ``Coordination=false``
+             for the ablation); ``bin=``, ``net=`` (EvalFile)
+  fsf        unmodified Fairy-Stockfish bughouse via the UCI snapshot
+             adapter; ``bin=``, ``net=`` (EvalFile)
+
+``nodes=`` or ``movetime=`` set the search (the Fairy-Stockfish kinds need
+one), ``name=`` labels it, and any other ``Option=value`` is sent with
+setoption. Measured runs use ``--fixed-sample`` with a pinned opening file:
+
+    python3 -m bughouse_arena --fixed-sample \
+        --contender hypebeast,movetime=500 --baseline fsf,movetime=500 \
+        --openings bughouse_arena/opening_sets/screen20.txt --pairs 20
 """
 
 from __future__ import annotations
@@ -39,7 +52,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         prog="python3 -m bughouse_arena",
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--engine", type=Path,
-                        help="default engine binary for both sides (else the bundled one)")
+                        help="default Hivemind binary for hivemind specs (else the bundled one)")
     parser.add_argument("--contender", required=True)
     parser.add_argument("--baseline", required=True)
     parser.add_argument("--pairs", type=int, default=10, help="openings; each is played twice")
@@ -60,6 +73,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--engine-logs", action="store_true", help="write each process's UCI traffic")
     parser.add_argument("--verbose", action="store_true", help="print every move and sit")
+    parser.add_argument("--fixed-sample", action="store_true",
+                        help="play exactly --pairs pairs, no SPRT stopping, and report the "
+                             "pair-aware interval; needs one opening per pair")
     parser.add_argument("--sprt-elo0", type=float, default=0.0)
     parser.add_argument("--sprt-elo1", type=float, default=0.0)
     parser.add_argument("--sprt-alpha", type=float, default=0.05)
@@ -68,7 +84,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = parse_args(sys.argv[1:] if argv is None else argv)
+    argv = sys.argv[1:] if argv is None else argv
+    args = parse_args(argv)
+    if args.fixed_sample and args.sprt_elo1 > args.sprt_elo0:
+        print("bughouse_arena: --fixed-sample runs do not use SPRT stopping", file=sys.stderr)
+        return 2
     ort_threads = args.ort_threads or default_ort_threads(args.concurrency)
     try:
         contender = PlayerFactory(args.contender, args.engine, ort_threads, None)
@@ -88,12 +108,19 @@ def main(argv: list[str] | None = None) -> int:
         opening_plies=args.opening_plies, concurrency=args.concurrency,
         resume=args.resume, verbose=args.verbose,
         sprt=((args.sprt_elo0, args.sprt_elo1, args.sprt_alpha, args.sprt_beta)
-              if args.sprt_elo1 > args.sprt_elo0 else None))
+              if args.sprt_elo1 > args.sprt_elo0 else None),
+        fixed_sample=args.fixed_sample, openings_path=args.openings,
+        ort_threads=ort_threads, argv=["python3", "-m", "bughouse_arena", *argv])
     try:
         summary = run_match(config, contender, baseline)
-    except (RuntimeError, FileExistsError) as error:
+    except (RuntimeError, FileExistsError, ValueError) as error:
         print(f"bughouse_arena: {error}", file=sys.stderr)
         return 1
+    if args.fixed_sample:
+        print(format_fixed_sample(contender.name, baseline.name, summary["fixed_sample"])
+              + f"\nterminations {summary['terminations']}"
+              + f"\nsummary: {args.output / 'summary.json'}")
+        return 0
     elo = summary["contender_elo"]
     interval = summary["elo_confidence_95"]
     print(f"\n{contender.name} vs {baseline.name}: "
@@ -104,6 +131,31 @@ def main(argv: list[str] | None = None) -> int:
           + f"\nterminations {summary['terminations']}"
           + f"\nsummary: {args.output / 'summary.json'}")
     return 0
+
+
+def format_fixed_sample(contender: str, baseline: str, block: dict) -> str:
+    def elo(value):
+        return "unbounded" if value is None else f"{value:+.0f}"
+
+    lines = [f"\n{contender} vs {baseline}: +{block['wins']} ={block['draws']} -{block['losses']}"
+             f" over {block['complete_pairs']}/{block['declared_pairs']} complete pairs"]
+    if block["score"] is not None:
+        low, high = block["score_interval_95"]
+        lines.append(f"score {100 * block['score']:.1f}% (95% CI {100 * low:.1f}% to "
+                     f"{100 * high:.1f}%, opening pairs as the unit)")
+        point = block["elo"]
+        bounds = block["elo_interval_95"]
+        lines.append(f"elo {'n/a at 0%/100%' if point is None else f'{point:+.0f}'}"
+                     f" (95% CI {elo(bounds[0])} to {elo(bounds[1])})")
+    lines.append("pairs " + " ".join(f"{k}:{v}" for k, v in block["pentanomial"].items()))
+    reliability = block["reliability"]
+    lines.append(f"reliability errors={reliability['errors']} "
+                 f"illegal={reliability['illegal_moves']} "
+                 f"replayed={reliability['replayed_errors']}"
+                 + ("" if reliability["ok"] else "  NOT a clean run"))
+    if not block["sample_complete"]:
+        lines.append("sample INCOMPLETE: the declared pairs were not all played")
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

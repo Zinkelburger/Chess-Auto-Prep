@@ -3,8 +3,10 @@
 
 Offline and unittest-only beyond python-chess. The referee cases are ported
 one-for-one from Hivemind's engine/tests/test_mate_detection.cc, so a change to
-the engine's mate rule that is not mirrored here fails loudly. The engine
-checks need a Hivemind build and ``--engine``.
+the engine's mate rule that is not mirrored here fails loudly. Protocol tests
+for the hivemind/hypebeast/fsf kinds run against a scripted fake UCI engine
+(FAKE_ENGINE below), so no engine build is needed. The real-engine checks need
+``--engine`` and a Hivemind build and/or ``$HYPEBEAST_HOME/bin/fsf-ref``.
 
 Run:
     python3 tools/test_bughouse_arena.py
@@ -13,8 +15,11 @@ Run:
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
+import os
+import random
 import sys
 import tempfile
 import unittest
@@ -22,16 +27,23 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 import chess
+from chess.variant import CrazyhouseBoard
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from bughouse_arena.match import MatchConfig, PlayerFactory, run_match  # noqa: E402
-from bughouse_arena.players import EngineSpec, HivemindSeat, RandomPlayer  # noqa: E402
+from bughouse_arena import openings as opening_sets  # noqa: E402
+from bughouse_arena import preflight  # noqa: E402
+from bughouse_arena.match import (MatchConfig, PlayerFactory, game_plan,  # noqa: E402
+                                  load_openings, run_match)
+from bughouse_arena.players import (FSF_LABEL, EngineError, EngineSpec, FsfSeat,  # noqa: E402
+                                    HivemindSeat, RandomPlayer, TeamEngineSeat, fsf_fen,
+                                    hypebeast_home)
 from bughouse_arena.referee import (BOARD_A, BOARD_B, STARTING_FEN, Bughouse,  # noqa: E402
                                     IllegalMove)
-from bughouse_arena.sim import (ClockConfig, MoveCosts, play_game, seat_index,  # noqa: E402
-                                time_advantage)
-from bughouse_arena.stats import paired_sprt, score_to_elo, summarize  # noqa: E402
+from bughouse_arena.sim import (ClockConfig, MoveCosts, SeatView, play_game,  # noqa: E402
+                                seat_index, time_advantage)
+from bughouse_arena.stats import (pair_interval, paired_sprt, score_to_elo,  # noqa: E402
+                                  summarize)
 
 WANT_ENGINE = "--engine" in sys.argv
 
@@ -394,6 +406,701 @@ class MatchFiles(unittest.TestCase):
             self.assertIn('[WhiteA "random"]', (output / "games.bpgn").read_text())
 
 
+TOOLS = Path(__file__).resolve().parent
+
+FAKE_ENGINE = r'''#!{python}
+"""Scripted UCI engine for the arena tests: kind {kind!r}, behaviour {behaviour!r}."""
+import json
+import sys
+import time
+
+sys.path.insert(0, {tools!r})
+from chess.variant import CrazyhouseBoard  # noqa: E402
+from bughouse_arena.referee import Bughouse  # noqa: E402
+
+KIND = {kind!r}
+BEHAVIOUR = {behaviour!r}
+log = open({log!r}, "a")
+log.write("ARGV " + json.dumps(sys.argv) + "\n")
+log.flush()
+COMMON = ["option name Threads type spin default 1 min 1 max 512",
+          "option name Hash type spin default 16 min 1 max 33554432",
+          "option name Ponder type check default false"]
+FSF = ["option name UCI_Variant type combo default chess var bughouse var chess",
+       "option name Use NNUE type check default true",
+       "option name EvalFile type string default <empty>"]
+TEAM = ["option name Team type combo default white var white var black",
+        "option name TimeAdvantage type check default false"]
+HYPEBEAST = ["option name HypeBeast type check default false",
+             "option name Coordination type check default true",
+             "option name Seat type combo default Awhite var Awhite var Ablack var Bwhite var Bblack",
+             "option name Clocks type string"]
+ADVERTISED = {{"hivemind": ["option name Hash type spin default 16 min 1 max 1024",
+                           "option name Ponder type check default true"] + TEAM,
+              "hypebeast": COMMON + FSF + TEAM + HYPEBEAST,
+              "fsf": COMMON + FSF}}[KIND]
+ADVERTISED = [line for line in ADVERTISED
+              if line.split()[2] not in BEHAVIOUR.get("hide", [])]
+ADVERTISED += [line for line in TEAM + HYPEBEAST if line.split()[2] in BEHAVIOUR.get("advertise", [])]
+options = {{}}
+position = "position startpos"
+
+
+def say(text):
+    sys.stdout.write(text + "\n")
+    sys.stdout.flush()
+
+
+def team_answer():
+    tokens = position.split()
+    game = Bughouse()
+    if tokens[1] == "fen":
+        game = Bughouse.from_dual_fen(" ".join(tokens[2:tokens.index("moves")] if "moves" in tokens
+                                               else tokens[2:]))
+    if "moves" in tokens:
+        for token in tokens[tokens.index("moves") + 1:]:
+            game.push(int(token[0]) - 1, token[1:])
+    team_white = options.get("Team", "white") == "white"
+    halves = []
+    for board in (0, 1):
+        colour = team_white if board == 0 else not team_white
+        mine = KIND == "hivemind" or board == "AB".index(options.get("Seat", "Awhite")[0])
+        moves = sorted(game.legal_moves(board))
+        halves.append(moves[0] if mine and game.turn(board) == colour and moves else "pass")
+    if BEHAVIOUR.get("pass"):
+        halves = ["pass", "pass"]
+    if "wake" in BEHAVIOUR:
+        say(f"info string hb_wake_after_ms={{BEHAVIOUR['wake']}}")
+    return f"({{halves[0]}},{{halves[1]}})"
+
+
+def fsf_answer():
+    tokens = position.split()
+    board = CrazyhouseBoard(" ".join(tokens[2:]) if tokens[1] == "fen" else CrazyhouseBoard.starting_fen)
+    if BEHAVIOUR.get("null"):
+        return "(none)"
+    if BEHAVIOUR.get("illegal"):
+        return "e2e5"
+    moves = sorted(move.uci() for move in board.legal_moves)
+    return moves[0] if moves else "(none)"
+
+
+for raw in sys.stdin:
+    line = raw.strip()
+    log.write(line + "\n")
+    log.flush()
+    if line == "uci":
+        say(f"id name Fake-{{KIND}}")
+        say("id author arena tests")
+        for option in ADVERTISED:
+            say(option)
+        say("uciok")
+    elif line == "isready":
+        say("readyok")
+    elif line.startswith("setoption name "):
+        name, _, value = line[len("setoption name "):].partition(" value ")
+        options[name] = value
+    elif line.startswith("position"):
+        position = line
+    elif line.startswith("go"):
+        tokens = line.split()
+        if "movetime" in tokens:
+            time.sleep(int(tokens[tokens.index("movetime") + 1]) / 1000 * BEHAVIOUR.get("slow", 1))
+        if KIND != "hivemind" and not BEHAVIOUR.get("no_nnue"):
+            say(f"info string NNUE evaluation using {{options.get('EvalFile', '')}} enabled")
+        say("info depth 1 seldepth 1 multipv 1 score cp 0 nodes 42 nps 4200 time 10 pv a2a3")
+        say("bestmove " + (fsf_answer() if KIND == "fsf" else team_answer()))
+    elif line == "quit":
+        break
+'''
+
+
+class FakeEngines:
+    """Writes fake engines into a temporary directory; ``commands(name)``
+    returns what one received."""
+
+    def __init__(self, directory: Path):
+        self.directory = directory
+        self.net = directory / "bughouse-test.nnue"
+        self.net.write_bytes(b"not really a net")
+        self.model = directory / "model.onnx"
+        self.model.write_bytes(b"not really a model")
+
+    def make(self, name: str, kind: str, **behaviour) -> Path:
+        path = self.directory / name
+        path.write_text(FAKE_ENGINE.format(python=sys.executable, kind=kind, behaviour=behaviour,
+                                           tools=str(TOOLS), log=str(self.log(name))))
+        path.chmod(0o755)
+        return path
+
+    def log(self, name: str) -> Path:
+        return self.directory / f"{name}.commands"
+
+    def commands(self, name: str) -> list[str]:
+        return self.log(name).read_text().splitlines()
+
+    def spec(self, kind: str, name: str, extra: str = "", **behaviour) -> EngineSpec:
+        binary = self.make(name, kind, **behaviour)
+        if kind == "hivemind":
+            text = f"hivemind,bin={binary},model={self.model},nodes=5"
+        else:
+            text = f"{kind},bin={binary},net={self.net},nodes=5"
+        return EngineSpec.parse(text + extra)
+
+
+def view_of(game, board, color, advantage=False, clocks=(120_000,) * 4, now=0):
+    team = color if board == BOARD_A else not color
+    return SeatView(game, board, color, team, advantage, clocks, now, False)
+
+
+class TempDir(unittest.TestCase):
+    def setUp(self):
+        self._temp = tempfile.TemporaryDirectory()
+        self.dir = Path(self._temp.name)
+        self.fakes = FakeEngines(self.dir)
+
+    def tearDown(self):
+        self._temp.cleanup()
+
+
+class EngineKinds(unittest.TestCase):
+    def test_kind_prefix_and_backward_compatible_hivemind_specs(self):
+        for text in ("hivemind,bin=/x/hm,model=/x/n.onnx,nodes=9", "bin=/x/hm,model=/x/n.onnx,nodes=9"):
+            with self.subTest(text):
+                spec = EngineSpec.parse(text)
+                self.assertEqual((spec.kind, spec.model, spec.nodes), ("hivemind", Path("/x/n.onnx"), 9))
+
+    def test_fsf_and_hypebeast_defaults(self):
+        home = hypebeast_home()
+        fsf = EngineSpec.parse("fsf,movetime=250")
+        self.assertEqual((fsf.kind, fsf.binary, fsf.net, fsf.movetime_ms, fsf.model),
+                         ("fsf", home / "bin/fsf-ref", home / "nets/bughouse-cd8cceab93fe.nnue",
+                          250, None))
+        self.assertEqual(fsf.name, "fsf-t250")
+        self.assertEqual(fsf.describe()["label"], FSF_LABEL)
+        hb = EngineSpec.parse("hypebeast,nodes=1000")
+        self.assertEqual((hb.binary, hb.options, hb.name),
+                         (home / "bin/hypebeast", {"Coordination": "true"}, "hypebeast-coord-n1000"))
+        off = EngineSpec.parse("hypebeast,nodes=1000,Coordination=false,Hash=64")
+        self.assertEqual((off.options, off.name),
+                         ({"Coordination": "false", "Hash": "64"}, "hypebeast-nocoord-n1000"))
+
+    def test_hivemind_only_arguments_are_rejected_elsewhere(self):
+        for text in ("fsf,model=/x.onnx,nodes=5", "hypebeast,lib=/x,nodes=5", "fsf",
+                     "hypebeast,movetime=5,nodes=5", "fsf,nodes=5,EvalFile=/x",
+                     "hypebeast,nodes=5,Seat=Awhite", "fsf,nodes=5,Coordination=false",
+                     "hypebeast,nodes=5,Coordination=maybe", "stockfish,nodes=5",
+                     "hivemind,bin=/x,model=/y,net=/z"):
+            with self.subTest(text), self.assertRaises(ValueError):
+                EngineSpec.parse(text)
+
+
+class OptionGating(TempDir):
+    def test_hivemind_gets_team_and_advantage_but_never_seat_or_clocks(self):
+        seat = HivemindSeat(self.fakes.spec("hivemind", "hm"))
+        try:
+            seat.new_game(BOARD_B, B)
+            game = play(Bughouse(), "1e2e4 2e2e4")
+            move = seat.decide(view_of(game, BOARD_B, B, advantage=True, clocks=(1, 2, 3, 4)))
+        finally:
+            seat.close()
+        commands = self.fakes.commands("hm")
+        self.assertIn("--model", json.loads(commands[0][len("ARGV "):]))
+        self.assertIn("setoption name Team value white", commands)   # B-black is team white
+        self.assertIn("setoption name TimeAdvantage value true", commands)
+        self.assertIn("position startpos moves 1e2e4 2e2e4", commands)
+        self.assertFalse([c for c in commands if c.startswith(("setoption name Seat",
+                                                                "setoption name Clocks"))])
+        self.assertIn("stop", commands)   # no PermanentBrain: stop after bestmove
+        self.assertTrue(game.is_legal(BOARD_B, move))
+
+    def test_seat_and_clocks_follow_the_advertisement_not_the_kind(self):
+        seat = HivemindSeat(self.fakes.spec("hivemind", "hm2", advertise=["Seat", "Clocks"]))
+        try:
+            seat.new_game(BOARD_A, W)
+            seat.decide(view_of(Bughouse(), BOARD_A, W, clocks=(5, 6, 7, 8)))
+        finally:
+            seat.close()
+        commands = self.fakes.commands("hm2")
+        self.assertIn("setoption name Seat value Awhite", commands)
+        self.assertIn("setoption name Clocks value 5,6,7,8", commands)
+
+    def test_hypebeast_handshake_seat_once_and_clocks_before_every_go(self):
+        spec = self.fakes.spec("hypebeast", "hb", ",Coordination=false")
+        seat = TeamEngineSeat(spec)
+        game = Bughouse()
+        try:
+            seat.new_game(BOARD_B, B)
+            play(game, "2e2e4")
+            first = seat.decide(view_of(game, BOARD_B, B, clocks=(120_000, 119_000, 118_000, 117_500)))
+            play(game, f"2{first} 2d2d4")
+            seat.decide(view_of(game, BOARD_B, B, clocks=(110_000, 109_000, 108_000, 107_001)))
+        finally:
+            seat.close()
+        commands = self.fakes.commands("hb")
+        self.assertNotIn("--model", json.loads(commands[0][len("ARGV "):]))
+        for expected in ("setoption name UCI_Variant value bughouse",
+                         f"setoption name EvalFile value {self.fakes.net}",
+                         "setoption name HypeBeast value true",
+                         "setoption name Coordination value false",
+                         "setoption name Team value white"):
+            self.assertIn(expected, commands)
+        self.assertEqual([c for c in commands if c.startswith("setoption name Seat")],
+                         ["setoption name Seat value Bblack"])
+        clocks = [i for i, c in enumerate(commands) if c.startswith("setoption name Clocks")]
+        goes = [i for i, c in enumerate(commands) if c.startswith("go ")]
+        self.assertEqual([commands[i] for i in clocks],
+                         ["setoption name Clocks value 120000,119000,118000,117500",
+                          "setoption name Clocks value 110000,109000,108000,107001"])
+        self.assertEqual(len(goes), 2)
+        self.assertTrue(clocks[0] < goes[0] < clocks[1] < goes[1])
+        self.assertTrue(commands[goes[1] - 1].startswith("position startpos moves 2e2e4"))
+        self.assertNotIn("stop", commands)
+
+    def test_seat_values_for_every_seat(self):
+        spec = self.fakes.spec("hypebeast", "hb4")
+        seat = TeamEngineSeat(spec)
+        try:
+            for board, color in ((BOARD_A, W), (BOARD_A, B), (BOARD_B, W), (BOARD_B, B)):
+                seat.new_game(board, color)
+        finally:
+            seat.close()
+        commands = self.fakes.commands("hb4")
+        self.assertEqual([c.split()[-1] for c in commands if c.startswith("setoption name Seat")],
+                         ["Awhite", "Ablack", "Bwhite", "Bblack"])
+        self.assertEqual([c.split()[-1] for c in commands if c.startswith("setoption name Team")],
+                         ["white", "black", "black", "white"])
+
+    def test_hypebeast_kind_requires_its_options(self):
+        for hidden in ("HypeBeast", "Seat", "Coordination"):
+            with self.subTest(hidden), self.assertRaises(EngineError):
+                TeamEngineSeat(self.fakes.spec("hypebeast", f"no-{hidden}", hide=[hidden])).close()
+
+    def test_wake_request_is_read_only_from_a_passing_search(self):
+        seat = TeamEngineSeat(self.fakes.spec("hypebeast", "waker", **{"pass": True, "wake": 3000}))
+        mover = TeamEngineSeat(self.fakes.spec("hypebeast", "mover", wake=3000))
+        try:
+            for player in (seat, mover):
+                player.new_game(BOARD_A, W)
+            self.assertIsNone(seat.decide(view_of(Bughouse(), BOARD_A, W)))
+            self.assertEqual(seat.requested_wake_ms, 3000)
+            self.assertIsNotNone(mover.decide(view_of(Bughouse(), BOARD_A, W)))
+            self.assertIsNone(mover.requested_wake_ms)
+            self.assertEqual(seat.game_stats["wake_requests"], 1)
+        finally:
+            seat.close()
+            mover.close()
+
+
+class FsfFen(unittest.TestCase):
+    def test_bracket_pockets_promoted_marks_and_counters(self):
+        board = CrazyhouseBoard("r1bqkb1r/pppp1Q~pp/2n2n2/4p3/2B1P3/8/PPPP1PPP/RNB1K1NR"
+                                "[NPQqnp] b KQkq - 0 4")
+        self.assertEqual(fsf_fen(board), "r1bqkb1r/pppp1Q~pp/2n2n2/4p3/2B1P3/8/PPPP1PPP/"
+                                         "RNB1K1NR[QNPqnp] b KQkq - 0 4")
+        self.assertEqual(fsf_fen(CrazyhouseBoard("r3k2r/8/8/8/8/8/8/R3K2R[] w Kq - 3 20")),
+                         "r3k2r/8/8/8/8/8/8/R3K2R[] w Kq - 3 20")
+
+    def test_promotion_and_transfers_from_the_referee(self):
+        game = play(Bughouse("1r5k/P7/8/8/8/8/8/K7[] w - - 0 1", BARE_KINGS_W), "1a7a8q")
+        self.assertEqual(fsf_fen(game.boards[BOARD_A]), "Qr5k/8/8/8/8/8/8/K7[] b - - 0 1"
+                         .replace("Qr", "Q~r"))
+        play(game, "1b8a8")   # the promoted queen goes to board B's white as a pawn
+        self.assertEqual(fsf_fen(game.boards[BOARD_B]), "4k3/8/8/8/8/8/8/4K3[P] w - - 0 1")
+
+    def test_en_passant_square_only_when_capturable(self):
+        game = play(Bughouse(), "1e2e4")
+        self.assertIn(" b KQkq - 0 1", fsf_fen(game.boards[BOARD_A]))
+        play(game, "1a7a6 1e4e5 1d7d5")
+        self.assertIn(" w KQkq d6 0 3", fsf_fen(game.boards[BOARD_A]))
+
+    def test_round_trips_through_python_chess(self):
+        rng = random.Random(7)
+        pockets = promoted = 0
+        for _ in range(30):
+            game = Bughouse()
+            for _ in range(80):
+                board = rng.choice((BOARD_A, BOARD_B))
+                moves = sorted(game.legal_moves(board))
+                if not moves:
+                    continue
+                game.push(board, rng.choice(moves))
+                for position in game.boards:
+                    fen = fsf_fen(position)
+                    back = CrazyhouseBoard(fen)
+                    self.assertEqual(fsf_fen(back), fen)
+                    self.assertEqual(back.board_fen(promoted=True), position.board_fen(promoted=True))
+                    for color in (W, B):
+                        for piece in chess.PIECE_TYPES[:-1]:
+                            self.assertEqual(back.pockets[color].count(piece),
+                                             position.pockets[color].count(piece))
+                    self.assertEqual((back.turn, back.clean_castling_rights(), back.halfmove_clock,
+                                      back.fullmove_number, back.promoted),
+                                     (position.turn, position.clean_castling_rights(),
+                                      position.halfmove_clock, position.fullmove_number,
+                                      position.promoted))
+                    self.assertEqual(set(back.legal_moves), set(position.legal_moves))
+                    pockets += "[]" not in fen
+                    promoted += "~" in fen
+        self.assertGreater(pockets, 100)
+        self.assertGreater(promoted, 0)
+
+
+class FsfAdapter(TempDir):
+    def test_sends_the_seats_board_as_fen_and_plays_legal_moves(self):
+        seat = FsfSeat(self.fakes.spec("fsf", "fsf"))
+        game = play(Bughouse(), "1e2e4 1d7d5 1e4d5 2d2d4")   # board B black now holds a pawn
+        try:
+            seat.new_game(BOARD_B, B)
+            move = seat.decide(view_of(game, BOARD_B, B))
+        finally:
+            seat.close()
+        commands = self.fakes.commands("fsf")
+        self.assertNotIn("--model", json.loads(commands[0][len("ARGV "):]))
+        self.assertIn("setoption name UCI_Variant value bughouse", commands)
+        self.assertIn(f"setoption name EvalFile value {self.fakes.net}", commands)
+        self.assertIn("position fen rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR[p] b KQkq - 0 1",
+                      commands)
+        self.assertFalse([c for c in commands if c.startswith(("setoption name Team",
+                                                                "setoption name Seat",
+                                                                "setoption name Clocks"))])
+        self.assertTrue(game.is_legal(BOARD_B, move))
+
+    def test_full_game_against_random(self):
+        players = {A_WHITE: FsfSeat(self.fakes.spec("fsf", "f1")),
+                   A_BLACK: RandomPlayer(1), B_WHITE: RandomPlayer(2),
+                   B_BLACK: FsfSeat(self.fakes.spec("fsf", "f2"))}
+        try:
+            result = play_game(Bughouse(), players, ClockConfig(initial_ms=20_000))
+        finally:
+            for player in players.values():
+                player.close()
+        self.assertIsNone(result.error)
+        self.assertIn(result.termination, {"checkmate", "flag", "draw"})
+        self.assertGreater(players[A_WHITE].game_stats["searches"], 3)
+
+    def test_no_legal_move_sits_without_asking_the_engine(self):
+        seat = FsfSeat(self.fakes.spec("fsf", "stuck"))
+        game = Bughouse("k7/8/1Q6/8/8/8/8/1K6 b - - 0 1", START)  # stalemated, game goes on
+        self.assertFalse(game.is_checkmate(B, False))
+        try:
+            seat.new_game(BOARD_A, B)
+            self.assertIsNone(seat.decide(view_of(game, BOARD_A, B)))
+        finally:
+            seat.close()
+        self.assertFalse([c for c in self.fakes.commands("stuck") if c.startswith("go")])
+        self.assertEqual(seat.game_stats["mandatory_sits"], 1)
+
+    def test_null_or_illegal_output_loses_and_is_logged(self):
+        for name, behaviour in (("null", {"null": True}), ("illegal", {"illegal": True})):
+            with self.subTest(name):
+                players = seats()
+                players[A_WHITE] = FsfSeat(self.fakes.spec("fsf", name, **behaviour))
+                try:
+                    result = play_game(Bughouse(), players, FIXED)
+                finally:
+                    players[A_WHITE].close()
+                self.assertEqual((result.termination, result.winner), ("illegal move", B))
+                illegal = [e for e in result.events if e["kind"] == "illegal"]
+                self.assertEqual(illegal[0]["uci"], "(none)" if name == "null" else "e2e5")
+
+    def test_missing_nnue_confirmation_is_an_engine_failure(self):
+        seat = FsfSeat(self.fakes.spec("fsf", "classical", no_nnue=True))
+        try:
+            seat.new_game(BOARD_A, W)
+            with self.assertRaises(EngineError):
+                seat.decide(view_of(Bughouse(), BOARD_A, W))
+        finally:
+            seat.close()
+
+
+class WakeScheduling(unittest.TestCase):
+    """Wake requests with no other-board events: board B never moves."""
+
+    class Waker(Scripted):
+        def __init__(self, wake_ms, sit=lambda view: True):
+            super().__init__(sit)
+            self.wake_ms = wake_ms
+
+        def decide(self, view):
+            move = super().decide(view)
+            self.requested_wake_ms = self.wake_ms if move is None else None
+            return move
+
+    def frozen_b(self):
+        return {"bw": Scripted(sit=lambda v: True), "bb": Scripted(sit=lambda v: True)}
+
+    def test_timer_wakes_the_seat_with_no_other_board_events(self):
+        waker = self.Waker(3000, sit=lambda view: view.now_ms < 5_000)
+        result = play_game(Bughouse(), seats(aw=waker, **self.frozen_b()), FIXED, max_decisions=4)
+        self.assertEqual([t for t, _, _ in waker.calls[:2]], [2000, 5000])
+        self.assertIn((5000, "A-white"), [(t, s) for t, s, _ in moves_of(result)])
+        wakes = [e for e in result.events if e["kind"] == "wake"]
+        self.assertEqual([(e["t"], e["seat"], e["reason"]) for e in wakes], [(5000, "A-white", "timer")])
+        self.assertEqual(result.timer_wakes[W], 1)
+
+    def test_no_indefinite_renewal(self):
+        waker = self.Waker(3000)   # sits and asks again every time
+        result = play_game(Bughouse(), seats(aw=waker, **self.frozen_b()), FIXED)
+        self.assertEqual([t for t, _, _ in waker.calls], [2000, 5000])
+        self.assertEqual(result.termination, "flag")
+
+    def test_intervening_wakes_keep_the_original_expiry(self):
+        # Board B moves at 2000 (B-white) and 4000 (B-black) and then stalls, so
+        # A-white is react-woken at 2500 and 4500 and still timer-woken at 5000,
+        # not at 5500 or 7500.
+        waker = self.Waker(3000, sit=lambda view: view.now_ms < 5_000)
+        stall = {"bw": Scripted(sit=lambda v: v.now_ms > 2_000),
+                 "bb": Scripted(sit=lambda v: v.now_ms > 4_000)}
+        result = play_game(Bughouse(), seats(aw=waker, **stall), FIXED, max_decisions=12)
+        self.assertEqual([t for t, _, _ in waker.calls[:4]], [2000, 2500, 4500, 5000])
+        sits = [e for e in result.events if e["kind"] == "sit" and e["seat"] == "A-white"]
+        self.assertEqual([e["wake_at"] for e in sits], [5000, 5000, 5000])
+
+    def test_a_new_turn_gets_a_new_deadline(self):
+        # Plays at 5000 when woken, then sits again on its next turn (asked at
+        # 2000 + 2000 + react) with a fresh request.
+        waker = self.Waker(1000, sit=lambda view: view.now_ms != 3_000 and view.now_ms < 9_000)
+        play_game(Bughouse(), seats(aw=waker, **self.frozen_b()), FIXED, max_decisions=10)
+        times = [t for t, _, _ in waker.calls]
+        self.assertEqual(times[:2], [2000, 3000])   # timer wake, plays
+        self.assertIn(times[2] + 1000, times)       # its next turn's own timer
+
+    def test_engine_wake_line_drives_the_timer(self):
+        with tempfile.TemporaryDirectory() as temp:
+            fakes = FakeEngines(Path(temp))
+            waker = TeamEngineSeat(fakes.spec("hypebeast", "w", **{"pass": True, "wake": 3000}))
+            try:
+                play_game(Bughouse(), seats(aw=waker, **self.frozen_b()), FIXED)
+            finally:
+                waker.close()
+            self.assertEqual(len([c for c in fakes.commands("w") if c.startswith("go ")]), 2)
+
+
+class FixedSampleStatistics(unittest.TestCase):
+    def test_boundaries_never_have_zero_width(self):
+        for n in (1, 2, 20, 200):
+            with self.subTest(n=n):
+                low, high = pair_interval([1.0] * n)
+                self.assertEqual(high, 1.0)
+                self.assertLess(low, 1.0)
+                low, high = pair_interval([0.0] * n)
+                self.assertEqual(low, 0.0)
+                self.assertGreater(high, 0.0)
+                for value in (0.25, 0.5, 0.75):
+                    low, high = pair_interval([value] * n)
+                    self.assertLess(low, value)
+                    self.assertGreater(high, value)
+        self.assertIsNone(pair_interval([]))
+
+    def test_interval_contains_the_mean_and_shrinks(self):
+        rng = random.Random(3)
+        values = [0, 0.25, 0.5, 0.75, 1]
+        for _ in range(200):
+            sample = rng.choices(values, k=rng.randint(1, 40))
+            low, high = pair_interval(sample)
+            self.assertLessEqual(low, sum(sample) / len(sample))
+            self.assertGreaterEqual(high, sum(sample) / len(sample))
+        widths = [pair_interval([1.0, 0.5, 0.75, 0.25] * k) for k in (5, 50)]
+        self.assertLess(widths[1][1] - widths[1][0], widths[0][1] - widths[0][0])
+
+    def test_coverage_is_about_95_percent(self):
+        rng = random.Random(11)
+        values = [0, 0.25, 0.5, 0.75, 1]
+        for probs in ([0.1, 0.2, 0.4, 0.2, 0.1], [0.02, 0.08, 0.3, 0.35, 0.25]):
+            mean = sum(p * v for p, v in zip(probs, values))
+            hits = 0
+            for _ in range(1000):
+                low, high = pair_interval(rng.choices(values, probs, k=20))
+                hits += low <= mean <= high
+            self.assertGreaterEqual(hits / 1000, 0.92, probs)
+            self.assertLessEqual(hits / 1000, 0.99, probs)
+
+    @staticmethod
+    def record(game, pair, team, score, termination="flag"):
+        empty = {"white": 0, "black": 0}
+        return {"game": game, "pair": pair, "contender_team": team, "contender_score": score,
+                "result": {"termination": termination, "duration_ms": 1000, "decisions": empty,
+                           "sits": empty, "sit_ms": empty, "advantage_decisions": empty}}
+
+    def test_all_winning_has_no_finite_elo(self):
+        games = [self.record(2 * p + i, p, team, 1.0) for p in range(3)
+                 for i, team in enumerate(("white", "black"))]
+        block = summarize(games, declared_pairs=3)["fixed_sample"]
+        self.assertEqual((block["wins"], block["draws"], block["losses"], block["score"]), (6, 0, 0, 1.0))
+        self.assertIsNone(block["elo"])
+        self.assertIsNotNone(block["elo_interval_95"][0])
+        self.assertIsNone(block["elo_interval_95"][1])
+        self.assertEqual(block["score_interval_95"][1], 1.0)
+        self.assertEqual(block["pentanomial"], {"0-2": 0, "0.5-1.5": 0, "1-1": 0, "1.5-0.5": 0, "2-0": 3})
+        self.assertTrue(block["sample_complete"] and block["reliability"]["ok"])
+
+    def test_errors_and_illegal_moves_are_reported_not_dropped(self):
+        games = [self.record(0, 0, "white", 1.0), self.record(1, 0, "black", 0.5),
+                 self.record(2, 1, "white", 0.0, "illegal move"),
+                 self.record(3, 1, "black", 0.5, "error")]
+        block = summarize(games, declared_pairs=2, replayed_errors=1)["fixed_sample"]
+        self.assertEqual(block["reliability"], {"errors": 1, "illegal_moves": 1,
+                                                "replayed_errors": 1, "ok": False})
+        self.assertEqual((block["complete_pairs"], block["incomplete_pairs"]), (1, [1]))
+        self.assertFalse(block["sample_complete"])
+        self.assertEqual(block["pentanomial"]["1.5-0.5"], 1)
+
+    def test_fixed_sample_rejects_sprt_and_short_opening_sets(self):
+        with tempfile.TemporaryDirectory() as temp:
+            config = MatchConfig(pairs=2, clock=ClockConfig(initial_ms=5_000), output=Path(temp),
+                                 fixed_sample=True, sprt=(0.0, 10.0, 0.05, 0.05))
+            sides = (PlayerFactory("random", None, None, None),) * 2
+            with self.assertRaises(ValueError):
+                run_match(config, *sides, log=lambda _: None)
+        config = MatchConfig(pairs=3, clock=FIXED, output=Path("."), fixed_sample=True,
+                             openings=[load_openings(SETS / "debug.txt")[0]] * 2)
+        with self.assertRaises(ValueError):
+            game_plan(config)
+
+    def test_fixed_sample_plays_every_declared_pair(self):
+        with tempfile.TemporaryDirectory() as temp:
+            config = MatchConfig(pairs=3, clock=ClockConfig(initial_ms=10_000), output=Path(temp),
+                                 fixed_sample=True, openings=load_openings(SETS / "debug.txt"),
+                                 openings_path=SETS / "debug.txt")
+            summary = run_match(config, PlayerFactory("random", None, None, None),
+                                PlayerFactory("random,sit=0.2", None, None, None),
+                                log=lambda _: None)
+        block = summary["fixed_sample"]
+        self.assertEqual((summary["counted_games"], block["complete_pairs"]), (6, 3))
+        self.assertTrue(block["sample_complete"])
+
+
+SETS = TOOLS / "bughouse_arena" / "opening_sets"
+
+
+class OpeningSets(unittest.TestCase):
+    SIZES = {"debug.txt": 20, "preflight.txt": 24, "screen20.txt": 20, "heldout200.txt": 200}
+
+    def test_sets_are_legal_real_pocket_positions_and_disjoint(self):
+        keys = {}
+        for name, size in self.SIZES.items():
+            with self.subTest(name):
+                openings = load_openings(SETS / name)
+                self.assertEqual(len(openings), size)
+                self.assertEqual(sum("swapped=1" in o.source for o in openings), size // 2)
+                for opening in openings:
+                    game = opening.build()
+                    self.assertTrue(opening.source.startswith("fics="))
+                    self.assertTrue(any(len(game.boards[b].pockets[c]) for b in (0, 1) for c in (W, B)))
+                    for board in (BOARD_A, BOARD_B):
+                        self.assertFalse(game.boards[board].is_check())
+                        self.assertTrue(game.has_legal_move(board))
+                keys[name] = {opening_sets.position_key(o.build()) for o in openings}
+                self.assertEqual(len(keys[name]), size)
+        names = list(keys)
+        for i, first in enumerate(names):
+            for second in names[i + 1:]:
+                self.assertFalse(keys[first] & keys[second], (first, second))
+
+    def test_board_swap_is_a_legal_mirror(self):
+        tokens = load_openings(SETS / "screen20.txt")[0].moves
+        swapped = opening_sets.swap_boards(list(tokens))
+        game = Bughouse()
+        for token in swapped:
+            game.push(int(token[0]) - 1, token[1:])
+        original = load_openings(SETS / "screen20.txt")[0].build()
+        self.assertEqual(game.boards[BOARD_A].fen(), original.boards[BOARD_B].fen())
+
+    def test_each_opening_is_played_twice_with_teams_swapped(self):
+        openings = load_openings(SETS / "screen20.txt")
+        plan = game_plan(MatchConfig(pairs=20, clock=FIXED, output=Path("."), fixed_sample=True,
+                                     openings=openings))
+        self.assertEqual(len(plan), 40)
+        for first, second in zip(plan[::2], plan[1::2]):
+            self.assertEqual((first[1], first[3]), (second[1], second[3]))
+            self.assertEqual((first[2], second[2]), (W, B))
+        self.assertEqual(len({item[3] for item in plan}), 20)
+
+
+class Manifest(TempDir):
+    def test_manifest_pins_files_settings_and_openings(self):
+        output = self.dir / "match"
+        openings = self.dir / "openings.txt"
+        openings.write_text((SETS / "debug.txt").read_text())
+        contender = PlayerFactory(f"fsf,bin={self.fakes.make('fsf', 'fsf')},net={self.fakes.net},"
+                                  "nodes=5,Hash=32", None, None, None)
+        config = MatchConfig(pairs=1, clock=ClockConfig(initial_ms=8_000), output=output,
+                             fixed_sample=True, openings=load_openings(openings),
+                             openings_path=openings, argv=["python3", "-m", "bughouse_arena", "x"])
+        summary = run_match(config, contender, PlayerFactory("random", None, None, None),
+                            log=lambda _: None)
+        manifest = json.loads((output / "manifest.json").read_text())
+        sha = lambda path: hashlib.sha256(Path(path).read_bytes()).hexdigest()  # noqa: E731
+        side = manifest["sides"]["contender"]
+        self.assertEqual(side["kind"], "fsf")
+        self.assertEqual(side["label"], FSF_LABEL)
+        self.assertEqual(side["files"]["binary"]["sha256"], sha(self.dir / "fsf"))
+        self.assertEqual(side["files"]["net"]["sha256"], sha(self.fakes.net))
+        self.assertEqual(side["options"], {"Hash": "32"})
+        identity = side["identity"]
+        self.assertEqual(identity["id"]["name"], "Fake-fsf")
+        self.assertTrue(identity["probe_search"]["nnue"])
+        self.assertEqual(identity["sent_options"]["UCI_Variant"], "bughouse")
+        self.assertEqual(identity["sent_options"]["Hash"], "32")
+        self.assertEqual(identity["advertised_options"]["Hash"], {"type": "spin", "default": "16"})
+        self.assertEqual(manifest["openings"]["sha256"], sha(openings))
+        self.assertEqual(manifest["pins"]["openings"], {"sha256": sha(openings), "count": 20})
+        self.assertEqual(manifest["pins"]["clock"]["initial_ms"], 8_000)
+        self.assertTrue(manifest["pins"]["fixed_sample"])
+        self.assertIn("players.py", manifest["arena"]["files_sha256"])
+        for key in ("cpu_model", "logical_cpus", "physical_cores", "cgroup_cpu_max", "env"):
+            self.assertIn(key, manifest["environment"])
+        self.assertEqual(manifest["argv"][-1], "x")
+        self.assertEqual(summary["openings_sha256"], sha(openings))
+        record = json.loads((output / "results.jsonl").read_text().splitlines()[0])
+        fsf_seats = {"white": ("A-white", "B-black"), "black": ("A-black", "B-white")}[
+            record["contender_team"]]
+        self.assertEqual(set(record["seat_stats"]), set(fsf_seats))
+        self.assertTrue(all(isinstance(x, float) for s in record["seat_stats"].values()
+                            for x in s["latency_ms"]))
+
+        # Changing the net under a match refuses to resume it.
+        self.fakes.net.write_bytes(b"another net")
+        config.resume = True
+        with self.assertRaises(RuntimeError):
+            run_match(config, contender, PlayerFactory("random", None, None, None),
+                      log=lambda _: None)
+
+    def test_hivemind_side_hashes_model_and_runtime(self):
+        (self.dir / "libonnxruntime.so.1").write_bytes(b"runtime")
+        binary = self.fakes.make("hm", "hivemind")
+        factory = PlayerFactory(f"hivemind,bin={binary},model={self.fakes.model},lib={self.dir},"
+                                "nodes=5", None, None, None)
+        files = factory.files()
+        self.assertEqual(files["model"]["sha256"], hashlib.sha256(b"not really a model").hexdigest())
+        self.assertEqual([r["sha256"] for r in files["runtime"]], [hashlib.sha256(b"runtime").hexdigest()])
+        identity = factory.identity()
+        self.assertFalse(identity["sends_seat"] or identity["sends_clocks"])
+        self.assertNotIn("probe_search", identity)
+
+
+class Preflight(TempDir):
+    def test_reports_latency_and_whether_movetime_is_honoured(self):
+        positions = self.dir / "positions.txt"
+        positions.write_text("\n".join((SETS / "preflight.txt").read_text().splitlines()[:6]) + "\n")
+        for slow, honoured in ((1, True), (3, False)):
+            with self.subTest(slow=slow):
+                binary = self.fakes.make(f"hm{slow}", "hivemind", slow=slow)
+                report = preflight.run(f"hivemind,bin={binary},model={self.fakes.model},nodes=400",
+                                       positions, [40], warmup=2, ort_threads=1, log=lambda _: None)
+                self.assertEqual(set(report["phases"]), {"nodes=400", "movetime=40"})
+                self.assertEqual(report["phases"]["nodes=400"]["searches"][0]["nodes"], 42)
+                self.assertEqual(report["phases"]["movetime=40"]["latency"]["count"], 4)
+                self.assertIs(report["movetime_reliably_honoured"], honoured)
+                self.assertEqual(report["recommendation"]["mode"],
+                                 "same movetime for all arms" if honoured else "matched mean compute")
+                self.assertEqual(report["concurrency"], 1)
+                self.assertIn("cpu_model", report["environment"])
+                self.assertEqual(report["warmup"]["searches"], 2)
+                self.assertIn("sha256", report["engine"]["files"]["binary"])
+
+
 def _engine_files():
     try:
         return EngineSpec.parse("hivemind,nodes=16")
@@ -415,6 +1122,43 @@ class RealEngine(unittest.TestCase):
         self.assertIn(result.termination, {"decision limit", "checkmate", "flag", "draw"})
         self.assertGreaterEqual(len(result.moves), 12)
         self.assertTrue(all(player.searches > 0 for player in players))
+
+
+def _fsf_files(name: str):
+    home = hypebeast_home()
+    binary, net = home / "bin" / name, home / "nets" / "bughouse-cd8cceab93fe.nnue"
+    return (binary, net) if binary.exists() and net.exists() else None
+
+
+@unittest.skipUnless(WANT_ENGINE and _fsf_files("fsf-ref"), "needs bin/fsf-ref, its net and --engine")
+class RealFsf(unittest.TestCase):
+    def play(self, contender: str, baseline: str, decisions: int):
+        binary, net = _fsf_files("fsf-ref")
+        spec = f"fsf,bin={binary},net={net},nodes=2000"
+        factories = {"fsf": PlayerFactory(spec, None, None, None),
+                     "random": PlayerFactory("random", None, None, None)}
+        players = {A_WHITE: factories[contender].make("aw", 1),
+                   B_BLACK: factories[contender].make("bb", 2),
+                   A_BLACK: factories[baseline].make("ab", 3),
+                   B_WHITE: factories[baseline].make("bw", 4)}
+        try:
+            result = play_game(Bughouse(), players, ClockConfig(), max_decisions=decisions)
+        finally:
+            for player in players.values():
+                player.close()
+        return result, players
+
+    def test_unmodified_fsf_plays_legal_moves_with_real_pockets(self):
+        result, players = self.play("fsf", "random", 80)
+        self.assertIsNone(result.error)
+        self.assertNotEqual(result.termination, "illegal move")
+        self.assertTrue(players[A_WHITE].nnue_lines)
+        self.assertGreater(players[A_WHITE].searches, 5)
+
+    def test_adapter_symmetry_fsf_against_fsf(self):
+        result, _ = self.play("fsf", "fsf", 80)
+        self.assertIsNone(result.error)
+        self.assertNotEqual(result.termination, "illegal move")
 
 
 if __name__ == "__main__":

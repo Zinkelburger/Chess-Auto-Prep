@@ -16,6 +16,14 @@ Time model, all integers in milliseconds:
 * A sitting seat wakes ``react_cost`` after any move on the other board, and
   immediately when its team's time advantage flips; nothing else changes what
   it sees, so it is not asked again until then. Its clock runs throughout.
+* A seat that sits may ask for a wake-up: a player whose ``decide`` returned
+  ``None`` and whose ``requested_wake_ms`` attribute is then set (HypeBeast's
+  ``info string hb_wake_after_ms=N``) is asked again N ms later even if
+  nothing else happens. It is woken at the earliest of that deadline, the
+  react-cost wake and an advantage flip. Intervening wakes keep the original
+  deadline (a later request does not move it), and a board turn gets at most
+  one such deadline, so a seat cannot renew its wait indefinitely. Players
+  without the attribute see no change.
 * A clock that reaches zero loses for its team.
 
 Time advantage uses Hivemind's training definition (src/domain/board2planes.py
@@ -92,6 +100,7 @@ class GameResult:
     sits: list[int] = field(default_factory=lambda: [0, 0])
     sit_ms: list[int] = field(default_factory=lambda: [0, 0])
     advantage_decisions: list[int] = field(default_factory=lambda: [0, 0])
+    timer_wakes: list[int] = field(default_factory=lambda: [0, 0])
     error: str | None = None
 
     def to_json(self) -> dict:
@@ -107,6 +116,8 @@ class GameResult:
             "advantage_decisions": {
                 "white": self.advantage_decisions[chess.WHITE],
                 "black": self.advantage_decisions[chess.BLACK]},
+            "timer_wakes": {"white": self.timer_wakes[chess.WHITE],
+                            "black": self.timer_wakes[chess.BLACK]},
             "error": self.error,
             "events": self.events,
         }
@@ -145,6 +156,10 @@ def play_game(game: Bughouse,
     moves_made = [0] * 4
     sitting = [False, False]
     sit_since = [0, 0]
+    # Wake deadlines a sitting seat asked for, and whether this board turn has
+    # already had one (at most one per turn, never renewed).
+    wake_deadline: list[int | None] = [None, None]
+    wake_used = [False, False]
     result = GameResult(None, "", 0, clocks, [])
 
     for index, player in players.items():
@@ -248,6 +263,10 @@ def play_game(game: Bughouse,
         color = game.turn(board)
         team = seat_team(board, color)
         advantage = time_advantage(clocks, team)
+        if sitting[board] and wake_deadline[board] is not None and now >= wake_deadline[board]:
+            wake_deadline[board] = None
+            result.timer_wakes[team] += 1
+            log("wake", board, seat, reason="timer")
         decisions += 1
         if decisions > max_decisions:
             return finish(None, "decision limit")
@@ -267,7 +286,17 @@ def play_game(game: Bughouse,
                 sit_since[board] = now
             result.sits[team] += 1
             pending[board] = None
-            log("sit", board, seat, advantage=advantage)
+            requested = getattr(players[seat], "requested_wake_ms", None)
+            extra = {}
+            if requested is not None:
+                extra["wake_requested_ms"] = requested
+                if wake_deadline[board] is None and not wake_used[board]:
+                    wake_deadline[board] = now + max(1, int(requested))
+                    wake_used[board] = True
+            if wake_deadline[board] is not None:
+                pending[board] = wake_deadline[board]
+                extra["wake_at"] = wake_deadline[board]
+            log("sit", board, seat, advantage=advantage, **extra)
             continue
 
         try:
@@ -279,6 +308,8 @@ def play_game(game: Bughouse,
         if sitting[board]:
             result.sit_ms[team] += now - sit_since[board]
             sitting[board] = False
+        wake_deadline[board] = None
+        wake_used[board] = False
         moves_made[seat] += 1
         log("move", board, seat, uci=uci, advantage=advantage)
 

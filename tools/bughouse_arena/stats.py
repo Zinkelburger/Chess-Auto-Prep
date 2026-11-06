@@ -4,6 +4,13 @@ arena and in-engine tournament numbers mean the same thing.
 Games come in opening pairs (same opening and think costs, teams swapped), and
 the pair is the unit of evidence: pair scores cancel most of the opening's
 bias, which is why the confidence interval and SPRT both run on pairs.
+
+The ported SPRT scores each pair by its total points, not by the pentanomial
+distribution of pair outcomes, so its error rates are not what its parameters
+say. Fixed-sample runs (``--fixed-sample``) do not stop on it; they report the
+``fixed_sample`` block built by :func:`pair_interval`, a Wilson score interval
+on the mean pair score whose effective sample size comes from the pentanomial
+dispersion (see that function for why).
 """
 
 from __future__ import annotations
@@ -44,6 +51,139 @@ def score_interval(pair_scores: list[float], wins: int, losses: int,
     return max(0.0, center - margin), min(1.0, center + margin)
 
 
+PENTANOMIAL_LABELS = ("0-2", "0.5-1.5", "1-1", "1.5-0.5", "2-0")
+PSEUDOCOUNT = 0.5
+
+
+def pair_interval(pair_scores: list[float], z: float = Z95,
+                  pseudocount: float = PSEUDOCOUNT) -> tuple[float, float] | None:
+    """A 95% interval for the expected pair score, with pairs as the unit.
+
+    Each pair score is one of 0, 1/4, 1/2, 3/4, 1. A variable on [0, 1] with
+    mean p has variance phi * p(1-p) for some dispersion 0 < phi <= 1 (phi = 1
+    only when every pair is 0 or 1). The interval is the Wilson score interval
+    for the observed mean with effective sample size n / phi, the design-effect
+    form of Wilson. phi is estimated from the pentanomial after adding
+    ``pseudocount`` (Jeffreys-style 1/2) to each of the five outcomes; the
+    pseudocounts enter only the dispersion, never the point estimate, so the
+    interval always contains the observed mean.
+
+    Why this rather than the paired normal approximation: that one has zero
+    width whenever all pair scores are equal (every pair 2-0, or every pair
+    1-1), claiming certainty from a handful of pairs. Here an all-winning
+    sample gives [L, 1] with L < 1, an all-losing one [0, U] with U > 0, and
+    identical pair scores give a nonzero width that shrinks as pairs accumulate.
+    A percentile bootstrap was rejected because, like the normal
+    approximation, it collapses to a point on identical samples unless it is
+    regularized, and it is not deterministic.
+    """
+    count = len(pair_scores)
+    if count == 0:
+        return None
+    mean = sum(pair_scores) / count
+    weights = [pseudocount] * 5
+    for score in pair_scores:
+        weights[int(round(4 * score))] += 1
+    total = sum(weights)
+    values = [k / 4 for k in range(5)]
+    smoothed = sum(w * v for w, v in zip(weights, values)) / total
+    variance = sum(w * (v - smoothed) ** 2 for w, v in zip(weights, values)) / total
+    phi = variance / (smoothed * (1.0 - smoothed))
+    effective = count / phi
+    z2 = z * z
+    denominator = 1.0 + z2 / effective
+    center = (mean + z2 / (2.0 * effective)) / denominator
+    half = z * math.sqrt(mean * (1.0 - mean) / effective
+                         + z2 / (4.0 * effective * effective)) / denominator
+    # The score interval contains the observed mean exactly; clamping to it
+    # also keeps rounding from turning a 100% sample's upper bound into 0.99..9.
+    return min(mean, max(0.0, center - half)), max(mean, min(1.0, center + half))
+
+
+def elo_bounds(interval: tuple[float, float] | None) -> list[float | None] | None:
+    """Elo for each end of a score interval; None where it is unbounded (0 or 1)."""
+    if interval is None:
+        return None
+    return [score_to_elo(interval[0]), score_to_elo(interval[1])]
+
+
+def percentile(values: list[float], fraction: float) -> float | None:
+    """Nearest-rank percentile."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    rank = max(1, math.ceil(fraction * len(ordered)))
+    return ordered[rank - 1]
+
+
+def latency_summary(latencies_ms: list[float]) -> dict:
+    if not latencies_ms:
+        return {"count": 0, "mean_ms": None, "median_ms": None, "p95_ms": None,
+                "max_ms": None, "total_ms": 0.0}
+    ordered = sorted(latencies_ms)
+    middle = len(ordered) // 2
+    median = (ordered[middle] if len(ordered) % 2
+              else (ordered[middle - 1] + ordered[middle]) / 2.0)
+    return {"count": len(ordered), "mean_ms": sum(ordered) / len(ordered),
+            "median_ms": median, "p95_ms": percentile(ordered, 0.95),
+            "max_ms": ordered[-1], "total_ms": sum(ordered)}
+
+
+def contender_seats(contender_team: str) -> tuple[str, str]:
+    return ("A-white", "B-black") if contender_team == "white" else ("A-black", "B-white")
+
+
+def engine_behaviour(games: list[dict]) -> dict:
+    """Per side: searches, nodes, search latency, passes and wake requests."""
+    out = {}
+    for role in ("contender", "baseline"):
+        totals = {"searches": 0, "nodes": 0, "passes": 0, "mandatory_sits": 0,
+                  "wake_requests": 0, "null_outputs": 0}
+        latencies: list[float] = []
+        for g in games:
+            mine = contender_seats(g["contender_team"])
+            for seat, stats in (g.get("seat_stats") or {}).items():
+                if (seat in mine) != (role == "contender"):
+                    continue
+                for key in totals:
+                    totals[key] += stats.get(key, 0)
+                latencies.extend(stats.get("latency_ms", []))
+        out[role] = {**totals, "latency": latency_summary(latencies)}
+    return out
+
+
+def fixed_sample(counted: list[dict], games: list[dict], pair_scores: list[float],
+                 pentanomial: list[int], wins: int, losses: int, draws: int,
+                 declared_pairs: int | None, replayed_errors: int) -> dict:
+    played = wins + losses + draws
+    score = (wins + 0.5 * draws) / played if played else None
+    interval = pair_interval(pair_scores)
+    pairs_seen: dict[int, int] = {}
+    for g in counted:
+        pairs_seen[g["pair"]] = pairs_seen.get(g["pair"], 0) + 1
+    errors = sum(1 for g in games if g["result"]["termination"] == "error")
+    illegal = sum(1 for g in games if g["result"]["termination"] == "illegal move")
+    return {
+        "declared_pairs": declared_pairs,
+        "complete_pairs": len(pair_scores),
+        "incomplete_pairs": sorted(p for p, n in pairs_seen.items() if n != 2),
+        "sample_complete": declared_pairs is not None and len(pair_scores) == declared_pairs,
+        "wins": wins, "draws": draws, "losses": losses,
+        "score": score,
+        "pair_score_mean": sum(pair_scores) / len(pair_scores) if pair_scores else None,
+        "pentanomial": dict(zip(PENTANOMIAL_LABELS, pentanomial)),
+        "score_interval_95": list(interval) if interval else None,
+        "interval_method": ("Wilson score interval on the mean pair score, effective n = "
+                            "pairs / dispersion from the pentanomial with 0.5 pseudocounts"),
+        # No finite Elo at 0% or 100%: score_to_elo returns None there.
+        "elo": score_to_elo(score) if score is not None else None,
+        "elo_interval_95": elo_bounds(interval),
+        "reliability": {"errors": errors, "illegal_moves": illegal,
+                        "replayed_errors": replayed_errors,
+                        "ok": errors == 0 and illegal == 0 and replayed_errors == 0},
+    }
+
+
 @dataclass
 class Sprt:
     llr: float
@@ -68,7 +208,8 @@ def paired_sprt(pair_scores: list[float], elo0: float, elo1: float,
     return Sprt(llr, lower, upper, decision)
 
 
-def summarize(games: list[dict], sprt: tuple[float, float, float, float] | None = None) -> dict:
+def summarize(games: list[dict], sprt: tuple[float, float, float, float] | None = None,
+              declared_pairs: int | None = None, replayed_errors: int = 0) -> dict:
     """Aggregate finished game records (see match.py) from the contender's side."""
     counted = [g for g in games if g["result"]["termination"] != "error"]
     wins = sum(1 for g in counted if g["contender_score"] == 1.0)
@@ -122,6 +263,9 @@ def summarize(games: list[dict], sprt: tuple[float, float, float, float] | None 
                                      if games_played else 0.0),
             "time_advantage_share": (team_totals("advantage_decisions", role) / decisions
                                      if decisions else 0.0),
+            "timer_wakes": sum(g["result"].get("timer_wakes", {}).get(
+                g["contender_team"] if role == "contender" else
+                ("black" if g["contender_team"] == "white" else "white"), 0) for g in counted),
         }
 
     summary = {
@@ -143,6 +287,9 @@ def summarize(games: list[dict], sprt: tuple[float, float, float, float] | None 
         "mean_virtual_seconds": (sum(g["result"]["duration_ms"] for g in counted)
                                  / 1000.0 / games_played if games_played else None),
         "behaviour": behaviour,
+        "engines": engine_behaviour(games),
+        "fixed_sample": fixed_sample(counted, games, pair_scores, pentanomial, wins,
+                                     losses, draws, declared_pairs, replayed_errors),
     }
     if sprt:
         elo0, elo1, alpha, beta = sprt

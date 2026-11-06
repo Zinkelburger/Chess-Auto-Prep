@@ -4,25 +4,36 @@ Each opening is played twice with the teams swapped and the same think-cost
 sequence per seat, so the pair, not the game, is the unit the statistics use.
 Every game seats four independent players: the contender holds both seats of
 one team, the baseline the other two.
+
+Every match directory gets a ``manifest.json`` pinning what was played: each
+side's kind, settings, binary/model/runtime/net SHA-256 and the engine's own
+``uci`` self-description, the opening file and its hash, the clock model, the
+arena source, the host and the command line. ``--resume`` refuses to continue
+a match whose pins changed.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import platform
 import queue
 import random
+import socket
+import subprocess
+import sys
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
 import chess
 
-from .players import EngineSpec, HivemindSeat, RandomPlayer
-from .referee import BOARD_A, BOARD_B, BOARDS, Bughouse, team_color, team_name
-from .sim import SEAT_NAMES, ClockConfig, GameResult, play_game, seat_index
+from .players import EngineSpec, RandomPlayer, make_seat
+from .referee import BOARDS, Bughouse, team_color, team_name
+from .sim import SEAT_NAMES, ClockConfig, GameResult, SeatView, play_game, seat_index
 from .stats import summarize
 
 
@@ -32,6 +43,7 @@ from .stats import summarize
 class Opening:
     dual_fen: str | None
     moves: tuple[str, ...]
+    source: str = ""
 
     def build(self) -> Bughouse:
         game = Bughouse.from_dual_fen(self.dual_fen) if self.dual_fen else Bughouse()
@@ -40,21 +52,27 @@ class Opening:
         return game
 
     def to_json(self) -> dict:
-        return {"dual_fen": self.dual_fen, "moves": list(self.moves)}
+        data = {"dual_fen": self.dual_fen, "moves": list(self.moves)}
+        if self.source:
+            data["source"] = self.source
+        return data
 
 
 def load_openings(path: Path) -> list[Opening]:
     """One opening per line: engine-format moves (``1e2e4 2d2d4``), or a dual
     FEN (the tournament positions format; extra tab fields are ignored, since
-    the clocks decide time advantage here)."""
+    the clocks decide time advantage here). A second tab field that names
+    where the opening came from (``fics=...``) is kept as its source."""
     openings = []
     for number, raw in enumerate(path.read_text().splitlines(), 1):
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
-        first = line.split("\t")[0].strip()
-        opening = (Opening(first, ()) if "|" in first
-                   else Opening(None, tuple(first.split())))
+        fields = line.split("\t")
+        first = fields[0].strip()
+        source = fields[1].strip() if len(fields) > 1 and "=" in fields[1] else ""
+        opening = (Opening(first, (), source) if "|" in first
+                   else Opening(None, tuple(first.split()), source))
         try:
             opening.build()
         except ValueError as error:
@@ -77,7 +95,8 @@ def random_opening(seed: int, pair: int, plies_per_board: int) -> Opening:
 # ------------------------------------------------------------------ players
 
 class PlayerFactory:
-    """Builds one side's two seats from a spec string."""
+    """Builds one side's two seats from a spec string: ``random[,sit=p]`` or
+    an engine spec (``[hivemind|hypebeast|fsf,]key=value,...``)."""
 
     def __init__(self, text: str, default_binary: Path | None,
                  ort_threads: int | None, log_dir: Path | None):
@@ -89,18 +108,63 @@ class PlayerFactory:
             self.random_sit = float(options.get("sit", 0.0))
             self.spec = None
             self.name = options.get("name", "random")
+            self.kind = "random"
         else:
+            # --engine names a Hivemind build; the Fairy-Stockfish kinds take bin=.
             self.spec = EngineSpec.parse(text, default_binary)
             self.name = self.spec.name
+            self.kind = self.spec.kind
 
     def describe(self) -> dict:
-        return self.spec.describe() if self.spec else {"name": self.name, "random_sit": self.random_sit}
+        return (self.spec.describe() if self.spec
+                else {"kind": "random", "name": self.name, "random_sit": self.random_sit})
 
     def make(self, label: str, seed: int):
         if self.spec is None:
             return RandomPlayer(seed, self.random_sit, self.name)
         log = self.log_dir / f"{label}.log" if self.log_dir else None
-        return HivemindSeat(self.spec, ort_threads=self.ort_threads, log_path=log)
+        return make_seat(self.spec, ort_threads=self.ort_threads, log_path=log)
+
+    def files(self) -> dict:
+        """Every file this side loads, with its SHA-256."""
+        spec = self.spec
+        if spec is None:
+            return {}
+        out = {"binary": file_record(spec.binary)}
+        if spec.kind == "hivemind":
+            out["model"] = file_record(spec.model)
+            if spec.library_dir:
+                out["runtime"] = [file_record(path) for path in sorted(
+                    Path(spec.library_dir).glob("*onnxruntime*")) + sorted(
+                    Path(spec.library_dir).glob("hivemind_ort*"))]
+        else:
+            out["net"] = file_record(spec.net)
+        return out
+
+    def identity(self) -> dict:
+        """Start one seat and record what the engine says about itself. The
+        Fairy-Stockfish kinds also answer one real search from the start
+        position, which is where NNUE loading is confirmed."""
+        if self.spec is None:
+            return {}
+        seat = self.make("probe", 0)
+        try:
+            info = seat.identity()
+            if self.spec.kind != "hivemind":
+                seat.new_game(0, chess.WHITE)
+                view = SeatView(Bughouse(), 0, chess.WHITE, chess.WHITE, False,
+                                (120_000,) * 4, 0, False)
+                move = seat.decide(view)
+                info["probe_search"] = {"position": seat.position_command(view),
+                                        "go": self.spec.go_command, "bestmove": move,
+                                        "nnue": list(seat.nnue_lines),
+                                        "latency_ms": seat.game_stats["latency_ms"]}
+            info["sends_seat"] = getattr(seat, "sends_seat", False)
+            info["sends_clocks"] = getattr(seat, "sends_clocks", False)
+            info["sent_options"] = dict(seat.sent_options)
+            return info
+        finally:
+            seat.close()
 
 
 class SeatSet:
@@ -138,9 +202,17 @@ class MatchConfig:
     resume: bool = False
     sprt: tuple[float, float, float, float] | None = None
     verbose: bool = False
+    fixed_sample: bool = False
+    openings_path: Path | None = None
+    ort_threads: int | None = None
+    argv: list[str] = field(default_factory=list)
+    probe_engines: bool = True
 
 
 def game_plan(config: MatchConfig) -> list[tuple[int, int, chess.Color, Opening]]:
+    if config.fixed_sample and config.openings and config.pairs > len(config.openings):
+        raise ValueError(f"--fixed-sample needs one opening per pair: {config.pairs} pairs, "
+                         f"{len(config.openings)} openings")
     plan = []
     for pair in range(config.pairs):
         opening = (config.openings[pair % len(config.openings)] if config.openings
@@ -180,21 +252,166 @@ def write_bpgn(stream, record: dict, names: dict[str, str]) -> None:
     stream.write(" ".join(tokens) + f" {outcome}\n\n")
 
 
+# ----------------------------------------------------------------- manifest
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        for block in iter(lambda: stream.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def file_record(path: Path | None) -> dict | None:
+    if path is None:
+        return None
+    path = Path(path)
+    if not path.exists():
+        return {"path": str(path), "missing": True}
+    resolved = path.resolve()
+    return {"path": str(path), "resolved": str(resolved), "bytes": resolved.stat().st_size,
+            "sha256": sha256_file(resolved)}
+
+
+def _read(path: str) -> str | None:
+    try:
+        return Path(path).read_text()
+    except OSError:
+        return None
+
+
+ENV_RECORDED = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "HIVEMIND_ORT_THREADS",
+                "HIVEMIND_BIN", "HIVEMIND_MODEL", "HIVEMIND_LIB", "HYPEBEAST_HOME")
+
+
+def environment() -> dict:
+    """The host a run used: CPU, cores, memory and the CPU quota of the cgroup
+    it runs in (scripts/ci.sh jobs are capped)."""
+    cpuinfo = _read("/proc/cpuinfo") or ""
+    model = next((line.split(":", 1)[1].strip() for line in cpuinfo.splitlines()
+                  if line.startswith("model name")), platform.processor())
+    cores = {(block.get("physical id"), block.get("core id"))
+             for block in (dict(line.split(":", 1) for line in chunk.splitlines() if ":" in line)
+                           for chunk in cpuinfo.split("\n\n"))
+             if block.get("core id") is not None}
+    memory = next((line.split()[1] for line in (_read("/proc/meminfo") or "").splitlines()
+                   if line.startswith("MemTotal:")), None)
+    cgroup = (_read("/proc/self/cgroup") or "").strip().split("::")[-1]
+    cpu_max = _read(f"/sys/fs/cgroup{cgroup}/cpu.max") if cgroup else None
+    try:
+        affinity = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        affinity = None
+    return {"hostname": socket.gethostname(), "platform": platform.platform(),
+            "python": sys.version.split()[0], "python_chess": chess.__version__,
+            "cpu_model": model, "logical_cpus": os.cpu_count(),
+            "physical_cores": len(cores) or None, "cpu_affinity": affinity,
+            "memory_kb": int(memory) if memory else None,
+            "cgroup": cgroup or None, "cgroup_cpu_max": cpu_max.strip() if cpu_max else None,
+            "load_average": list(os.getloadavg()) if hasattr(os, "getloadavg") else None,
+            "env": {name: os.environ[name] for name in ENV_RECORDED if name in os.environ}}
+
+
+def arena_source() -> dict:
+    here = Path(__file__).resolve().parent
+    files = {path.name: sha256_file(path) for path in sorted(here.glob("*.py"))}
+    try:
+        head = subprocess.run(["git", "-C", str(here), "rev-parse", "HEAD"], text=True,
+                              capture_output=True, timeout=10).stdout.strip() or None
+        dirty = subprocess.run(["git", "-C", str(here), "status", "--porcelain", "--", "."],
+                               text=True, capture_output=True, timeout=10).stdout.split("\n")
+        dirty = [line.strip() for line in dirty if line.strip()]
+    except (OSError, subprocess.SubprocessError):
+        head, dirty = None, None
+    return {"git_head": head, "dirty": dirty, "files_sha256": files}
+
+
+def build_manifest(config: MatchConfig, contender: PlayerFactory,
+                   baseline: PlayerFactory) -> dict:
+    sides = {}
+    for role, factory in (("contender", contender), ("baseline", baseline)):
+        sides[role] = {**factory.describe(), "spec": factory.text, "files": factory.files(),
+                       "identity": factory.identity() if config.probe_engines else None}
+    openings = None
+    if config.openings_path:
+        openings = {**file_record(config.openings_path), "count": len(config.openings or [])}
+    return {
+        "pins": {
+            "contender": {k: sides["contender"][k] for k in ("kind", "name", "spec", "files")},
+            "baseline": {k: sides["baseline"][k] for k in ("kind", "name", "spec", "files")},
+            "openings": ({k: openings[k] for k in ("sha256", "count")} if openings
+                         else {"random_plies_per_board": config.opening_plies}),
+            "clock": vars(config.clock) | {"move_cost_ms": list(config.clock.move_cost_ms)},
+            "seed": config.seed,
+            "fixed_sample": config.fixed_sample,
+        },
+        "sides": sides,
+        "openings": openings,
+        "pairs": config.pairs,
+        "concurrency": config.concurrency,
+        "ort_threads": config.ort_threads,
+        "statistics": ("fixed sample: no early stopping; pair-aware Wilson interval"
+                       if config.fixed_sample else
+                       "legacy: optional total-points paired SPRT stopping"),
+        "sprt": list(config.sprt) if config.sprt else None,
+        "arena": arena_source(),
+        "environment": environment(),
+        "argv": list(config.argv),
+    }
+
+
+def write_manifest(config: MatchConfig, contender: PlayerFactory,
+                   baseline: PlayerFactory) -> dict:
+    path = config.output / "manifest.json"
+    manifest = build_manifest(config, contender, baseline)
+    session = {"started": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "argv": manifest["argv"],
+               "environment": manifest["environment"], "arena": manifest["arena"],
+               "identity": {role: manifest["sides"][role]["identity"]
+                            for role in ("contender", "baseline")},
+               "pairs": config.pairs}
+    if path.exists():
+        previous = json.loads(path.read_text())
+        if previous.get("pins") != manifest["pins"]:
+            raise RuntimeError(f"{path}: the engines, files, openings or clock changed since "
+                               "this match started; start a new --output")
+        manifest = previous
+        manifest["pairs"] = config.pairs
+    manifest.setdefault("sessions", []).append(session)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(manifest, indent=2) + "\n")
+    temporary.replace(path)
+    return manifest
+
+
 def run_match(config: MatchConfig, contender: PlayerFactory, baseline: PlayerFactory,
               log: Callable[[str], None] = print) -> dict:
+    if config.fixed_sample and config.sprt:
+        raise ValueError("--fixed-sample runs do not use SPRT stopping")
     config.output.mkdir(parents=True, exist_ok=True)
     results_path = config.output / "results.jsonl"
     summary_path = config.output / "summary.json"
     bpgn_path = config.output / "games.bpgn"
+    replayed_path = config.output / "replayed_errors.jsonl"
 
     records: list[dict] = []
     if config.resume and results_path.exists():
         records = [json.loads(line) for line in results_path.read_text().splitlines() if line]
+        voided = [r for r in records if r["result"]["termination"] == "error"]
+        if voided:
+            # Crashed games are replayed, never forgotten: keep them beside the
+            # results and count them in the summary's reliability block.
+            with replayed_path.open("a") as stream:
+                for record in voided:
+                    stream.write(json.dumps(record) + "\n")
         records = [r for r in records if r["result"]["termination"] != "error"]
         results_path.write_text("".join(json.dumps(r) + "\n" for r in records))
     elif results_path.exists():
         raise FileExistsError(f"{results_path} exists; pass --resume or pick a new --output")
     done = {r["game"] for r in records}
+    replayed_errors = (len(replayed_path.read_text().splitlines())
+                       if replayed_path.exists() else 0)
+    game_plan(config)  # fail on a short opening file before starting engines
+    manifest = write_manifest(config, contender, baseline)
 
     plan = [item for item in game_plan(config) if item[0] not in done]
     work: queue.Queue = queue.Queue()
@@ -205,10 +422,13 @@ def run_match(config: MatchConfig, contender: PlayerFactory, baseline: PlayerFac
     started = time.monotonic()
     meta = {"contender": contender.describe(), "baseline": baseline.describe(),
             "clock": vars(config.clock) | {"move_cost_ms": list(config.clock.move_cost_ms)},
-            "pairs": config.pairs, "seed": config.seed}
+            "pairs": config.pairs, "seed": config.seed,
+            "fixed_sample_mode": config.fixed_sample,
+            "openings_sha256": (manifest.get("openings") or {}).get("sha256")}
 
     def write_summary() -> dict:
-        summary = {**meta, **summarize(records, config.sprt),
+        summary = {**meta, **summarize(records, config.sprt, declared_pairs=config.pairs,
+                                       replayed_errors=replayed_errors),
                    "wall_seconds": time.monotonic() - started}
         temporary = summary_path.with_suffix(".tmp")
         temporary.write_text(json.dumps(summary, indent=2) + "\n")
@@ -248,6 +468,8 @@ def run_match(config: MatchConfig, contender: PlayerFactory, baseline: PlayerFac
                     "opening": opening.to_json(), "seats": names,
                     "clock": meta["clock"],
                     "wall_seconds": time.monotonic() - game_start,
+                    "seat_stats": {SEAT_NAMES[s]: dict(p.game_stats)
+                                   for s, p in seating.items() if hasattr(p, "game_stats")},
                     "result": result.to_json(),
                 }
                 with lock:
@@ -267,7 +489,7 @@ def run_match(config: MatchConfig, contender: PlayerFactory, baseline: PlayerFac
                     if result.error:
                         log(f"  error: {result.error}")
                     sprt = summary.get("sprt")
-                    if sprt and sprt["decision"] != "continue":
+                    if sprt and sprt["decision"] != "continue" and not config.fixed_sample:
                         log(f"SPRT {sprt['decision']} (LLR {sprt['llr']:.2f}); stopping")
                         stop.set()
                 if result.termination == "error":
