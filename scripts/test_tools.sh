@@ -29,6 +29,7 @@ TESTS=(
   tools/mcp/test_bughouse.py
   tools/test_bughouse_db.py
   tools/test_bughouse_nnue.py
+  tools/test_bughouse_arena.py
   tools/test_lichess_broadcasts.py
   tools/test_chesscom_events.py
 )

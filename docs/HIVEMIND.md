@@ -471,6 +471,13 @@ independent mate-probe allowance. This is a small consistency study, not an Elo
 calibration. Its two-core quota and machine load produced slower timings than
 the earlier throughput figures above; use its measured settings when comparing.
 
+Strength is measured by playing: [`tools/bughouse_arena`](../tools/bughouse_arena/README.md)
+plays engine-vs-engine bughouse on four simulated clocks, so sitting costs
+what it costs at a table and `TimeAdvantage` is computed from the clocks rather
+than flipped each turn. It reports Elo over opening pairs with an SPRT, and
+takes the shipped engine as `hivemind` so any other seat (another build,
+network or engine) can be scored against it.
+
 Bulk analysis uses **800 nodes**. This changes the neural budget only; the
 native root mate allowance still follows the engine's existing coupling
 described in the study.
