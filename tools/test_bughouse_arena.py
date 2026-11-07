@@ -1138,6 +1138,20 @@ class EngineTimeouts(TempDir):
         self.assertGreaterEqual(len(starts), 3)
 
 
+class FreshProcesses(TempDir):
+    def test_fsf_seats_restart_every_game_hivemind_seats_persist(self):
+        fsf = PlayerFactory(f"fsf,bin={self.fakes.make('f', 'fsf')},net={self.fakes.net},nodes=5",
+                            None, None, None)
+        hm = PlayerFactory(f"hivemind,bin={self.fakes.make('h', 'hivemind')},"
+                           f"model={self.fakes.model},nodes=5", None, None, None)
+        config = MatchConfig(pairs=2, clock=ClockConfig(initial_ms=6_000), output=self.dir / "m")
+        summary = run_match(config, fsf, hm, log=lambda _: None)
+        self.assertEqual(summary["counted_games"], 4)
+        starts = lambda name: sum(c.startswith("ARGV") for c in self.fakes.commands(name))  # noqa: E731
+        self.assertEqual(starts("f"), 1 + 4 * 2)   # identity probe + two seats per game
+        self.assertEqual(starts("h"), 1 + 2)       # identity probe + two persistent seats
+
+
 class Preflight(TempDir):
     def test_reports_latency_and_whether_movetime_is_honoured(self):
         positions = self.dir / "positions.txt"

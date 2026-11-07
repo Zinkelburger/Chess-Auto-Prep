@@ -140,6 +140,14 @@ with termination `error` and the message in `result.error` (never as a sit),
 the worker starts fresh processes for the next game, and `fixed_sample`
 reports it under `reliability`.
 
+The `fsf` and `hypebeast` seats get fresh processes for every game. The
+unmodified Fairy-Stockfish binary keeps search state across `ucinewgame`:
+after one game's searches, the same `position fen` and `go nodes 20000`
+gives a different move than in a fresh process, even after `Clear Hash`.
+That broke pair symmetry (FSF against itself scored 0-2 pairs); with fresh
+processes both games of a pair are move-for-move mirrors. Hivemind processes
+persist across games as before.
+
 An idle seat must not search on another seat's time. Builds that advertise
 `PermanentBrain` get it turned off; older ones, including the shipped release,
 get `stop` after every `bestmove`, which ends the background search within

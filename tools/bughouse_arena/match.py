@@ -170,13 +170,32 @@ class PlayerFactory:
 
 
 class SeatSet:
-    """The four processes one worker plays its games with."""
+    """The four processes one worker plays its games with.
+
+    Fairy-Stockfish-based seats get fresh processes for every game: the
+    unmodified binary carries search state across ``ucinewgame`` (a process
+    that has played a game answers a fixed-node search differently from a
+    fresh one), which would break the paired design's symmetry. Hivemind
+    processes persist across games as before."""
 
     def __init__(self, contender: PlayerFactory, baseline: PlayerFactory, worker: int):
-        self.contender = [contender.make(f"w{worker}-contender-{b}", worker * 4 + i)
-                          for i, b in enumerate("AB")]
-        self.baseline = [baseline.make(f"w{worker}-baseline-{b}", worker * 4 + 2 + i)
-                         for i, b in enumerate("AB")]
+        self.factories = {"contender": contender, "baseline": baseline}
+        self.worker = worker
+        self.contender = self._make("contender", 0)
+        self.baseline = self._make("baseline", 2)
+
+    def _make(self, role: str, offset: int) -> list:
+        factory = self.factories[role]
+        return [factory.make(f"w{self.worker}-{role}-{b}", self.worker * 4 + offset + i)
+                for i, b in enumerate("AB")]
+
+    def refresh(self) -> None:
+        """Restart the seats whose kind needs a fresh process per game."""
+        for role, offset in (("contender", 0), ("baseline", 2)):
+            if self.factories[role].kind in FRESH_PROCESS_KINDS:
+                for player in getattr(self, role):
+                    player.close()
+                setattr(self, role, self._make(role, offset))
 
     def seating(self, contender_team: chess.Color) -> dict[int, object]:
         seats = {}
@@ -191,6 +210,8 @@ class SeatSet:
 
 
 # -------------------------------------------------------------------- match
+
+FRESH_PROCESS_KINDS = ("fsf", "hypebeast")
 
 @dataclass
 class MatchConfig:
@@ -304,7 +325,8 @@ def environment() -> dict:
     model = next((line.split(":", 1)[1].strip() for line in cpuinfo.splitlines()
                   if line.startswith("model name")), platform.processor())
     cores = {(block.get("physical id"), block.get("core id"))
-             for block in (dict(line.split(":", 1) for line in chunk.splitlines() if ":" in line)
+             for block in ({key.strip(): value.strip() for key, value in
+                            (line.split(":", 1) for line in chunk.splitlines() if ":" in line)}
                            for chunk in cpuinfo.split("\n\n"))
              if block.get("core id") is not None}
     memory = next((line.split()[1] for line in (_read("/proc/meminfo") or "").splitlines()
@@ -362,6 +384,7 @@ def build_manifest(config: MatchConfig, contender: PlayerFactory,
         "openings": openings,
         "pairs": config.pairs,
         "concurrency": config.concurrency,
+        "fresh_process_per_game": list(FRESH_PROCESS_KINDS),
         "search_timeout_s": {"contender": contender.search_timeout,
                              "baseline": baseline.search_timeout,
                              "default": "3 x movetime + 15 s, or 120 s for a node budget"},
@@ -457,6 +480,7 @@ def run_match(config: MatchConfig, contender: PlayerFactory, baseline: PlayerFac
 
     def worker(index: int) -> None:
         seats = None
+        games_played = 0
         try:
             while not stop.is_set():
                 try:
@@ -465,6 +489,9 @@ def run_match(config: MatchConfig, contender: PlayerFactory, baseline: PlayerFac
                     return
                 if seats is None:
                     seats = SeatSet(contender, baseline, index)
+                elif games_played:
+                    seats.refresh()
+                games_played += 1
                 seating = seats.seating(team)
                 names = {SEAT_NAMES[s]: p.name for s, p in seating.items()}
                 on_event = None
@@ -513,6 +540,7 @@ def run_match(config: MatchConfig, contender: PlayerFactory, baseline: PlayerFac
                 if result.termination == "error":
                     seats.close()
                     seats = None
+                    games_played = 0
         except Exception as error:  # a seat that cannot start stops the match
             with lock:
                 failures.append(f"worker {index}: {error}")
