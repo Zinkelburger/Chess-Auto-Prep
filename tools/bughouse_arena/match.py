@@ -103,6 +103,7 @@ class PlayerFactory:
         self.text = text
         self.ort_threads = ort_threads
         self.log_dir = log_dir
+        self.search_timeout: float | None = None  # None: derived from the budget
         if text == "random" or text.startswith("random,"):
             options = dict(item.split("=", 1) for item in text.split(",")[1:])
             self.random_sit = float(options.get("sit", 0.0))
@@ -123,7 +124,8 @@ class PlayerFactory:
         if self.spec is None:
             return RandomPlayer(seed, self.random_sit, self.name)
         log = self.log_dir / f"{label}.log" if self.log_dir else None
-        return make_seat(self.spec, ort_threads=self.ort_threads, log_path=log)
+        return make_seat(self.spec, ort_threads=self.ort_threads, log_path=log,
+                         search_timeout=self.search_timeout)
 
     def files(self) -> dict:
         """Every file this side loads, with its SHA-256."""
@@ -349,6 +351,9 @@ def build_manifest(config: MatchConfig, contender: PlayerFactory,
         "openings": openings,
         "pairs": config.pairs,
         "concurrency": config.concurrency,
+        "search_timeout_s": {"contender": contender.search_timeout,
+                             "baseline": baseline.search_timeout,
+                             "default": "3 x movetime + 15 s, or 120 s for a node budget"},
         "ort_threads": config.ort_threads,
         "statistics": ("fixed sample: no early stopping; pair-aware Wilson interval"
                        if config.fixed_sample else

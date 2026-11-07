@@ -132,6 +132,14 @@ unchanged and loses as an illegal move; nothing is substituted. The first
 search must report `NNUE evaluation using <net>`, or the seat fails rather
 than play on a classical fallback.
 
+No engine can wedge the arena. Every command is written with a deadline, and
+every search has a hard wall-clock limit (`--search-timeout`, default 3x
+movetime + 15 s, or 120 s for a node budget). A search that misses it, or an
+engine that dies, is an engine failure: the process is killed, the game ends
+with termination `error` and the message in `result.error` (never as a sit),
+the worker starts fresh processes for the next game, and `fixed_sample`
+reports it under `reliability`.
+
 An idle seat must not search on another seat's time. Builds that advertise
 `PermanentBrain` get it turned off; older ones, including the shipped release,
 get `stop` after every `bestmove`, which ends the background search within
@@ -212,6 +220,13 @@ was trained on is not known.
 ```bash
 python3 -m bughouse_arena.preflight --output ~/.local/share/chess-prep/bughouse-arena/preflight.json
 ```
+
+Each search has a hard limit (`--search-timeout`, default 60 s); a miss is
+recorded as a failed search and an overrun, the engine is killed and
+restarted, and the run goes on. No search starts after `--max-minutes`
+(default 20); the report then says `complete: false`. The JSON is rewritten
+after every phase and the UCI traffic goes to `<output>.uci.log`, so a killed
+run still leaves its data.
 
 Searches every `preflight.txt` seat on turn with Hivemind at `nodes=400`
 and at `go movetime` 100/250/500/1000 ms, after discarded warm-up searches,

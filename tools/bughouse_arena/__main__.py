@@ -73,6 +73,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--engine-logs", action="store_true", help="write each process's UCI traffic")
     parser.add_argument("--verbose", action="store_true", help="print every move and sit")
+    parser.add_argument("--search-timeout", type=float,
+                        help="hard wall-clock seconds per search before the engine is killed and "
+                             "the game voided as an engine failure (default 3x movetime + 15 s, "
+                             "or 120 s for a node budget)")
     parser.add_argument("--fixed-sample", action="store_true",
                         help="play exactly --pairs pairs, no SPRT stopping, and report the "
                              "pair-aware interval; needs one opening per pair")
@@ -96,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as error:  # bad spec, or no engine installed
         print(f"bughouse_arena: {error}", file=sys.stderr)
         return 1
+    contender.search_timeout = baseline.search_timeout = args.search_timeout
     if args.output is None:
         args.output = DATA / f"{contender.name}-vs-{baseline.name}"
     if args.engine_logs:

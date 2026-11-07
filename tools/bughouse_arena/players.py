@@ -34,6 +34,7 @@ import platform
 import queue
 import random
 import re
+import select
 import subprocess
 import sys
 import threading
@@ -54,6 +55,8 @@ FSF_LIMITATIONS = ("receives the seat's actual board, pockets and counters as on
                    "does not measure Fairy-Stockfish's native CECP team play")
 SEAT_OPTION_VALUES = ("Awhite", "Ablack", "Bwhite", "Bblack")
 DEFAULT_NET_NAME = "bughouse-cd8cceab93fe.nnue"
+SYNC_TIMEOUT = 120.0
+NODES_TIMEOUT = 120.0
 WAKE_RE = re.compile(r"\bhb_wake_after_ms=(\d+)\b")
 
 
@@ -236,33 +239,55 @@ class EngineSpec:
 
 
 class UciProcess:
-    """A line-oriented engine process that waits for each answer."""
+    """A line-oriented engine process that waits for each answer.
+
+    Nothing here can block without a deadline: replies are read by a thread
+    and awaited with a timeout, commands are written to a non-blocking pipe
+    with a timeout (an engine that stops reading its input cannot wedge the
+    arena), and ``kill``/``close`` never wait unboundedly.
+    """
+
+    WRITE_TIMEOUT = 10.0
 
     def __init__(self, command: list[str], env: dict[str, str] | None = None,
                  log_path: Path | None = None):
         self.process = subprocess.Popen(
             command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, text=True, bufsize=1, env=env)
+            stderr=subprocess.STDOUT, env=env)
+        assert self.process.stdin is not None
+        self.stdin_fd = self.process.stdin.fileno()
+        os.set_blocking(self.stdin_fd, False)
         self.lines: queue.Queue[str | None] = queue.Queue()
-        self.log = open(log_path, "a") if log_path else None
+        # Line-buffered, so the protocol log survives a kill of the arena.
+        self.log = open(log_path, "a", buffering=1) if log_path else None
         self.reader = threading.Thread(target=self._read, daemon=True)
         self.reader.start()
 
     def _read(self) -> None:
         assert self.process.stdout is not None
-        for line in self.process.stdout:
-            self.lines.put(line.rstrip("\n"))
+        for raw in self.process.stdout:
+            self.lines.put(raw.decode("utf-8", "replace").rstrip("\r\n"))
         self.lines.put(None)
 
-    def send(self, command: str) -> None:
+    def send(self, command: str, timeout: float | None = None) -> None:
         if self.log:
             self.log.write(f">>> {command}\n")
-        try:
-            assert self.process.stdin is not None
-            self.process.stdin.write(command + "\n")
-            self.process.stdin.flush()
-        except (BrokenPipeError, OSError) as error:
-            raise EngineError(f"engine exited (sending {command!r})") from error
+        data = (command + "\n").encode()
+        deadline = time.monotonic() + (self.WRITE_TIMEOUT if timeout is None else timeout)
+        while data:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise EngineError(f"engine stopped reading its input (sending {command!r})")
+            try:
+                _, writable, _ = select.select([], [self.stdin_fd], [], remaining)
+                if not writable:
+                    continue
+                written = os.write(self.stdin_fd, data)
+            except BlockingIOError:
+                continue
+            except (BrokenPipeError, OSError, ValueError) as error:
+                raise EngineError(f"engine exited (sending {command!r})") from error
+            data = data[written:]
 
     def read_until(self, prefix: str, timeout: float) -> list[str]:
         deadline = time.monotonic() + timeout
@@ -270,7 +295,9 @@ class UciProcess:
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise EngineError(f"timed out after {timeout:.0f}s waiting for {prefix!r}")
+                tail = " | ".join(seen[-3:])
+                raise EngineError(f"timed out after {timeout:.0f}s waiting for {prefix!r}"
+                                  + (f" (last: {tail})" if tail else " (no output)"))
             try:
                 line = self.lines.get(timeout=remaining)
             except queue.Empty:
@@ -284,22 +311,42 @@ class UciProcess:
             if line.startswith(prefix):
                 return seen
 
+    def alive(self) -> bool:
+        return self.process.poll() is None
+
+    def kill(self) -> None:
+        """SIGKILL the engine and release the pipes, without blocking."""
+        if self.process.poll() is None:
+            self.process.kill()
+            try:
+                self.process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                pass
+        self._release()
+
     def close(self) -> None:
         if self.process.poll() is None:
             try:
-                self.send("quit")
+                self.send("quit", timeout=2)
                 self.process.wait(timeout=10)
             except (EngineError, subprocess.TimeoutExpired):
-                self.process.kill()
-                self.process.wait()
+                pass
+        self.kill()
+
+    def _release(self) -> None:
         self.reader.join(timeout=5)
-        for pipe in (self.process.stdin, self.process.stdout):
+        pipes = [self.process.stdin]
+        # Closing stdout while the reader thread is still inside read() would
+        # block on the buffer lock; only close it once the reader has ended.
+        if not self.reader.is_alive():
+            pipes.append(self.process.stdout)
+        for pipe in pipes:
             if pipe:
                 try:
                     pipe.close()
                 except OSError:
                     pass
-        if self.log:
+        if self.log and not self.log.closed:
             self.log.close()
 
 
@@ -318,21 +365,33 @@ class UciSeat:
     searches and per-game statistics."""
 
     def __init__(self, spec: EngineSpec, command: list[str], env: dict[str, str] | None,
-                 search_timeout: float, log_path: Path | None):
+                 search_timeout: float | None, log_path: Path | None):
         self.spec = spec
         self.name = spec.name
         self.search_timeout = search_timeout
-        self.uci = UciProcess(command, env=env, log_path=log_path)
-        self.uci.send("uci")
-        self.uci_lines = self.uci.read_until("uciok", 120)
-        self.advertised = _option_table(self.uci_lines)
-        self.sent_options: dict[str, str] = {}
         self.board = 0
         self.color = chess.WHITE
         self.searches = 0
         self.nodes = 0
         self.seconds = 0.0
         self.game_stats = self._fresh_stats()
+        self.requested_wake_ms: int | None = None
+        self.nnue_lines: list[str] = []
+        self.uci = UciProcess(command, env=env, log_path=log_path)
+        self.sent_options: dict[str, str] = {}
+        self.failed: str | None = None
+        try:
+            self.uci.send("uci")
+            self.uci_lines = self.uci.read_until("uciok", SYNC_TIMEOUT)
+            self.advertised = _option_table(self.uci_lines)
+            self._configure()
+            self._sync()
+        except BaseException:
+            self.uci.kill()   # a seat that cannot start leaves no process behind
+            raise
+
+    def _configure(self) -> None:
+        """Kind-specific options, sent between ``uciok`` and ``isready``."""
 
     @staticmethod
     def _fresh_stats() -> dict:
@@ -366,14 +425,46 @@ class UciSeat:
                 raise EngineError(f"{self.spec.binary} has no option {key!r}")
             self._setoption(key, value)
 
+    def _fail(self, what: str, error: Exception) -> EngineError:
+        """Kill a wedged or dead engine; the seat is unusable afterwards."""
+        self.failed = f"{self.name}: {what}: {error}"
+        self.uci.kill()
+        return EngineError(self.failed)
+
+    def _check(self) -> None:
+        if self.failed:
+            raise EngineError(f"seat already failed ({self.failed})")
+
     def _sync(self) -> None:
-        self.uci.send("isready")
-        self.uci.read_until("readyok", 120)
+        self._check()
+        try:
+            self.uci.send("isready")
+            self.uci.read_until("readyok", SYNC_TIMEOUT)
+        except EngineError as error:
+            raise self._fail("isready", error) from error
+
+    def search_deadline(self, go: str) -> float:
+        """Hard wall-clock limit for one search: the explicit search_timeout,
+        else generous multiples of the budget (``go movetime M`` gets 3 M +
+        15 s, a node budget NODES_TIMEOUT seconds)."""
+        if self.search_timeout is not None:
+            return self.search_timeout
+        tokens = go.split()
+        if "movetime" in tokens:
+            return 3 * int(tokens[tokens.index("movetime") + 1]) / 1000 + 15
+        return NODES_TIMEOUT
 
     def _search(self, go: str) -> tuple[list[str], float]:
+        self._check()
         started = time.monotonic()
-        self.uci.send(go)
-        lines = self.uci.read_until("bestmove", self.search_timeout)
+        try:
+            self.uci.send(go)
+            lines = self.uci.read_until("bestmove", self.search_deadline(go))
+        except EngineError as error:
+            # No bestmove inside the deadline (or the engine died): an engine
+            # failure. The process is killed, never left searching, and the
+            # caller reports it; it is never turned into a sit.
+            raise self._fail(f"{go!r} gave no bestmove", error) from error
         elapsed = time.monotonic() - started
         self.seconds += elapsed
         self.searches += 1
@@ -400,7 +491,7 @@ class TeamEngineSeat(UciSeat):
     position, joint ``bestmove (moveA,moveB)``."""
 
     def __init__(self, spec: EngineSpec, ort_threads: int | None = None,
-                 search_timeout: float = 300.0, log_path: Path | None = None):
+                 search_timeout: float | None = None, log_path: Path | None = None):
         env = dict(os.environ)
         if spec.kind == "hivemind":
             library_key = {"Darwin": "DYLD_LIBRARY_PATH", "Windows": "PATH"}.get(
@@ -413,7 +504,11 @@ class TeamEngineSeat(UciSeat):
             command = [str(spec.binary), "--model", str(spec.model)]
         else:
             command = [str(spec.binary)]
+        self.advantage: bool | None = None
         super().__init__(spec, command, env, search_timeout, log_path)
+
+    def _configure(self) -> None:
+        spec = self.spec
         advertised = self.advertised
         if spec.kind == "hivemind":
             # Pondering off: an idle seat must not search on another seat's
@@ -436,9 +531,6 @@ class TeamEngineSeat(UciSeat):
         self._apply_spec_options()
         self.sends_seat = "Seat" in advertised
         self.sends_clocks = "Clocks" in advertised
-        self._sync()
-        self.advantage: bool | None = None
-        self.nnue_lines: list[str] = []
 
     def new_game(self, board: int, color: chess.Color) -> None:
         super().new_game(board, color)
@@ -507,9 +599,12 @@ class FsfSeat(UciSeat):
 
     label = FSF_LABEL
 
-    def __init__(self, spec: EngineSpec, search_timeout: float = 300.0,
+    def __init__(self, spec: EngineSpec, search_timeout: float | None = None,
                  log_path: Path | None = None, **_ignored):
         super().__init__(spec, [str(spec.binary)], dict(os.environ), search_timeout, log_path)
+
+    def _configure(self) -> None:
+        spec = self.spec
         for name in ("UCI_Variant", "EvalFile"):
             self._require(name)
         if "Ponder" in self.advertised:
@@ -517,9 +612,6 @@ class FsfSeat(UciSeat):
         self._setoption("UCI_Variant", "bughouse")
         self._setoption("EvalFile", str(spec.net))
         self._apply_spec_options()
-        self._sync()
-        self.nnue_lines: list[str] = []
-        self.requested_wake_ms = None
 
     def new_game(self, board: int, color: chess.Color) -> None:
         super().new_game(board, color)
@@ -580,7 +672,7 @@ class RandomPlayer:
 
 
 def make_seat(spec: EngineSpec, ort_threads: int | None = None,
-              log_path: Path | None = None, search_timeout: float = 300.0):
+              log_path: Path | None = None, search_timeout: float | None = None):
     if spec.kind == "fsf":
         return FsfSeat(spec, search_timeout=search_timeout, log_path=log_path)
     return TeamEngineSeat(spec, ort_threads=ort_threads, search_timeout=search_timeout,

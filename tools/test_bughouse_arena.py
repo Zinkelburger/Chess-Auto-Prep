@@ -444,6 +444,7 @@ ADVERTISED = [line for line in ADVERTISED
 ADVERTISED += [line for line in TEAM + HYPEBEAST if line.split()[2] in BEHAVIOUR.get("advertise", [])]
 options = {{}}
 position = "position startpos"
+searches = 0
 
 
 def say(text):
@@ -503,6 +504,9 @@ for raw in sys.stdin:
     elif line.startswith("position"):
         position = line
     elif line.startswith("go"):
+        searches += 1
+        if searches > BEHAVIOUR.get("hang_after", 10 ** 9):
+            continue   # never answers this search, but keeps reading input
         tokens = line.split()
         if "movetime" in tokens:
             time.sleep(int(tokens[tokens.index("movetime") + 1]) / 1000 * BEHAVIOUR.get("slow", 1))
@@ -1080,6 +1084,60 @@ class Manifest(TempDir):
         self.assertNotIn("probe_search", identity)
 
 
+class EngineTimeouts(TempDir):
+    def test_a_search_without_bestmove_kills_the_engine_and_fails_the_seat(self):
+        seat = TeamEngineSeat(self.fakes.spec("hivemind", "hang", hang_after=1))
+        seat.search_timeout = 0.5
+        try:
+            seat.new_game(BOARD_A, W)
+            seat.decide(view_of(Bughouse(), BOARD_A, W))
+            with self.assertRaises(EngineError) as caught:
+                seat.decide(view_of(Bughouse(), BOARD_A, W))
+            self.assertIn("gave no bestmove", str(caught.exception))
+            self.assertFalse(seat.uci.alive())
+            with self.assertRaises(EngineError):
+                seat.new_game(BOARD_A, W)
+        finally:
+            seat.close()
+
+    def test_default_deadline_follows_the_budget(self):
+        seat = FsfSeat(self.fakes.spec("fsf", "deadline"))
+        try:
+            self.assertEqual(seat.search_deadline("go movetime 1000"), 18.0)
+            self.assertEqual(seat.search_deadline("go nodes 400"), 120.0)
+            seat.search_timeout = 7
+            self.assertEqual(seat.search_deadline("go movetime 1000"), 7)
+        finally:
+            seat.close()
+
+    def test_a_hung_engine_voids_the_game_as_an_error_not_a_sit(self):
+        players = seats()
+        players[A_WHITE] = FsfSeat(self.fakes.spec("fsf", "hang2", hang_after=2), search_timeout=0.5)
+        try:
+            result = play_game(Bughouse(), players, FIXED)
+        finally:
+            players[A_WHITE].close()
+        self.assertEqual(result.termination, "error")
+        self.assertIn("gave no bestmove", result.error)
+        self.assertFalse([e for e in result.events if e["kind"] == "sit" and e["seat"] == "A-white"])
+
+    def test_match_restarts_engines_after_a_timeout(self):
+        output = self.dir / "m"
+        binary = self.fakes.make("hang3", "fsf", hang_after=3)
+        contender = PlayerFactory(f"fsf,bin={binary},net={self.fakes.net},nodes=5", None, None, None)
+        contender.search_timeout = 0.5
+        config = MatchConfig(pairs=1, clock=ClockConfig(initial_ms=30_000), output=output,
+                             probe_engines=False)
+        summary = run_match(config, contender, PlayerFactory("random", None, None, None),
+                            log=lambda _: None)
+        # Each fresh process answers three searches and then hangs, so both
+        # games fail; the second ran on restarted engines.
+        self.assertEqual(summary["terminations"], {"error": 2})
+        self.assertEqual(summary["fixed_sample"]["reliability"]["errors"], 2)
+        starts = [c for c in self.fakes.commands("hang3") if c.startswith("ARGV")]
+        self.assertGreaterEqual(len(starts), 3)
+
+
 class Preflight(TempDir):
     def test_reports_latency_and_whether_movetime_is_honoured(self):
         positions = self.dir / "positions.txt"
@@ -1099,6 +1157,34 @@ class Preflight(TempDir):
                 self.assertIn("cpu_model", report["environment"])
                 self.assertEqual(report["warmup"]["searches"], 2)
                 self.assertIn("sha256", report["engine"]["files"]["binary"])
+                self.assertTrue(report["complete"])
+
+    def test_timeouts_are_failures_and_the_engine_restarts(self):
+        positions = self.dir / "positions.txt"
+        positions.write_text("\n".join((SETS / "preflight.txt").read_text().splitlines()[:6]) + "\n")
+        binary = self.fakes.make("hmhang", "hivemind", hang_after=3)
+        checkpoints = []
+        report = preflight.run(f"hivemind,bin={binary},model={self.fakes.model},nodes=400",
+                               positions, [20], warmup=0, ort_threads=1, log=lambda _: None,
+                               search_timeout=0.3, checkpoint=checkpoints.append)
+        nodes = report["phases"]["nodes=400"]
+        self.assertEqual((len(nodes["searches"]), nodes["failures"]), (4, 1))
+        self.assertTrue(nodes["searches"][3]["timeout"])
+        movetime = report["phases"]["movetime=20"]
+        self.assertGreaterEqual(movetime["failures"], 1)
+        self.assertFalse(movetime["honoured"])
+        self.assertGreaterEqual(report["engine"]["restarts_after_failure"], 2)
+        self.assertFalse(report["movetime_reliably_honoured"])
+        self.assertEqual(len(checkpoints), 2)
+
+    def test_total_runtime_is_bounded(self):
+        binary = self.fakes.make("hmslow", "hivemind")
+        report = preflight.run(f"hivemind,bin={binary},model={self.fakes.model},nodes=400",
+                               SETS / "preflight.txt", [200, 400], warmup=0, ort_threads=1,
+                               log=lambda _: None, max_seconds=0.5)
+        self.assertFalse(report["complete"])
+        self.assertTrue(report["truncated_by_max_seconds"])
+        self.assertLess(report["wall_seconds"], 10)
 
 
 def _engine_files():

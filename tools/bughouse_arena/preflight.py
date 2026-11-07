@@ -31,6 +31,7 @@ from pathlib import Path
 import chess
 
 from .match import PlayerFactory, default_ort_threads, environment, file_record, load_openings
+from .players import EngineError
 from .referee import BOARDS, seat_team
 from .sim import SeatView
 from .stats import latency_summary
@@ -78,87 +79,164 @@ def samples(positions_path: Path) -> list[tuple]:
 
 
 def run(spec_text: str, positions: Path, movetimes: list[int], warmup: int,
-        ort_threads: int | None, log=print) -> dict:
+        ort_threads: int | None, log=print, search_timeout: float | None = None,
+        max_seconds: float | None = 1200.0, engine_log: Path | None = None,
+        checkpoint=None) -> dict:
+    """Measure, never hang: every search has a hard wall-clock deadline (the
+    seat's, or ``search_timeout``); a search that misses it is recorded as a
+    timeout (an overrun and a failure), the engine is killed and a fresh one
+    started. Once ``max_seconds`` have passed no new search starts and the
+    report says it is truncated. ``checkpoint(report)`` is called after
+    every phase so a killed run still leaves its data."""
     factory = PlayerFactory(spec_text, None, ort_threads, None)
     if factory.kind != "hivemind" or factory.spec.nodes is None:
         raise ValueError("the preflight measures a Hivemind spec with nodes=")
+    factory.search_timeout = search_timeout
+    if engine_log:
+        factory.log_dir = engine_log.parent
     spec = factory.spec
     work = samples(positions)
     if not work:
         raise ValueError(f"{positions}: no positions with a legal move")
-    seat = factory.make("preflight", 0)
     started = time.time()
+    clock = time.monotonic()
     phases: dict[str, dict] = {}
-    try:
-        identity = seat.identity()
+    state = {"seat": None, "restarts": 0, "identity": None}
 
-        def search(sample, budget_spec) -> dict:
-            label, game, board, color = sample
-            seat.new_game(board, color)
-            seat.spec = budget_spec
+    def seat():
+        if state["seat"] is None:
+            state["seat"] = factory.make(engine_log.stem if engine_log else "preflight", 0)
+            if state["identity"] is None:
+                state["identity"] = state["seat"].identity()
+        return state["seat"]
+
+    def search(sample, budget_spec) -> dict:
+        label, game, board, color = sample
+        player = seat()
+        row = {"position": label, "go": budget_spec.go_command}
+        searched = time.monotonic()
+        try:
+            player.new_game(board, color)
+            player.spec = budget_spec
             view = SeatView(game.copy(), board, color, seat_team(board, color), False,
                             (120_000,) * 4, 0, False)
-            before_nodes = seat.nodes
-            move = seat.decide(view)
-            return {"position": label, "latency_ms": seat.game_stats["latency_ms"][-1],
-                    "nodes": seat.nodes - before_nodes, "move": move,
-                    "legal": move is None or game.is_legal(board, move)}
+            before_nodes = player.nodes
+            move = player.decide(view)
+        except EngineError as error:
+            # Timeout or crash: a failed search, not a skipped one. Kill the
+            # engine and carry on with a fresh process.
+            row.update(timeout=True, error=str(error),
+                       latency_ms=round((time.monotonic() - searched) * 1000, 1), nodes=None,
+                       move=None, legal=False)
+            log(f"  {label} {budget_spec.go_command}: FAILED after {row['latency_ms'] / 1000:.1f}s: "
+                f"{error}")
+            player.close()
+            state["seat"] = None
+            state["restarts"] += 1
+            return row
+        row.update(timeout=False, latency_ms=player.game_stats["latency_ms"][-1],
+                   nodes=player.nodes - before_nodes, move=move,
+                   legal=move is None or game.is_legal(board, move))
+        return row
 
-        warm = [search(work[i % len(work)], spec) for i in range(warmup)]
+    def out_of_time() -> bool:
+        return max_seconds is not None and time.monotonic() - clock > max_seconds
+
+    report: dict = {}
+
+    def assemble(complete: bool) -> dict:
+        node_phase = phases.get(f"nodes={spec.nodes}")
+        measured = [m for m in movetimes if f"movetime={m}" in phases]
+        reliable = (complete and bool(movetimes)
+                    and all(phases[f"movetime={m}"]["honoured"] for m in measured))
+        recommendation = None
+        if node_phase and node_phase["latency"]["mean_ms"] is not None:
+            matched = max(1, round(node_phase["latency"]["mean_ms"]))
+            recommendation = (
+                {"mode": "same movetime for all arms",
+                 "hivemind": f"hivemind,movetime={matched}",
+                 "fsf_hypebeast_movetime_ms": matched}
+                if reliable else
+                {"mode": "matched mean compute",
+                 "hivemind": f"hivemind,nodes={spec.nodes}",
+                 "fsf_hypebeast_movetime_ms": matched,
+                 "note": "Hivemind keeps its node budget; the Fairy-Stockfish arms get its "
+                         "mean preflight latency (successful searches) as TOTAL movetime"})
+        report.update({
+            "measured_at": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(started)),
+            "wall_seconds": time.time() - started,
+            "complete": complete,
+            "truncated_by_max_seconds": out_of_time(),
+            "max_seconds": max_seconds,
+            "concurrency": 1,
+            "spec": spec_text,
+            "engine": {**factory.describe(), "files": factory.files(),
+                       "identity": state["identity"], "ort_threads_env": ort_threads,
+                       "search_timeout_s": search_timeout,
+                       "restarts_after_failure": state["restarts"]},
+            "hivemind_checkout": checkout_identity(HIVEMIND_CHECKOUT),
+            "positions": {**file_record(positions), "searches_per_phase": len(work)},
+            "warmup": {"searches": warmup, "latency": latency_summary(
+                [row["latency_ms"] for row in warm if not row["timeout"]]),
+                "failures": sum(1 for row in warm if row["timeout"])},
+            "environment": environment(),
+            "honour_rule": "median >= 0.8 M and p95 <= M + max(0.1 M, 25 ms); "
+                           "a timed-out search counts as an overrun and a failure",
+            "phases": phases,
+            "movetime_reliably_honoured": reliable,
+            "recommendation": recommendation,
+        })
+        return report
+
+    warm: list[dict] = []
+    try:
+        for i in range(warmup):
+            if out_of_time():
+                break
+            warm.append(search(work[i % len(work)], spec))
         budgets = [(f"nodes={spec.nodes}", spec, None)] + [
             (f"movetime={m}", dataclasses.replace(spec, nodes=None, movetime_ms=m), m)
             for m in movetimes]
         for label, budget_spec, movetime in budgets:
-            rows = [search(sample, budget_spec) for sample in work]
-            latencies = [row["latency_ms"] for row in rows]
+            rows = []
+            for sample in work:
+                if out_of_time():
+                    break
+                rows.append(search(sample, budget_spec))
+            if not rows:
+                break
+            ok = [row for row in rows if not row["timeout"]]
+            latencies = [row["latency_ms"] for row in ok]
             phase = {"go": budget_spec.go_command, "searches": rows,
+                     "failures": len(rows) - len(ok),
                      "latency": latency_summary(latencies),
-                     "nodes": latency_summary([float(row["nodes"]) for row in rows]),
-                     "illegal_answers": sum(1 for row in rows if not row["legal"])}
+                     "nodes": latency_summary([float(row["nodes"]) for row in ok]),
+                     "illegal_answers": sum(1 for row in ok if not row["legal"]),
+                     "complete": len(rows) == len(work)}
             if movetime is not None:
-                phase["overruns"] = sum(1 for x in latencies if x > tolerance_ms(movetime))
-                phase["honoured"] = honoured(movetime, latencies)
+                phase["overruns"] = (sum(1 for x in latencies if x > tolerance_ms(movetime))
+                                     + phase["failures"])
+                phase["honoured"] = (phase["failures"] == 0 and phase["complete"]
+                                     and honoured(movetime, latencies))
             phases[label] = phase
             summary = phase["latency"]
-            log(f"{label:>14}: mean {summary['mean_ms']:.0f} ms, median {summary['median_ms']:.0f}, "
-                f"p95 {summary['p95_ms']:.0f}, max {summary['max_ms']:.0f}, "
-                f"total {summary['total_ms'] / 1000:.1f} s"
-                + (f", overruns {phase['overruns']}/{len(rows)}, honoured {phase['honoured']}"
-                   if movetime is not None else ""))
+            if summary["count"]:
+                log(f"{label:>14}: mean {summary['mean_ms']:.0f} ms, median "
+                    f"{summary['median_ms']:.0f}, p95 {summary['p95_ms']:.0f}, max "
+                    f"{summary['max_ms']:.0f}, total {summary['total_ms'] / 1000:.1f} s, "
+                    f"failures {phase['failures']}/{len(rows)}"
+                    + (f", overruns {phase['overruns']}, honoured {phase['honoured']}"
+                       if movetime is not None else ""))
+            else:
+                log(f"{label:>14}: every search failed ({len(rows)})")
+            if checkpoint:
+                checkpoint(assemble(False))
     finally:
-        seat.close()
-
-    node_phase = phases[f"nodes={spec.nodes}"]
-    mean = node_phase["latency"]["mean_ms"]
-    reliable = bool(movetimes) and all(phases[f"movetime={m}"]["honoured"] for m in movetimes)
-    matched = max(1, round(mean))
-    recommendation = (
-        {"mode": "same movetime for all arms",
-         "hivemind": f"hivemind,movetime={matched}",
-         "fsf_hypebeast_movetime_ms": matched}
-        if reliable else
-        {"mode": "matched mean compute",
-         "hivemind": f"hivemind,nodes={spec.nodes}",
-         "fsf_hypebeast_movetime_ms": matched,
-         "note": "Hivemind keeps its node budget; the Fairy-Stockfish arms get its mean "
-                 "preflight latency as TOTAL movetime"})
-    return {
-        "measured_at": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(started)),
-        "wall_seconds": time.time() - started,
-        "concurrency": 1,
-        "spec": spec_text,
-        "engine": {**factory.describe(), "files": factory.files(), "identity": identity,
-                   "ort_threads_env": ort_threads},
-        "hivemind_checkout": checkout_identity(HIVEMIND_CHECKOUT),
-        "positions": {**file_record(positions), "searches_per_phase": len(work)},
-        "warmup": {"searches": warmup, "latency": latency_summary(
-            [row["latency_ms"] for row in warm])},
-        "environment": environment(),
-        "honour_rule": "median >= 0.8 M and p95 <= M + max(0.1 M, 25 ms)",
-        "phases": phases,
-        "movetime_reliably_honoured": reliable,
-        "recommendation": recommendation,
-    }
+        if state["seat"] is not None:
+            state["seat"].close()
+    complete = (not out_of_time() and len(phases) == len(movetimes) + 1
+                and all(phase["complete"] for phase in phases.values()))
+    return assemble(complete)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -173,23 +251,43 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--warmup", type=int, default=6, help="searches discarded first")
     parser.add_argument("--ort-threads", type=int, default=default_ort_threads(1),
                         help="HIVEMIND_ORT_THREADS, as a --concurrency 1 match sets it")
+    parser.add_argument("--search-timeout", type=float, default=60.0,
+                        help="hard wall-clock seconds per search; a miss is a recorded failure "
+                             "and the engine is restarted (default 60)")
+    parser.add_argument("--max-minutes", type=float, default=20.0,
+                        help="start no search after this many minutes (default 20)")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     movetimes = [int(m) for m in args.movetimes.split(",") if m.strip()]
-    try:
-        report = run(args.spec, args.positions, movetimes, args.warmup, args.ort_threads)
-    except Exception as error:
-        print(f"preflight: {error}", file=sys.stderr)
-        return 1
-    report["argv"] = ["python3", "-m", "bughouse_arena.preflight",
-                      *(argv if argv is not None else sys.argv[1:])]
+    argv_record = ["python3", "-m", "bughouse_arena.preflight",
+                   *(argv if argv is not None else sys.argv[1:])]
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, indent=2) + "\n")
+
+    def write(report: dict) -> None:
+        report["argv"] = argv_record
+        temporary = args.output.with_suffix(".tmp")
+        temporary.write_text(json.dumps(report, indent=2) + "\n")
+        temporary.replace(args.output)
+
+    def log(text: str) -> None:
+        print(text, flush=True)
+
+    try:
+        report = run(args.spec, args.positions, movetimes, args.warmup, args.ort_threads,
+                     log=log, search_timeout=args.search_timeout,
+                     max_seconds=args.max_minutes * 60,
+                     engine_log=args.output.with_suffix(".uci.log"), checkpoint=write)
+    except Exception as error:
+        print(f"preflight: {error}", file=sys.stderr, flush=True)
+        return 1
+    write(report)
     rec = report["recommendation"]
-    print(f"movetime reliably honoured: {report['movetime_reliably_honoured']}\n"
-          f"recommendation: {rec['mode']}: {rec['hivemind']} vs "
-          f"fsf/hypebeast movetime={rec['fsf_hypebeast_movetime_ms']}\n"
-          f"report: {args.output}")
+    print(f"complete: {report['complete']}  movetime reliably honoured: "
+          f"{report['movetime_reliably_honoured']}", flush=True)
+    if rec:
+        print(f"recommendation: {rec['mode']}: {rec['hivemind']} vs "
+              f"fsf/hypebeast movetime={rec['fsf_hypebeast_movetime_ms']}", flush=True)
+    print(f"report: {args.output}\nprotocol log: {args.output.with_suffix('.uci.log')}", flush=True)
     return 0
 
 
