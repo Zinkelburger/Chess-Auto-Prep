@@ -30,7 +30,8 @@ from pathlib import Path
 
 import chess
 
-from .match import PlayerFactory, default_ort_threads, environment, file_record, load_openings
+from .match import (PlayerFactory, default_ort_threads, environment, file_record,
+                    load_openings, suspend_clock)
 from .players import EngineError
 from .referee import BOARDS, seat_team
 from .sim import SeatView
@@ -100,6 +101,7 @@ def run(spec_text: str, positions: Path, movetimes: list[int], warmup: int,
         raise ValueError(f"{positions}: no positions with a legal move")
     started = time.time()
     clock = time.monotonic()
+    suspended_at_start = suspend_clock()
     phases: dict[str, dict] = {}
     state = {"seat": None, "restarts": 0, "identity": None}
 
@@ -165,6 +167,7 @@ def run(spec_text: str, positions: Path, movetimes: list[int], warmup: int,
         report.update({
             "measured_at": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(started)),
             "wall_seconds": time.time() - started,
+            "suspended_seconds": round(suspend_clock() - suspended_at_start, 1),
             "complete": complete,
             "truncated_by_max_seconds": out_of_time(),
             "max_seconds": max_seconds,

@@ -282,6 +282,17 @@ def _read(path: str) -> str | None:
         return None
 
 
+def suspend_clock() -> float:
+    """Seconds the machine has spent suspended since boot (CLOCK_BOOTTIME
+    counts suspend, CLOCK_MONOTONIC does not); 0 where unsupported. A
+    difference of two readings is the suspend inside a run, which makes a
+    laptop lid-close visible instead of looking like a hang."""
+    try:
+        return time.clock_gettime(time.CLOCK_BOOTTIME) - time.monotonic()
+    except (AttributeError, OSError):
+        return 0.0
+
+
 ENV_RECORDED = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "HIVEMIND_ORT_THREADS",
                 "HIVEMIND_BIN", "HIVEMIND_MODEL", "HIVEMIND_LIB", "HYPEBEAST_HOME")
 
@@ -425,6 +436,7 @@ def run_match(config: MatchConfig, contender: PlayerFactory, baseline: PlayerFac
     lock = threading.Lock()
     stop = threading.Event()
     started = time.monotonic()
+    suspended_at_start = suspend_clock()
     meta = {"contender": contender.describe(), "baseline": baseline.describe(),
             "clock": vars(config.clock) | {"move_cost_ms": list(config.clock.move_cost_ms)},
             "pairs": config.pairs, "seed": config.seed,
@@ -434,7 +446,8 @@ def run_match(config: MatchConfig, contender: PlayerFactory, baseline: PlayerFac
     def write_summary() -> dict:
         summary = {**meta, **summarize(records, config.sprt, declared_pairs=config.pairs,
                                        replayed_errors=replayed_errors),
-                   "wall_seconds": time.monotonic() - started}
+                   "wall_seconds": time.monotonic() - started,
+                   "suspended_seconds": round(suspend_clock() - suspended_at_start, 1)}
         temporary = summary_path.with_suffix(".tmp")
         temporary.write_text(json.dumps(summary, indent=2) + "\n")
         temporary.replace(summary_path)
