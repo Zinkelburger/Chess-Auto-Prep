@@ -153,6 +153,14 @@ void main() {
     },
   );
 
+  test('entered with nothing chosen, the only repertoire is the choice', () {
+    trainer.selection.followDocument();
+    trainer.selection.update(trainer.options.copyWith(repertoirePath: ''));
+    trainer.selection.enter(null);
+    expect(trainer.selection.root, '/repertoires/KID');
+    expect(settings.value.training.repertoirePath, '/repertoires/KID');
+  });
+
   test('old settings load with no repertoire chosen and due review', () {
     final options = TrainingOptions.fromJson({'rateReviews': true});
     expect(options.repertoirePath, isEmpty);
