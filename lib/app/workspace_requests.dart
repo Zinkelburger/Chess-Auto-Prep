@@ -16,6 +16,7 @@ import '../workspace/document/draft_keeper.dart';
 import '../features/study/studies.dart';
 import '../features/study/studies_state.dart';
 import '../storage/chapter_files.dart';
+import '../storage/saved_place.dart';
 import '../workspace/book/books.dart';
 import '../workspace/document/chapter_commands.dart';
 import '../workspace/document/save_copy.dart';
@@ -178,6 +179,44 @@ final class WorkspaceRequests extends ChangeNotifier {
     _remember(_here);
     _mode = mode;
     notifyListeners();
+  }
+
+  /// Where the window is, as the settings keep it for the next launch.
+  SavedPlace get place {
+    final source = _mode.showsBoard && !_session.isScratch
+        ? _session.source
+        : null;
+    return SavedPlace(
+      mode: _mode.name,
+      path: source?.path,
+      section: source?.section,
+      game: source == null ? null : _session.game,
+    );
+  }
+
+  /// Opens where the last run was left: its mode at once, so the window
+  /// comes up on it, then its file. A file gone since leaves the mode on an
+  /// empty board with nothing said, and Back has nowhere to go.
+  Future<void> resume(SavedPlace? place) async {
+    if (_disposed || place == null) return;
+    final mode = Mode.values.where((m) => m.name == place.mode).firstOrNull;
+    if (mode == null) return;
+    if (mode != _mode) {
+      _mode = mode;
+      notifyListeners();
+    }
+    if (!mode.showsBoard) return;
+    final path = place.path;
+    if (path == null) return documents.entered(mode);
+    final ticket = _nextRequest();
+    final ref = ChapterRef.at(path, section: place.section);
+    final result = mode == Mode.pgnViewer
+        ? await _inViewer(ticket, ref)
+        : await _open(ticket, ref, game: place.game);
+    if (_disposed || ticket.overtaken) return;
+    if (result is RequestDone) return documents.carry(mode);
+    if (result is RequestRefused) say(null);
+    documents.entered(mode);
   }
 
   /// The Books mode, at the active book: where every "Edit books" goes.

@@ -4,7 +4,9 @@ import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/chess/tournament/config.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/storage/my_accounts.dart';
+import 'package:chess_auto_prep/storage/saved_place.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -56,6 +58,71 @@ void main() {
       expect(w.analysis.multiPv, 2);
     },
   );
+
+  Future<void> leftAt(Settings settings) => File(
+    p.join(support.path, 'settings.json'),
+  ).writeAsString(settings.toJson());
+
+  /// Waits for the settings writes in flight, which the folder must outlive.
+  Future<void> written() => w.settings.update(
+    w.settings.value.copyWith(figurines: !w.settings.value.figurines),
+  );
+
+  test('a launch opens on the mode and the file the last one was left '
+      'on', () async {
+    await leftAt(
+      Settings(
+        lastPlace: SavedPlace(mode: Mode.trainer.name, path: benkoMain.path),
+      ),
+    );
+    await w.parts.start();
+    expect(w.parts.requests.mode, Mode.trainer);
+    expect(w.parts.session.source, benkoMain);
+    expect(w.parts.requests.backTo, isNull);
+  });
+
+  test('a file gone since leaves the mode on an empty board, with nothing '
+      'said', () async {
+    await leftAt(
+      Settings(
+        lastPlace: SavedPlace(
+          mode: Mode.repertoires.name,
+          path: p.join(p.dirname(benkoMain.path), 'Gone.pgn'),
+        ),
+      ),
+    );
+    await w.parts.start();
+    expect(w.parts.requests.mode, Mode.repertoires);
+    expect(w.parts.session.isScratch, isTrue);
+    expect(w.parts.requests.status, isNull);
+  });
+
+  test('the place is kept as the user moves between files and modes', () async {
+    await w.parts.start();
+    await w.parts.requests.open(kidMain);
+    expect(
+      w.settings.value.lastPlace,
+      SavedPlace(mode: Mode.repertoires.name, path: kidMain.path),
+    );
+    w.parts.requests.switchTo(Mode.databases);
+    expect(w.settings.value.lastPlace, SavedPlace(mode: Mode.databases.name));
+    await written();
+  });
+
+  test('the engine comes back as the user left its switch, not as a mode '
+      'left it', () async {
+    await leftAt(const Settings(engineOn: true));
+    await w.parts.start();
+    await pumpEventQueue();
+    expect(w.analysis.enabled, isTrue);
+    await w.analysis.disable();
+    expect(w.settings.value.engineOn, isTrue, reason: 'a mode hid an answer');
+    await w.analysis.turn(false);
+    expect(w.settings.value.engineOn, isFalse);
+    await w.analysis.turn(true);
+    expect(w.settings.value.engineOn, isTrue);
+    await written();
+  });
 
   test('unreadable settings start the app on the defaults', () async {
     final file = File(p.join(support.path, 'settings.json'));

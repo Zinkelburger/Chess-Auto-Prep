@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/chess/generation/evaluation_source.dart';
 import 'package:chess_auto_prep/chess/generation/expectimax_options.dart';
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/storage/atomic_write.dart';
+import 'package:chess_auto_prep/storage/saved_place.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -265,6 +266,28 @@ void main() {
       expect(next.value.analysisEngine, 'engine-1');
       expect(next.value, store.value);
     });
+  });
+
+  test('the last place and the engine switch round-trip; a place that is '
+      'not one is none', () {
+    const left = Settings(
+      lastPlace: SavedPlace(
+        mode: 'pgnViewer',
+        path: '/docs/games.pgn',
+        section: 'Round 1',
+        game: 3,
+      ),
+      engineOn: true,
+    );
+    final back = Settings.fromJson(left.toJson());
+    expect(back, left);
+    expect(back.lastPlace!.game, 3);
+    expect(Settings.fromJson('{"lastPlace": 4}').lastPlace, isNull);
+    expect(
+      Settings.fromJson('{"lastPlace": {"path": "/x"}}').lastPlace,
+      isNull,
+    );
+    expect(Settings.fromJson('{}').engineOn, isFalse);
   });
 
   test('a missing or mistyped field keeps its default', () {

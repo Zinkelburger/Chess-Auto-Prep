@@ -161,7 +161,9 @@ comment's shapes out where edits are taken, else hides them until the
 position changes; the threat stays.
 
 **Engine** — the switch or Actions ▸ `Engine on` → starts or retries a
-failed start; the engine is off at every launch. Changing cores or memory
+failed start. The switch is remembered (`engineOn`): a launch starts the
+engine when it was left on, and a mode that turns it off to hide an answer
+(a puzzle, a lesson, solitaire) does not change what is remembered. Changing cores or memory
 restarts it; lines apply to the next search. Show threat (setting
 `engineThreat`, off by default) runs a depth-12 search of the turn-passed
 position just before the position's lines and draws its best move red; a
@@ -209,6 +211,11 @@ An illegal setup names its reason while `Use this position` waits. The result
 is a new analysis board. The same editor is embedded in Study's new-chapter
 dialog and the tournament's position dialog.
 
+**Where the app opens** — on the mode and the file the last run was left on
+(`lastPlace` in `settings.json`: mode, path, chapter, game; written when the
+place changes). A file gone since leaves that mode on an empty analysis
+board, with nothing said. The first launch opens the Repertoire builder.
+
 **Full screen** — F11 or Actions ▸ Window ▸ `Full screen`, every mode.
 
 **Layout** — panes, open tabs and board size are remembered per mode and
@@ -237,8 +244,8 @@ focus: arrows, Enter/Space, Esc. A text field with focus keeps its keys.
   markers and the app's generated metrics (`[%score]`, `[%expectimax]`,
   `[%cumProb]`).
 - **Settings** are global across boards (`settings.json`): coordinates,
-  figurines, engine choice, cores, memory, lines, threat, explorer source and
-  chips, layouts. See [settings](settings.md).
+  figurines, engine choice, cores, memory, lines, threat, the engine switch,
+  explorer source and chips, layouts, the last place. See [settings](settings.md).
 - **Engine cache** — `<support>/eval_cache.db`, SQLite `evals(fen,
   eval_cp_white, depth, created_at)` keyed by the four-field FEN, White's view,
   deeper wins. Read and written by

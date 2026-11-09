@@ -22,6 +22,7 @@ import 'mode.dart';
 import 'mode_wiring.dart';
 import 'player_wiring.dart';
 import 'window_input.dart';
+import 'place_memory.dart';
 import 'workspace_requests.dart';
 import 'workspace_wiring.dart';
 
@@ -239,7 +240,16 @@ final class AppParts {
     unawaited(labs.offer(env.bughouse.bundled));
     unawaited(_startUpdates());
     await _workspace.start();
+    if (_disposed) return;
+    await requests.resume(settings.value.lastPlace);
+    if (!_disposed) _place.start();
   }
+
+  late final _place = PlaceMemory(
+    settings: settings,
+    requests: requests,
+    session: session,
+  );
 
   /// Starts the update checks and says once when the last install failed.
   Future<void> _startUpdates() async {
@@ -290,6 +300,7 @@ final class AppParts {
     labs.dispose();
     _training.dispose();
     if (_started) _drafts?.dispose();
+    _place.dispose();
     requests.dispose();
     _workspace.dispose();
     documents.dispose();

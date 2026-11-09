@@ -94,6 +94,9 @@ final class WorkspaceWiring {
     _env.startAnalysisEngine,
     multiPv: _env.settings.value.engineLines,
     elsewhere: _tree.board,
+    switched: (on) => unawaited(
+      _env.settings.update(_env.settings.value.copyWith(engineOn: on)),
+    ),
   );
 
   late final _review = GameReview(
@@ -272,6 +275,9 @@ final class WorkspaceWiring {
       ..showThreat(s.engineThreat);
     _inspection.engine.setLines(s.engineLines);
     _env.settings.addListener(_engineSettings);
+    // The switch as it was left: a mode that hides an answer turns the
+    // engine off for itself when the answer comes up.
+    if (s.engineOn) unawaited(_analysis.enable());
   }
 
   /// What the engine was last started with, so a settings change that

@@ -8,6 +8,7 @@ import '../chess/generation/expectimax_options.dart';
 import '../chess/training/training_options.dart';
 import '../chess/tactics/game_ids.dart' show GameSpeed;
 import '../chess/tactics/puzzle_queue.dart';
+import 'saved_place.dart';
 import 'update_choices.dart';
 
 /// What the user has chosen about the app as a whole: the few things two
@@ -38,6 +39,8 @@ final class Settings {
     this.myGameSpeeds = allSpeeds,
     this.updates = UpdateChoices.defaults,
     this.workspaceLayouts = const {},
+    this.lastPlace,
+    this.engineOn = false,
     this._extra = const {},
   });
 
@@ -118,6 +121,13 @@ final class Settings {
   /// Saved reading-tool arrangements, keyed by mode and document path.
   final Map<String, String> workspaceLayouts;
 
+  /// Where the window was last, which the next launch opens on; null
+  /// before the first.
+  final SavedPlace? lastPlace;
+
+  /// Whether the engine switch under the board was left on.
+  final bool engineOn;
+
   /// The file's keys this build does not read, written back as they were
   /// so a newer build's choices survive an older build saving. Not part of
   /// equality: nothing on screen can change them.
@@ -178,6 +188,8 @@ final class Settings {
     Set<GameSpeed>? myGameSpeeds,
     UpdateChoices? updates,
     Map<String, String>? workspaceLayouts,
+    SavedPlace? lastPlace,
+    bool? engineOn,
   }) => Settings(
     boardCoordinates: boardCoordinates ?? this.boardCoordinates,
     figurines: figurines ?? this.figurines,
@@ -202,6 +214,8 @@ final class Settings {
     myGameSpeeds: myGameSpeeds ?? this.myGameSpeeds,
     updates: updates ?? this.updates,
     workspaceLayouts: workspaceLayouts ?? this.workspaceLayouts,
+    lastPlace: lastPlace ?? this.lastPlace,
+    engineOn: engineOn ?? this.engineOn,
     extra: _extra,
   );
 
@@ -232,6 +246,8 @@ final class Settings {
     ],
     'updates': updates.toJson(),
     'workspaceLayouts': workspaceLayouts,
+    'lastPlace': ?lastPlace?.toJson(),
+    'engineOn': engineOn,
   });
 
   /// Reads [text]; a field that is missing or of the wrong type keeps its
@@ -287,6 +303,8 @@ final class Settings {
             if (entry.key is String && entry.value is String)
               entry.key as String: entry.value as String,
       },
+      lastPlace: SavedPlace.fromJson(decoded['lastPlace']),
+      engineOn: pick('engineOn', defaults.engineOn),
       extra: {
         for (final MapEntry(:key, :value) in decoded.entries)
           if (!_keys.contains(key)) key: value,
@@ -316,6 +334,8 @@ final class Settings {
     'myGameSpeeds',
     'updates',
     'workspaceLayouts',
+    'lastPlace',
+    'engineOn',
   };
 
   /// The speeds [value] names; every speed when it names none, since no
@@ -353,7 +373,9 @@ final class Settings {
       other.training == training &&
       setEquals(other.myGameSpeeds, myGameSpeeds) &&
       other.updates == updates &&
-      mapEquals(other.workspaceLayouts, workspaceLayouts);
+      mapEquals(other.workspaceLayouts, workspaceLayouts) &&
+      other.lastPlace == lastPlace &&
+      other.engineOn == engineOn;
 
   @override
   int get hashCode => Object.hash(
@@ -376,8 +398,12 @@ final class Settings {
     training,
     Object.hashAllUnordered(myGameSpeeds),
     updates,
-    Object.hashAllUnordered(
-      workspaceLayouts.entries.map((e) => Object.hash(e.key, e.value)),
+    Object.hash(
+      Object.hashAllUnordered(
+        workspaceLayouts.entries.map((e) => Object.hash(e.key, e.value)),
+      ),
+      lastPlace,
+      engineOn,
     ),
   );
 }

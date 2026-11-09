@@ -38,9 +38,7 @@ List<AppAction> tacticsActions({
     AppAction(
       analysis.enabled ? 'Engine off' : 'Engine on',
       analysis.enabled || !hidden
-          ? () => unawaited(
-              analysis.enabled ? analysis.disable() : analysis.enable(),
-            )
+          ? () => unawaited(analysis.turn(!analysis.enabled))
           : null,
       group: 'Board',
     ),

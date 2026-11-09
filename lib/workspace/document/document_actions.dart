@@ -65,9 +65,7 @@ List<AppAction> documentActions({
       analysis.enabled ? 'Engine off' : 'Engine on',
       when(
         analysis.enabled || session.shownTo == null,
-        () => unawaited(
-          analysis.enabled ? analysis.disable() : analysis.enable(),
-        ),
+        () => unawaited(analysis.turn(!analysis.enabled)),
       ),
       group: 'Board',
     ),

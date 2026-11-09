@@ -221,8 +221,7 @@ class _Header extends StatelessWidget {
               label: 'Engine',
               child: EngineSwitch(
                 value: analysis.enabled,
-                onChanged: (enabled) =>
-                    unawaited(enabled ? analysis.enable() : analysis.disable()),
+                onChanged: (enabled) => unawaited(analysis.turn(enabled)),
               ),
             ),
           ),
