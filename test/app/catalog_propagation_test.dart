@@ -169,7 +169,7 @@ void main() {
       final clubBook = app.parts.books.create('Club book')!;
       app.parts.books.setRepertoire(clubBook, folder('Club', club), true);
       await pumpEventQueue();
-      expect(app.parts.books.active?.id, 'test');
+      expect(app.parts.books.chosen?.id, 'test');
       await app.session.open(kidMain);
       app.tree.watch();
       await pumpEventQueue();

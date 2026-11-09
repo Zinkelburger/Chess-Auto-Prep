@@ -249,7 +249,7 @@ class _BookList extends StatelessWidget {
                 Expanded(
                   child: Text(book.name, overflow: TextOverflow.ellipsis),
                 ),
-                if (book.id == books.active?.id) Text('In use', style: inUse),
+                if (book.id == books.chosen?.id) Text('In use', style: inUse),
               ],
             ),
           ),
@@ -418,7 +418,7 @@ class _BookEditorState extends State<_BookEditor> {
     final books = widget.books;
     final book = widget.book;
     final theme = Theme.of(context);
-    final inUse = books.active?.id == book.id;
+    final inUse = books.chosen?.id == book.id;
     return Padding(
       padding: const EdgeInsets.fromLTRB(Space.l, Space.m, Space.s, 0),
       child: Row(

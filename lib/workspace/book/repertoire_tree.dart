@@ -205,9 +205,6 @@ final class RepertoireTree extends ChangeNotifier {
       .where((ref) => (_liveFor(ref) ?? _shelf.indexOf(ref))?.side == side)
       .length;
 
-  /// The name of the book the tree is of, or null while none is set.
-  String? get bookName => _books.active?.name;
-
   /// The chapters on the shelf that are in the active book.
   Iterable<ChapterRef> get _inBook => _shelf.refs.where(_books.includes);
 
@@ -301,10 +298,6 @@ final class RepertoireTree extends ChangeNotifier {
     final side = this.side;
     final merged = <String, List<(IndexedMove, ChapterRef)>>{};
     var files = 0;
-    if (_books.active == null) {
-      _show(const TreeNothing('No book set.'));
-      return;
-    }
     for (final ref in _inBook) {
       final index = _liveFor(ref) ?? _shelf.indexOf(ref);
       if (index == null || index.side != side) continue;

@@ -294,11 +294,6 @@ class _Openings extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!checked.hasBook) {
-      return const ListMessage(
-        'Choose a book above to compare openings. Your saved games are in Games.',
-      );
-    }
     final items = <Widget>[];
     for (final kind in Deviation.values) {
       final ways = checked.waysOf(kind);

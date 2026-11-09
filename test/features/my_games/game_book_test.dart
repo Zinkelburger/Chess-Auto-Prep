@@ -213,23 +213,13 @@ void main() {
   });
 
   test(
-    'saved games stay browsable without a book and compare after selection',
+    'with no book chosen the games are read against every repertoire',
     () async {
-      final selected = fixture.books.active!;
       fixture.books.activate(null);
-      final unchecked = await watched();
-      expect(unchecked.hasBook, isFalse);
-      expect(unchecked.games, hasLength(5));
-      expect(unchecked.games.every((g) => g.verdict is NoBook), isTrue);
-      expect(fixture.files.listings, 0);
-      fixture.book.search('Rival');
-      expect(fixture.book.shown, hasLength(5));
-      fixture.books.activate(selected);
-      await pumpEventQueue();
-      final checked = fixture.book.state as BookChecked;
-      expect(checked.hasBook, isTrue);
+      final checked = await watched();
+      expect(checked.games, hasLength(5));
+      expect(checked.games.any((g) => g.verdict is! NoBook), isTrue);
       expect(checked.ways, isNotEmpty);
-      expect(fixture.book.shown, hasLength(5));
     },
   );
 

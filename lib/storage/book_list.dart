@@ -16,7 +16,15 @@ final class Book {
     required this.name,
     this.repertoires = const {},
     this.chapters = const {},
+    this.all = false,
   });
+
+  /// Every repertoire: what is read while no book has been chosen. It is
+  /// never in the list and never written.
+  static const everything = Book(id: '', name: 'All repertoires', all: true);
+
+  /// Whether every chapter under `repertoires/` counts.
+  final bool all;
 
   final String id;
   final String name;
@@ -28,11 +36,12 @@ final class Book {
   /// course file by its `[ChapterName]`.
   final Set<BookChapter> chapters;
 
-  bool get isEmpty => repertoires.isEmpty && chapters.isEmpty;
+  bool get isEmpty => !all && repertoires.isEmpty && chapters.isEmpty;
 
   /// Whether the chapter [section] of the file at [path] is in the book:
   /// its folder is, the chapter is, or its whole file is.
   bool includes(String path, String? section) =>
+      all ||
       repertoires.any(
         (folder) => folder == path || p.posix.isWithin(folder, path),
       ) ||

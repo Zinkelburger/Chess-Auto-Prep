@@ -114,22 +114,14 @@ void main() {
   });
 
   testWidgets(
-    'no selected book still offers games and explains opening comparison',
+    'with no book chosen the games are read against every repertoire',
     (tester) async {
       fixture.books.activate(null);
       await pumpPanel(tester);
       expect(find.text('5 games, newest first'), findsOneWidget);
-      await tester.tap(find.text('vs Rival (2105) · Won · 2026.09.21'));
-      expect(opened.single.game.date, '2026.09.21');
       await tester.tap(find.text('Openings'));
       await tester.pumpAndSettle();
-      expect(
-        find.text(
-          'Choose a book above to compare openings. Your saved games are in Games.',
-        ),
-        findsOneWidget,
-      );
-      expect(find.text('None of these games left your book.'), findsNothing);
+      expect(find.text('You left book (1)'), findsOneWidget);
     },
   );
 

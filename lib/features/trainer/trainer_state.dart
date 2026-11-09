@@ -30,7 +30,7 @@ typedef LineToRead = ({
 });
 
 /// Why there is nothing to train.
-enum NothingToTrain { noChapter, studyChapter, noBook, emptyBook }
+enum NothingToTrain { noChapter, studyChapter, emptyBook }
 
 sealed class TrainerState {
   const TrainerState();

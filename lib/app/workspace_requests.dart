@@ -182,7 +182,7 @@ final class WorkspaceRequests extends ChangeNotifier {
 
   /// The Books mode, at the active book: where every "Edit books" goes.
   void editBooks() {
-    if (_books.active case final active?) _books.edit(active);
+    if (_books.chosen case final chosen?) _books.edit(chosen);
     switchTo(Mode.books);
   }
 

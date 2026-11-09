@@ -107,7 +107,7 @@ Top to bottom, left to right:
   Under it, the games here (Masters 15, Lichess four top and four recent, TWIC
   12). `This file` and `My games` show `40 games` / `12 of 40 games`.
 - **Explorer `Book`** — the book in use as an explorer (see
-  [books](books.md)); `No book set.` without one. For the board's position,
+  [books](books.md)); every repertoire while none is chosen. For the board's position,
   every move any chapter of the book for the board's side plays, matched by
   position: `Move` · `Lines` · `Goes on` · `Found in` (a click opens that
   file there). While it is up the board is free: a move the file does not play

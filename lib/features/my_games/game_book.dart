@@ -69,14 +69,7 @@ final class BookNoAccounts extends BookState {
 /// Every saved game of the accounts, checked, newest first; and the ways
 /// they left the book, most often first.
 final class BookChecked extends BookState {
-  const BookChecked({
-    required this.games,
-    required this.ways,
-    this.hasBook = true,
-  });
-
-  /// Browsing saved games does not require a comparison book.
-  final bool hasBook;
+  const BookChecked({required this.games, required this.ways});
 
   final List<CheckedGame> games;
   final List<SameWay> ways;
@@ -133,8 +126,8 @@ final class GameBook extends ChangeNotifier {
 
   /// The book as the last read saw it: another book in use, or an edit to
   /// this one, reads again.
-  (Book?, int)? _bookSeen;
-  (Book?, int) get _bookInput => (_books.active, _books.revision);
+  (Book, int)? _bookSeen;
+  (Book, int) get _bookInput => (_books.active, _books.revision);
 
   BookState _state = const BookReading();
   String _query = '';
@@ -280,10 +273,8 @@ final class GameBook extends ChangeNotifier {
       if (accounts.isEmpty) return _become(const BookNoAccounts());
       final corpus = await _readCorpus(accounts, overtaken);
       if (corpus == null || overtaken()) return;
-      if (book != null) {
-        _shelf.forget();
-        await _shelf.read(gone: overtaken);
-      }
+      _shelf.forget();
+      await _shelf.read(gone: overtaken);
       if (overtaken()) return;
       _become(_checked(corpus, book));
     } on Object catch (error) {
@@ -321,11 +312,9 @@ final class GameBook extends ChangeNotifier {
 
   BookChecked _checked(
     List<(ChapterRef, GameSite, PlayedGame)> played,
-    Book? selected,
+    Book selected,
   ) {
-    final books = selected == null
-        ? <BookFile>[]
-        : _shelf.bookFiles((ref) => _books.contains(selected, ref));
+    final books = _shelf.bookFiles((ref) => _books.contains(selected, ref));
     final games = [
       for (final (file, site, game) in played)
         CheckedGame(
@@ -335,11 +324,7 @@ final class GameBook extends ChangeNotifier {
           verdict: checkGame(game, books),
         ),
     ]..sort((a, b) => b.game.playedAt.compareTo(a.game.playedAt));
-    return BookChecked(
-      games: List.unmodifiable(games),
-      ways: _ways(games),
-      hasBook: selected != null,
-    );
+    return BookChecked(games: List.unmodifiable(games), ways: _ways(games));
   }
 
   /// The games that left the book, grouped by how, the most games first

@@ -84,8 +84,11 @@ final class Books extends ChangeNotifier {
 
   List<Book> get books => _list.books;
 
-  /// The book everything reads, or null while none is set.
-  Book? get active => _list.activeBook;
+  /// The book everything reads: the one chosen, else every repertoire.
+  Book get active => _list.activeBook ?? Book.everything;
+
+  /// The book the user chose to use, or null while every repertoire counts.
+  Book? get chosen => _list.activeBook;
 
   bool get loaded => _loaded;
 
@@ -95,7 +98,7 @@ final class Books extends ChangeNotifier {
   /// The book the Books mode has open: the one asked for, else the active
   /// one, else the first.
   Book? get editing =>
-      _list.byId(_editing) ?? active ?? _list.books.firstOrNull;
+      _list.byId(_editing) ?? chosen ?? _list.books.firstOrNull;
 
   Future<void> load() async {
     if (_disposed || _changingReferences) return;
@@ -139,6 +142,7 @@ final class Books extends ChangeNotifier {
 
   /// Native files and recursive folders on which a selected book depends.
   Set<String> inputs(Book? book) => Set.unmodifiable({
+    if (book != null && book.all) _root,
     if (book != null)
       for (final path in [
         ...book.repertoires,

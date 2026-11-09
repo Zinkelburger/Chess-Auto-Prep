@@ -177,7 +177,7 @@ run keeps its partial report. Findings can be dismissed and restored.
 
 **Check against my book** — My book tab or Actions → walks the filtered games
 through the book in use for our colour; a row opens its game at the gap.
-No book: `Choose a white repertoire in Books, then check again.`
+No chapter for that colour in the book: `Your book has no white repertoire to check against.`
 
 ## Data
 

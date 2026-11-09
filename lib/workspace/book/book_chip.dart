@@ -9,9 +9,10 @@ import 'books.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/tool_button.dart';
 
-/// The one control wherever the book is read: the active book's name, which
-/// switches to another book, and a pencil into the Books mode to edit them.
-/// With no books yet the name goes straight to the Books mode.
+/// The one control wherever the book is read: the active book's name
+/// (`All repertoires` while none is chosen), which switches to another book,
+/// and a pencil into the Books mode to edit them. With no books yet the name
+/// goes straight to the Books mode.
 class BookChip extends StatelessWidget {
   const BookChip({super.key, required this.books, required this.onEdit});
 
@@ -24,7 +25,7 @@ class BookChip extends StatelessWidget {
     final chosen = await showChoiceDialog<Book>(
       context,
       title: 'Use opening book',
-      options: books.books,
+      options: [Book.everything, ...books.books],
       label: (book) => book.name,
       hint: 'Search opening books',
       empty: 'No opening books yet',
@@ -33,6 +34,7 @@ class BookChip extends StatelessWidget {
     // A chapter being moved or renamed rewrites the books; the choice waits
     // for that to land rather than being written under it.
     await books.referencesSettled;
+    if (chosen.all) return books.activate(null);
     final current = books.books.where((book) => book.id == chosen.id);
     if (current.isNotEmpty) books.activate(current.first);
   }
@@ -56,7 +58,7 @@ class BookChip extends StatelessWidget {
                     : () => unawaited(_choose(context)),
                 icon: const Icon(AppIcons.book, size: IconSize.menu),
                 label: Text(
-                  active?.name ?? 'No opening book set',
+                  active.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),

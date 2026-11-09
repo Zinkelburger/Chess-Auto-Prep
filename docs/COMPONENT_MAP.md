@@ -117,8 +117,8 @@ Bughouse mode is offered when its engine assets are present.
   define both the visible puzzle list and Play's counted queue.
   `PuzzleTrainer.continueSession` restores a parked run without clearing results. Alternative answers use
   a supervised finite engine job; unavailable checks do not invent grades.
-- My games reads saved games independently of the selected comparison book;
-  `BookChecked.hasBook` distinguishes browsing from opening comparison. Its
+- My games reads saved games against the book in use, which is every
+  repertoire (`Book.everything`) until a book is chosen. Its
   initial Game tab has Book and Game review beside it.
 - Players/prep owns identities, groups, downloads, findings, prepared flags and
   linked prep studies. Player analysis exposes My book beside Game, and Player

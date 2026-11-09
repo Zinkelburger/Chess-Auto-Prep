@@ -97,7 +97,7 @@ void main() {
       await owner.load();
       owner.create('Unconfirmed');
       await owner.settled;
-      expect(owner.active?.name, 'Unconfirmed');
+      expect(owner.chosen?.name, 'Unconfirmed');
       expect(owner.current, isFalse);
       expect(owner.problem, isNotNull);
       held.fail = false;
@@ -123,12 +123,12 @@ void main() {
       addTearDown(owner.dispose);
       await owner.load();
       racing.rivals = 3;
-      owner.rename(owner.active!, 'Renamed');
+      owner.rename(owner.chosen!, 'Renamed');
       await owner.settled;
       expect(racing.writes, 3);
       expect(owner.canRetry, isTrue);
       expect(owner.problem, isNotNull);
-      expect(owner.active?.name, 'Renamed');
+      expect(owner.chosen?.name, 'Renamed');
       await owner.load();
       expect(owner.canRetry, isFalse);
       expect(owner.current, isTrue);
@@ -181,7 +181,7 @@ void main() {
       expect(owner.current, isTrue);
       gate.complete();
       await oldRead;
-      expect(owner.active?.name, 'Newer');
+      expect(owner.chosen?.name, 'Newer');
       expect(owner.current, isTrue);
     },
   );
@@ -221,22 +221,25 @@ void main() {
     await owner.load();
     names.add('Unobserved');
     list.clear();
-    expect(owner.active!.repertoires, {'First'});
+    expect(owner.chosen!.repertoires, {'First'});
     expect(() => owner.books.clear(), throwsUnsupportedError);
-    expect(() => owner.active!.repertoires.clear(), throwsUnsupportedError);
-    owner.setRepertoire(owner.active!, najdorf, true);
-    expect(() => owner.active!.repertoires.clear(), throwsUnsupportedError);
+    expect(() => owner.chosen!.repertoires.clear(), throwsUnsupportedError);
+    owner.setRepertoire(owner.chosen!, najdorf, true);
+    expect(() => owner.chosen!.repertoires.clear(), throwsUnsupportedError);
     await owner.settled;
   });
 
-  test('no book is in use until one is made; the first one made is', () async {
-    expect(books.active, isNull);
-    expect(books.includes(najdorf.chapters.first), isFalse);
+  test('every repertoire is the book until one is made; the first one made '
+      'is in use', () async {
+    expect(books.chosen, isNull);
+    expect(books.active.name, 'All repertoires');
+    expect(books.includes(najdorf.chapters.first), isTrue);
+    expect(books.inputs(books.active), {'/repertoires'});
     final spring = books.create('Spring Equinox Open')!;
-    expect(books.active?.id, spring.id);
+    expect(books.chosen?.id, spring.id);
     expect(books.editing?.id, spring.id);
     final later = books.create('Later')!;
-    expect(books.active?.id, spring.id, reason: 'the one in use stays');
+    expect(books.chosen?.id, spring.id, reason: 'the one in use stays');
     expect(books.editing?.id, later.id);
     await books.settled;
     expect(store.books.books.map((b) => b.name), [
@@ -250,24 +253,24 @@ void main() {
       'and a chapter counts on its own', () {
     final book = books.create('Spring')!;
     books.setRepertoire(book, najdorf, true);
-    expect(books.shareOf(books.active!, najdorf), BookShare.all);
+    expect(books.shareOf(books.chosen!, najdorf), BookShare.all);
     expect(books.includes(ref('Najdorf', 'Brand new')), isTrue);
     expect(books.includes(ref('e4', 'Italian')), isFalse);
-    books.setChapter(books.active!, e4, ref('e4', 'Italian'), true);
+    books.setChapter(books.chosen!, e4, ref('e4', 'Italian'), true);
     expect(books.includes(ref('e4', 'Italian')), isTrue);
-    expect(books.shareOf(books.active!, e4), BookShare.all);
+    expect(books.shareOf(books.chosen!, e4), BookShare.all);
   });
 
   test('taking one chapter out of a whole repertoire keeps the others', () {
     final book = books.create('Spring')!;
     books.setRepertoire(book, najdorf, true);
     books.setChapter(
-      books.active!,
+      books.chosen!,
       najdorf,
       ref('Najdorf', 'Sidelines'),
       false,
     );
-    final active = books.active!;
+    final active = books.chosen!;
     expect(active.repertoires, isEmpty);
     expect(books.shareOf(active, najdorf), BookShare.some);
     expect(books.includes(ref('Najdorf', 'Main')), isTrue);
@@ -287,18 +290,18 @@ void main() {
         chapters: [...najdorf.chapters, nested],
       );
       books.create('Spring');
-      books.setChapter(books.active!, recursive, nested, true);
-      books.setChapter(books.active!, recursive, sibling, true);
+      books.setChapter(books.chosen!, recursive, nested, true);
+      books.setChapter(books.chosen!, recursive, sibling, true);
       books.setRepertoire(
-        books.active!,
+        books.chosen!,
         folder('Najdorf/Other', ['Main']),
         true,
       );
-      books.setRepertoire(books.active!, recursive, false);
+      books.setRepertoire(books.chosen!, recursive, false);
       expect(books.includes(nested), isFalse);
       expect(books.includes(ref('Najdorf/Other', 'Main')), isFalse);
       expect(books.includes(sibling), isTrue);
-      expect(books.shareOf(books.active!, recursive), BookShare.none);
+      expect(books.shareOf(books.chosen!, recursive), BookShare.none);
       await books.settled;
       final reopened = Books(store: store, root: '/repertoires');
       addTearDown(reopened.dispose);
@@ -323,13 +326,13 @@ void main() {
     books.setChapter(book, course, scotch, true);
     expect(books.includes(scotch), isTrue);
     expect(books.includes(ruy), isFalse);
-    expect(books.shareOf(books.active!, course), BookShare.some);
+    expect(books.shareOf(books.chosen!, course), BookShare.some);
   });
 
   test('deleting the book in use leaves none in use', () {
     final book = books.create('Spring')!;
     books.delete(book);
-    expect(books.active, isNull);
+    expect(books.chosen, isNull);
     expect(books.books, isEmpty);
   });
 

@@ -91,7 +91,7 @@ void main() {
   test('a book whose last edit did not save is still trained', () {
     fakeAsync((clock) {
       bookStore.fail = true;
-      books.rename(books.active!, 'Retained name');
+      books.rename(books.chosen!, 'Retained name');
       trainer.setScope(TrainScope.book);
       clock.flushMicrotasks();
       expect(books.canRetry, isTrue);
@@ -109,7 +109,7 @@ void main() {
   test('a book edit still being written does not hold training up', () {
     fakeAsync((clock) {
       bookStore.hold = Completer<void>();
-      books.rename(books.active!, 'Uncommitted');
+      books.rename(books.chosen!, 'Uncommitted');
       trainer.setScope(TrainScope.book);
       clock.flushMicrotasks();
       expect(trainer.state, isA<TrainerReady>());

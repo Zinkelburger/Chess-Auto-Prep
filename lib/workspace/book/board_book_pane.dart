@@ -79,10 +79,6 @@ class _BoardBookPaneState extends State<BoardBookPane> {
               'Could not read your repertoires.',
               inset: 0,
             ),
-            BoardBookNotSet() => const ListMessage(
-              'No book set. Pick the book to compare games with.',
-              inset: 0,
-            ),
             BoardBookChecked(:final game, :final verdict, :final book) =>
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -120,7 +120,7 @@ void main() {
       addTearDown(owner.dispose);
       await owner.load();
       final before = owner.source;
-      owner.rename(owner.active!, 'Updated');
+      owner.rename(owner.chosen!, 'Updated');
       await owner.settled;
       expect(owner.current, isFalse);
       expect(owner.canRetry, isTrue);
@@ -128,7 +128,7 @@ void main() {
       fail = false;
       await owner.retry();
       expect(owner.current, isTrue);
-      expect(owner.active!.name, 'Updated');
+      expect(owner.chosen!.name, 'Updated');
       final current =
           await probeDocument(p.join(support.path, 'books.json')) as FileFound;
       expect(owner.source!.revision!.nativeIdentity, current.identity);
@@ -158,7 +158,7 @@ void main() {
         active: 'a',
       ),
     );
-    owner.rename(owner.active!, 'Updated');
+    owner.rename(owner.chosen!, 'Updated');
     await owner.settled;
     expect(owner.canRetry, isFalse);
     expect(owner.current, isTrue);
@@ -184,7 +184,7 @@ void main() {
     await owner.load();
     final e4 = folder('e4', ['Italian']);
     final italian = ref('e4', 'Italian');
-    owner.setChapter(owner.active!, e4, italian, true);
+    owner.setChapter(owner.chosen!, e4, italian, true);
     await owner.settled;
     expect(owner.canRetry, isTrue);
     final result = await owner.changeReferences(() async {

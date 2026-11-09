@@ -723,9 +723,6 @@ class Trainer extends ChangeNotifier {
   Future<void> _loadBook(Ticket load, Chapter? chapter, ChapterRef? ref) async {
     final book = _books.active;
     _bookSeen = (_books.revision, _books.current);
-    if (book == null) {
-      return _become(const TrainerEmpty(NothingToTrain.noBook));
-    }
     final open = chapter != null && ref != null && chapter.game == null
         ? (
             ref: ref,

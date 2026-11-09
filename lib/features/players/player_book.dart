@@ -74,7 +74,7 @@ final class PlayerBook extends ChangeNotifier {
               ),
       ];
       if (files.isEmpty) {
-        status = 'Choose a ${side.name} repertoire in Books, then check again.';
+        status = 'Your book has no ${side.name} repertoire to check against.';
         return;
       }
       final corpus = analysis.corpus!;

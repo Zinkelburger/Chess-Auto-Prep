@@ -70,8 +70,8 @@ void main() {
       ]);
       await w.pumpShell(tester);
       final books = w.parts.books;
-      books.setRepertoire(books.active!, kid, false);
-      books.setChapter(books.active!, kid, nested, true);
+      books.setRepertoire(books.chosen!, kid, false);
+      books.setChapter(books.chosen!, kid, nested, true);
       await toMode(tester, 'Opening books');
       expect(books.includes(nested), isTrue);
       final kidRow = find.ancestor(
