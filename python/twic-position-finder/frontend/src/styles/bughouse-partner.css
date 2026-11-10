@@ -1,0 +1,88 @@
+/* The bughouse board: the analysis layout (analysis.css), the partner board
+   beside it when both boards are shown, and the partner panel under the
+   engine lines. */
+
+/* ── Two boards: the partner board between the board and the panel ── */
+.ch[data-boards="2"] {
+  --ch-board: clamp(280px, min(calc(100dvh - var(--nav-h) - 84px), calc((100vw - 48px - 48px - 420px) / 1.5)), 760px);
+  --ch-partner: calc(var(--ch-board) / 2);
+  grid-template-columns: var(--ch-board) var(--ch-partner) minmax(300px, 440px);
+  grid-template-areas: 'stage partner side' 'under under controls';
+}
+.ch-partner { grid-area: partner; display: flex; flex-direction: column; align-items: stretch; gap: 4px; width: var(--ch-partner); min-width: 0; }
+.ch-partner[hidden] { display: none; }
+.ch-partner-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 8px; font-size: 0.9rem; }
+.ch-partner-name { font-weight: 600; }
+.ch-partner-eval { color: var(--text-dim); font-weight: 600; }
+.ch-partner-board { display: block; width: var(--ch-partner); height: var(--ch-partner); padding: 0; border: 0; border-radius: 0; background: none; cursor: pointer; }
+.ch-partner-board:hover, .ch-partner-board:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ch-partner-board .bb-board, .ch-partner-board cg-container { width: 100%; height: 100%; }
+.ch-partner-board cg-board { cursor: pointer; }
+.ch-partner-hand .zh-pocket.ch-partner-well { width: 100%; font-size: 12px; }
+.ch-partner-switch { align-self: center; margin-top: 4px; }
+
+/* Mid widths: the partner board under the board, the panel keeps its column. */
+@media (max-width: 1180px) and (min-width: 861px) {
+  .ch[data-boards="2"] {
+    --ch-board: clamp(280px, min(calc(100dvh - var(--nav-h) - 84px), calc(100vw - 48px - 24px - 420px)), 860px);
+    --ch-partner: min(calc(var(--ch-board) / 2), 340px);
+    grid-template-columns: var(--ch-board) minmax(300px, 440px);
+    grid-template-areas: 'stage side' 'partner controls' 'under under';
+  }
+  .ch[data-boards="2"] .ch-partner { justify-self: center; }
+}
+
+/* Phones: the partner board after the move buttons. */
+@media (max-width: 860px) {
+  .ch[data-boards="2"] {
+    --ch-board: min(calc(100vw - 32px), 640px);
+    --ch-partner: min(calc(100vw - 32px), 320px);
+    grid-template-columns: var(--ch-board);
+    grid-template-areas: 'top' 'stage' 'bottom' 'controls' 'partner' 'tools' 'under';
+  }
+  .ch[data-boards="2"] .ch-partner { justify-self: center; }
+}
+
+/* ── Partner panel: piece values, arrivals, why ──────────────── */
+/* Its own section of the tools column: a strip of page background parts it
+   from the engine lines. */
+.bs-partner { flex: none; border-top: 8px solid var(--bg); border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+.bs-partner[hidden] { display: none; }
+.ch-analysis.practising .bs-partner { display: none; }
+
+.bs-values-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 6px 10px 2px; }
+.bs-values-title { color: var(--text-dim); font-size: 0.78rem; font-weight: 600; }
+.bs-values-note { color: var(--text-faint); font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bs-values-note .ch-spinner { width: 12px; height: 12px; vertical-align: middle; }
+
+.bs-values-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-variant-numeric: tabular-nums; }
+.bs-values-table th { padding: 2px 4px; color: var(--text-dim); font-size: 0.78rem; font-weight: 600; text-align: center; }
+.bs-values-table th:first-child { width: 4.4em; }
+.bs-values-table th.bs-values-side { padding-left: 10px; color: var(--text); text-align: left; font-size: 0.85rem; }
+.bs-values-turn th.bs-values-side::after { content: ' •'; color: var(--accent); }
+.bs-values-table td { padding: 0; border-top: 1px solid var(--border); }
+.bs-values-table td + td { border-left: 1px solid var(--border); }
+.bs-values-give {
+  display: flex; align-items: center; justify-content: center; gap: 2px; width: 100%; height: 1.95em; padding: 0 2px;
+  border: 0; background: none; color: var(--text); font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.bs-values-give img { flex: none; width: 20px; height: 20px; }
+.bs-values-give:hover { background: var(--accent-bg); }
+.bs-values-give:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.bs-values-mate .bs-values-give { color: var(--ok); }
+
+.bs-arrivals { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 5px 10px 4px; border-top: 1px solid var(--border); }
+.bs-arrival-list { display: contents; }
+.bs-arrival { padding: 1px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-card); font-size: 0.82rem; }
+.bs-arrival .num { color: var(--text-dim); }
+.bs-arrival-moves { flex: 1 0 100%; margin: 0; overflow: hidden; font-size: 0.8rem; white-space: nowrap; text-overflow: ellipsis; }
+.bs-why { margin: 0; padding: 5px 10px 6px; border-top: 1px solid var(--border); font-size: 0.82rem; line-height: 1.3; }
+
+@media (max-height: 800px) and (min-width: 861px) {
+  .bs-partner { border-top-width: 4px; }
+  .bs-values-give { height: 1.8em; }
+  .bs-values-give img { width: 16px; height: 16px; }
+}
+@media (max-width: 860px) {
+  .bs-values-give { height: 2.8em; }
+}

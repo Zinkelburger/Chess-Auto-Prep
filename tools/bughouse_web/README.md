@@ -4,7 +4,7 @@ This folder builds Hivemind, the bughouse engine, to run **entirely in a
 visitor's browser**: a WebAssembly build of the engine with its network on
 ONNX Runtime Web, on the GPU through WebGPU or on CPU threads, searching one
 board with the partner board held still. No page of the website loads it:
-the site's `/bughouse` board runs Lichess's crazyhouse Fairy-Stockfish (see
+the site's `/bughouse` board runs HypeBeast (see
 the [frontend guide](../../python/twic-position-finder/frontend/README.md#bughouse-board)).
 `prepare_assets.py` runs on every frontend build, because the ONNX Runtime it
 copies also serves the Expectimax tab's Maia.

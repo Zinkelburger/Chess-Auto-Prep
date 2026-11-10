@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { parseSquare } from 'chessops/util';
 import {
-  MAX_IN_HAND, START_FEN, Tree, adjustHand, boardDests, dropSquares, enPassantOptions, fenOf, handEdit, handLetters, lichessFen, playLine, readFen,
+  MAX_IN_HAND, START_FEN, Tree, adjustHand, capturedBy, boardDests, dropSquares, enPassantOptions, fenOf, handEdit, handLetters, lichessFen, playLine, readFen,
   sanLine, threatFen,
   outcomeOf, positionOf, readMove,
 } from '../src/analysis/tree';
@@ -64,16 +64,23 @@ const castled = castle.play(castle.root.id, 'e1g1')!;
 assert.equal(castled.san, 'O-O');
 assert.equal(castle.play(castle.root.id, 'e1h1'), castled, 'both castling forms are one move');
 
-// Crazyhouse rules, as the engine plays them: a capture goes to the capturer's hand.
+// Bughouse rules, as the engine plays them: a captured piece leaves the board for the partner, not the capturer's hand.
 const captures = new Tree('rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR[] w KQkq d6 0 2');
 const exd5 = captures.play(captures.root.id, 'e4d5')!;
-assert.equal(handLetters(exd5.fen), 'P', 'exd5 banks the pawn');
+assert.equal(handLetters(exd5.fen), '', 'exd5 sends the pawn away');
+assert.deepEqual(capturedBy(captures.root.fen, 'e4d5'), { color: 'black', role: 'pawn' }, 'what the partner receives');
+assert.equal(capturedBy(captures.root.fen, 'e2e3'), null, 'a quiet move captures nothing');
 assert.ok(captures.adjustHand(exd5.id, 'black', 'knight', 1));
 const nf6 = captures.play(exd5.id, 'N@f6')!;
-assert.equal(handLetters(nf6.fen), 'P', 'a drop spends the piece');
+assert.equal(handLetters(nf6.fen), '', 'a drop spends the piece');
 assert.equal(captures.expectedFen(nf6.id), nf6.fen);
-assert.ok(captures.play(nf6.id, 'P@e4'), 'the captured pawn can be dropped');
+assert.ok(!captures.play(nf6.id, 'P@e4'), 'the captured pawn is not in hand');
 assert.ok(!captures.play(nf6.id, 'N@e4'), 'no knight in hand, no knight drop');
+// En passant takes a pawn; a promoted piece goes as a pawn; castling (king takes rook in chessops) takes nothing.
+assert.deepEqual(capturedBy('4k3/8/8/3pP3/8/8/8/4K3[] w - d6 0 2', 'e5d6'), { color: 'black', role: 'pawn' });
+assert.deepEqual(capturedBy('3Q~k3/8/8/8/8/8/8/4K3[] b - - 0 1', 'e8d8'), { color: 'white', role: 'pawn' });
+assert.equal(handLetters(playLine('3Q~k3/8/8/8/8/8/8/4K3[] b - - 0 1', ['e8d8'])[0].fen), '', 'not into the capturer\'s hand');
+assert.equal(capturedBy('r3k2r/8/8/8/8/8/8/R3K2R[] w KQkq - 0 1', 'e1g1'), null);
 // A check a drop could block is mate when the hand is empty, as the engine plays it.
 assert.equal(outcomeOf('4R1k1/5ppp/8/8/8/8/5PPP/6K1[] b - - 0 1'), 'Checkmate');
 assert.ok(readMove(positionOf('4R1k1/5ppp/8/8/8/8/5PPP/6K1[n] b - - 0 1'), 'N@f8'), 'with a knight in hand it blocks');
@@ -88,12 +95,12 @@ assert.equal(drop.san, 'N@d5');
 const reply = tree.play(drop.id, 'f6d5')!;
 assert.equal(handEdit(tree.expectedFen(b.id), b.fen), '+N');
 assert.equal(handEdit(tree.expectedFen(drop.id), drop.fen), '', 'the move after an edit is not an edit');
-assert.equal(handLetters(reply.fen), 'np', 'both captures went to Black’s hand');
+assert.equal(handLetters(reply.fen), '', 'both captures left the board');
 
 // An earlier edit keeps the later one: Black gets a pawn at the start, White still gets the knight.
 assert.ok(tree.adjustHand(tree.root.id, 'black', 'pawn', 1));
 assert.equal(tree.get(reply.id), reply, 'the line survives');
-assert.equal(handLetters(reply.fen), 'npp');
+assert.equal(handLetters(reply.fen), 'p');
 assert.equal(handEdit(tree.loadedFen, tree.root.fen), '+p');
 
 // Taking the knight away again cuts the drop that needed it.
@@ -126,7 +133,7 @@ for (const uci of ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1c4', 'g8f6', 'f3g5', 'd7d5
   n = game.play(n.id, uci)!;
 game.play(game.root.children[0].id, 'c7c5');
 const pgn = game.pgn();
-assert.match(pgn, /\[Variant "Crazyhouse"\]/);
+assert.match(pgn, /\[Variant "Bughouse"\]/);
 assert.match(pgn, /1\. e4 e5 \( 1\.\.\. c5 \) 2\. Nf3/);
 assert.match(pgn, /P@e6/);
 const back = Tree.fromPgn(pgn)!;

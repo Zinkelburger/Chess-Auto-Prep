@@ -7,10 +7,12 @@
  * of a piece no longer in hand) is cut. The tree never checks material counts: any hand chessops accepts
  * is allowed (no kings, at most 64 pieces), capped per piece.
  *
- * Crazyhouse rules, as the engine plays them: a capture goes to the
- * capturer's hand, and anything else a partner would send arrives through a
- * hand edit. Positions are kept in chessops' crazyhouse form, which reads and
- * writes hands in FENs.
+ * Bughouse rules, as the engine plays them: a captured piece leaves the
+ * board for the partner's hand on the other board (a promoted piece goes as a
+ * pawn), so it never reaches the capturer's own hand. What the partner sends
+ * arrives through a hand edit; with both boards shown, the page makes that edit
+ * on the other board itself. Positions are kept in chessops' crazyhouse form,
+ * which reads and writes hands in FENs.
  */
 import { makeFen, parseFen, INITIAL_FEN } from 'chessops/fen';
 import { makeSan as chessopsSan, parseSan } from 'chessops/san';
@@ -68,6 +70,39 @@ export type HandDelta = Partial<Record<`${Color}-${Role}`, number>>;
 function makeSan(pos: Crazyhouse, move: Move): string {
   const san = chessopsSan(pos, move);
   return san.startsWith('@') ? `P${san}` : san;
+}
+
+/** A piece taken by a move: its colour and what it counts as in hand. */
+export interface Captured { color: Color; role: Exclude<Role, 'king'> }
+
+/**
+ * Plays a legal move by bughouse rules: as crazyhouse, but the captured piece
+ * leaves the board instead of joining the capturer's hand. Returns it.
+ */
+export function playMove(pos: Crazyhouse, move: Move): Captured | null {
+  let captured: Captured | null = null;
+  if ('from' in move) {
+    const target = pos.board.get(move.to);
+    const mover = pos.board.get(move.from);
+    // chessops writes castling as the king taking its own rook.
+    if (target && target.color !== pos.turn)
+      captured = { color: target.color, role: pos.board.promoted.has(move.to) ? 'pawn' : target.role as Captured['role'] };
+    else if (!target && mover?.role === 'pawn' && pos.epSquare === move.to)
+      captured = { color: pos.turn === 'white' ? 'black' : 'white', role: 'pawn' };
+  }
+  pos.play(move);
+  if (captured && pos.pockets) {
+    const capturer = captured.color === 'white' ? 'black' : 'white';
+    pos.pockets[capturer][captured.role] = Math.max(0, pos.pockets[capturer][captured.role] - 1);
+  }
+  return captured;
+}
+
+/** What a move captures, by bughouse rules; null for a quiet move, a drop or an illegal move. */
+export function capturedBy(fen: string, uci: string): Captured | null {
+  const pos = positionOf(fen);
+  const move = readMove(pos, uci);
+  return move ? playMove(pos, move) : null;
 }
 
 export type PositionResult = { ok: true; pos: Crazyhouse } | { ok: false; error: string };
@@ -241,7 +276,7 @@ export function playLine(fen: string, ucis: string[], limit = ucis.length): Line
     const move = readMove(pos, uci);
     if (!move) break;
     const san = makeSan(pos, move);
-    pos.play(move);
+    playMove(pos, move);
     out.push({ uci, san, fen: fenOf(pos) });
   }
   return out;
@@ -275,7 +310,7 @@ export class Tree extends VariationTree<TreeNode> {
     const parent = this.parent(id);
     if (!parent) return this.loadedFen;
     const pos = positionOf(parent.fen);
-    pos.play(parseUci(node.uci)!);
+    playMove(pos, parseUci(node.uci)!);
     return fenOf(pos);
   }
 
@@ -288,7 +323,7 @@ export class Tree extends VariationTree<TreeNode> {
     const existing = parent.children.find((c) => c.uci === makeUci(move));
     if (existing) return existing;
     const san = makeSan(pos, move);
-    pos.play(move);
+    playMove(pos, move);
     const child: TreeNode = { id: newId(), ply: parent.ply + 1, uci: makeUci(move), san, fen: fenOf(pos), children: [] };
     this.attach(parent, child);
     return child;
@@ -312,7 +347,7 @@ export class Tree extends VariationTree<TreeNode> {
       const move = parseUci(child.uci);
       if (!move || !readMove(pos, child.uci)) { this.unindex(child); continue; }
       child.san = makeSan(pos, move);
-      pos.play(move);
+      playMove(pos, move);
       child.fen = applyDelta(fenOf(pos), child.hand);
       kept.push(child);
       this.replay(child);
@@ -381,7 +416,7 @@ export class Tree extends VariationTree<TreeNode> {
   }
 
   private headers(): string[] {
-    const headers = ['[Event "Bughouse analysis"]', '[Site "https://chessautoprep.com/bughouse"]', '[Variant "Crazyhouse"]'];
+    const headers = ['[Event "Bughouse analysis"]', '[Site "https://chessautoprep.com/bughouse"]', '[Variant "Bughouse"]'];
     if (this.root.fen !== START_FEN) headers.push(`[FEN "${lichessFen(this.root.fen)}"]`, '[SetUp "1"]');
     return headers;
   }
@@ -424,7 +459,7 @@ export class Tree extends VariationTree<TreeNode> {
     out.push(node.san);
   }
 
-  /** A tree from a bughouse or crazyhouse PGN (the first game; any variant tag is read as this page's rules). */
+  /** A tree from a bughouse or crazyhouse PGN (the first game; any variant tag is read as this page's rules, bughouse). */
   static fromPgn(text: string): Tree | null {
     const game = parsePgn(text)[0];
     if (!game) return null;

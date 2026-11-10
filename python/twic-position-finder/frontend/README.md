@@ -8,7 +8,7 @@ Static Astro site deployed to Cloudflare Pages. Browser preparation tools, one s
 | `/pgn`                | Analysis board on its PGN tab: lichess.org/analysis with Stockfish 18, PGN games, comments and variations | `src/components/AnalysisPage.astro`, `src/prep/*`, `src/analysis/*` |
 | `/expectimax`         | The same board on its Expectimax tab: practical moves for both sides against Maia's replies, on this device | the same |
 | `/tactics`            | Tactics Trainer — Stockfish in the browser mines puzzles from games  | `src/tactics/*`                        |
-| `/bughouse`           | Bughouse — lichess.org/analysis/crazyhouse with + and − on every piece in both hands, lila's board editor and a sit panel; Lichess's crazyhouse Fairy-Stockfish in the browser | `src/analysis/*`, `../../../tools/prepare_crazyhouse_web.py` |
+| `/bughouse`           | Bughouse — one board or both, + and − on every piece in both hands, lila's board editor, and what one more piece is worth; HypeBeast in the browser | `src/analysis/*`, `../../../tools/prepare_hypebeast_web.py` |
 | `/bughouse-puzzles`   | Bughouse Puzzles — mates and tactics mined from FICS games, reserves frozen | `src/bughouse-puzzles/*`, `public/bughouse-puzzles/` |
 | `/charles-clock`      | Charles Clock — a full-screen phone clock with its own `<html>`      | `src/pages/charles-clock.astro`, `src/lib/charles-clock.ts` |
 | `/meow-chess/`        | Meow Chess — the Meow-Chess tournament director app, a Flutter web build copied in from its own repository | `public/meow-chess/` (built), `functions/meow-chess/fetch.js` |
@@ -32,9 +32,11 @@ npm run test:prep      # PGN reading, the analysis tree, Maia input, expectimax,
 Environment (build-time): `PUBLIC_API_URL` (default `https://api.chessautoprep.com`),
 `PUBLIC_TURNSTILE_SITE_KEY` (empty disables the CAPTCHA widget).
 `npm run dev` and `npm run build` also prepare the engines the pages
-download: `tools/prepare_crazyhouse_web.py` copies Fairy-Stockfish out of
-`@lichess-org/stockfish-web` and puts Lichess's crazyhouse net, pinned by
-checksum, in gzipped parts under `/crazyhouse-engine/`;
+download: `tools/prepare_hypebeast_web.py` checks the committed HypeBeast
+WebAssembly build in `public/hypebeast-engine/` against its `build.json` and
+puts Fairy-Stockfish's bughouse net, pinned by checksum, in gzipped parts
+beside it (set `HYPEBEAST_NNUE` to a local copy to skip the download; the
+script's `--import` takes in a new engine build with its source);
 `tools/bughouse_web/prepare_assets.py` copies ONNX Runtime for the
 Expectimax tab's Maia under `/bughouse-engine/` (with the
 [static Hivemind build](../../../tools/bughouse_web/README.md), which no page
@@ -73,10 +75,10 @@ checksum-verified chunks. Every file fits Cloudflare Pages' 25 MiB asset limit.
     marks and practice verdicts; `menu.ts` the ☰ menu (replay mode, the
     analysis switches) and the keyboard help; `settings.ts` the saved
     settings;
-  - for `/bughouse` only: `tree.ts` (the crazyhouse move tree and hand edits),
-    `engine.ts` (Fairy-Stockfish), `sit.ts` (the sit
+  - for `/bughouse` only: `tree.ts` (a board's move tree by bughouse rules,
+    and hand edits), `engine.ts` (HypeBeast), `partner.ts` (the partner
     panel), `hand.ts` (a hand with + and −), `practice.ts` (Practice with
-    computer) and `app.ts` (the page).
+    computer) and `app.ts` (the page, both boards).
 - `src/prep/` — the PGN and Expectimax tabs (below). `pgn.ts`,
   `pgn-client.ts`/`pgn.worker.ts` and `storage.ts` (IndexedDB
   `cap-preparation`) are also used by the Tactics Trainer.
@@ -88,45 +90,73 @@ checksum-verified chunks. Every file fits Cloudflare Pages' 25 MiB asset limit.
 
 ## Bughouse board
 
-`/bughouse` is one board with crazyhouse rules, as Lichess's crazyhouse
-analysis: a capture goes to the capturer's hand, and what a partner would
-send arrives through a hand edit (`tree.ts`, pure, `npm run test:analysis`).
-PGN is written with `[Variant "Crazyhouse"]`. A hand edit is
-kept on its position and carried through the moves after it; the engine
-always gets a bare FEN. Hands are capped at 16 of a piece and 64 pieces in
-all (the crazyhouse net has 16 slots a piece). The tree is kept in
-`localStorage` and comes back on a plain `/bughouse` and on reload; a `?fen=`
-link opens that position unless it is the saved one. The FEN box, `?fen=`
-links and PGN write the hand as Lichess does, a ninth rank
-(`…/RNB1K2R/PNpnb w …`); they and the board editor read that or brackets,
-and positions inside the page stay in chessops' bracket form.
+`/bughouse` is bughouse analysis searched by
+[HypeBeast](https://github.com/Zinkelburger/HypeBeast), a Fairy-Stockfish
+fork that plays one board knowing the other. A captured piece leaves the
+board for the partner's hand, as in bughouse (a promoted piece goes as a
+pawn; `tree.ts`, pure, `npm run test:analysis`), and never reaches the
+capturer's own hand. PGN is written with `[Variant "Bughouse"]`.
 
-`engine.ts` runs Fairy-Stockfish 14 with Lichess's crazyhouse NNUE, the
-engine of lichess.org/analysis/crazyhouse (`@lichess-org/stockfish-web`),
-multi-threaded on the page's main thread. One engine serves everything: the
-shown position is searched first (10 seconds by default), then the sit
-panel's rows (`sit.ts`: the side to move's position again with one more
-pawn, knight, bishop, rook or queen, mating rows marked; 500,000 nodes a row
-unless the gear's Sit search says otherwise). With ∞, the position is then
-searched again without a limit; the hash keeps what the first search found,
-and the panel keeps the deeper result until the new search reaches it.
-Practice with computer answers after 600,000 nodes, Lichess's casual
-strength.
+**One board or two** is a setting (the two-boards button under the panel,
+kept in this browser; one by default). With one, what a partner would send
+arrives through a hand edit, and the engine searches the board alone
+(`Coordination=false`, its MultiPV lines). With two, the partner board
+stands beside the board, smaller and facing the other way, with its hands,
+its evaluation and best move; clicking it (or S) makes it the board worked
+on. Each board keeps its own moves, as on the desktop app, and a new capture
+puts the piece in the partner's hand as a hand edit at the move the partner
+board is at. Practice with computer is for one board.
 
-The first download (the net, about 30 MB) shows its progress in the engine
+A hand edit is kept on its position and carried through the moves after it.
+Hands are capped at 16 of a piece and 64 pieces in all. Both trees are kept
+in `localStorage` and come back on a plain `/bughouse` and on reload; a
+`?fen=` link opens that position on board 1 unless it is the saved one, and
+`&fen2=` opens board 2 and both boards. The FEN box, links and PGN write the
+hand as Lichess does, a ninth rank (`…/RNB1K2R/PNpnb w …`); they and the
+board editor read that or brackets, and positions inside the page stay in
+chessops' bracket form.
+
+`engine.ts` runs HypeBeast compiled to WebAssembly with Fairy-Stockfish's
+bughouse NNUE, multi-threaded on the page's main thread. It is always given
+both boards (`position fen A|B`, with one board shown board 2 is the
+starting position, out of play) and the seat to search: the board and its
+side to move. Jobs run one at a time:
+
+1. The shown board, for the search time (10 seconds by default). With two
+   boards HypeBeast first searches the partner board, forecasts what
+   arrives, and measures what one more piece is worth there to price
+   captures; the lines are then the move it chose and the others it
+   compared, scored with what each sends the partner (so a score can differ
+   from the one-board score of the same position).
+2. With two boards, the partner board, for the same time. Its report
+   includes what one more piece is worth on the shown board, which the
+   partner panel shows at once.
+3. The piece values on the shown board, measured deeper (`hbvalues`: the
+   position with and without each piece, deepening for the gear's Piece
+   values time, 3 seconds by default).
+
+The partner panel (`partner.ts`, under the engine lines) shows those piece
+values for both colours, in pawns, Mate where the piece makes a mate
+possible; clicking a cell adds the piece to that hand. With two boards it
+also shows what may arrive from the partner board in its next two moves
+(HypeBeast's forecast, with chances and the likely moves there) and why
+HypeBeast chose its move. Practice with computer answers after 600,000
+nodes.
+
+The first download (the net, about 28 MB) shows its progress in the engine
 header and is kept in the Cache API, checked against `net.json`'s checksums;
 on a phone, tablet or data-saving connection the header asks first
 (Download). A failed download or an engine error stops the engine with a Try
-again button. The gear has sliders for Search time (2 s to ∞), Multiple
-lines, Threads (1 to every thread up to 32, with a tick on the recommended
-count, all but one, as lila) and Sit search; changing Threads restarts the
-running search with them. The hash is 256 MB, or 64 MB on a device with
-less than 8 GB of memory.
+again button. The gear has sliders for Search time (2 s to 5 minutes; no ∞,
+as HypeBeast decides within a time), Multiple lines, Threads (1 to every
+thread up to 32, with a tick on the recommended count, all but one, as lila)
+and Piece values; changing Threads restarts the running search with them.
+The hash is 256 MB, or 64 MB on a device with less than 8 GB of memory.
 
 ## Cross-origin isolation
 
-Fairy-Stockfish's threads need SharedArrayBuffer, so `/bughouse`,
-`/crazyhouse-engine/*` and `/bughouse-engine/*` are cross-origin isolated,
+HypeBeast's threads need SharedArrayBuffer, so `/bughouse`,
+`/hypebeast-engine/*` and `/bughouse-engine/*` are cross-origin isolated,
 and `/_astro/*` (the bundled scripts) carries COEP too (`public/_headers`,
 and the dev server in `astro.config.mjs`). Every bundled worker is then isolated, so
 `/stockfish/*`, which the Expectimax tab's worker starts, is isolated as
@@ -345,5 +375,7 @@ scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test
   reload, Stop, a search offline) and uploaded PGN tactics. Screenshots go to
   `build/prep-web/`.
 - `test:bughouse:browser` drives `/bughouse` with the real engine at desktop,
-  1366×768 and phone sizes, through a failed download and a phone's first
-  visit, and writes screenshots to `build/bughouse-web/`.
+  1366×768 and phone sizes, with one board and two (a capture reaching the
+  partner's hand, the partner board's search, switching boards), through a
+  failed download and a phone's first visit, and writes screenshots to
+  `build/bughouse-web/`.
