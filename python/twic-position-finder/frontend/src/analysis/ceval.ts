@@ -82,9 +82,11 @@ export interface CevalHooks {
   start(): void;
 }
 
+/** A line's score; a line without one (a bughouse move HypeBeast did not score) shows a dash. */
 export function formatEval(line: Pick<EngineLine, 'cp' | 'mate'>): string {
   if (line.mate !== undefined) return `#${line.mate}`;
-  const pawns = (line.cp ?? 0) / 100;
+  if (line.cp === undefined) return '—';
+  const pawns = line.cp / 100;
   return `${pawns > 0 ? '+' : ''}${pawns.toFixed(1)}`;
 }
 

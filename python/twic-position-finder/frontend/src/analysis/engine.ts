@@ -123,6 +123,8 @@ export interface EngineResult {
   complete: boolean;
   /** The search's time limit. */
   budget: number;
+  /** The lines asked for; a search may find fewer (one legal move, a sit, no other candidate). */
+  multiPv: number;
   /** "Depth 21 · 140 kn/s", under the engine name. */
   info: string;
   /** The move HypeBeast chose, or `pass` when it sits; set once done. */
@@ -172,6 +174,13 @@ function sharedMemory(lo = 1024, hi = 32768): WebAssembly.Memory {
 }
 
 const DOWNLOAD_FAILED = 'The engine download failed. Check your connection and try again.';
+
+/**
+ * The engine's stderr lines that mean the module is dead: Emscripten's abort
+ * (which out of memory and C++ terminate end in), a crashed search worker, a
+ * WebAssembly trap. Other stderr (a rejected FEN, a warning) is not fatal.
+ */
+const FATAL_STDERR = /^(Aborted\(|worker sent an error!)|RuntimeError|out of memory/i;
 
 /** A fetch whose network errors read as a failed download. */
 async function download(url: string): Promise<Response> {
@@ -371,7 +380,10 @@ export class Engine {
       locateFile: (file: string) => new URL(DIRECTORY + file, location.href).href,
       mainScriptUrlOrBlob: scriptUrl,
     });
-    module.onError = (msg: string) => { if (msg.startsWith('BAD_NNUE')) this.reset('The engine net did not load. Try again.'); };
+    module.onError = (msg: string) => {
+      if (msg.startsWith('BAD_NNUE')) this.reset('The engine net did not load. Try again.');
+      else if (FATAL_STDERR.test(msg)) this.reset(msg);
+    };
     module.listen = (line: string) => this.received(line);
     // HypeBeast mode switches the variant to bughouse; the net is read for that variant.
     module.uci('setoption name HypeBeast value true');
@@ -549,9 +561,10 @@ export class Engine {
       .map((c) => ({ c, score: c.S ?? c.L }))
       .filter((x): x is { c: Candidate; score: number } => x.score !== null && x.score !== undefined)
       .sort((a, b) => b.score - a.score);
+    // A move the coordinator did not score is shown without a score: the main search's belongs to its own best move.
     const lineOf = (move: string, score: number | undefined): EngineLine => {
       if (main && main.pv[0] === move) return main;
-      return { multipv: 0, depth, pv: [move], cp: score === undefined ? main?.cp : score * sign, mate: score === undefined ? main?.mate : undefined };
+      return { multipv: 0, depth, pv: [move], cp: score === undefined ? undefined : score * sign };
     };
     out.push(lineOf(decision, scored.find((x) => x.c.move === decision)?.score));
     for (const { c, score } of scored)
@@ -568,7 +581,7 @@ export class Engine {
     return {
       key: seatKey(job.seat), seat: job.seat, fen: job.seat.fens[job.seat.board],
       depth, nodes: Number(running.summary?.total_nodes) || running.nodes, millis: performance.now() - running.started,
-      lines, done, complete: done && !job.short, budget: job.millis,
+      lines, done, complete: done && !job.short, budget: job.millis, multiPv: job.lines,
       info: `Depth ${depth} · ${speed(running.nps)}`,
       decision, reason: running.summary?.reason ?? running.coordination?.reason,
       coordination: running.coordination, forecast: running.forecast,
