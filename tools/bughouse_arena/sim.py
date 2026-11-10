@@ -279,6 +279,10 @@ def play_game(game: Bughouse,
         except Exception as error:  # engine crash: no result, not a loss
             result.error = f"{SEAT_NAMES[seat]}: {error}"
             return finish(None, "error")
+        # The engine's own score for this decision, as it reported it (for
+        # the mover; a team engine's is for its team). Not every player has one.
+        score = getattr(players[seat], "last_eval", None)
+        scored = {"eval": score} if score else {}
 
         if uci is None:
             if not sitting[board]:
@@ -296,7 +300,7 @@ def play_game(game: Bughouse,
             if wake_deadline[board] is not None:
                 pending[board] = wake_deadline[board]
                 extra["wake_at"] = wake_deadline[board]
-            log("sit", board, seat, advantage=advantage, **extra)
+            log("sit", board, seat, advantage=advantage, **extra, **scored)
             continue
 
         try:
@@ -311,7 +315,7 @@ def play_game(game: Bughouse,
         wake_deadline[board] = None
         wake_used[board] = False
         moves_made[seat] += 1
-        log("move", board, seat, uci=uci, advantage=advantage)
+        log("move", board, seat, uci=uci, advantage=advantage, **scored)
 
         next_seat = to_move(board)
         pending[board] = now + costs.sample(next_seat, moves_made[next_seat])

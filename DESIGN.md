@@ -330,6 +330,7 @@ One name and one symbol per action, everywhere it appears. `lib/ui/app_icons.dar
 ### Bughouse reserve (lila's pocket)
 - **Style:** lila's crazyhouse pocket, kept on purpose over the flat rules: five square-sized slots (pawn to queen) in a #888 grey well with lila's inset top shade, 4px radius, beside the seat's letter. A held piece shows in full with its count in white bold on lila's orange (#D64F00) in the slot's lower right; an empty slot keeps its place with the piece at 10% opacity. On the player's turn a slot brightens to #AAA under the pointer, a picked piece takes the board's selection green, and its drop squares are ringed on the board.
 - **Add and take away:** while the pointer is over a slot (or one of its controls has focus), that slot shows a − in its upper left corner and a + in its upper right: a dark chip (`labHandStep`, 4px radius) with a white sign, two fifths of the slot within 16–24px. Hidden, they take no room, so the hands are only a square tall and the board gets the height; a − with nothing to take and a + at 16 are left out.
+- **Player and clock:** a game read from a file has, at the right end of each hand's row, the player's name (Body Small, full ink; rating muted) over the seat's clock in 16px mono, 600; the clock of the player on move in full ink, the other muted. Under 40px of height the name sits beside the clock. The name is cut short before the clock ever is.
 
 ### Reading card (signature)
 - **Style:** Reading Black card, 8px radius, 24px inset; movetext in 16px mono at 1.7, comments in 16px prose at a 640px measure. Mistakes are marked and clickable; no per-move evaluations in the movetext.
@@ -339,7 +340,7 @@ One name and one symbol per action, everywhere it appears. `lib/ui/app_icons.dar
 
 ### Do:
 - **Do** keep every gap on the 4 / 8 / 12 / 16 / 24 scale and every size in `lib/ui/theme.dart`.
-- **Do** reuse the controls in `lib/ui/` (search_field, choice_field, number_field, field_row, check_row, toggle_chip, segments, tool_button, pane_header, list_row, list_message, problem_line, progress_line, form_dialog, name_dialog, confirm_dialog, options_dialog, choice_dialog, menu_entry, row_actions, action_context_menu, pane_tabs, selection, app_action). A stepper or choice sits in a `field_row` that names it; a set of on/off choices is `toggle_chip`s, which never grow a tick.
+- **Do** reuse the controls in `lib/ui/` (search_field, choice_field, number_field, field_row, check_row, toggle_chip, segments, tool_button, game_stepper, pane_header, list_row, list_message, problem_line, progress_line, form_dialog, name_dialog, confirm_dialog, options_dialog, choice_dialog, menu_entry, row_actions, action_context_menu, pane_tabs, selection, app_action). A stepper or choice sits in a `field_row` that names it; a set of on/off choices is `toggle_chip`s, which never grow a tick.
 - **Do** write labels and tooltips behaviour-first: the first sentence says what the control does; the binding comes from `ui/app_keys.dart`.
 - **Do** follow Lichess conventions for the board, arrows, explorer and engine lines.
 - **Do** give feedback lines, rows and panes fixed heights so nothing jumps.
