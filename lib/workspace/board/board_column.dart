@@ -141,12 +141,10 @@ class _BoardAndCounterState extends State<BoardAndCounter>
             : 0.0;
         final most = max(0.0, constraints.maxHeight - room);
         var side = min(constraints.maxWidth, max(0.0, most - noteRoom));
-        // In a short window the board comes before the note's box: it
-        // takes the note's room up to a size worth playing on, and the note
-        // is written in the Notes tab or the edit strip.
-        if (side < boardComfortSide) {
-          side = min(constraints.maxWidth, min(most, boardComfortSide));
-        }
+        // In a short window the board comes before the note's box: a
+        // board too small to play on takes the note's room, and the note is
+        // written in the Notes tab or the edit strip.
+        if (side < boardCrampedSide) side = min(constraints.maxWidth, most);
         final below = constraints.maxHeight - side - room - Space.s;
         return Align(
           alignment: Alignment.topCenter,

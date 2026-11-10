@@ -70,7 +70,10 @@ Top to bottom, left to right:
   the move note: the
   current move with its glyph and note (`14. Nf5!  Good move`), the game's
   introduction and first move (muted, clickable) at the start; fixed height, a
-  long note scrolls; no card when there is nothing to say.
+  long note scrolls; no card when there is nothing to say. In a window so
+  short that the board would be under 300 px (`boardCrampedSide`), the board
+  takes the note's room and the note is written in the `Notes` tab or the
+  edit strip.
 - **Engine pane** — a labelled sliding switch (`Engine`), the status
   (`Off`, `Starting…`, `Depth 24 · 12 MN/s · 345M nodes · Stockfish 19`,
   shortened to fit; no depth shown past 100), the threat crosshair (`Show
