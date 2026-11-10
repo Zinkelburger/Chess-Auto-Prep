@@ -69,6 +69,7 @@ try {
   assert.equal(await page.$$eval('#ch-pvs .ch-pv', (rows) => rows.filter((r) => r.dataset.uci).length), 2, 'two lines, the default, with one board');
   const before = await page.$eval('#ch-pearl', (el) => el.textContent);
   console.log('eval without hands:', before, await page.$eval('#ch-engine-info', (el) => el.textContent));
+  assert.match(await page.$eval('#ch-engine-info', (el) => el.textContent), /^Board · Depth \d+/, 'one board names its score the board’s');
   await page.screenshot({ path: path.join(output, 'analysis.png') });
 
   // + under Black's knight: the hand, the FEN and the eval follow.
@@ -344,6 +345,11 @@ try {
   await page.waitForFunction(() => /\d/.test(document.querySelector('#ch-partner-eval').textContent) && !/…/.test(document.querySelector('#ch-partner-eval').textContent), { timeout: 180_000 });
   await page.waitForSelector('#bs-partner .bs-why', { timeout: 180_000 });
   console.log('two boards:', await text(page, '#ch-partner-eval'), '|', await page.$eval('#bs-partner', (el) => el.innerText.replace(/\s+/g, ' ')));
+  // Two boards name the score the team's, with the board's own share when the line gives it.
+  const info = await page.$eval('#ch-engine-info', (el) => el.textContent);
+  console.log('two-board score:', await page.$eval('#ch-pearl', (el) => el.textContent), info);
+  assert.match(info, /^Team( · board [+\-]?\d+\.\d)? · Depth \d+/);
+  assert.match(await text(page, '#ch-partner-eval'), /^Team [+\-#]?\d/);
   await page.screenshot({ path: path.join(output, 'two-boards.png') });
   // Working on board 2 makes it the large board.
   await page.click('#ch-partner-switch');

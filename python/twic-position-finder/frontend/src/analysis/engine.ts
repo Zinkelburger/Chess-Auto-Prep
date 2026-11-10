@@ -48,6 +48,18 @@ export interface EngineLine {
   cp?: number;
   mate?: number;
   pv: string[];
+  /**
+   * With two boards, the part of `cp` that is feed prices: what the line's
+   * captures are worth on the partner board. `cp - fed` is this board's own
+   * score along the same line. Undefined with one board, for a mate, and for
+   * a move HypeBeast compared without a line of its own.
+   */
+  fed?: number;
+}
+
+/** A line's score on its board alone, when the line says how much of it is feed prices. */
+export function boardScore(line: Pick<EngineLine, 'cp' | 'fed'>): number | undefined {
+  return line.cp === undefined || line.fed === undefined ? undefined : line.cp - line.fed;
 }
 
 /** Both boards, board 1's FEN first, and the board searched (0 or 1); the side to move there plays. */
@@ -501,6 +513,10 @@ export class Engine {
     if (!pv.length) return;
     const sign = turnOf(running.job.seat.fens[running.job.seat.board]) === 'black' ? -1 : 1;
     const parsed: EngineLine = { multipv, depth, pv, cp: cp === undefined ? undefined : cp * sign, mate: mate === undefined ? undefined : mate * sign };
+    // A search stopped mid-iteration cuts the line to its first move, which says nothing of the captures after it;
+    // the previous line with the same first move still does. (HypeBeast reports no feed prices for a one-move line.)
+    const before = running.multi.get(multipv);
+    if (pv.length === 1 && before?.pv[0] === pv[0] && before.fed !== undefined && cp !== undefined) parsed.fed = before.fed;
     if (multipv === 1) {
       running.main = parsed;
       running.multi = new Map([...running.multi].filter(([, l]) => l.depth >= depth - 1));
@@ -533,6 +549,17 @@ export class Engine {
         const c = JSON.parse(body) as { reason: string; candidates?: Candidate[] };
         running.coordination = { reason: c.reason, candidates: c.candidates ?? [] };
       } catch { /* Not shown. */ }
+    } else if (kind === 'hb_fed') {
+      // `hb_fed multipv N cp X` follows the line it belongs to, from the side to move's view.
+      const fields = body.split(' ');
+      const multipv = Number(fields[fields.indexOf('multipv') + 1]), cp = Number(fields[fields.indexOf('cp') + 1]);
+      const line = running.multi.get(multipv);
+      if (!line || !Number.isFinite(cp) || line.cp === undefined) return;
+      line.fed = turnOf(running.job.seat.fens[running.job.seat.board]) === 'black' ? -cp : cp;
+      if (running.job.main) {
+        const result = this.result(running, false);
+        if (result) this.onResult(result);
+      }
     } else if (kind === 'hb_summary') running.summary = summaryFields(body);
   }
 

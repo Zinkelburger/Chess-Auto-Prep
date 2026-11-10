@@ -23,8 +23,8 @@ import { makePockets, parseFen } from 'chessops/fen';
 import { Material } from 'chessops/setup';
 import type { Color, Role, SquareName } from 'chessops/types';
 import { CrazyBoard, ROLE_LETTER, type Brush } from './board';
-import { CevalView } from './ceval';
-import { Engine, seatKey, type EngineResult, type EngineStatus, type HandRole, type PieceValues, type SearchSettings, type Seat } from './engine';
+import { CevalView, formatEval } from './ceval';
+import { boardScore, Engine, seatKey, type EngineResult, type EngineStatus, type HandRole, type PieceValues, type SearchSettings, type Seat } from './engine';
 import { renderHand } from './hand';
 import { liveGlyph, type Glyph } from './judge';
 import { openHelp, renderMenu } from './menu';
@@ -619,6 +619,7 @@ export class BughouseApp {
       over: at && outcomeOf(at.fen),
       unplayable: at ? null : 'Waiting for a legal position',
       orientation: this.orientation,
+      scoreKind: this.twoBoards ? 'team' : 'board',
     });
   }
 
@@ -753,7 +754,8 @@ export class BughouseApp {
     else if (!this.settings.engineOn || !line) evalBox.textContent = '';
     else {
       const best = line.pv[0] ? sanLine(other.fen, [line.pv[0]])[0] : '';
-      evalBox.textContent = `${line.mate !== undefined ? `#${line.mate}` : `${(line.cp ?? 0) >= 0 ? '+' : ''}${((line.cp ?? 0) / 100).toFixed(1)}`}${best ? ` · ${best}` : ''}${result?.done ? '' : ' …'}`;
+      const board = line.mate === undefined ? boardScore(line) : undefined;
+      evalBox.textContent = `Team ${formatEval(line)}${board === undefined ? '' : ` · board ${formatEval({ cp: board })}`}${best ? ` · ${best}` : ''}${result?.done ? '' : ' …'}`;
     }
   }
 
