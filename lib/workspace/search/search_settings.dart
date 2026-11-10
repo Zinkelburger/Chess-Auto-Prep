@@ -36,15 +36,15 @@ abstract final class SearchSettingCopy {
   static const rating = ('Maia rating', 'opponent replies at this Elo');
   static const rootMoves = (
     'First move',
-    'our best engine moves compared where the search starts',
+    'our best engine moves compared at the start',
   );
   static const candidateMoves = (
     'Later moves',
-    'our best engine moves at every move after; 1 goes deepest',
+    'our moves searched after it; 1 goes deepest',
   );
   static const bothSides = (
     'Other side too',
-    'its values in a second column; about twice the time',
+    'adds its column; about twice the time',
   );
   static const rare = (
     'Search replies met once in',
