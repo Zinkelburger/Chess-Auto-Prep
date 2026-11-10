@@ -437,7 +437,12 @@ class _RowView extends StatelessWidget {
             if (played) _shareCell(share, muted),
             for (final side in sides)
               switch (row.valueFor(side)) {
-                null => _Cell('–', width: searchValueWidth, style: muted),
+                null => Tooltip(
+                  message:
+                      'Not among the moves the search for '
+                      '${side == Side.white ? 'White' : 'Black'} looked at',
+                  child: _Cell('–', width: searchValueWidth, style: muted),
+                ),
                 // An unexpanded move is worth only what the engine says;
                 // the search's own value is not in yet.
                 (searched: false, forWhite: _) => _Cell(
