@@ -99,9 +99,11 @@ final class FillLines {
         ? heading.rootMoves
         : const <String>[];
     final created = _clock();
+    final pins = chapterPins(chapter);
     final (plan, traps) = await foundIn(
       found.tree,
       known: chapterDecisions(chapter),
+      pins: pins,
     );
     if (plan.lines == 0) {
       return (

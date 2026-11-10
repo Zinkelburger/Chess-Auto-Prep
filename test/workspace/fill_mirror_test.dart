@@ -41,7 +41,7 @@ void main() {
   late EngineAnalysis analysis;
   late EngineJobs jobs;
 
-  const request = FillRequest(elo: 2200, depthPlies: 2);
+  const request = FillRequest(elo: 2200, depthPlies: 2, bothSides: true);
 
   setUp(() async {
     fixture = await openSession(chapter);
@@ -155,7 +155,9 @@ void main() {
       ScriptedEvaluator(),
       keepTree: (_, tree, {required runId}) async => trees.add(tree),
     );
-    await first.start(const FillRequest(elo: 2200, depthPlies: 1));
+    await first.start(
+      const FillRequest(elo: 2200, depthPlies: 1, bothSides: true),
+    );
     expect(trees.map(sideOf).toSet(), {Side.white, Side.black});
 
     final evaluator = ScriptedEvaluator();
@@ -178,6 +180,18 @@ void main() {
     );
   });
 
+  test('unasked, only the board\'s side is searched and kept', () async {
+    final trees = <String>[];
+    final fill = fillWith(
+      ScriptedEvaluator(),
+      keepTree: (_, tree, {required runId}) async => trees.add(tree),
+    );
+    await fill.start(const FillRequest(elo: 2200, depthPlies: 2));
+    expect(fill.nodeAtBoard(), isA<OurNode>());
+    expect(fill.nodeAtBoard(side: Side.black), isNull);
+    expect(trees.map(sideOf), [Side.white]);
+  });
+
   test('the mainline book is built for the board\'s side alone', () async {
     var asked = 0;
     final fill = FillGaps(
@@ -192,7 +206,11 @@ void main() {
     );
     addTearDown(fill.dispose);
     await fill.start(
-      const FillRequest(elo: 2200, method: SearchMethod.mainline),
+      const FillRequest(
+        elo: 2200,
+        method: SearchMethod.mainline,
+        bothSides: true,
+      ),
     );
     expect(asked, 1);
     expect(fill.nodeAtBoard(side: Side.black), isNull);
@@ -205,7 +223,7 @@ void main() {
         fill.finishLevel();
       }
     });
-    await fill.start(const FillRequest(elo: 2200));
+    await fill.start(const FillRequest(elo: 2200, bothSides: true));
     final done = fill.state as FillDone;
     expect(done.complete, isFalse);
     expect(fill.nodeAtBoard(), isA<OurNode>());

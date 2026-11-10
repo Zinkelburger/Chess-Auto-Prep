@@ -551,6 +551,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
             session: _ws.session,
             onOpen: _doors.openFind,
             onTrain: _trainFind,
+            onBack: _columns.togglePositions,
             trailing: trailing,
           )
         : _requests.mode == Mode.trainer
@@ -627,6 +628,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         ),
         onOpenChapter: (ref) => unawaited(_requests.readInBuilder(ref, [])),
         onShowPositions: _columns.showPositions,
+        onTogglePositions: _columns.togglePositions,
         // The chapter a book move was found in: in the builder, at the
         // position the move leads to.
         onOpenPlace: (place) =>

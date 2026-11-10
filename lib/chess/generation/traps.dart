@@ -68,10 +68,11 @@ const int trapLossCapCp = mateBaseCp;
 /// Every trap along the lines [root] prepares, the ones most worth knowing
 /// first.
 ///
-/// The walk follows our chosen move at each of our positions — the other
-/// candidates are not what we would play — and every reply at the opponent's;
-/// with [everyMove] it follows every move of ours too, for a search that
-/// explores rather than prepares.
+/// The walk follows our move at each of our positions — the one [decided]
+/// for it ([draftDecisions]), else the search's choice; the other candidates
+/// are not what we would play — and every reply at the opponent's; with
+/// [everyMove] it follows every move of ours too, for a search that explores
+/// rather than prepares.
 /// Two traps that leave the same position after the blunder are one trap,
 /// kept where it springs more often. They are ranked by how often they spring
 /// times how much they win, the win capped at [trapRankLossCapCp].
@@ -81,13 +82,15 @@ List<Trap> trapsOf(
   int minLossCp = trapMinLossCp,
   int punishPlies = 6,
   bool everyMove = false,
+  Map<String, String> decided = const {},
 }) {
   final found = <String, Trap>{};
 
   void walk(SearchNode node, List<DraftMove> sofar, double reach) {
     switch (node) {
-      case OurNode(:final candidates, :final chosen):
-        for (final candidate in everyMove ? candidates : [chosen]) {
+      case OurNode(:final candidates):
+        for (final candidate
+            in everyMove ? candidates : [draftPick(node, decided)]) {
           walk(candidate.child, [
             ...sofar,
             _step(node.fen, candidate.move, candidate.child, ours: true),
@@ -101,6 +104,7 @@ List<Trap> trapsOf(
           minShare: minShare,
           minLossCp: minLossCp,
           punishPlies: punishPlies,
+          decided: decided,
         )) {
           final key = trap.blunder.after.position;
           final held = found[key];
@@ -136,6 +140,7 @@ Iterable<Trap> _trapsAt(
   required double minShare,
   required int minLossCp,
   required int punishPlies,
+  required Map<String, String> decided,
 }) sync* {
   for (final (reply, loss) in trapRepliesAt(
     node,
@@ -144,8 +149,17 @@ Iterable<Trap> _trapsAt(
   )) {
     yield Trap(
       toTrap: List.unmodifiable(sofar),
-      blunder: _step(node.fen, reply.move, reply.child, ours: false),
-      punishment: List.unmodifiable(_punishment(reply.child, punishPlies)),
+      blunder: _step(
+        node.fen,
+        reply.move,
+        reply.child,
+        ours: false,
+        share: reply.probability,
+        trapLossCp: loss,
+      ),
+      punishment: List.unmodifiable(
+        _punishment(reply.child, punishPlies, decided),
+      ),
       share: reply.probability,
       lossCp: loss,
       reach: reach,
@@ -194,17 +208,22 @@ double _worth(Trap trap) =>
 
 String _ucis(Trap trap) => trap.moves.map((m) => m.move.uci).join(' ');
 
-/// The search's answer to a blunder: our chosen move at our positions and
-/// the opponent's likeliest reply at theirs, until the tree ends or [plies]
-/// moves are written.
-List<DraftMove> _punishment(SearchNode from, int plies) {
+/// The search's answer to a blunder: our move at our positions ([decided]
+/// first, as a drafted line picks it) and the opponent's likeliest reply at
+/// theirs, until the tree ends or [plies] moves are written.
+List<DraftMove> _punishment(
+  SearchNode from,
+  int plies,
+  Map<String, String> decided,
+) {
   final moves = <DraftMove>[];
   var node = from;
   while (moves.length < plies) {
     switch (node) {
-      case OurNode(:final chosen):
-        moves.add(_step(node.fen, chosen.move, chosen.child, ours: true));
-        node = chosen.child;
+      case OurNode():
+        final pick = draftPick(node, decided);
+        moves.add(_step(node.fen, pick.move, pick.child, ours: true));
+        node = pick.child;
       case OpponentNode(:final replies) when replies.isNotEmpty:
         final likeliest = replies.reduce(
           (a, b) => b.probability > a.probability ? b : a,
@@ -227,12 +246,16 @@ DraftMove _step(
   MoveRef move,
   SearchNode child, {
   required bool ours,
+  double? share,
+  int? trapLossCp,
 }) => DraftMove(
   move: move,
   before: from.position,
   after: child.fen,
   value: child.valuation.value,
   ours: ours,
+  share: share,
+  trapLossCp: trapLossCp,
 );
 
 /// [plan] with each of [traps] as a line of its own after the plan's, so a
@@ -264,14 +287,22 @@ DraftPlan withTraps(DraftPlan plan, List<Trap> traps) {
 const offThreadFrom = 2000;
 
 /// The lines [tree] proposes, cut as a draft is ([planDraft], leaving out
-/// the decisions in [known]), and its traps; worked out on another isolate
-/// when the tree is big enough to hold the window otherwise.
+/// the decisions in [known]), and its traps, each position answered with
+/// one move and the chapter's own where it has one ([pins]); worked out on
+/// another isolate when the tree is big enough to hold the window otherwise.
 Future<(DraftPlan, List<Trap>)> foundIn(
   SearchNode tree, {
   required Set<String> known,
+  Map<String, Set<String>> pins = const {},
 }) {
-  (DraftPlan, List<Trap>) work() =>
-      (planDraft(linesOf(tree), known: known), trapsOf(tree));
+  (DraftPlan, List<Trap>) work() {
+    final decided = draftDecisions(tree, pins: pins);
+    return (
+      planDraft(linesOf(tree, decided: decided), known: known),
+      trapsOf(tree, decided: decided),
+    );
+  }
+
   return nodesIn(tree) < offThreadFrom
       ? Future.value(work())
       : Isolate.run(work);

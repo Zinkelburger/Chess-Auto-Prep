@@ -1,0 +1,11 @@
+{
+  "source": "https://github.com/Zinkelburger/HypeBeast",
+  "commit": "36678bce6ff8b834684db88e5535bf85e5472180",
+  "files": {
+    "hypebeast.js": "ad5aa32daf25ee665e764d2c1350c00d6010b0dc6949c59c0058e23c7af358da",
+    "hypebeast.wasm": "069116803cd19609c47b44aeacc15ca3f5aa9f13cbc67389342a2a8df4394037",
+    "hypebeast-source.tar.gz": "3b57f7b045783d7fb909fb82855bf13593981017885c29d19e829d32b1ef885f"
+  },
+  "emscripten": "5.0.7",
+  "build": "web/build.sh"
+}

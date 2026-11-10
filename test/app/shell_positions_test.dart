@@ -68,6 +68,18 @@ void main() {
     expect(find.byType(LibraryPanel), findsOneWidget);
   });
 
+  testWidgets('the Positions have their own way back to the list', (
+    tester,
+  ) async {
+    await w.pumpShell(tester);
+    await choosePanel(tester, 'Positions');
+    expect(find.byType(FindsPanel), findsOneWidget);
+    await tester.tap(find.byTooltip('Back to the list'));
+    await tester.pumpAndSettle();
+    expect(find.byType(FindsPanel), findsNothing);
+    expect(find.byType(LibraryPanel), findsOneWidget);
+  });
+
   testWidgets('Positions lives under Actions ▸ Panels', (tester) async {
     await w.pumpShell(tester);
     expect(find.text('Positions'), findsNothing);

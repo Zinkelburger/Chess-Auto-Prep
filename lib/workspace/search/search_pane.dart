@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart' show PointerHoverEvent;
 import 'package:flutter/material.dart';
 
 import '../../chess/fen.dart';
@@ -34,9 +35,10 @@ import 'search_status.dart';
 /// the side playing it is expected to go wrong after. Each move the model
 /// was asked about also says how often it is played, and a reply that is
 /// a trap by the one rule the Positions use is marked
-/// `?`. The table follows the board and fills in while the search runs.
-/// Clicking a row plays the move; resting on it floats the position after
-/// it.
+/// `?`, and a move with traps in the lines after it says how many. The
+/// table follows the board and fills in while the search runs; the search
+/// itself stays where it was started. Clicking a row plays the move;
+/// resting on it floats the position after it.
 ///
 /// A search on a repertoire chapter can then be turned into lines, written
 /// into a draft chapter beside it; nothing is written until asked.
@@ -48,6 +50,7 @@ class SearchPane extends StatefulWidget {
     required this.settings,
     this.onOpenChapter,
     this.onShowPositions,
+    this.onTogglePositions,
   });
 
   final FillGaps fill;
@@ -62,6 +65,9 @@ class SearchPane extends StatefulWidget {
 
   /// Shows the Positions, where what a search found is listed.
   final VoidCallback? onShowPositions;
+
+  /// The bar's Positions button: shows them, or puts the list back.
+  final VoidCallback? onTogglePositions;
 
   @override
   State<SearchPane> createState() => _SearchPaneState();
@@ -79,6 +85,14 @@ class _SearchPaneState extends State<SearchPane>
 
   /// Why the last press of the button did nothing. Cleared by the next.
   String? _refusal;
+
+  /// A row was clicked and the pointer has not moved since: the rows of the
+  /// new position came up under it, and floating a board over them there
+  /// would hide the very rows the click asked for.
+  bool _pointerStill = false;
+
+  /// What the still pointer rests on, floated once it moves.
+  LinePreview Function()? _resting;
 
   /// The run and the position the rows are for.
   (FillTarget?, Fen)? _rowsFor;
@@ -148,21 +162,33 @@ class _SearchPaneState extends State<SearchPane>
   }
 
   void _hover(Fen after, String uci, Offset anchor) {
-    _preview.rest(() => LinePreview(fen: after, lastMove: uci, anchor: anchor));
+    LinePreview shown() =>
+        LinePreview(fen: after, lastMove: uci, anchor: anchor);
+    if (_pointerStill) {
+      _resting = shown;
+      return;
+    }
+    _preview.rest(shown);
   }
 
   void _leave() {
+    _resting = null;
     _preview.leave();
+  }
+
+  /// The pointer moved after a click: what it rests on floats again.
+  void _pointerMoved(PointerHoverEvent event) {
+    if (!_pointerStill || event.delta == Offset.zero) return;
+    _pointerStill = false;
+    final resting = _resting;
+    _resting = null;
+    if (resting != null) _preview.rest(resting);
   }
 
   void _play(String uci) {
     _leave();
-    unawaited(
-      widget.fill.followMove(uci).then((problem) {
-        if (!mounted || problem == null) return;
-        setState(() => _refusal = problem);
-      }),
-    );
+    _pointerStill = true;
+    widget.session.playMove(uci);
   }
 
   @override
@@ -205,7 +231,7 @@ class _SearchPaneState extends State<SearchPane>
         onProblem: _problem,
         onSearch: () => unawaited(_search()),
         onDeeper: (depth) => unawaited(_deeper(depth)),
-        onShowPositions: widget.onShowPositions,
+        onShowPositions: widget.onTogglePositions ?? widget.onShowPositions,
       ),
       SearchStatusLine(
         fill: widget.fill,
@@ -222,14 +248,17 @@ class _SearchPaneState extends State<SearchPane>
                 locked: widget.fill.running,
                 onProblem: _problem,
               )
-            : SearchResults(
-                fill: widget.fill,
-                session: widget.session,
-                book: _book,
-                onHover: (row, anchor) =>
-                    _hover(row.after, row.move.uci, anchor),
-                onLeave: _leave,
-                onPlay: (row) => _play(row.move.uci),
+            : Listener(
+                onPointerHover: _pointerMoved,
+                child: SearchResults(
+                  fill: widget.fill,
+                  session: widget.session,
+                  book: _book,
+                  onHover: (row, anchor) =>
+                      _hover(row.after, row.move.uci, anchor),
+                  onLeave: _leave,
+                  onPlay: (row) => _play(row.move.uci),
+                ),
               ),
       ),
       if (widget.fill.treeSaveProblem case final problem?)

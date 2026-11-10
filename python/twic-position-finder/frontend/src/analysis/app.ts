@@ -1,12 +1,20 @@
 /**
- * Bughouse analysis: lichess.org/analysis/crazyhouse, with a + above and −
- * below every piece in both hands and lila's board editor. Captures go to
- * the capturer's hand, as in crazyhouse, and whatever a partner would send
- * you add yourself. Lichess's crazyhouse Fairy-Stockfish searches it, and the
- * sit panel (sit.ts) shows what one more piece is worth to the side to move.
+ * Bughouse analysis: lichess.org/analysis/crazyhouse's board with a + above
+ * and − below every piece in both hands and lila's board editor, searched by
+ * HypeBeast. A captured piece leaves the board for the partner's hand, as in
+ * bughouse. With one board (the default), what a partner sends you add
+ * yourself. With two, the partner board stands beside it and a capture lands
+ * in the partner's hand there; clicking it makes it the board you work on.
+ * Each board keeps its own moves, as on the desktop app.
  *
- * This file wires the parts together: the tree and the current position,
- * the engine, the board, the move list (moves.ts), the engine panel
+ * HypeBeast always gets both boards. With two it searches the shown board
+ * knowing the other one; while it does, it measures what one more piece is
+ * worth across, and the partner panel (partner.ts) shows that without a
+ * search of its own. Once the shown board is done, the engine searches the
+ * partner board, then measures piece values on the shown board deeper.
+ *
+ * This file wires the parts together: the trees and the current positions,
+ * the engine, the boards, the move list (moves.ts), the engine panel
  * (ceval.ts), practice (practice.ts), the ☰ menu (menu.ts) and the editor.
  */
 import type { DrawShape } from '@lichess-org/chessground/draw';
@@ -16,19 +24,21 @@ import { Material } from 'chessops/setup';
 import type { Color, Role, SquareName } from 'chessops/types';
 import { CrazyBoard, ROLE_LETTER, type Brush } from './board';
 import { CevalView } from './ceval';
-import { Engine, type EngineResult, type EngineStatus, type SearchSettings } from './engine';
+import { Engine, seatKey, type EngineResult, type EngineStatus, type HandRole, type PieceValues, type SearchSettings, type Seat } from './engine';
 import { renderHand } from './hand';
 import { liveGlyph, type Glyph } from './judge';
 import { openHelp, renderMenu } from './menu';
 import { MoveList, el } from './moves';
 import { PRACTICE_NODES, Practice } from './practice';
 import { GearPanel } from './gear';
-import { loadSettings, maxThreads, recommendedThreads, saveSettings, sitNodesFor, threadsFor, type Settings, type Toggle } from './settings';
-import { SitPanel } from './sit';
+import { loadSettings, maxThreads, recommendedThreads, saveSettings, threadsFor, valuesSecondsFor, type Settings, type Toggle } from './settings';
+import { PartnerPanel } from './partner';
+import { Chessground } from '@lichess-org/chessground';
+import type { Api as CgApi } from '@lichess-org/chessground/api';
 import { engineShapes, glyphShape, moveShapes, threatShapes, variationShapes } from './shapes';
 import {
-  HAND_ROLES, START_FEN, Tree, boardDests, castlingPossible, dropSquares, enPassantOptions, fenOf, handEdit, lichessFen, outcomeOf, playLine,
-  positionOf, readFen, readMove, threatFen, type CastlingRight, type SavedTree, type TreeNode,
+  HAND_ROLES, START_FEN, Tree, boardDests, capturedBy, castlingPossible, dropSquares, enPassantOptions, fenOf, handEdit, lichessFen, outcomeOf, playLine,
+  positionOf, readFen, readMove, sanLine, threatFen, type CastlingRight, type SavedTree, type TreeNode,
 } from './tree';
 import { makeSquare, makeUci } from 'chessops/util';
 
@@ -36,36 +46,17 @@ const HELP_NOTES = [
   'In the board editor, F flips the board, right-click with a piece in hand takes the other colour, and Shift-click marks a piece promoted (a dot in its top-left corner): taken, it goes back as a pawn.',
 ];
 
-/** The analysis tree, kept in this browser so a reload comes back to it (Lichess keeps it too). */
+/** Both boards' trees, kept in this browser so a reload comes back to them (Lichess keeps its tree too). */
+const BOARDS_KEY = 'bughouse-analysis-boards-v1';
+/** The single tree kept before there were two boards: read as board 1 when nothing newer is kept. */
 const TREE_KEY = 'bughouse-analysis-tree-v1';
 
-/** What the sit panel may read and do. */
-export interface ExtraHost {
-  readonly fen: string;
-  readonly settings: Settings;
-  /** Each row's search, in nodes: the setting, or the default. */
-  readonly sitNodes: number;
-  /** The engine is on and the board is in analysis (not the editor or practice). */
-  readonly active: boolean;
-  /** The engine has loaded (its files are in this browser's cache). */
-  readonly engineReady: boolean;
-  /** The engine failed or waits for the player: rows have nothing to wait for. */
-  readonly engineStopped: boolean;
-  evalOf(fen: string): EngineResult | undefined;
-  /** One more of this piece in the hand of the side to move, as if the partner sent it. */
-  give(role: Role): void;
-  /** Shows a move on the board, in place of the engine's arrows, while the pointer is on it (null to clear). */
-  hover(uci: string | null): void;
-  /** Searches a position after the analysis of the shown one; null when cancelled or failed. */
-  evaluate(fen: string, nodes: number): Promise<EngineResult | null>;
-  /** Drops the evaluations asked for so far. */
-  cancelEvaluations(): void;
-}
+interface SavedBoards { boards: [SavedTree, SavedTree]; active: 0 | 1 }
 
-export interface Extra {
-  /** The position, the engine switch or the settings changed. */
-  update(): void;
-}
+/** One board's moves and the move it is at. */
+interface BoardState { tree: Tree; current: TreeNode }
+
+const BOARD_NAMES = ['board 1', 'board 2'] as const;
 
 interface Draft {
   turn: Color;
@@ -91,18 +82,39 @@ function arrowUci(node: TreeNode): string {
   return node.uci.slice(0, 2) + (node.san.startsWith('O-O-O') ? 'c' : 'g') + node.uci[1];
 }
 
-function loadSavedTree(key: string): SavedTree | null {
-  try { return JSON.parse(localStorage.getItem(key) ?? 'null') as SavedTree | null; } catch { return null; }
+function loadSaved<T>(key: string): T | null {
+  try { return JSON.parse(localStorage.getItem(key) ?? 'null') as T | null; } catch { return null; }
 }
 
+/** A board's tree from the link, or the kept tree when it is at that position (or no position was linked). */
+function openBoard(saved: SavedTree | null | undefined, fen: string | null, flash: (text: string) => void): BoardState {
+  const read = fen ? readFen(fen) : null;
+  const target = read?.ok ? fenOf(read.pos) : START_FEN;
+  const restored = saved ? Tree.restore(saved) : null;
+  if (read && !read.ok) flash(`Could not open the linked position: ${read.error}`);
+  if (restored && (!fen || (read?.ok && restored.current.fen === target))) return { tree: restored.tree, current: restored.current };
+  const tree = new Tree(target);
+  return { tree, current: tree.root };
+}
+
+const opposite = (c: Color): Color => (c === 'white' ? 'black' : 'white');
+
 export class BughouseApp {
-  private tree: Tree;
-  private current: TreeNode;
-  private orientation: Color = 'white';
+  private boards: [BoardState, BoardState];
+  /** The board shown large and worked on: 0 for board 1, 1 for board 2. */
+  private active: 0 | 1 = 0;
+  /** Board 1's orientation; board 2 faces the other way, as partners sit. */
+  private teamOrientation: Color = 'white';
   private mode: 'analysis' | 'editor' = 'analysis';
   private dropping: Role | null = null;
   private settings: Settings;
+  /** Engine reports by seatKey: both boards' positions and the board searched. */
   private evals = new Map<string, EngineResult>();
+  /** Piece values by seatKey of the board they are for, the deepest kept. */
+  private values = new Map<string, PieceValues>();
+  /** The piece-value measure running or queued, by seatKey. */
+  private measuring = new Set<string>();
+  private partnerCg: CgApi | null = null;
   private engineStatus: EngineStatus = { kind: 'off' };
   private readonly engine: Engine;
   private readonly board: CrazyBoard;
@@ -123,30 +135,41 @@ export class BughouseApp {
   private editorSearchTimer = 0;
   private toastTimer = 0;
   private lastDepth = new Map<string, number>();
-  private readonly extra: Extra;
+  private readonly partner: PartnerPanel;
   private gear!: GearPanel;
+
+  private get tree(): Tree { return this.boards[this.active].tree; }
+  private set tree(tree: Tree) { this.boards[this.active].tree = tree; }
+  private get current(): TreeNode { return this.boards[this.active].current; }
+  private set current(node: TreeNode) { this.boards[this.active].current = node; }
+  private get orientation(): Color { return this.active === 0 ? this.teamOrientation : opposite(this.teamOrientation); }
+  private set orientation(color: Color) { this.teamOrientation = this.active === 0 ? color : opposite(color); }
+  private get twoBoards(): boolean { return this.settings.boards === 2; }
+  private get engineStopped(): boolean { return this.engineStatus.kind === 'failed' || this.engineStatus.kind === 'ask'; }
+  /** The board not shown large. */
+  private get other(): BoardState { return this.boards[this.active === 0 ? 1 : 0]; }
 
   constructor() {
     this.settings = loadSettings();
-    const fen = new URLSearchParams(location.search).get('fen');
-    const read = fen ? readFen(fen) : null;
-    const target = read?.ok ? fenOf(read.pos) : START_FEN;
-    const saved = loadSavedTree(TREE_KEY);
-    const restored = saved ? Tree.restore(saved) : null;
+    // HypeBeast decides within a time: an ∞ kept from the old engine searches the default 10 s.
+    if (!this.settings.searchSeconds) this.settings.searchSeconds = 10;
+    const params = new URLSearchParams(location.search);
+    const fen = params.get('fen'), fen2 = params.get('fen2');
+    if (fen2) this.settings.boards = 2;
     // A plain /bughouse comes back to the saved analysis; a linked position opens it unless it is the saved one.
-    if (restored && (!fen || (read?.ok && restored.current.fen === target))) {
-      this.tree = restored.tree;
-      this.current = restored.current;
-    } else {
-      this.tree = new Tree(target);
-      this.current = this.tree.root;
-    }
-    if (read && !read.ok) this.flash(`Could not open the linked position: ${read.error}`);
-    if (positionOf(this.tree.root.fen).turn === 'black') this.orientation = 'black';
+    const saved = loadSaved<SavedBoards>(BOARDS_KEY);
+    const flash = (text: string) => this.flash(text);
+    this.boards = [
+      openBoard(saved?.boards[0] ?? loadSaved<SavedTree>(TREE_KEY), fen, flash),
+      openBoard(saved?.boards[1], fen2, flash),
+    ];
+    if (this.twoBoards && saved?.active === 1 && !fen) this.active = 1;
+    if (!this.twoBoards && positionOf(this.boards[0].tree.root.fen).turn === 'black') this.teamOrientation = 'black';
 
-    const onStatus = (status: EngineStatus) => { this.engineStatus = status; this.renderCeval(); this.renderGear(); this.extra?.update(); };
+    const onStatus = (status: EngineStatus) => { this.engineStatus = status; this.renderCeval(); this.renderGear(); this.partner?.update(); };
     const onResult = (result: EngineResult) => this.engineResult(result);
-    this.engine = new Engine(onStatus, onResult);
+    const onValues = (key: string, values: PieceValues) => this.valuesResult(key, values);
+    this.engine = new Engine(onStatus, onResult, onValues);
     this.engine.configure(threadsFor(this.settings));
     this.board = new CrazyBoard($('ch-board-wrap'), $('ch-board'), {
       move: (orig, dest) => void this.boardMove(orig, dest),
@@ -194,20 +217,21 @@ export class BughouseApp {
       hover: (uci) => this.hover(uci, 'paleBlue'),
       play: (pv, upTo) => { if (this.mode === 'analysis') this.playLine(pv, upTo); },
       start: () => this.startEngine(),
-    }, { engineName: 'Fairy-Stockfish', playLine, hands: (fen) => positionOf(fen).pockets });
-    this.extra = new SitPanel({
-      get fen() { return app.current.fen; },
-      get settings() { return app.settings; },
-      get sitNodes() { return sitNodesFor(app.settings); },
-      get active() { return app.mode === 'analysis' && !app.practice && app.settings.engineOn; },
-      get engineReady() { return app.engineStatus.kind === 'ready'; },
-      get engineStopped() { return app.engineStatus.kind === 'failed' || app.engineStatus.kind === 'ask'; },
-      evalOf: (fen) => this.evals.get(fen),
-      give: (role) => this.adjust(positionOf(this.current.fen).turn, role, 1),
-      hover: (uci) => this.hover(uci, 'blue'),
-      evaluate: (fen, nodes) => this.engine.evaluate(fen, nodes),
-      cancelEvaluations: () => this.engine.cancelEvaluations(),
-    }, $('bs-sit'));
+    }, { engineName: 'HypeBeast', playLine, hands: (fen) => positionOf(fen).pockets });
+    this.partner = new PartnerPanel({
+      get active() { return app.mode === 'analysis' && !app.practice && app.settings.engineOn && !outcomeOf(app.current.fen); },
+      get engineStopped() { return app.engineStopped; },
+      get twoBoards() { return app.twoBoards; },
+      get boardName() { return BOARD_NAMES[app.active]; },
+      get partnerName() { return BOARD_NAMES[app.active === 0 ? 1 : 0]; },
+      get turn() { return positionOf(app.current.fen).turn; },
+      values: () => this.values.get(seatKey(this.seatFor(this.current.fen))),
+      measuring: () => !this.engineStopped && (this.measuring.has(seatKey(this.seatFor(this.current.fen))) || !this.evalOf(this.current.fen)?.done),
+      result: () => this.evalOf(this.current.fen),
+      partnerSan: (uci) => sanLine(this.other.current.fen, [uci])[0] ?? uci,
+      moveSan: (uci) => sanLine(this.current.fen, [uci])[0] ?? uci,
+      give: (color: Color, role: HandRole) => this.adjust(color, role, 1),
+    }, $('bs-partner'));
 
     this.bind();
     this.renderAll();
@@ -247,7 +271,7 @@ export class BughouseApp {
   }
 
   private play(uci: string, by: 'user' | 'engine'): boolean {
-    const node = this.tree.play(this.current.id, uci);
+    const node = this.playOn(this.current, uci);
     if (!node) { this.renderBoard(); return false; }
     if (by === 'user') this.practice?.userMoved();
     this.treeChanged();
@@ -276,7 +300,7 @@ export class BughouseApp {
   }
 
   private playBest() {
-    const best = this.evals.get(this.current.fen)?.lines[0]?.pv[0];
+    const best = this.evalOf(this.current.fen)?.lines[0]?.pv[0];
     if (best) this.play(best, 'user');
   }
 
@@ -284,11 +308,29 @@ export class BughouseApp {
   private playLine(pv: string[], upTo: number) {
     let node = this.current;
     for (const uci of pv.slice(0, upTo + 1)) {
-      const next = this.tree.play(node.id, uci);
+      const next = this.playOn(node, uci);
       if (!next) break;
       node = next;
     }
     if (node !== this.current) { this.treeChanged(); this.goTo(node, false); }
+  }
+
+  /**
+   * Plays a move after a node of the shown board. With two boards, a new
+   * capture puts the piece in the partner's hand at the move the partner
+   * board is at, as a hand edit there (stepping back here does not take it
+   * back, as on the desktop app).
+   */
+  private playOn(parent: TreeNode, uci: string): TreeNode | null {
+    const known = new Set(parent.children);
+    const node = this.tree.play(parent.id, uci);
+    if (!node || known.has(node) || !this.twoBoards) return node;
+    const captured = capturedBy(parent.fen, node.uci);
+    if (captured) {
+      const other = this.other;
+      if (other.tree.adjustHand(other.current.id, captured.color, captured.role, 1)) this.renderPartner();
+    }
+    return node;
   }
 
   private treeChanged() {
@@ -397,11 +439,11 @@ export class BughouseApp {
     const on = this.settings.engineOn && !outcomeOf(this.current.fen);
     if (on && this.hoverUci) shapes.push(...moveShapes(this.threat ? other : turn, this.hoverUci, this.hoverBrush));
     else if (on && this.settings.bestArrows) {
-      const result = this.evals.get(this.current.fen);
+      const result = this.evalOf(this.current.fen);
       if (result) shapes.push(...engineShapes(turn, result.lines, this.settings.maneuverArrows));
     }
     if (on && this.threat) {
-      const result = this.evals.get(threatFen(this.current.fen));
+      const result = this.evalOf(threatFen(this.current.fen));
       if (result) shapes.push(...threatShapes(other, result.lines, this.settings.maneuverArrows));
     }
     const glyph = this.settings.glyphsOnBoard ? this.glyph(this.current) : undefined;
@@ -433,8 +475,23 @@ export class BughouseApp {
 
   // ── Engine ──────────────────────────────────────────────────────
   private analyse() {
+    // Background work belongs to the positions it was asked for.
+    this.engine.cancelBackground();
+    this.measuring.clear();
     this.search();
-    this.extra?.update();
+    this.partner?.update();
+    this.renderPartner();
+  }
+
+  /** Both boards for the engine, with `fen` on `board`; with one board shown, the other is out of play. */
+  private seatFor(fen: string, board: 0 | 1 = this.active): Seat {
+    if (!this.twoBoards) return { fens: [fen, START_FEN], board: 0, solo: true };
+    const other = this.boards[board === 0 ? 1 : 0].current.fen;
+    return { fens: board === 0 ? [fen, other] : [other, fen], board };
+  }
+
+  private evalOf(fen: string, board: 0 | 1 = this.active): EngineResult | undefined {
+    return this.evals.get(seatKey(this.seatFor(fen, board)));
   }
 
   /** The position the engine looks at: the current move, or the editor's position while it is legal. */
@@ -449,38 +506,73 @@ export class BughouseApp {
     clearTimeout(this.editorSearchTimer);
     const at = this.enginePosition();
     if (!at || outcomeOf(at.fen)) { this.engine.stop(); this.renderCeval(); return; }
-    if (this.practice) this.engine.analyse(this.current.fen, { ...this.searchSettings(), multiPv: 1, infinite: false, nodes: PRACTICE_NODES });
+    if (this.practice) this.engine.analyse(this.seatFor(this.current.fen), { ...this.searchSettings(), multiPv: 1, nodes: PRACTICE_NODES });
     else if (!this.settings.engineOn) { this.engine.stop(); return; }
     else {
       const fen = this.threat ? threatFen(at.fen) : at.fen;
       // A position already searched to its limit is shown as it was, as Lichess keeps its evaluations;
-      // the engine's time then goes to the sit panel.
-      const kept = this.evals.get(fen);
+      // the engine's time then goes to the partner board and the piece values.
+      const kept = this.evalOf(fen);
       const search = this.searchSettings();
-      if (kept?.complete && kept.budget >= search.searchMs && kept.lines.length >= search.multiPv && !search.infinite) this.engine.stop();
-      else this.engine.analyse(fen, search);
+      if (kept?.complete && kept.budget >= search.searchMs && kept.lines.length >= Math.min(search.multiPv, 2)) { this.engine.stop(); this.background(); }
+      else this.engine.analyse(this.seatFor(fen), search);
     }
     this.engine.load().catch(() => { /* Shown in the engine header. */ });
   }
 
-  /** The analysis's search: ∞ searches 10 s first, then carries on once the sit panel is done. */
   private searchSettings(): SearchSettings {
-    const seconds = this.settings.searchSeconds;
-    return { multiPv: this.settings.multiPv, infinite: seconds === 0, searchMs: (seconds || 10) * 1000 };
+    return { multiPv: this.settings.multiPv, searchMs: (this.settings.searchSeconds || 10) * 1000 };
+  }
+
+  /**
+   * Once the shown board is searched: with two boards, the partner board's
+   * search (its own report, and this board's piece values from it), then a
+   * deeper measure of piece values on this board.
+   */
+  private background() {
+    if (this.practice || this.threat || this.mode !== 'analysis' || !this.settings.engineOn) return;
+    const fen = this.current.fen;
+    if (outcomeOf(fen)) return;
+    this.engine.cancelBackground();
+    this.measuring.clear();
+    const here = this.seatFor(fen);
+    if (this.twoBoards) {
+      const partner = this.seatFor(this.other.current.fen, this.active === 0 ? 1 : 0);
+      if (!outcomeOf(this.other.current.fen) && !this.evals.get(seatKey(partner))?.complete)
+        void this.engine.search(partner, this.searchSettings().searchMs, 1);
+    }
+    const key = seatKey(here);
+    if (this.values.get(key)?.source !== 'board') {
+      this.measuring.add(key);
+      void this.engine.values(here, valuesSecondsFor(this.settings) * 1000).then(() => {
+        this.measuring.delete(key);
+        this.partner.update();
+      });
+    }
+    this.partner.update();
+  }
+
+  private valuesResult(key: string, values: PieceValues) {
+    const kept = this.values.get(key);
+    // A measure on the board itself beats one read across at the same depth.
+    if (!kept || values.depth > kept.depth || (values.depth === kept.depth && values.source === 'board')) this.values.set(key, values);
+    if (key === seatKey(this.seatFor(this.current.fen))) this.partner.update();
   }
 
   private engineResult(result: EngineResult) {
-    const kept = this.evals.get(result.fen);
+    const kept = this.evals.get(result.key);
     // A position searched again starts from depth 1: keep the deeper search until the new one reaches it.
-    if (!kept || result.depth >= kept.depth || result.lines.length > kept.lines.length || kept.lines.length > this.settings.multiPv)
-      this.evals.set(result.fen, result);
+    if (!kept || result.done || result.depth >= kept.depth || result.lines.length > kept.lines.length || kept.lines.length > this.settings.multiPv)
+      this.evals.set(result.key, result);
+    if (this.twoBoards && result.seat.board !== this.active) { this.renderPartner(); return; }
     const at = this.enginePosition();
     if (!at) return;
     const searched = this.threat ? threatFen(at.fen) : at.fen;
-    if (result.fen !== at.fen && result.fen !== searched) return;
+    if (result.key !== seatKey(this.seatFor(at.fen)) && result.key !== seatKey(this.seatFor(searched))) return;
     if (this.practice) { this.practice.check(); return; }
     this.renderCeval();
     this.renderShapes();
+    if (result.done) { this.partner.update(); if (result.complete && result.fen === this.current.fen) this.background(); }
     // Live annotations change only with a new depth.
     if (this.settings.liveGlyphs && this.lastDepth.get(result.fen) !== result.depth) {
       this.lastDepth.set(result.fen, result.depth);
@@ -501,11 +593,11 @@ export class BughouseApp {
   private glyph(node: TreeNode): Glyph | undefined {
     if (!this.settings.liveGlyphs || node.hand) return undefined;
     const parent = this.tree.parent(node.id);
-    const before = parent && this.evals.get(parent.fen);
+    const before = parent && this.evalOf(parent.fen);
     if (!parent || !before) return undefined;
     const best = before.lines[0];
     if (!best || this.sameMove(parent.fen, best.pv[0], node)) return undefined;
-    const after = before.lines.find((l) => this.sameMove(parent.fen, l.pv[0], node)) ?? this.evals.get(node.fen)?.lines[0];
+    const after = before.lines.find((l) => this.sameMove(parent.fen, l.pv[0], node)) ?? this.evalOf(node.fen)?.lines[0];
     if (!after) return undefined;
     return liveGlyph(positionOf(parent.fen).turn, best, after);
   }
@@ -518,9 +610,9 @@ export class BughouseApp {
       fen,
       ply: at?.ply ?? 0,
       multiPv: this.settings.multiPv,
-      infinite: this.settings.searchSeconds === 0,
+      infinite: false,
       searchMs: this.searchSettings().searchMs,
-      result: at ? this.evals.get(fen) : undefined,
+      result: at ? this.evalOf(fen) : undefined,
       status: this.engineStatus,
       threat: this.threat,
       inCheck: !!at && positionOf(at.fen).isCheck(),
@@ -567,7 +659,7 @@ export class BughouseApp {
 
   // ── Practice ────────────────────────────────────────────────────
   private togglePractice(on = !this.practice) {
-    if (on === !!this.practice || this.mode === 'editor') return;
+    if (on === !!this.practice || this.mode === 'editor' || (on && this.twoBoards)) return;
     this.stopAutoplay();
     this.closeActionMenu();
     if (on) {
@@ -576,7 +668,7 @@ export class BughouseApp {
       this.practice = new Practice({
         get tree() { return app.tree; },
         get current() { return app.current; },
-        evalOf: (fen) => this.evals.get(fen),
+        evalOf: (fen) => this.evalOf(fen),
         playUci: (uci) => { this.play(uci, 'engine'); },
         goTo: (node) => this.goTo(node),
         changed: () => { this.renderPractice(); this.renderShapes(); },
@@ -600,6 +692,93 @@ export class BughouseApp {
   // ── Move list ───────────────────────────────────────────────────
   private renderMoves() {
     if (this.mode === 'analysis') this.moves.render();
+  }
+
+  // ── Two boards ──────────────────────────────────────────────────
+  /** One board or two: a setting, kept in this browser. With one, board 1 is shown and board 2 is out of play. */
+  private toggleBoards(two = !this.twoBoards) {
+    if (two === this.twoBoards || this.mode !== 'analysis') return;
+    if (two && this.practice) this.togglePractice(false);
+    this.settings.boards = two ? 2 : 1;
+    saveSettings(this.settings);
+    if (!two) this.active = 0;
+    this.threat = false;
+    this.hoverUci = null;
+    this.renderAll();
+    this.analyse();
+    this.updateUrl();
+    this.scheduleSave();
+  }
+
+  /** Works on the partner board instead: it becomes the large one. */
+  private switchBoard() {
+    if (!this.twoBoards || this.mode !== 'analysis') return;
+    this.stopAutoplay();
+    this.moves.closeMenu();
+    this.active = this.active === 0 ? 1 : 0;
+    this.dropping = null;
+    this.threat = false;
+    this.hoverUci = null;
+    this.forkIndex = 0;
+    this.pgnDirty = false;
+    this.renderAll();
+    this.analyse();
+    this.scheduleSave();
+  }
+
+  /** The partner board beside the large one: its position, hands, and HypeBeast's word on it. */
+  private renderPartner() {
+    const box = $('ch-partner');
+    box.hidden = !this.twoBoards;
+    if (!this.twoBoards) return;
+    const other = this.other.current;
+    const pos = positionOf(other.fen);
+    const orientation = opposite(this.orientation);
+    const config = {
+      fen: other.fen.split(' ')[0].replace(/\[.*\]$/, ''), orientation, turnColor: pos.turn,
+      lastMove: other.uci ? squaresOf(other.uci) : undefined, check: pos.isCheck(),
+    };
+    if (!this.partnerCg)
+      this.partnerCg = Chessground($('ch-partner-cg'), { ...config, viewOnly: true, coordinates: false, animation: { enabled: true, duration: 150 }, drawable: { enabled: false, visible: true } });
+    else this.partnerCg.set(config);
+    const result = this.evalOf(other.fen, this.active === 0 ? 1 : 0);
+    const line = result?.lines[0];
+    this.partnerCg.setAutoShapes(line?.pv[0] && this.settings.engineOn ? engineShapes(pos.turn, [line], false) : []);
+    for (const [id, color] of [['ch-partner-hand-top', opposite(orientation)], ['ch-partner-hand-bottom', orientation]] as const)
+      this.renderPocket($(id), color, pos.pockets![color]);
+    $('ch-partner-name').textContent = `${BOARD_NAMES[this.active === 0 ? 1 : 0][0].toUpperCase()}${BOARD_NAMES[this.active === 0 ? 1 : 0].slice(1)} · ${pos.turn === 'white' ? 'White' : 'Black'} to play`;
+    const evalBox = $('ch-partner-eval');
+    const over = outcomeOf(other.fen);
+    if (over) evalBox.textContent = over;
+    else if (!this.settings.engineOn || !line) evalBox.textContent = '';
+    else {
+      const best = line.pv[0] ? sanLine(other.fen, [line.pv[0]])[0] : '';
+      evalBox.textContent = `${line.mate !== undefined ? `#${line.mate}` : `${(line.cp ?? 0) >= 0 ? '+' : ''}${((line.cp ?? 0) / 100).toFixed(1)}`}${best ? ` · ${best}` : ''}${result?.done ? '' : ' …'}`;
+    }
+  }
+
+  /** A hand shown as lila's pocket, without controls (the partner board's). */
+  private renderPocket(box: HTMLElement, color: Color, material: { [role in Role]: number }) {
+    const well = document.createElement('div');
+    well.className = 'zh-pocket ch-well ch-partner-well';
+    well.setAttribute('aria-label', `${color === 'white' ? 'White' : 'Black'}’s hand`);
+    for (const role of HAND_ROLES) {
+      const slot = document.createElement('span');
+      slot.className = 'zh-slot';
+      slot.dataset.nb = String(material[role]);
+      const img = document.createElement('img');
+      img.src = `/piece/${color === 'white' ? 'w' : 'b'}${ROLE_LETTER[role]}.svg`;
+      img.alt = '';
+      slot.append(img);
+      if (material[role]) {
+        const nb = document.createElement('span');
+        nb.className = 'zh-nb';
+        nb.textContent = String(material[role]);
+        slot.append(nb);
+      }
+      well.append(slot);
+    }
+    box.replaceChildren(well);
   }
 
   // ── ☰ menu ──────────────────────────────────────────────────────
@@ -844,14 +1023,17 @@ export class BughouseApp {
 
   private updateUrl() {
     const url = new URL(location.href);
-    if (this.current.fen === START_FEN) url.searchParams.delete('fen'); else url.searchParams.set('fen', lichessFen(this.current.fen));
+    const [one, two] = this.boards.map((b) => b.current.fen);
+    if (one === START_FEN && !this.twoBoards) url.searchParams.delete('fen'); else url.searchParams.set('fen', lichessFen(one));
+    if (this.twoBoards) url.searchParams.set('fen2', lichessFen(two)); else url.searchParams.delete('fen2');
     history.replaceState(null, '', url);
   }
 
   private scheduleSave() {
     clearTimeout(this.saveTimer);
     this.saveTimer = window.setTimeout(() => {
-      try { localStorage.setItem(TREE_KEY, JSON.stringify(this.tree.save(this.current.id))); } catch { /* Kept for this visit only. */ }
+      const kept: SavedBoards = { boards: [this.boards[0].tree.save(this.boards[0].current.id), this.boards[1].tree.save(this.boards[1].current.id)], active: this.active };
+      try { localStorage.setItem(BOARDS_KEY, JSON.stringify(kept)); } catch { /* Kept for this visit only. */ }
     }, 300);
   }
 
@@ -870,6 +1052,8 @@ export class BughouseApp {
   // ── Rendering and wiring ────────────────────────────────────────
   private renderAll() {
     $('ch').dataset.mode = this.mode;
+    $('ch').dataset.boards = String(this.settings.boards);
+    this.renderPartner();
     this.renderBoard();
     this.renderHands();
     this.renderSpares();
@@ -895,7 +1079,10 @@ export class BughouseApp {
     $<HTMLButtonElement>('ch-next').disabled = !analysis || atEnd;
     $<HTMLButtonElement>('ch-last').disabled = !analysis || atEnd;
     $('ch-edit').setAttribute('aria-pressed', String(!analysis));
-    $<HTMLButtonElement>('ch-practice-toggle').disabled = !analysis;
+    $<HTMLButtonElement>('ch-practice-toggle').disabled = !analysis || this.twoBoards;
+    $('ch-practice-toggle').title = this.twoBoards ? 'Practice with computer (one board only)' : 'Practice with computer';
+    $('ch-boards').setAttribute('aria-pressed', String(this.twoBoards));
+    $<HTMLButtonElement>('ch-boards').disabled = !analysis;
     $<HTMLButtonElement>('ch-menu-toggle').disabled = !analysis;
     $('ch-controls').classList.toggle('replaying', !!this.autoplay);
   }
@@ -908,6 +1095,9 @@ export class BughouseApp {
     $('ch-flip').onclick = () => this.flip();
     $('ch-edit').onclick = () => this.mode === 'editor' ? this.closeEditor(false) : this.openEditor();
     $('ch-practice-toggle').onclick = () => this.togglePractice();
+    $('ch-boards').onclick = () => this.toggleBoards();
+    $('ch-partner-board').onclick = () => this.switchBoard();
+    $('ch-partner-switch').onclick = () => this.switchBoard();
     $('ch-menu-toggle').onclick = () => this.toggleActionMenu();
     $('ch-engine-on').onchange = (e) => this.toggleEngine((e.target as HTMLInputElement).checked);
     $('ch-threat').onclick = () => this.toggleThreat();
@@ -937,7 +1127,7 @@ export class BughouseApp {
       searchSeconds: (seconds) => { this.settings.searchSeconds = seconds; changed(false); },
       lines: (n) => { this.settings.multiPv = n; this.evals.clear(); changed(false); },
       threads: (n) => { this.settings.threads = n; changed(true); },
-      sitNodes: (n) => { this.settings.sitNodes = n; changed(false); },
+      valuesSeconds: (n) => { this.settings.valuesSeconds = n; changed(false); },
     });
 
     // Editor panel
@@ -988,7 +1178,7 @@ export class BughouseApp {
     const max = maxThreads();
     this.gear.render({
       settings: this.settings,
-      sitNodes: sitNodesFor(this.settings),
+      valuesSeconds: valuesSecondsFor(this.settings),
       maxThreads: max,
       recommendedThreads: recommendedThreads(max),
       threads: threadsFor(this.settings),
@@ -1037,6 +1227,7 @@ export class BughouseApp {
       f: () => this.flip(), l: () => this.toggleEngine(), x: () => this.toggleThreat(),
       a: () => this.toggleSetting('bestArrows'), v: () => this.toggleSetting('variationArrows'),
       b: () => this.openEditor(), h: () => this.toggleActionMenu(),
+      s: () => this.switchBoard(),
       ' ': () => { if (this.practice) return; if (this.settings.engineOn) this.playBest(); else this.toggleEngine(true); },
     };
     const action = actions[e.key];

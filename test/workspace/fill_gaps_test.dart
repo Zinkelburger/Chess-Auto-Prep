@@ -329,55 +329,6 @@ void main() {
     expect(shown.first, isA<OurNode>(), reason: 'the root was answered first');
   });
 
-  test(
-    'clicking a running result saves old values before searching the new board',
-    () async {
-      final saved = <String>[];
-      final gate = Completer<void>();
-      final fill = fillWith(
-        ScriptedEvaluator(),
-        keepTree: (_, text, {required runId}) async {
-          saved.add(text);
-          if (saved.length == 1) await gate.future;
-        },
-      );
-      Future<String?>? following;
-      void follow() {
-        if (fill.running && fill.found?.tree is OurNode && following == null) {
-          // Set the latch before the navigation notifies listeners again.
-          following = Future.value();
-          following = fill.followMove('e2e4');
-        }
-      }
-
-      fill.addListener(follow);
-      final first = fill.start(const FillRequest(elo: 2200, depthPlies: 2));
-      while (saved.isEmpty) {
-        await Future<void>.delayed(Duration.zero);
-      }
-      expect(fixture.session.cursor.currentMove?.san, 'e4');
-      expect(releases, 1);
-      expect(
-        fill.found!.target.sans,
-        isEmpty,
-        reason: 'old search still owns the save',
-      );
-      gate.complete();
-      await first;
-      await following;
-      fill.removeListener(follow);
-      expect(fill.found!.target.sans, ['e4']);
-      expect(
-        saved.length,
-        3,
-        reason:
-            'after e4 it is Black\'s move, and Black\'s side of that '
-            'board is kept beside White\'s',
-      );
-      expect(releases, 2);
-    },
-  );
-
   test('back restores an earlier root and reuses its scores', () async {
     final evaluator = ScriptedEvaluator();
     final fill = fillWith(evaluator);
@@ -402,49 +353,6 @@ void main() {
         await fill.start(FillRequest(elo: rating, depthPlies: 1));
         expect(fill.nodeAtBoard(), same(fill.found!.tree));
       }
-    },
-  );
-
-  test(
-    'rapid board navigation during save follows only the latest root',
-    () async {
-      final gate = Completer<void>();
-      var saves = 0;
-      var starts = 0;
-      final evaluator = ScriptedEvaluator();
-      final fill = fillWith(
-        evaluator,
-        tools: (_) async {
-          starts++;
-          return FillReady(
-            evaluator: evaluator,
-            policy: const ScriptedPolicy({'e8d8': 1}),
-            release: () async {},
-          );
-        },
-        keepTree: (_, _, {required runId}) async {
-          if (++saves == 1) await gate.future;
-        },
-      );
-      var moved = false;
-      fill.addListener(() {
-        if (!moved && fill.running && fill.found != null) {
-          moved = true;
-          fixture.session.playMove('e2e4');
-        }
-      });
-      final run = fill.start(const FillRequest(elo: 2200, depthPlies: 2));
-      while (saves == 0) {
-        await Future<void>.delayed(Duration.zero);
-      }
-      fixture.session.cursor.back();
-      expect(fill.nodeAtBoard(), isA<OurNode>());
-      gate.complete();
-      await run;
-      await pumpEventQueue(times: 100);
-      expect(starts, 2);
-      expect(fill.found!.target.sans, isEmpty);
-      expect(fill.running, isFalse);
     },
   );
 
