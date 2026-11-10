@@ -505,6 +505,14 @@ List<SettingRow> _expectimaxRows(Settings s, _Change change) {
     ),
     ..._expectimaxLimits(e, set),
     SettingRow(
+      SearchSettingCopy.bothSides.$1,
+      ToggleSetting(
+        value: e.bothSides,
+        onChanged: (on) => set((now) => now.copyWith(bothSides: on)),
+      ),
+      hint: SearchSettingCopy.bothSides.$2,
+    ),
+    SettingRow(
       SearchSettingCopy.source.$1,
       ChoiceSetting(
         options: SearchSettingCopy.sources,

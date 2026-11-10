@@ -394,10 +394,24 @@ void main() {
       '[Event "Hivemind Arena"]\n[Round "1"]\n'
       '[WhiteA "hb-v4"]\n[BlackA "hm-n1500"]\n'
       '[WhiteB "hm-n1500"]\n[BlackB "hb-v4"]\n'
-      '[TimeControl "120"]\n[Result "1-0"]\n[Termination "checkmate"]\n\n'
+      '[TimeControl "120"]\n[Opening "1e2e4 1d7d5"]\n'
+      '[Result "1-0"]\n[Termination "checkmate"]\n\n'
       '1A. e4 1a. d5 2A. exd5 {118.100} 1B. Nf3 {118.000} 1b. P@e4 {118.000} '
       '1-0',
     );
+    // A different line from the same game no longer reached its result.
+    lab.toEnd();
+    lab.step(-1);
+    lab.play(BoardNumber.two, 'e7e5');
+    expect(lab.movesText, contains('[Result "*"]'));
+    expect(lab.movesText, isNot(contains('Termination')));
+    expect(lab.movesText, endsWith('1b. e5 *'));
+    // Back on the game's own line, it is the game again.
+    lab.stepOn(BoardNumber.two, -1);
+    lab.stepOn(BoardNumber.two, 1);
+    expect(lab.movesText, endsWith('{118.000} 1-0'));
+    // An engine line goes without the file's clocks.
+    expect(lab.linePgnWith(const []), isNot(contains(RegExp('[{}]'))));
   });
 
   group('a file of several games', () {
@@ -466,6 +480,16 @@ void main() {
       lab.showGame(2);
       expect(lab.problem, isNull);
       expect(lab.line.moves, hasLength(2));
+    });
+
+    test('pasted, a first game that does not play takes nothing', () {
+      lab.newGame();
+      lab.play(BoardNumber.one, 'd2d4');
+      lab.pasteMoves(game(2, '1A. e4 1a. Ke7') + game(3, '1B. c4 1b. e5'));
+      expect((lab.problem as MovesRefused).token, '1a. Ke7');
+      expect((lab.problem as MovesRefused).file, isNull);
+      expect(lab.movesText, '1A. d4');
+      expect(lab.gameCount, 0);
     });
 
     test('a new game is no game of the file', () {

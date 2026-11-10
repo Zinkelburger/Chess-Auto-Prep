@@ -110,7 +110,10 @@ this model. “100% correct chess” would require those inputs and additional r
 
 Both builders expand breadth-first: the shallowest unexpanded node goes first,
 so an unfinished search has seen the whole choice shallowly rather than one
-line deeply. An expansion is committed atomically: first construct its complete
+line deeply. Within a level the app expands the positions reached most often
+first (`_mostReachedFirst` in `search.dart`), so a search stopped in the
+middle of one has answered its likeliest lines; a finished level is the same
+either way. An expansion is committed atomically: first construct its complete
 action set and evaluations, then attach it to the tree. Cancellation, time
 limits, or a node budget never leave a partial probability distribution or
 partial legal candidate enumeration. The budget is checked against every legal
@@ -265,9 +268,15 @@ The app's Expectimax uses a bounded candidate policy rather than an exhaustive
 Pure tree, and no engine-loss window. From the root down, Stockfish at the
 configured Engine depth (default 14) supplies a MultiPV shortlist of our moves
 (`FixedDepthCandidates`): First move (default four) for our first move, at the
-root or under each first reply, and Later moves (default four) after it. Only
+root or under each first reply, and Later moves (default one) after it. Only
 those child positions get separate fixed-depth evaluations and recursive
-expansion. A failed or incomplete shortlist stops with a visible error.
+expansion. One later move is what lets a run go deep: with four, each pair of
+moves multiplied the tree about twentyfold and a run spent itself on the
+first two moves; with one, the tree widens only at the opponent's replies,
+which the reach floor below bounds, so the same work follows the likely lines
+ten or more half-moves down. The shortlist of a position is asked once a run
+(`CandidateAnswers`), so two move orders into one position get the same moves
+of ours. A failed or incomplete shortlist stops with a visible error.
 Callers without a ranking source score all candidates before retaining the best
 N. The Search tab's Expectimax bar and gear, mirrored in Settings ▸ Expectimax,
 set the Maia rating, First move, Later moves, Depth in half-moves (blank for no
@@ -275,16 +284,41 @@ limit), Engine depth, evaluation source and `Search replies met once in N`
 games (default 100; zero searches every reply). Settings apply to the next
 search and are shown but locked during a run.
 
-A practical search is run twice from the same board at once, on the one
-engine (`FillGaps._buildMirror`): for the side at the bottom of the board, and
-for the other side with the roles swapped, so the same position is our choice
-in one tree and Maia's reply in the other. Each tree has its own 25,000-node
-budget (`fillNodeBudget`) and is saved as its own run. The second exists for its values: the
-table sets a move's expected score when White is the prepared side beside its
-score when Black is, and beside the engine's. The gap between the engine and
-the other side's column is how far a human on the move is expected to drift
-from best play. The board's tree alone drives status, Positions and drafted
-lines; the second stops with it unless the first ran its whole depth.
+A practical search is for the side at the bottom of the board. With `Other
+side too` it is run twice from the same board at once, on the one engine
+(`FillGaps._buildMirror`): for that side, and for the other with the roles
+swapped, so the same position is our choice in one tree and Maia's reply in
+the other. Each tree has its own 25,000-node budget (`fillNodeBudget`) and is
+saved as its own run. The second exists for its values: the table sets a
+move's expected score when White is the prepared side beside its score when
+Black is, and beside the engine's. The gap between the engine and the other
+side's column is how far a human on the move is expected to drift from best
+play. It is off by default because it is a second tree: in a measured default
+run it was 383 of 526 positions. The board's tree alone drives status,
+Positions and drafted lines; the second stops with it unless the first ran
+its whole depth.
+
+### The chapter's moves
+
+A search started on a repertoire chapter for the chapter's side takes the
+moves the chapter already plays as pins (`chapterPins`,
+`SearchConfig.pins`): at a pinned position only the chapter's moves are
+played, whatever the engine ranks them, so the search continues the chapter
+instead of choosing again. The first move of the search is the exception,
+because it is the position the user asked about: there the chapter's move is
+searched beside the engine's First move shortlist and is never cut from it.
+The other side's tree has no pins. Pins are not saved with a tree. A resumed
+tree is corrected where it matters: a saved choice at a pinned position that
+is not exactly the pinned moves is expanded again, and a first move missing a
+pin is topped up; a position whose pin has since been removed keeps the move
+it was searched with until a fresh search.
+
+A draft then answers each position with one move (`draftDecisions` in
+`draft_lines.dart`). Positions are decided most reached first: the chapter's
+move where the search holds it, else the move already decided for that
+position on a likelier line, else the search's own choice. The search values
+every path on its own and never merges positions, so without this two move
+orders into one position could be drafted with two different moves.
 
 ### Where the replies come from
 
@@ -338,15 +372,14 @@ loss window, which includes every C and MCP build, is refused. Shortlisted
 trees carry algorithm version 4, which the MCP's chapter reader
 (`expectimax_chapters.py`) refuses; exhaustive trees stay at version 3.
 
-### Following the board and resuming
+### Browsing and resuming
 
-An active search follows board moves, move-list navigation and back/forward.
-Navigation interrupts the old engine, saves its committed expansions, and starts
-from the latest board only after that save finishes. A manual stop or a change
-of document or side cancels the pending restart. Up to 32 earlier trees (two
-per practical search) are retained in memory, so backing up displays their results immediately
-and a new search reuses compatible values. Searches also keep their saved trees
-on disk. A stopped search stays stopped while browsing. The one search button
+A running search stays where it was started. Board moves, move-list
+navigation and back/forward only change which node of its tree the table
+reads; the search stops, keeping what it has, when the document or the side
+at the bottom changes. Up to 32 earlier trees are retained in memory, so
+backing up displays their results immediately and a new search reuses
+compatible values. Searches also keep their saved trees on disk. The one search button
 reads Resume when a compatible search covers the board, and continues from the
 current board, not the old root, with its retained values. Otherwise it loads a
 saved tree starting at the board (after restarting the app), and when none fits

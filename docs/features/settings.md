@@ -54,7 +54,7 @@ Places, in order:
 - **Expectimax** — the Expectimax tab's settings (`Method`, `Replies from`,
   `Fall back to Maia`, `Fall back to Maia under`, `Depth` (0 = no limit),
   `First move`, `Later moves`, `Search replies met once in`, `Engine depth`,
-  `Evaluation`). See [generation](generation.md).
+  `Other side too`, `Evaluation`). See [generation](generation.md).
 - **Files** — `Copy files from outside Documents when opened` (on; `into
   Documents/pgn_collections, so they can be edited`).
 - **Accounts** — `Lichess`: the hint says where the account stands and the

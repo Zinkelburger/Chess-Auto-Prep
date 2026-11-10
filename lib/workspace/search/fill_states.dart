@@ -31,7 +31,8 @@ final class FillRequest {
     this.depthPlies,
     this.source = EvaluationSource.stockfish,
     this.rootMoves = 4,
-    this.candidateMoves = 4,
+    this.candidateMoves = 1,
+    this.bothSides = false,
     this.replyFloor = 0.01,
     this.method = SearchMethod.practical,
     this.evalDepth = fillEvalDepth,
@@ -49,6 +50,7 @@ final class FillRequest {
         source: settings.expectimax.source,
         rootMoves: settings.expectimax.rootMoves,
         candidateMoves: settings.expectimax.candidateMoves,
+        bothSides: settings.expectimax.bothSides,
         replyFloor: settings.expectimax.replyFloor,
         method: settings.expectimax.method,
         evalDepth: settings.expectimax.evalDepth,
@@ -67,6 +69,9 @@ final class FillRequest {
 
   /// Our moves kept at every later move of ours.
   final int candidateMoves;
+
+  /// Whether the board is searched for the other side too, for its values.
+  final bool bothSides;
   final double replyFloor;
 
   /// The engine depth each position is scored at.
@@ -99,6 +104,10 @@ final class FillRequest {
         : '$source+maia<$fallbackUnder';
   }
 
+  /// Whether the run also searches the board for the other side: asked
+  /// for, and never for the mainline book.
+  bool get mirrored => bothSides && method == SearchMethod.practical;
+
   bool compatibleWith(FillRequest other) =>
       method == other.method &&
       replyKey == other.replyKey &&
@@ -126,9 +135,15 @@ final class FillRequest {
   int get treeRating => method == SearchMethod.mainline ? 0 : elo;
 
   /// The expectimax search this request asks for, playing [side], on top of
-  /// the [seeded] positions a resumed tree already holds.
-  SearchConfig expectimaxFor(Side side, {int seeded = 0}) => SearchConfig(
+  /// the [seeded] positions a resumed tree already holds, with the moves
+  /// already decided on as [pins].
+  SearchConfig expectimaxFor(
+    Side side, {
+    int seeded = 0,
+    Map<String, Set<String>> pins = const {},
+  }) => SearchConfig(
     side: side,
+    pins: pins,
     horizonPlies: depthPlies,
     lossLimitCp: null,
     maxOurMoves: candidateMoves,
@@ -258,10 +273,15 @@ final class FillRunning extends FillState {
     this.cancelling = false,
     this.finishing = false,
     this.lastPly,
+    this.levelShare,
   });
 
   final int nodes;
   final int depth;
+
+  /// How much of the depth under way is done, from 0 to 1; null before the
+  /// search says, and for the mainline book.
+  final double? levelShare;
 
   /// The depth asked for; null when the search goes on until stopped.
   final int? of;
@@ -284,6 +304,7 @@ final class FillRunning extends FillState {
     bool? cancelling,
     bool? finishing,
     int? lastPly,
+    double? levelShare,
   }) => FillRunning(
     nodes: nodes ?? this.nodes,
     depth: depth ?? this.depth,
@@ -291,6 +312,7 @@ final class FillRunning extends FillState {
     cancelling: cancelling ?? this.cancelling,
     finishing: finishing ?? this.finishing,
     lastPly: lastPly ?? this.lastPly,
+    levelShare: levelShare ?? this.levelShare,
   );
 }
 
@@ -361,6 +383,7 @@ final class FillTarget {
     required this.sans,
     required this.side,
     this.chapter,
+    this.pins = const {},
   });
 
   final Fen rootFen;
@@ -369,11 +392,16 @@ final class FillTarget {
   final Side side;
   final (Chapter, ChapterRef)? chapter;
 
+  /// The moves the repertoire chapter on the board already plays for
+  /// [side], by position: the search plays them rather than choosing again,
+  /// and at its first move sets them beside the engine's best.
+  final Map<String, Set<String>> pins;
+
   /// How the log names the run.
   String get label => chapter?.$2.path ?? 'the board';
 
   /// The same start searched for the other side, for its values alone: it
-  /// is never written as lines.
+  /// is never written as lines, and plays none of the chapter's moves.
   FillTarget get mirror => FillTarget(
     rootFen: rootFen,
     cursor: cursor,

@@ -126,6 +126,60 @@ void main() {
       expect([for (final r in rows) r.trapLossCp], [null, 110, null]);
     });
 
+    test('a move says how many traps lie in the lines after it', () {
+      // After Qb4 White's Nd5 sets a trap two replies deep.
+      final deeper = OpponentNode.over(
+        fen: _board,
+        evalForUs: const Eval(0),
+        replies: [
+          ReplyMove(
+            move: _move('Qb4'),
+            probability: 0.5,
+            child: OurNode.over(
+              fen: const Fen('after Qb4'),
+              evalForUs: const Eval(0),
+              candidates: [
+                CandidateMove(
+                  move: _move('Nd5'),
+                  child: OpponentNode.over(
+                    fen: const Fen('after Nd5'),
+                    evalForUs: const Eval(0),
+                    replies: [
+                      ReplyMove(
+                        move: _move('Qc5'),
+                        probability: 0.75,
+                        child: _worth('sound', 0),
+                      ),
+                      ReplyMove(
+                        move: _move('Qxb2'),
+                        probability: 0.25,
+                        child: _worth('blunder', 300),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ReplyMove(
+            move: _move('Qf6'),
+            probability: 0.5,
+            child: _worth('after Qf6', 10),
+          ),
+        ],
+      );
+      final rows = searchRows(side: Side.white, mine: deeper);
+      final qb4 = rows.firstWhere((r) => r.move.san == 'Qb4');
+      expect(qb4.below.traps, 1);
+      expect(qb4.below.likeliest, 0.25);
+      expect(rows.firstWhere((r) => r.move.san == 'Qf6').below.traps, 0);
+      expect(
+        trapsBelowTip(qb4.below),
+        '1 trap in the lines after this move. '
+        'The likeliest comes up in 1 of 4 games from here.',
+      );
+    });
+
     test('one search alone still fills its side', () {
       final rows = searchRows(side: Side.black, mine: forBlack);
       expect(rows, hasLength(3));
@@ -308,6 +362,70 @@ void main() {
       expect(find.text('Value'), findsOneWidget);
       expect(find.text('White'), findsNothing);
       expect(find.text('Black'), findsNothing);
+    });
+  });
+
+  group('one side searched', () {
+    testWidgets('one value column, saying whose it is, beside Played and '
+        'the engine; a move with traps under it says how many', (tester) async {
+      final rows = [
+        const SearchRow(
+          move: MoveRef(uci: 'qb4', san: 'Qb4'),
+          after: Fen('after Qb4'),
+          engineCp: 20,
+          share: 0.6,
+          white: (forWhite: 0.6, searched: true),
+          below: (traps: 2, likeliest: 0.1),
+        ),
+      ];
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: darkTheme(),
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                // What a pane of the builder is at a 1280-wide window.
+                width: 280,
+                height: 300,
+                child: SearchTable(
+                  rows: rows,
+                  ours: false,
+                  sides: const [Side.white],
+                  valueTip: searchValueTip(Side.white),
+                  engineDepthAt: (_) => null,
+                  onHover: (_, _) {},
+                  onLeave: () {},
+                  onPlay: (_) {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Value'), findsOneWidget);
+      expect(find.text('White'), findsNothing);
+      expect(
+        find.text('Played'),
+        findsOneWidget,
+        reason: 'one side leaves room for the share in a narrow pane',
+      );
+      expect(find.text('60%'), findsOneWidget);
+      expect(
+        find.byTooltip(
+          'White plays its best moves; Black replies the way players do. '
+          'Scored from White\'s side.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('2 traps'), findsOneWidget);
+      expect(
+        find.byTooltip(
+          '2 traps in the lines after this move. '
+          'The likeliest comes up in 1 of 10 games from here.',
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
     });
   });
 }

@@ -140,6 +140,48 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('at the smallest boards a seat keeps its hand\'s height and '
+        'its whole clock', (tester) async {
+      build();
+      await pump(tester);
+      lab.pasteMoves(
+        file.replaceAll('"ann"', '"a-very-long-engine-name-v4"'),
+        file: 'night.bpgn',
+      );
+      await tester.binding.setSurfaceSize(const Size(900, 700));
+      await tester.sendKeyEvent(LogicalKeyboardKey.end);
+      await tester.pumpAndSettle();
+      final board = tester.getRect(find.byType(Chessboard).first);
+      expect(board.width, labBoardMin);
+      final square = board.width / 8;
+      for (final clock in ['2:59', '0:09.4', '2:57', '3:00']) {
+        final shown = tester.getRect(find.text(clock));
+        expect(shown.height, lessThanOrEqualTo(square), reason: clock);
+        expect(shown.width, greaterThan(0), reason: clock);
+      }
+      // Each hand's row is a square tall, so the column fits as sized.
+      for (final well in tester.widgetList<PocketWell>(
+        find.byType(PocketWell),
+      )) {
+        final row = find.ancestor(
+          of: find.byWidget(well),
+          matching: find.byType(Row),
+        );
+        expect(tester.getSize(row.first).height, square);
+      }
+      // A clock is never past its board's edge.
+      for (final clock in tester.widgetList<Text>(
+        find.textContaining(RegExp(r'^\d+:\d\d')),
+      )) {
+        final shown = tester.getRect(find.byWidget(clock));
+        final boards = tester.getRect(
+          find.byType(Chessboard).at(shown.left < board.right ? 0 : 1),
+        );
+        expect(shown.right, lessThanOrEqualTo(boards.right + 0.5));
+      }
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('says which game it is and steps through the file', (
       tester,
     ) async {

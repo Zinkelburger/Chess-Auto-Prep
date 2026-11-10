@@ -70,8 +70,11 @@ final class SearchConfig {
   /// from ([Fen.position], the four fields) to the moves in standard or
   /// dartchess UCI. At a pinned position only those moves are enumerated,
   /// so a fill continues the chapter the user has rather than second-guessing
-  /// it; the loss window still ranks the pinned moves among themselves. A
-  /// pin naming no legal move is ignored.
+  /// it; the loss window still ranks the pinned moves among themselves, and
+  /// the shortlist never drops one. The first move of a shortlisted search
+  /// is the exception: there the pins are searched beside the engine's
+  /// best, since that is the position the user asked about. A pin naming no
+  /// legal move is ignored.
   final Map<String, Set<String>> pins;
 
   /// A reply reached less often than this, as a share of the games that

@@ -252,8 +252,13 @@ def contender_score(result: GameResult, contender_team: chess.Color) -> float:
 
 
 def _clock_tag(ms: int) -> str:
-    seconds = max(0, ms) / 1000
-    return f"[%clk {int(seconds // 3600)}:{int(seconds % 3600 // 60):02d}:{seconds % 60:04.1f}]"
+    # Rounded to tenths before it is split, so 59.96 s is 0:01:00.0 and not
+    # 0:00:60.0.
+    tenths = (max(0, ms) + 50) // 100
+    hours, rest = divmod(tenths, 36000)
+    minutes, rest = divmod(rest, 600)
+    seconds, tenth = divmod(rest, 10)
+    return f"[%clk {hours}:{minutes:02d}:{seconds:02d}.{tenth}]"
 
 
 def _eval_tag(score: dict, white_moved: bool) -> str:

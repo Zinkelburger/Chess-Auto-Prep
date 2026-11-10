@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from bughouse_arena import openings as opening_sets  # noqa: E402
 from bughouse_arena import preflight  # noqa: E402
-from bughouse_arena.match import (MatchConfig, PlayerFactory, game_plan,  # noqa: E402
+from bughouse_arena.match import (MatchConfig, PlayerFactory, _clock_tag, game_plan,  # noqa: E402
                                   load_openings, run_match,
                                   write_bpgn)
 from bughouse_arena.players import (FSF_LABEL, EngineError, EngineSpec, FsfSeat,  # noqa: E402
@@ -446,6 +446,13 @@ class MatchFiles(unittest.TestCase):
             self.assertEqual((position.fullmove_number, position.turn), (int(number), letter.isupper()))
             game.push(board, position.parse_san(san).uci())
         self.assertEqual(len(game.moves), 5)
+
+    def test_clock_is_rounded_before_it_is_split(self):
+        self.assertEqual(_clock_tag(59_960), "[%clk 0:01:00.0]")
+        self.assertEqual(_clock_tag(119_970), "[%clk 0:02:00.0]")
+        self.assertEqual(_clock_tag(3_599_960), "[%clk 1:00:00.0]")
+        self.assertEqual(_clock_tag(7_449), "[%clk 0:00:07.4]")
+        self.assertEqual(_clock_tag(-5), "[%clk 0:00:00.0]")
 
     def test_last_score_is_the_final_info_line_before_bestmove(self):
         lines = ["info depth 3 score cp 12 nodes 9 pv e2e4",

@@ -1,10 +1,12 @@
 # Expectimax search (generation)
 
 The Expectimax tab searches from the position on the board and shows what each
-move is worth against how real opponents reply. Someone preparing a chapter
-runs it, reads the values as the board moves, and, when they want lines, has
-the best of them written into a draft chapter beside theirs. Every run also
-feeds the Positions list (traps, only moves, practical choices).
+move is worth against how real opponents reply. It compares our moves where
+it starts and then goes deep along the lines games take, so someone exploring
+a position sees where opponents go wrong and which move leads there, and
+someone preparing a chapter has the lines written into a draft chapter beside
+theirs. Every run also feeds the Positions list (traps, only moves, practical
+choices).
 
 Code: `lib/workspace/search/fill_gaps.dart` (`FillGaps`, the one run at a time),
 `search_pane.dart` (with its `search_run_bar.dart`, `search_status.dart`
@@ -14,7 +16,8 @@ and `search_results.dart`), `search_settings.dart`, `search_table.dart`,
 `finds.dart`, `finds_panel.dart`, `engine_jobs.dart`; `lib/app/search_door.dart`
 and `lib/app/trap_training.dart`; the pure core in
 `lib/chess/generation/` (`search.dart`, `mainline_book.dart`, `finds.dart`,
-`traps.dart`, `draft_lines.dart`, `draft_chapter.dart`, `tree_wire_v4*.dart`);
+`traps.dart`, `trap_scent.dart`, `draft_lines.dart`, `draft_chapter.dart`,
+`tree_wire_v4*.dart`);
 storage in `lib/storage/generation_trees.dart`, `finds_store.dart`,
 `eval_cache.dart`; remote lookups in `lib/net/search_evaluator.dart` and
 `remote_queue.dart`. Search policy and invariants:
@@ -35,25 +38,34 @@ search.
   the depth when the pane is wide enough, else on its own line.
 - **Status line** — the side being prepared (`White` / `Black`) as a text
   button that turns the board (as F does; held while running), then what will
-  run (`Maia 2200 · best 4, then 4`), or progress (`Depth 3 of 8 · 95
-  positions`, `Stopped at depth 3 · … · ChessDB stopped answering`), or the
-  failure in the error colour. At its end: `Finish depth N` while a search
-  with no depth runs; `N found` after a run that found positions (opens the
-  Positions list).
+  run (`Maia 2200 · best 4, then 1`, with `· both sides` when asked), or
+  progress with how much of the depth under way is done (`Depth 3 of 8 (40%)
+  · 95 positions`), the outcome (`Finished depth 8 · 412 positions`, `Stopped
+  at depth 3 · … · ChessDB stopped answering`), or the failure in the error
+  colour. At its end: `Finish depth N` while a search with no depth runs;
+  `N found` after a run that found positions (opens the Positions list).
 - **Table** — at our move `Your move`, at theirs `Their reply`, then
-  `Played`, `White`, `Black`, `Engine`, all from White's side. `White` is the
-  move's value when White plays its best and Black replies as players do;
-  `Black` the reverse. `Played` is dropped first when the pane is narrow. A
+  `Played`, `Value`, `Engine`, all from White's side. `Value` is the move's
+  worth when the board's side plays its best and the other replies as players
+  do. With `Other side too` the one column is two, `White` and `Black`: each
+  side's search of the same board; `Played` is dropped first when the pane is
+  too narrow for all of them. A move with traps in the lines after it says
+  how many beside its name (`Nf6  2 traps`; on hover `2 traps in the lines
+  after this move. The likeliest comes up in 1 of 12 games from here.`). A
   Maia stand-in share reads `~38%` with `~ Estimated by Maia where database
   games are sparse.`; a trap reply is marked `?` (`Trap: Played 34%, loses 1.8
   against their best`). Hovering an Engine value names its depth (`Depth 22`,
   or `Depth unknown (saved or database result)`). The mainline book shows one
-  `Value` column. Clicking a row plays the move; hovering floats the position.
+  `Value` column. Clicking a row plays the move; hovering floats the position,
+  except over the rows that come up under the pointer after a click, until
+  the pointer moves.
 - **Table states** — `Press ▶ Expectimax to evaluate moves from this
   position.`, `Evaluating the first moves…`, `The game is over here.`,
   `Not reached yet.` / `The search stopped before this position.`,
   `No saved results here yet.`, with `Go to where it started` when that line
-  is still in the document.
+  is still in the document; where a search with other settings covers the
+  board, `The results here are from a search with other settings. Expectimax
+  searches again with these.`
 - **Foot** — `Make lines` (`Write the best moves as lines in a draft chapter
   beside this one, traps marked ?`), then `8 lines in Main (draft)` with
   `Open`. Save failures show `Retry save` / `Discard tree save` and
@@ -62,17 +74,22 @@ search.
   practical: `Maia rating` (hidden when Maia is never asked), `Fall back to
   Maia under` N `games at a position` (database sources only), the Lichess
   speeds and ratings from the Explorer tab (Lichess players only), `First
-  move` and `Later moves` (our best engine moves searched, default 4 each),
-  `Search replies met once in` (default 100; 0 searches every reply), `Engine
-  depth` (default 14, 1–40), `Evaluation` (`Engine`, `ChessDB`, `Lichess`).
-  While running: `Pause the search to change these.` The same settings are in
-  Settings ▸ Expectimax (`Settings.expectimax` in `settings.json`).
+  move` (our best engine moves compared where the search starts, default 4),
+  `Later moves` (how many at every move of ours after; default 1, which goes
+  deepest), `Other side too` (off; the board searched for the other side as
+  well, for its column, at about twice the time), `Search replies met once
+  in` (default 100; 0 searches every reply), `Engine depth` (default 14,
+  1–40), `Evaluation` (`Engine`, `ChessDB`, `Lichess`). While running: `Pause
+  the search to change these.` The same settings are in Settings ▸ Expectimax
+  (`Settings.expectimax` in `settings.json`, later moves as `laterMoves`).
 - **Positions list** — replaces the left list column (Actions ▸ View ▸
-  `Positions`, the bar's Positions button, or `N found`; `Back to the list`
-  restores the list). `Top` |
+  `Positions`, the bar's Positions button, or `N found`). The bar's button
+  pressed again, the arrow before the list's name (`Back to the list`) or
+  Actions ▸ View ▸ `Back to the list` restores the list. `Top` |
   `Often` | `New` ordering, a typeable `Kind` field (`Every kind`, `Trap`,
-  `Only move`, `Their only move`, `Practical`), `This chapter` (on when a
-  chapter is open). A row reads `4.d4 Bc5?  Trap` over `played 29%, loses 1.7
+  `Only move`, `Their only move`, `Practical`), `This chapter` (shown and on
+  while the board is a chapter, or the line of a find opened from the list;
+  any other board lists every find). A row reads `4.d4 Bc5?  Trap` over `played 29%, loses 1.7
   · 1 in 3 · as White`; `⋯` offers `Train this line` (traps) and `Remove`.
   Empty: `What a search from the Expectimax tab finds is listed here.`
 
@@ -80,10 +97,15 @@ search.
 
 **Search** — `Expectimax`, or Actions ▸ `Expectimax from here`
 (where the tab exists and a position is on the board and not hidden; nothing
-is written to the document) → searches the board for both sides on the one engine: for the
-side at the bottom and, with roles swapped, for the other; the second tree's
-failure never fails the run. The engine pane reads `Paused while searching`.
-Values appear level by level. Refusals: `A search is already running.`,
+is written to the document) → searches the board for the side at the bottom:
+our best `First move` engine moves compared at the start, then `Later moves`
+of ours at each move after, against the replies players make, the likeliest
+positions of each depth first. On a repertoire chapter the search plays the
+moves the chapter already has for its side, and at its first move sets the
+chapter's move beside the engine's best. With `Other side too` the board is
+searched for the other side as well, roles swapped, on the one engine; that
+second tree's failure never fails the run. The engine pane reads `Paused
+while searching`. Values appear level by level. Refusals: `A search is already running.`,
 `Nothing is on the board.`, `Finish the puzzle first.`,
 `Finish saving the previous search tree first.`
 
@@ -98,9 +120,12 @@ asked depth and raises `Depth` by one. A saved tree that cannot be read is
 passed over for an older match → `No saved search is available for this
 board.`
 
-**Follow the board** — navigating while a search runs stops it, saves its tree
-and restarts from the new position, reusing compatible values; a stopped
-search stays stopped while browsing.
+**Browse while it runs** — a running search stays where it was started: moving
+on the board reads its tree at the new position and starts nothing. It stops,
+keeping what it has, when the document or the side at the bottom changes. To
+search from another position, pause and press the button there: `Resume` goes
+on from the board with the values already found, comparing `First move`
+candidates at it.
 
 **ChessDB mainline** — `Build` → our move is ChessDB's best (ties to the move
 masters played most); their replies are the masters' moves from
@@ -116,10 +141,13 @@ never enter `eval_cache.db`.
 
 **Make lines** — on a writable repertoire chapter, for its side, after a run →
 a draft chapter `<chapter> (draft)` (then `(draft 2)`…) beside it: one game
-per line the search answered, most reached first, at most 100; near-copies
-fold into a kept line as a sideline of at most 6 plies or are dropped; lines
-whose every move of ours the chapter already plays are left out; trap lines
-follow the lines. Each line is continued by up to 6 plies of Stockfish's best
+per line the search answered, at most 100, the lines that start with the same
+reply together and the reply games take most often first; near-copies fold
+into a kept line as a sideline of at most 6 plies or are dropped; lines whose
+every move of ours the chapter already plays are left out; trap lines follow
+the lines. A position is answered with one move whatever the move order: the
+chapter's own where the search looked at it, else the move of the likeliest
+line through it. Each line is continued by up to 6 plies of Stockfish's best
 line, unvalued (not for the mainline book). Refusals: `The search found no
 line the chapter does not already have.`, `The chapter was moved, renamed or
 deleted since …`. A write with an uncertain outcome is retried with the same
@@ -138,14 +166,17 @@ the chapter's draft and trained there.
 - **Draft chapter** — a normal chapter file with `// Draft` in its heading
   ([repertoires.md](repertoires.md)). Each game is named (`Event`, plus
   `ECO`) after the last position of its main line the bundled opening book
-  names, else the draft's name; carries `[CumProb]`. Every move's comment
+  names, else the draft's name; the opening family two or more lines and
+  most of the draft share is left off (`Two Knights Defense`, not `Italian
+  Game: Two Knights Defense`). It carries `[CumProb]`. Every move's comment
   carries `[%expectimax +0.42]` (centipawn equivalent of the expected score)
-  and `[%score 53.8%]`; a line's first move `[%cumProb 29.3%]`; trap replies
-  are written with `?`. The values follow a line dragged into a real chapter.
+  and `[%score 53.8%]`; a line's first move `[%cumProb 29.3%]`; a trap reply
+  is written with `?` and says why in words before its tokens (`Trap: played
+  44%, loses 0.9.`). The values follow a line dragged into a real chapter.
 - **Search trees** — v4 `tree.json` under
   `<repertoire>/.cap-generation/<chapter>.pgn/v2-<run id>/`, written under the
-  document lock. Each save keeps that run plus the newest 16 earlier `v2-*`
-  runs of the chapter; `v2-agent-*` runs and other entries are never pruned.
+  document lock, one per side searched. Each save keeps that run plus the
+  newest 16 earlier `v2-*` runs of the chapter; `v2-agent-*` runs and other entries are never pruned.
   A tree with no horizon is written as `max_depth` 512. Narrowed trees carry
   algorithm version 4. A search not started on a repertoire chapter (the
   analysis board, Player analysis) keeps its tree in memory only.
@@ -176,8 +207,9 @@ the chapter's draft and trained there.
   sentence; it never silently becomes a Maia search.
 - Find kinds and thresholds: trap (reply played ≥ 20% losing ≥ 50 cp against
   their best, leaving us ≥ 0 and ≥ 50 cp above our best at our last turn),
-  only move (others lose ≥ 150 cp, our best between −150 and +300), their only
-  move, practical (≥ 30 cp worse for the engine, ≥ 0.02 better in expected
+  only move (others lose ≥ 150 cp, our best between −150 and +300, and not a
+  capture nobody would miss: of the piece that just moved, or of one worth
+  more than the piece taking it), their only move, practical (≥ 30 cp worse for the engine, ≥ 0.02 better in expected
   score); a line whose own moves give up more than 300 cp is left out
   (`lib/chess/generation/finds.dart`, `traps.dart`).
 
@@ -194,9 +226,17 @@ the chapter's draft and trained there.
   into their host (the line-diversity bar).
 - **One button, one bar** (2026-10-01): Expectimax/Pause/Resume/Deeper in one
   place; the side is a flip button, never a White/Black switch.
-- **Both sides in one press** (2026-10-01): `White`, `Black` and `Engine`
-  columns; status, Positions, traps and `Make lines` belong to the board's
-  side.
+- **Both sides on request** (2026-11-10): one press searches the board's
+  side; `Other side too` adds the second tree and its column (it was three
+  quarters of a default run). Status, Positions, traps and `Make lines`
+  belong to the board's side.
+- **Deep and narrow by default** (2026-11-10): four of our moves compared
+  where the search starts, one after it, so a run reaches the moves where
+  opponents go wrong instead of spending itself on the first two.
+- **A search stays where it was started** (2026-11-10): browsing its results
+  never restarts it.
+- **The chapter's moves are kept** (2026-11-10): a search of a chapter plays
+  what the chapter plays, and a draft answers each position with one move.
 - **Replies from Maia or a database, one source per position** (2026-10-01),
   with Maia as fallback under N games.
 - **Nothing is computed while browsing** (2026-08-21): stored values only;

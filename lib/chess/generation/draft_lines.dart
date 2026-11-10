@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:collection/collection.dart' show HeapPriorityQueue;
+
 import '../fen.dart';
 import '../pv_text.dart';
 import '../pgn/game_tree.dart';
@@ -12,11 +14,13 @@ import 'traps.dart' show trapRepliesAt;
 /// The search tree is the whole policy: our one move at every position and
 /// every reply the model gave any weight. A draft is for a person to read and
 /// accept line by line, so it is cut down: one game per line the search
-/// actually answered, most reached first, near-copies of a kept line folded
-/// into it as a sideline, lines the chapter already has left out, and at
-/// most [DraftPlan.cap] of them. Every move carries what the search thought
-/// the position after it was worth, so the values travel with the line
-/// wherever it is dragged.
+/// actually answered, near-copies of a kept line folded into it as a
+/// sideline, lines the chapter already has left out, and at most
+/// [DraftPlan.cap] of them, the lines that start with the same reply kept
+/// together. A position reached by two move orders is answered with one
+/// move ([draftDecisions]). Every move carries what the search thought the
+/// position after it was worth, so the values travel with the line wherever
+/// it is dragged.
 
 /// One move of a proposed line and what the position after it is worth.
 final class DraftMove {
@@ -26,7 +30,8 @@ final class DraftMove {
     required this.after,
     required this.value,
     required this.ours,
-    this.trap = false,
+    this.share,
+    this.trapLossCp,
   });
 
   final MoveRef move;
@@ -42,8 +47,15 @@ final class DraftMove {
 
   final bool ours;
 
-  /// A reply that is a trap ([trapRepliesAt]): written with a `?`.
-  final bool trap;
+  /// How often the opponent plays the move, where it is a reply.
+  final double? share;
+
+  /// What a reply that is a trap ([trapRepliesAt]) throws away against the
+  /// opponent's best, in centipawns; null for every other move.
+  final int? trapLossCp;
+
+  /// A reply that is a trap: written with a `?` and a note saying why.
+  bool get trap => trapLossCp != null;
 
   /// What identifies the decision this move is: where, and what.
   String get decision => '$before|${move.uci}';
@@ -68,26 +80,84 @@ final class DraftLine {
   List<String> get ucis => [for (final move in moves) move.move.uci];
 }
 
+/// Our move at each position the drafted lines pass through, by four-field
+/// position: the one move a position is answered with, whichever move order
+/// reaches it.
+///
+/// The positions are decided most reached first. One the chapter already
+/// answers ([pins]) keeps the chapter's move where the search looked at it;
+/// one already decided on a likelier line keeps that decision where this
+/// node holds the move; any other takes the search's own choice. A search
+/// values each path on its own, so without this two move orders into one
+/// position could be answered with two different moves.
+Map<String, String> draftDecisions(
+  SearchNode root, {
+  Map<String, Set<String>> pins = const {},
+}) {
+  final decided = <String, String>{};
+  var order = 0;
+  final waiting = HeapPriorityQueue<(double, int, SearchNode)>((a, b) {
+    final byReach = b.$1.compareTo(a.$1);
+    return byReach != 0 ? byReach : a.$2.compareTo(b.$2);
+  })..add((1, order++, root));
+  while (waiting.isNotEmpty) {
+    final (reach, _, node) = waiting.removeFirst();
+    switch (node) {
+      case OurNode():
+        final position = node.fen.position;
+        final pick =
+            _held(node, decided[position]) ??
+            node.candidates
+                .where((c) => pins[position]?.contains(c.move.uci) ?? false)
+                .firstOrNull ??
+            node.chosen;
+        decided.putIfAbsent(position, () => pick.move.uci);
+        waiting.add((reach, order++, pick.child));
+      case OpponentNode(:final replies):
+        for (final reply in replies) {
+          waiting.add((reach * reply.probability, order++, reply.child));
+        }
+      case TerminalNode() || HorizonNode() || FrontierNode():
+    }
+  }
+  return decided;
+}
+
+/// The candidate of [node] that plays [uci], when it holds one.
+CandidateMove? _held(OurNode node, String? uci) => uci == null
+    ? null
+    : node.candidates.where((c) => c.move.uci == uci).firstOrNull;
+
+/// Our move at [node] in a draft: the one [decided] for its position where
+/// the node holds it, else the search's choice.
+CandidateMove draftPick(OurNode node, Map<String, String> decided) =>
+    _held(node, decided[node.fen.position]) ?? node.chosen;
+
 /// Every line [root] answers, most reached first.
 ///
-/// A line follows our chosen move at each of our positions and, at each of
+/// A line follows our move at each of our positions — the one [decided]
+/// for it ([draftDecisions]), else the search's choice — and, at each of
 /// the opponent's, branches into every reply the search went on to answer;
 /// a reply it only valued and never answered is not a line, because there is
 /// nothing of ours in it to learn. A line therefore ends on our move, or on
 /// a finished game.
-List<DraftLine> linesOf(SearchNode root) {
+List<DraftLine> linesOf(
+  SearchNode root, {
+  Map<String, String> decided = const {},
+}) {
   final lines = <DraftLine>[];
   void walk(SearchNode node, List<DraftMove> sofar, double reach) {
     switch (node) {
-      case OurNode(:final chosen):
-        walk(chosen.child, [
+      case OurNode():
+        final pick = draftPick(node, decided);
+        walk(pick.child, [
           ...sofar,
-          _step(node.fen, chosen.move, chosen.child, ours: true),
+          _step(node.fen, pick.move, pick.child, ours: true),
         ], reach);
       case OpponentNode(:final replies):
         var followed = false;
         final traps = {
-          for (final (trap, _) in trapRepliesAt(node)) trap.move.uci,
+          for (final (trap, loss) in trapRepliesAt(node)) trap.move.uci: loss,
         };
         for (final reply in replies) {
           final child = reply.child;
@@ -100,7 +170,8 @@ List<DraftLine> linesOf(SearchNode root) {
               reply.move,
               child,
               ours: false,
-              trap: traps.contains(reply.move.uci),
+              share: reply.probability,
+              trapLossCp: traps[reply.move.uci],
             ),
           ], reach * reply.probability);
         }
@@ -129,14 +200,16 @@ DraftMove _step(
   MoveRef move,
   SearchNode child, {
   required bool ours,
-  bool trap = false,
+  double? share,
+  int? trapLossCp,
 }) => DraftMove(
   move: move,
   before: from.position,
   after: child.fen,
   value: child.valuation.value,
   ours: ours,
-  trap: trap,
+  share: share,
+  trapLossCp: trapLossCp,
 );
 
 /// A line the draft keeps, with the near-copies folded into it.
@@ -243,13 +316,38 @@ DraftPlan planDraft(List<DraftLine> lines, {Set<String> known = const {}}) {
   }
   return DraftPlan(
     entries: List.unmodifiable([
-      for (final kept in entries)
+      for (final kept in _byFirstReply(entries))
         DraftEntry(
           line: kept.line,
           sidelines: List.unmodifiable(kept.sidelines),
         ),
     ]),
   );
+}
+
+/// [kept] with the lines that start with the same reply together, so a
+/// draft reads reply by reply as a chapter does: the reply games take most
+/// often first, and under it its lines most reached first. The lines come
+/// in most reached first, so each group already is.
+List<_Kept> _byFirstReply(List<_Kept> kept) {
+  final groups = <String, List<_Kept>>{};
+  for (final entry in kept) {
+    final moves = entry.line.moves;
+    final reply = moves.indexWhere((move) => !move.ours);
+    final key = reply < 0
+        ? ''
+        : moves.take(reply + 1).map((move) => move.move.uci).join(' ');
+    groups.putIfAbsent(key, () => []).add(entry);
+  }
+  double reach(List<_Kept> group) =>
+      group.fold(0, (sum, entry) => sum + entry.line.reach);
+  // Groups in the order they were first met: a stable sort from there.
+  final ordered = groups.values.indexed.toList()
+    ..sort((a, b) {
+      final byReach = reach(b.$2).compareTo(reach(a.$2));
+      return byReach != 0 ? byReach : a.$1.compareTo(b.$1);
+    });
+  return [for (final (_, group) in ordered) ...group];
 }
 
 final class _Kept {
@@ -368,6 +466,8 @@ _Branch _graft(
       continue;
     }
     final tokens = [
+      // What a reader is told in words: why the reply is marked.
+      ?trapNote(move),
       if (first && index == 0)
         '[%cumProb ${(reach * 100).toStringAsFixed(1)}%]',
       '[%expectimax ${expectimaxText(move.value)}]',
@@ -386,6 +486,18 @@ _Branch _graft(
     here = next;
   }
   return here;
+}
+
+/// The words written beside a trap's reply, or null for any other move:
+/// `Trap: played 44%, loses 0.9.`
+String? trapNote(DraftMove move) {
+  final loss = move.trapLossCp;
+  if (loss == null) return null;
+  final played = switch (move.share) {
+    final share? => 'played ${(share * 100).round()}%, ',
+    null => '',
+  };
+  return 'Trap: ${played}loses ${(loss / 100).toStringAsFixed(1)}.';
 }
 
 /// `$2`, the `?` a trap's reply is written with.

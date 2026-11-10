@@ -33,11 +33,18 @@ final class TableGame {
 
   /// What every clock started at: the seconds of `TimeControl "120+0"`.
   Duration? get startClock {
-    final seconds = RegExp(
-      r'^(\d+(?:\.\d+)?)(?:\+\d+(?:\.\d+)?)?$',
-    ).firstMatch(tags['TimeControl']?.trim() ?? '')?[1];
+    final seconds = _timeControl.firstMatch(
+      tags['TimeControl']?.trim() ?? '',
+    )?[1];
     return seconds == null ? null : _seconds(seconds);
   }
+
+  /// The game's tags for a line that is no longer the one it played: no
+  /// result and no ending, since that line did not reach them.
+  TableGame get unfinished => TableGame({
+    for (final MapEntry(:key, :value) in tags.entries)
+      if (key != 'Termination') key: key == 'Result' ? '*' : value,
+  });
 
   /// The team `Result` gives the game to: `1-0` is board A's White and
   /// partner, A + B.
@@ -84,6 +91,7 @@ Duration? clockComment(String comment) {
   return seconds == null ? null : _seconds(seconds);
 }
 
+final _timeControl = RegExp(r'^(\d+(?:\.\d+)?)(?:\+\d+(?:\.\d+)?)?$');
 final _clk = RegExp(r'\[%clk\s+(\d+):(\d+):(\d+(?:\.\d+)?)\]');
 final _bareClock = RegExp(r'^\s*(?:\d+(?:\.\d+)?s\s+)?(\d+(?:\.\d+)?)\s*$');
 

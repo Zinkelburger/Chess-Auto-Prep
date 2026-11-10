@@ -263,6 +263,23 @@ final class Library extends ChangeNotifier {
     );
   });
 
+  /// [board] — the analysis board — as the first chapter of a new
+  /// repertoire [name], for the board's side: what was explored before any
+  /// repertoire was made for it is kept as it stands.
+  Future<LibraryResult> saveBoardAsRepertoire(String name, Chapter board) =>
+      _run('save the analysis board as the repertoire $name', () async {
+        if (_named(name) != null) return const LibraryNameTaken();
+        final ref = DocumentRef(p.join(_root, name, '$firstChapter.pgn'));
+        final games = writeChapter(board).substring(board.preamble.length);
+        final result = await _create(ref, name, board.side, games: games);
+        if (result is! LibraryDone) return result;
+        return LibraryAdded(
+          ChapterRef.at(ref.path),
+          chapters: 1,
+          lines: board.gameCount,
+        );
+      });
+
   /// A chapter file is renamed on disk; a chapter of a course file is its
   /// games' `[ChapterName]`, so renaming it rewrites that tag — and the
   /// books that name it, in the same save — and nothing else. The games of a

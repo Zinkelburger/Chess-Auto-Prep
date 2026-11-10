@@ -38,6 +38,7 @@ final class WorkspaceHooks {
     this.onDownloadTwic,
     this.onOpenChapter,
     this.onShowPositions,
+    this.onTogglePositions,
     this.onOpenPlace,
     this.onEditBooks,
     this.onSaveHeld,
@@ -110,6 +111,9 @@ final class WorkspaceHooks {
 
   /// Shows the Positions in the list column: where a search's finds are.
   final VoidCallback? onShowPositions;
+
+  /// Shows the Positions, or puts the mode's own list back in their place.
+  final VoidCallback? onTogglePositions;
 
   /// Where a move made on the board goes when not into the document: a
   /// puzzle judges it. Null plays it into the document.
