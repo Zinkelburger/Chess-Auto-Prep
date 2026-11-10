@@ -171,4 +171,65 @@ void main() {
     expect(finds.first.worth, greaterThanOrEqualTo(finds.last.worth));
     expect(findsOf(tree, limit: 1), hasLength(1));
   });
+
+  group('an only move that is an obvious capture', () {
+    // After 1.e4 e5 2.Nf3 Nc6 3.Bc4 Nf6 4.Ng5 d5: the pawn that has just
+    // come forward attacks the bishop.
+    const twoKnights = Fen(
+      'r1bqkb1r/ppp2ppp/2n2n2/3pp1N1/2B1P3/8/PPPP1PPP/RNBQK2R w KQkq - 0 5',
+    );
+
+    test('taking the piece that has just moved is obvious', () {
+      expect(obviousCapture(twoKnights, 'e4d5', after: 'd7d5'), isTrue);
+    });
+
+    test('taking a piece worth more than the one that takes is obvious', () {
+      // A knight on f7 takes the rook on h8.
+      const fork = Fen(
+        'r1b1k2r/ppppqNpp/2n2n2/2b1p3/2B1P3/8/PPPP1PPP/RNBQK2R w KQkq - 0 6',
+      );
+      expect(obviousCapture(fork, 'f7h8', after: 'd8e7'), isTrue);
+    });
+
+    test('a capture that gives up material, and a move that takes nothing, '
+        'are not', () {
+      // The knight takes the f7 pawn: a sacrifice, not a plain win.
+      expect(obviousCapture(twoKnights, 'g5f7', after: 'd7d5'), isFalse);
+      expect(obviousCapture(twoKnights, 'c4b3', after: 'd7d5'), isFalse);
+    });
+
+    test('a position that cannot be read is never called obvious', () {
+      expect(obviousCapture(board('made up'), 'e4d5', after: 'd7d5'), isFalse);
+    });
+
+    test('an obvious recapture is not kept as an only move', () {
+      SearchNode real(Fen fen, int cp) =>
+          HorizonNode(fen: fen, evalForUs: Eval(cp));
+      final tree = OpponentNode.over(
+        fen: board('before d5'),
+        evalForUs: const Eval(0),
+        replies: [
+          ReplyMove(
+            move: const MoveRef(uci: 'd7d5', san: 'd5'),
+            probability: 1,
+            child: OurNode.over(
+              fen: twoKnights,
+              evalForUs: const Eval(0),
+              candidates: [
+                CandidateMove(
+                  move: const MoveRef(uci: 'e4d5', san: 'exd5'),
+                  child: real(board('after exd5'), 20),
+                ),
+                CandidateMove(
+                  move: const MoveRef(uci: 'c4b3', san: 'Bb3'),
+                  child: real(board('after Bb3'), -200),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+      expect(ofKind(findsOf(tree), FindKind.onlyMove), isEmpty);
+    });
+  });
 }

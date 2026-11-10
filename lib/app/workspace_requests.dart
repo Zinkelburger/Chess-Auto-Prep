@@ -720,6 +720,27 @@ final class WorkspaceRequests extends ChangeNotifier {
     return sentence == null ? const RequestDropped() : _refused(sentence);
   }
 
+  /// The analysis board as the first chapter of a new repertoire [name],
+  /// opened in the builder.
+  Future<RequestResult> saveBoardAsRepertoire(String name) async {
+    final ticket = _nextRequest();
+    final board = _session.chapter;
+    if (!_session.isScratch || board == null) return const RequestDropped();
+    final result = await _library.saveBoardAsRepertoire(name, board);
+    if (ticket.overtaken) return const RequestDropped();
+    if (result is LibraryAdded) {
+      _showMode(Mode.repertoires);
+      return _open(ticket, result.first);
+    }
+    final sentence = libraryMessage(
+      result,
+      thing: 'repertoire',
+      name: name,
+      failed: 'Could not save the analysis board.',
+    );
+    return sentence == null ? const RequestDropped() : _refused(sentence);
+  }
+
   /// [drafts] into a study the user picks — one of theirs, or a new one —
   /// from whatever mode they are in, which stays up: the bar says where
   /// they went, with `Open study` to go there.

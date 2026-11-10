@@ -208,11 +208,15 @@ class _FindsPanelState extends State<FindsPanel> {
                 null => null,
               },
               actions: [
+                // Beside the way back the row is tight: the chip gives way
+                // before the row overflows.
                 if (_narrows)
-                  ToggleChip(
-                    label: 'This chapter',
-                    selected: _thisChapter,
-                    onSelected: _showThisChapter,
+                  Flexible(
+                    child: ToggleChip(
+                      label: 'This chapter',
+                      selected: _thisChapter,
+                      onSelected: _showThisChapter,
+                    ),
                   ),
               ],
               trailing: widget.trailing,

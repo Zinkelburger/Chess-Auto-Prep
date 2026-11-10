@@ -64,6 +64,8 @@ void main() {
           method: SearchMethod.mainline,
           depth: 6,
           rootMoves: 8,
+          candidateMoves: 3,
+          bothSides: true,
           rareOnceIn: 0,
           source: EvaluationSource.chessDb,
           replies: ReplySource.lichess,
@@ -79,6 +81,22 @@ void main() {
       expect(odd.depth, isNull, reason: 'no limit');
     },
   );
+
+  test('a search goes deep by default: one later move, one side; the four '
+      'later moves older settings always saved are not read', () {
+    expect(ExpectimaxOptions.defaults.candidateMoves, 1);
+    expect(ExpectimaxOptions.defaults.bothSides, isFalse);
+    final old = Settings.fromJson(
+      '{"expectimax": {"rootMoves": 6, "candidateMoves": 4}}',
+    ).expectimax;
+    expect(old.rootMoves, 6);
+    expect(old.candidateMoves, 1);
+    final chosen = Settings.fromJson(
+      '{"expectimax": {"laterMoves": 3, "bothSides": true}}',
+    ).expectimax;
+    expect(chosen.candidateMoves, 3);
+    expect(chosen.bothSides, isTrue);
+  });
 
   Directory quarantine() =>
       Directory(p.join(support.path, 'recovery-quarantine'));

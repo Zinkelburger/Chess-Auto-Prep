@@ -44,14 +44,23 @@ String draftChapterText({
   );
   final taken = <String>{};
   final white = side == Side.white;
+  final trees = [
+    for (final entry in plan.entries)
+      draftTree(entry, rootFen: rootFen, prefix: prefix),
+  ];
+  final named = [for (final tree in trees) openings.ofMainLine(tree)];
+  final family = sharedFamily([for (final opening in named) opening?.name]);
   for (final (index, entry) in plan.entries.indexed) {
-    final tree = draftTree(entry, rootFen: rootFen, prefix: prefix);
+    final tree = trees[index];
     final sans = mainlineSans(tree);
     final id = newLineId(sans, index, taken);
     taken.add(id);
-    final opening = openings.ofMainLine(tree);
+    final opening = named[index];
     final tags = [
-      PgnTag('Event', opening?.name ?? name),
+      PgnTag(
+        'Event',
+        opening == null ? name : withoutFamily(opening.name, family),
+      ),
       PgnTag('White', white ? 'Me' : 'Training'),
       PgnTag('Black', white ? 'Training' : 'Me'),
       const PgnTag('Result', '*'),
@@ -70,6 +79,36 @@ String draftChapterText({
   }
   return buffer.toString();
 }
+
+/// The opening family most of [names] belong to — `Italian Game` of
+/// `Italian Game: Two Knights Defense` — when two or more lines, and more
+/// than half of those that have a name, share it; null otherwise. A draft
+/// is about one opening, and its name on every line only pushes what tells
+/// the lines apart out of a narrow list.
+String? sharedFamily(List<String?> names) {
+  final counts = <String, int>{};
+  var all = 0;
+  for (final name in names) {
+    if (name == null) continue;
+    all++;
+    final colon = name.indexOf(': ');
+    if (colon > 0) {
+      counts.update(name.substring(0, colon), (n) => n + 1, ifAbsent: () => 1);
+    }
+  }
+  for (final MapEntry(key: family, value: count) in counts.entries) {
+    if (count > 1 && count * 2 > all) return family;
+  }
+  return null;
+}
+
+/// [name] without [family] in front of it: `Two Knights Defense` for
+/// `Italian Game: Two Knights Defense`. A name of another family, or the
+/// family's own name with nothing after it, is left whole.
+String withoutFamily(String name, String? family) =>
+    family != null && name.startsWith('$family: ')
+    ? name.substring(family.length + 2)
+    : name;
 
 /// The `//` heading of a draft chapter [name] for [side], starting after
 /// [rootMoves]: a chapter heading with `// Draft` in it, which is what
