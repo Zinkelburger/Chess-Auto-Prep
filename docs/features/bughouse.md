@@ -42,8 +42,10 @@ panel on the right: 440–640 px beside board 1 alone, 440–480 px beside both.
   ten seconds: `0:07.4`), the clock of the player on move in full ink. The
   clock is what the game noted after that seat's last move on the board now,
   or the time the game started with before it has moved, so it follows the
-  boards as they are stepped. A hand under 40 px tall has the name beside
-  the clock. A line made in the mode has neither.
+  boards as they are stepped. The two stay within the hand's height; a hand
+  under 40 px tall has the name beside the clock, and a clock with too
+  little room is drawn smaller, never cut. A line made in the mode has
+  neither.
 - **Arrows** — while the engine is on, each board shows its best moves as
   lila's analysis board does: the first in lila's pale blue (15/64 of a
   square wide), the others in pale grey, 12/64 wide when level with it down
@@ -141,9 +143,10 @@ their lines. The board that moved is the board last used. F flips the
 boards.
 **Step the file** — the game row's arrows or number, or ↓ and ↑ → the next
 or previous game of the opened file, at its first move, with its players. A
-game with a move that does not play is shown without its moves, its players
-kept and the move named (`Not opened: <token> in <file> does not play.`),
-so the games after it can still be reached.
+game with a move that does not play is shown without its moves, at its own
+start (its `SetUpDualFEN`, when it has one), its players kept and the move
+named (`Not opened: <token> in <file> does not play.`), so the games after
+it can still be reached.
 **Point at a line** — draws its move on its board alone, in the best
 move's blue (an arrow, or a ringed piece for a drop), until the pointer
 leaves. Resting on one of its moves for
@@ -172,7 +175,7 @@ start is not the usual one, then SAN with drops as `N@f3` and `P@e5`, and each
 hand edit a comment where it was made, `{ +P +B }`. Lichess imports it by
 crazyhouse rules, where a piece taken stays in the taker's hand and an edit is
 only a comment, so its import stops at a drop of a piece from a hand edit.
-With two boards it is the BPGN `Copy moves` writes.
+With two boards it is BPGN moves without a game's tags or clocks.
 **Engine switch** (or Actions ▸ `Engine on`) — Hivemind runs only while the switch
 is on and the mode is on screen. Each team searched gets one continuous search
 on its own engine process; the two processes share the mode's cores. The
@@ -202,13 +205,19 @@ are each board's line without its variations, as BPGN movetext in played order (
 `[SetUpDualFEN "…"]` for a set-up start; a hand edit is a comment where it
 was made, `{ Hands edited on board 1: +2n }`, and pastes back. A game read
 from a BPGN is copied whole: its tags first, each move's clock after it as
-FICS writes it (`1A. e4 {119.000}`), then how it ended and its result. A
-paste takes any of the forms under Data, and one game is refused whole
-(`Not pasted: <token> does not play.`, `No bughouse moves to paste.`).
-Pasted moves are shown at their end, to go on from; several games pasted
-at once are a file, shown at the first game's start.
+FICS writes it (`1A. e4 {119.000}`), then how it ended and its result. Once
+the boards are on a line the game did not play, the copy has its tags with
+`[Result "*"]`, no ending and `*`. A paste takes any of the forms under
+Data, and one game is refused whole (`Not pasted: <token> does not play.`,
+`No bughouse moves to paste.`). Tags are read only from a game's header, so
+a tag-shaped note in a comment is the comment's. Pasted moves are shown at
+their end, to go on from; several games pasted at once are a file, shown at
+the first game's start, and refused, the boards kept, when that first game
+does not play.
 `Open BPGN…` asks for a `.bpgn`, `.pgn` or `.txt` file and reads it as a
-paste, where it is, without keeping it, and shows its first game at its
+paste, where it is, without keeping it (a large file's games are found off
+the UI thread, and each game's text is taken only when it is shown), and
+shows its first game at its
 first move, to play through (`Not opened: <token> in <file> does not
 play.`, `<file> could not be read.`). Moves on board 2, pasted or opened,
 switch to `2 boards`. The window's
@@ -248,7 +257,9 @@ paste commands are refused here with
   comment says how the game ended (`LinusO checkmated`). An older arena
   file kept its opening only in an `Opening` tag of engine moves (`1e2e4
   2d2d4`): when the movetext does not play from the start, it is played
-  after those. The other tags are kept and copied back.
+  after those, and that tag is dropped, its moves being in the line. The
+  other tags, the arena's `Opening` among them, are kept and copied back.
+  The arena writes each clock rounded to tenths (`[%clk 0:01:00.0]`).
 - Nothing is saved. Leaving the mode keeps the table for the session; quitting
   the app loses it. No database is read or written.
 

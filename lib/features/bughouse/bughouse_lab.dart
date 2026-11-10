@@ -36,7 +36,11 @@ final class BughouseLab extends ChangeNotifier {
   bool _flipped = false;
   TableRefusal? _problem;
   TableGame? _game;
-  List<String> _games = const [];
+
+  /// The line as [_game] played it, to tell a copy of the game from one of a
+  /// line changed since.
+  TableLine? _asPlayed;
+  BpgnGames? _games;
   int _gameAt = 0;
   String? _file;
 
@@ -65,7 +69,7 @@ final class BughouseLab extends ChangeNotifier {
 
   /// How many games the opened file holds, and which is on the boards,
   /// from 0. One game, or a line made here, is not counted: 0.
-  int get gameCount => _games.length;
+  int get gameCount => _games?.length ?? 0;
   int get gameAt => _gameAt;
 
   /// What [seat]'s clock reads with the boards as they are: after its last
@@ -210,18 +214,18 @@ final class BughouseLab extends ChangeNotifier {
       if (line.isNotEmpty) goTo(_focus, line.last);
       return;
     }
-    var end = _line.atEnd;
-    if (end.replay() is! LineReplayed) {
-      end = _line;
-      for (var steps = 0; steps < _line.nodes.length; steps++) {
-        final next = end.stepsOn
-            .where((way) => way.replay() is LineReplayed)
-            .firstOrNull;
-        if (next == null) break;
-        end = next;
-      }
+    if (_line.atEnd case final end when end.replay() is LineReplayed) {
+      return _stepTo([end], focus: _focus);
     }
-    _stepTo([end], focus: _focus);
+    var end = _line;
+    var position = _position;
+    for (var steps = 0; steps < _line.nodes.length; steps++) {
+      final next = end.stepOnFrom(position);
+      if (next == null) break;
+      (line: end, position: position) = next;
+    }
+    _line = end;
+    _show(position, focus: _focus);
   }
 
   /// The variation [node] is in one place up among the lines there.
@@ -287,17 +291,26 @@ final class BughouseLab extends ChangeNotifier {
   }
 
   /// Each board's line as the mode copies it, a whole BPGN game when the
-  /// line is one (see [tableLineText]).
-  String get movesText => tableLineText(_line, game: _game);
+  /// line is one (see [tableLineText]). Once the line is no longer the one
+  /// the game played, its result and ending are left out.
+  String get movesText {
+    final game = _game;
+    final asPlayed = _asPlayed;
+    final same =
+        asPlayed != null &&
+        bpgnMovetext(_line, clocks: false) ==
+            bpgnMovetext(asPlayed, clocks: false);
+    return tableLineText(_line, game: same ? game : game?.unfinished);
+  }
 
   /// The line up to and including [node] as a PGN: with one board, a
-  /// crazyhouse PGN of board 1 that Lichess imports; with two, the BPGN
-  /// [movesText] writes.
+  /// crazyhouse PGN of board 1 that Lichess imports; with two, BPGN moves
+  /// without the game's tags or clocks.
   String linePgnThrough(int node) {
     final line = _line.through(node);
     return single
         ? crazyhouseLinePgn(line, _line.nodes[node].board)
-        : tableLineText(line);
+        : tableLineText(line, clocks: false);
   }
 
   /// The table just after [node], as the line up to it leaves it; null when
@@ -321,7 +334,7 @@ final class BughouseLab extends ChangeNotifier {
     }
     return single
         ? crazyhouseLinePgn(line, BoardNumber.one)
-        : tableLineText(line);
+        : tableLineText(line, clocks: false);
   }
 
   /// Pasted BPGN as a new line, every move played; refused whole when one
@@ -329,21 +342,33 @@ final class BughouseLab extends ChangeNotifier {
   /// opened rather than pasted: a pasted line is shown at its end, to go on
   /// from, and an opened game at its start, to play through. Moves on board
   /// 2 show both boards. Text with several games shows the first, the rest
-  /// a step away with [showGame].
-  void pasteMoves(String text, {String? file}) {
-    final games = bpgnGames(text);
+  /// a step away with [showGame]; pasted, the first must play, or nothing
+  /// is taken, as with one game.
+  void pasteMoves(String text, {String? file}) =>
+      openGames(BpgnGames(text), file: file);
+
+  /// [games] as [pasteMoves] takes its text: what Open BPGN shows, once
+  /// [BpgnGames.index] has found the file's games.
+  void openGames(BpgnGames games, {String? file}) {
+    final text = games.length == 1 ? games[0] : games.text;
     if (games.length > 1) {
+      final first = readTableLineText(games[0]);
+      if (file == null && first is PastedMovesRefused) {
+        _refuse(MovesRefused(first.token));
+        return;
+      }
       _games = games;
       _file = file;
-      showGame(0);
+      _showGame(0, first);
       return;
     }
     switch (readTableLineText(text)) {
       case PastedLine(:final line, :final game):
-        _games = const [];
+        _games = null;
         _gameAt = 0;
         _file = null;
         _game = game;
+        _asPlayed = game == null ? null : line;
         _bothBoardsFor(line);
         if (file != null) _focus = BoardNumber.one;
         showLine(file == null ? line : line.atStart);
@@ -353,21 +378,28 @@ final class BughouseLab extends ChangeNotifier {
   }
 
   /// Game [index] of the opened file on the boards, at its start. One that
-  /// does not play is shown without its moves, with the move that broke it
-  /// named, so the games after it can still be reached.
+  /// does not play is shown at its start without its moves, with the move
+  /// that broke it named, so the games after it can still be reached.
   void showGame(int index) {
-    if (index < 0 || index >= _games.length) return;
+    final games = _games;
+    if (games == null || index < 0 || index >= games.length) return;
+    _showGame(index, readTableLineText(games[index]));
+  }
+
+  void _showGame(int index, PastedMoves read) {
     _gameAt = index;
     _focus = BoardNumber.one;
-    switch (readTableLineText(_games[index])) {
+    switch (read) {
       case PastedLine(:final line, :final game):
         _game = game;
+        _asPlayed = line;
         _bothBoardsFor(line);
         showLine(line.atStart);
-      case PastedMovesRefused(:final token):
-        _game = tableGameOf(_games[index]);
-        _line = const TableLine(TablePosition.initial);
-        _position = TablePosition.initial;
+      case PastedMovesRefused(:final token, :final game, :final start):
+        _game = game;
+        _asPlayed = null;
+        _line = TableLine(start);
+        _position = start;
         preview.value = null;
         _refuse(MovesRefused(token, file: _file));
     }
@@ -400,7 +432,8 @@ final class BughouseLab extends ChangeNotifier {
   /// A new line from [position], which is no game of a file.
   void _reset(TablePosition position, {BoardNumber focus = BoardNumber.one}) {
     _game = null;
-    _games = const [];
+    _asPlayed = null;
+    _games = null;
     _gameAt = 0;
     _file = null;
     _line = TableLine(position);

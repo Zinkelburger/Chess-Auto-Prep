@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:dartchess/dartchess.dart' show Role, Side;
 
 import 'table.dart';
@@ -237,6 +239,38 @@ final class TableLine {
     if (next.isNotEmpty) yield asAt(next.first);
   }
 
+  /// The step [stepsOn] takes, the first of its ways that replays, with the
+  /// table it leaves; [position] is the table here. A way that only adds a
+  /// node made after every node on the boards is played on [position]
+  /// alone, as a replay would end with it, so walking a game to its end
+  /// does not replay it at every step. Null when no way replays.
+  ({TableLine line, TablePosition position})? stepOnFrom(
+    TablePosition position,
+  ) {
+    final last = math.max(_at.$1 ?? -1, _at.$2 ?? -1);
+    for (final way in stepsOn) {
+      final moved = [
+        for (final board in BoardNumber.values)
+          if (way.at(board) != at(board)) board,
+      ];
+      final added = moved.length == 1 ? way.at(moved.single) : null;
+      final alone =
+          added != null &&
+          added > last &&
+          nodes[added].parent == at(moved.single);
+      if (alone) {
+        if (_apply(position, nodes[added].entry) case final after?) {
+          return (line: way, position: after);
+        }
+        continue;
+      }
+      if (way.replay() case LineReplayed(:final position)) {
+        return (line: way, position: position);
+      }
+    }
+    return null;
+  }
+
   /// One step back in the order made: the board whose move was made last
   /// goes back a move, which always replays. Null with both at their starts.
   TableLine? get steppedBack {
@@ -417,18 +451,26 @@ final class TableLine {
   LineReplay replay() {
     var position = root;
     for (final n in _applied) {
-      switch (nodes[n].entry) {
-        case final LineMove move:
-          final played = position.play(move.board, move.uci);
-          if (played == null) return LineBroken(move);
-          position = played.after;
-        case HandEdit(:final board, :final changes):
-          for (final (:side, :role, :count) in changes) {
-            position = position.withHand(board, side, role, count);
-          }
-      }
+      final entry = nodes[n].entry;
+      final after = _apply(position, entry);
+      if (after == null) return LineBroken(entry as LineMove);
+      position = after;
     }
     return LineReplayed(position);
+  }
+}
+
+/// [entry] made on [position]; null for a move that does not play there.
+TablePosition? _apply(TablePosition position, LineEntry entry) {
+  switch (entry) {
+    case LineMove(:final board, :final uci):
+      return position.play(board, uci)?.after;
+    case HandEdit(:final board, :final changes):
+      var after = position;
+      for (final (:side, :role, :count) in changes) {
+        after = after.withHand(board, side, role, count);
+      }
+      return after;
   }
 }
 

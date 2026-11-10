@@ -101,7 +101,13 @@ void main() {
     expect(game.name(Seat.c), 'hm-n1500');
     expect(game.startClock, const Duration(minutes: 2));
     expect(game.heading, 'A + B won · checkmate · Hivemind Arena · Round 3');
-    expect(game.tags.containsKey('Opening'), isFalse);
+    // Its moves were read from the movetext, so the tag stays, and a copy
+    // keeps it.
+    expect(game.tags['Opening'], '1e2e4 1d7d5');
+    expect(
+      tableLineText(line, game: game),
+      contains('[Opening "1e2e4 1d7d5"]'),
+    );
   });
 
   test('an older arena file plays its Opening tag, then coordinates', () {
@@ -122,11 +128,16 @@ void main() {
     expect(line.moves[0].clock, isNull);
     expect(game!.winner, Team.cd);
     expect(game.ending, 'flag');
+    // Its moves are the line's now, so a copy does not play them twice.
+    expect(game.tags.containsKey('Opening'), isFalse);
   });
 
   test('a move that does not play is named, in either arena form', () {
     final broken = arena.replaceFirst('1B. Nf3', '1B. Nf6');
-    expect((readTableLineText(broken) as PastedMovesRefused).token, '1B. Nf6');
+    final refused = readTableLineText(broken) as PastedMovesRefused;
+    expect(refused.token, '1B. Nf6');
+    expect(refused.game!.name(Seat.a), 'hb-v4');
+    expect(refused.start, TablePosition.initial);
     final oldBroken = oldArena.replaceFirst('1a. d8d5', '1a. d8d4');
     expect(
       (readTableLineText(oldBroken) as PastedMovesRefused).token,
@@ -135,13 +146,50 @@ void main() {
   });
 
   test('a file is split into its games at each tag block', () {
-    final games = bpgnGames('$fics\r\n$arena\n$oldArena');
-    expect(games, hasLength(3));
+    final games = BpgnGames('$fics\r\n$arena\n$oldArena');
+    expect(games.length, 3);
     expect(read(games[0]).game!.name(Seat.a), 'larso');
     expect(read(games[1]).game!.tags['Round'], '3');
     expect(read(games[2]).game!.ending, 'flag');
-    expect(bpgnGames('1A. e4 1a. e5\n2A. Nf3'), hasLength(1));
-    expect(bpgnGames('  \n\n'), isEmpty);
+    expect(BpgnGames('1A. e4 1a. e5\n2A. Nf3').length, 1);
+    expect(BpgnGames('  \n\n').length, 0);
+    expect(BpgnGames('\n\n$arena').length, 1);
+  });
+
+  test('a large file is split off the UI isolate the same way', () async {
+    final text = '$fics\r\n$arena\n' * 2000;
+    expect(text.length, greaterThan(1 << 20));
+    final games = await BpgnGames.index(text);
+    expect(games.length, 4000);
+    expect(games[3999], BpgnGames(text)[3999]);
+    expect(read(games[3998]).game!.name(Seat.a), 'larso');
+  });
+
+  test('a tag-shaped note in the movetext is not a tag', () {
+    final chat = fics.replaceFirst(
+      '{GuestXYZ checkmated}',
+      '{C: partner [Result "1-0"] lol}\r\n{GuestXYZ checkmated}',
+    );
+    final PastedLine(:line, :game) = read(chat);
+    expect(game!.tags['Result'], '0-1');
+    expect(game.winner, Team.cd);
+    expect(sans(line), hasLength(7));
+    expect(BpgnGames(chat).length, 1);
+  });
+
+  test('a game set up from a dual FEN that does not play starts there', () {
+    const setup =
+        'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR/ b KQkq - 0 1|'
+        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR/ w KQkq - 0 1';
+    final refused =
+        readTableLineText(
+              '[Event "Set"]\n[SetUpDualFEN "$setup"]\n\n1a. e5 1A. Ke7',
+            )
+            as PastedMovesRefused;
+    expect(refused.token, '1A. Ke7');
+    expect(refused.game!.tags['Event'], 'Set');
+    expect(refused.start, isNot(TablePosition.initial));
+    expect(refused.start.turn(BoardNumber.one).name, 'black');
   });
 
   test('a game is written back with its tags, clocks and result', () {
@@ -157,6 +205,18 @@ void main() {
     final PastedLine(line: again, game: same) = read(text);
     expect(tableLineText(again, game: same), text);
     expect(same!.tags, game!.tags);
+  });
+
+  test('a line no longer the game\'s, or an engine line, goes without '
+      'the result or the clocks', () {
+    final PastedLine(:line, :game) = read(fics);
+    final unfinished = tableLineText(line, game: game!.unfinished);
+    expect(unfinished, contains('[Result "*"]'));
+    expect(unfinished, isNot(contains('checkmated')));
+    expect(unfinished, endsWith('2b. P@e4 {9.400} *'));
+    final bare = tableLineText(line, clocks: false);
+    expect(bare, startsWith('1A. e4 1B. d4 1b. d5'));
+    expect(bare, isNot(contains(RegExp('[{}]'))));
   });
 
   test('a line made here is written as its moves alone', () {

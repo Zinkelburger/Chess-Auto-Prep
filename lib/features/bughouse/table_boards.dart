@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/gestures.dart';
@@ -353,12 +355,16 @@ class _SeatRow extends StatelessWidget {
             onPick: onPick,
             onStep: (role, by) => lab.adjustHand(board, side, role, by),
           ),
+          // As tall as the hand, which the board's size allows for.
           Expanded(
-            child: _SeatPlayer(
-              name: lab.game?.name(seat),
-              rating: lab.game?.rating(seat),
-              clock: lab.timeLeft(seat),
-              toMove: toMove,
+            child: SizedBox(
+              height: square,
+              child: _SeatPlayer(
+                name: lab.game?.name(seat),
+                rating: lab.game?.rating(seat),
+                clock: lab.timeLeft(seat),
+                toMove: toMove,
+              ),
             ),
           ),
         ],
@@ -369,10 +375,11 @@ class _SeatRow extends StatelessWidget {
 
 /// Who sits in a seat and what their clock reads with the boards as they
 /// are, at the end of the hand's row: the name over the clock, or beside it
-/// when the row is too short for two lines, the clock of the player on move
+/// when the hand is too short for two lines, the clock of the player on move
 /// in full ink. Both from the game's BPGN; a line made here has neither,
 /// and the room stays empty. A name too long for the room is cut short and
-/// whole on hover; the clock is never cut.
+/// whole on hover; the clock is never cut, and in a room too narrow for it
+/// it is drawn smaller.
 class _SeatPlayer extends StatelessWidget {
   const _SeatPlayer({
     required this.name,
@@ -415,34 +422,45 @@ class _SeatPlayer extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           );
-    final time = clock == null
+    Widget? time(double width) => clock == null
         ? null
-        : Text(
-            clockText(clock),
-            style: labClockText.copyWith(
-              color: toMove ? theme.colorScheme.onSurface : muted,
+        : ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: math.max(0, width)),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                clockText(clock),
+                style: labClockText.copyWith(
+                  color: toMove ? theme.colorScheme.onSurface : muted,
+                ),
+                maxLines: 1,
+                softWrap: false,
+                semanticsLabel: '${name ?? 'Clock'} ${clockText(clock)}',
+              ),
             ),
-            maxLines: 1,
-            softWrap: false,
-            semanticsLabel: '${name ?? 'Clock'} ${clockText(clock)}',
           );
     return Padding(
       padding: const EdgeInsets.only(left: Space.s),
       child: LayoutBuilder(
         builder: (context, room) => room.maxHeight < labSeatTwoLines
             ? Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  if (player != null) Flexible(child: player),
-                  if (player != null && time != null)
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: player,
+                    ),
+                  ),
+                  if (player != null && clock != null)
                     const SizedBox(width: Space.s),
-                  ?time,
+                  ?time(room.maxWidth - (player == null ? 0 : Space.s)),
                 ],
               )
             : Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.end,
-                children: [?player, ?time],
+                children: [?player, ?time(room.maxWidth)],
               ),
       ),
     );
