@@ -145,10 +145,26 @@ final class TablePosition {
   /// The legal move on [board] written [san] (checks and annotations
   /// ignored), or null: what an archive's SAN is on the boards.
   TableMove? moveBySan(BoardNumber board, String san) {
-    String bare(String text) => text.replaceAll(RegExp('[+#!?]'), '');
-    final wanted = bare(san);
-    return legalMoves(board).where((m) => bare(m.san) == wanted).firstOrNull;
+    final wanted = _bare(san);
+    // Coordinates are never SAN, and are how the arena writes its moves.
+    if (_coordinates.hasMatch(wanted)) return null;
+    final position = this.board(board);
+    // The parser finds most moves at once; the full list is the fallback
+    // for any spelling it does not take, such as a pawn drop written `P@e4`.
+    if (position.parseSan(wanted) case final move?
+        when position.isLegal(move) && _bare(_san(position, move)) == wanted) {
+      return (
+        board: board,
+        uci: _uci(position, move),
+        san: _san(position, move),
+      );
+    }
+    return legalMoves(board).where((m) => _bare(m.san) == wanted).firstOrNull;
   }
+
+  static String _bare(String text) => text.replaceAll(_marks, '');
+  static final _marks = RegExp('[+#!?]');
+  static final _coordinates = RegExp(r'^[a-h][1-8][a-h][1-8][qrbnk]?$');
 
   /// [uci] played on [board], with any capture sent across; null when it is
   /// not a legal move there. Accepts castling either way, `e1g1` or `e1h1`.

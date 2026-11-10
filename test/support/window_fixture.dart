@@ -277,7 +277,10 @@ final class WindowFixture {
 
   /// The window over these parts, the library listed and both
   /// repertoires' rows opened, since the chapters are what tests click.
-  Future<void> pumpShell(WidgetTester tester) async {
+  /// The window over the parts. [openFolders] opens the benko and KID
+  /// folders of the repertoire list, which a window opening on a mode
+  /// without the list leaves out.
+  Future<void> pumpShell(WidgetTester tester, {bool openFolders = true}) async {
     // The app reads the books as it starts; the rest of the start (the
     // engine, the settings file) the tests leave out.
     unawaited(parts.books.load());
@@ -304,6 +307,7 @@ final class WindowFixture {
     await library.refresh();
     await parts.labs.offer(parts.env.bughouse.bundled);
     await tester.pumpAndSettle();
+    if (!openFolders) return;
     // An already-open chapter selects Chapters in compact navigation.
     // Reveal the repertoire list before opening its fixture folders.
     final navigation = find.byType(NavigationPages);
