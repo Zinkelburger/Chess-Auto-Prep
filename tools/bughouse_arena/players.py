@@ -350,6 +350,21 @@ class UciProcess:
             self.log.close()
 
 
+def _last_score(lines: list[str]) -> dict | None:
+    """The score of the engine's last ``info`` line before ``bestmove``, as
+    it reported it: ``{"cp": n}`` or ``{"mate": n}``, for the side it searched
+    for. A team engine's score is for its team over both boards."""
+    for line in reversed(lines):
+        tokens = line.split()
+        if (tokens[:1] != ["info"] or tokens[1:2] == ["string"]
+                or "score" not in tokens[:-2]):
+            continue
+        kind, value = tokens[tokens.index("score") + 1:][:2]
+        if kind in ("cp", "mate") and value.lstrip("-").isdigit():
+            return {kind: int(value)}
+    return None
+
+
 def _last_nodes(lines: list[str]) -> int | None:
     for line in reversed(lines):
         tokens = line.split()
@@ -376,6 +391,9 @@ class UciSeat:
         self.seconds = 0.0
         self.game_stats = self._fresh_stats()
         self.requested_wake_ms: int | None = None
+        # What the last decision's search thought of the position (see
+        # _last_score); None when the seat answered without searching.
+        self.last_eval: dict | None = None
         self.nnue_lines: list[str] = []
         self.uci = UciProcess(command, env=env, log_path=log_path)
         self.sent_options: dict[str, str] = {}
@@ -468,6 +486,7 @@ class UciSeat:
         elapsed = time.monotonic() - started
         self.seconds += elapsed
         self.searches += 1
+        self.last_eval = _last_score(lines)
         nodes = _last_nodes(lines)
         if nodes is not None:
             self.nodes += nodes
@@ -553,6 +572,7 @@ class TeamEngineSeat(UciSeat):
 
     def decide(self, view: SeatView) -> str | None:
         self.requested_wake_ms = None
+        self.last_eval = None
         if view.time_advantage != self.advantage:
             self._setoption("TimeAdvantage", "true" if view.time_advantage else "false")
             self.advantage = view.time_advantage
@@ -622,6 +642,7 @@ class FsfSeat(UciSeat):
         return f"position fen {fsf_fen(view.game.boards[view.board])}"
 
     def decide(self, view: SeatView) -> str | None:
+        self.last_eval = None
         if not view.game.has_legal_move(view.board):
             # The referee says play goes on (else it would not ask), but this
             # seat cannot move: it has to sit. That is protocol plumbing, not

@@ -251,28 +251,71 @@ def contender_score(result: GameResult, contender_team: chess.Color) -> float:
     return 1.0 if result.winner == contender_team else 0.0
 
 
+def _clock_tag(ms: int) -> str:
+    seconds = max(0, ms) / 1000
+    return f"[%clk {int(seconds // 3600)}:{int(seconds % 3600 // 60):02d}:{seconds % 60:04.1f}]"
+
+
+def _eval_tag(score: dict, white_moved: bool) -> str:
+    """``[%eval]`` as PGN readers expect it: pawns, or ``#N`` for a mate, from
+    the point of view of White on that board. The engine reported it for the
+    side that moved."""
+    sign = 1 if white_moved else -1
+    if "mate" in score:
+        return f"[%eval #{sign * score['mate']}]"
+    return f"[%eval {sign * score['cp'] / 100:.2f}]"
+
+
 def write_bpgn(stream, record: dict, names: dict[str, str]) -> None:
+    """One game as BPGN that Chess Auto Prep's Bughouse mode opens: the whole
+    game from the start in SAN, the opening included, each move numbered on
+    its own board. A move's comment holds the mover's clock after it, the
+    engine's score when it gave one, and the game time it was played at."""
     result = record["result"]
     outcome = {"white": "1-0", "black": "0-1", None: "1/2-1/2"}[result["winner"]]
     seat_names = {seat: names[seat] for seat in SEAT_NAMES}
+    opening = record["opening"]
     stream.write(
         f'[Event "Hivemind Arena"]\n[Round "{record["game"] + 1}"]\n'
         f'[WhiteA "{seat_names["A-white"]}"]\n[BlackA "{seat_names["A-black"]}"]\n'
         f'[WhiteB "{seat_names["B-white"]}"]\n[BlackB "{seat_names["B-black"]}"]\n'
         f'[TimeControl "{record["clock"]["initial_ms"] / 1000:g}"]\n'
-        f'[Opening "{" ".join(record["opening"]["moves"])}"]\n'
+        + (f'[SetUpDualFEN "{opening["dual_fen"]}"]\n' if opening.get("dual_fen") else "")
+        + f'[Opening "{" ".join(opening["moves"])}"]\n'
         f'[Result "{outcome}"]\n[Termination "{result["termination"]}"]\n\n')
-    numbers = {"A": 0, "a": 0, "B": 0, "b": 0}
-    tokens = []
+    game = Bughouse.from_dual_fen(opening["dual_fen"]) if opening.get("dual_fen") else Bughouse()
+
+    def played(board: int, uci: str) -> str:
+        position = game.boards[board]
+        label = "AB"[board] if position.turn == chess.WHITE else "ab"[board]
+        token = f"{position.fullmove_number}{label}. "
+        san = position.san(chess.Move.from_uci(uci)).rstrip("+#")
+        game.push(board, uci)
+        # python-chess writes a pawn drop as @e5; BPGN readers want P@e5.
+        return token + ("P" + san if san.startswith("@") else san)
+
+    tokens = [played(int(move[0]) - 1, move[1:]) for move in opening["moves"]]
     for event in result["events"]:
-        if event["kind"] == "move":
-            label = event["board"] if event["seat"].endswith("white") else event["board"].lower()
-            numbers[label] += 1
-            clock = event["clocks"][SEAT_NAMES.index(event["seat"])] / 1000
-            tokens.append(f"{numbers[label]}{label}. {event['uci']} {{{event['t'] / 1000:.1f}s {clock:.1f}}}")
+        if event["kind"] == "illegal":
+            # Not a move token: a reader replays every token or takes nothing.
+            tokens.append(f"{{{event['seat']} illegal {event['uci']} @{event['t'] / 1000:.1f}s}}")
+        elif event["kind"] == "move":
+            board = "AB".index(event["board"])
+            notes = [_clock_tag(event["clocks"][SEAT_NAMES.index(event["seat"])])]
+            if event.get("eval"):
+                notes.append(_eval_tag(event["eval"], event["seat"].endswith("white")))
+            notes.append(f"{event['t'] / 1000:.1f}s")
+            tokens.append(f"{played(board, event['uci'])} {{{' '.join(notes)}}}")
         elif event["kind"] == "sit":
             tokens.append(f"{{{event['seat']} sits @{event['t'] / 1000:.1f}s}}")
-    stream.write(" ".join(tokens) + f" {outcome}\n\n")
+    lines, current = [], ""
+    for token in tokens:
+        if current and len(current) + len(token) + 1 > 100:
+            lines.append(current)
+            current = ""
+        current = f"{current} {token}" if current else token
+    lines.append(current)
+    stream.write("\n".join(lines) + f" {outcome}\n\n")
 
 
 # ----------------------------------------------------------------- manifest
