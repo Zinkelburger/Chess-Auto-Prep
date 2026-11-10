@@ -362,6 +362,25 @@ void main() {
     expect(lab.position.two.pockets!.of(Side.black, Role.pawn), 0);
   });
 
+  test('a game the bughouse arena wrote opens, comments and all', () {
+    // tools/bughouse_arena/match.py write_bpgn: tags, then every move with
+    // its clock, the engine's score and the game time in a comment.
+    lab.pasteMoves(
+      '[Event "Hivemind Arena"]\n[Round "1"]\n'
+      '[WhiteA "hb-v4"]\n[BlackA "hm-n1500"]\n'
+      '[WhiteB "hm-n1500"]\n[BlackB "hb-v4"]\n'
+      '[TimeControl "120"]\n[Opening "1e2e4 1d7d5"]\n'
+      '[Result "1-0"]\n[Termination "checkmate"]\n\n'
+      '1A. e4 1a. d5 2A. exd5 {[%clk 0:01:58.1] [%eval 3.19] 1.9s} '
+      '1B. Nf3 {[%clk 0:01:58.0] 2.0s}\n'
+      '{A-black sits @3.0s} 1b. P@e4 {[%clk 0:01:58.0] [%eval #-2] 4.0s} '
+      '{A-black illegal e2e5 @4.1s} 1-0\n',
+      file: 'games.bpgn',
+    );
+    expect(lab.problem, isNull);
+    expect(lab.movesText, '1A. e4 1a. d5 2A. exd5 1B. Nf3 1b. P@e4');
+  });
+
   test('pasted moves that do not play change nothing and say which', () {
     lab.play(BoardNumber.one, 'e2e4');
     lab.pasteMoves('1A. e4 1B. P@d5');

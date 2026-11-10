@@ -20,6 +20,7 @@ import io
 import json
 import os
 import random
+import re
 import sys
 import tempfile
 import unittest
@@ -34,10 +35,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from bughouse_arena import openings as opening_sets  # noqa: E402
 from bughouse_arena import preflight  # noqa: E402
 from bughouse_arena.match import (MatchConfig, PlayerFactory, game_plan,  # noqa: E402
-                                  load_openings, run_match)
+                                  load_openings, run_match,
+                                  write_bpgn)
 from bughouse_arena.players import (FSF_LABEL, EngineError, EngineSpec, FsfSeat,  # noqa: E402
                                     HivemindSeat, RandomPlayer, TeamEngineSeat, fsf_fen,
-                                    hypebeast_home)
+                                    hypebeast_home,
+                                    _last_score)
 from bughouse_arena.referee import (BOARD_A, BOARD_B, STARTING_FEN, Bughouse,  # noqa: E402
                                     IllegalMove)
 from bughouse_arena.sim import (ClockConfig, MoveCosts, SeatView, play_game,  # noqa: E402
@@ -404,6 +407,55 @@ class MatchFiles(unittest.TestCase):
             lines = (output / "results.jsonl").read_text().splitlines()
             self.assertEqual(sorted(json.loads(line)["game"] for line in lines), list(range(6)))
             self.assertIn('[WhiteA "random"]', (output / "games.bpgn").read_text())
+
+    def test_bpgn_is_the_whole_game_in_san_with_clocks_and_scores(self):
+        clocks = {"initial_ms": 120000}
+        record = {
+            "game": 0, "clock": clocks,
+            "opening": {"dual_fen": None, "moves": ["1e2e4", "1d7d5"]},
+            "result": {"winner": "white", "termination": "checkmate", "events": [
+                {"t": 1900, "kind": "move", "seat": "A-white", "board": "A", "uci": "e4d5",
+                 "clocks": [118100, 120000, 120000, 120000], "eval": {"cp": 319}},
+                {"t": 2000, "kind": "move", "seat": "B-white", "board": "B", "uci": "g1f3",
+                 "clocks": [118100, 120000, 118000, 120000]},
+                {"t": 2100, "kind": "flip", "seat": None, "clocks": [118100] * 4},
+                {"t": 3000, "kind": "sit", "seat": "A-black", "board": "A",
+                 "clocks": [118100, 118900, 118000, 120000], "eval": {"cp": -40}},
+                {"t": 4000, "kind": "move", "seat": "B-black", "board": "B", "uci": "P@e4",
+                 "clocks": [118100, 118900, 118000, 3598000], "eval": {"mate": 2}},
+                {"t": 4100, "kind": "illegal", "seat": "A-black", "board": "A", "uci": "e2e5",
+                 "clocks": [118100, 117800, 118000, 3598000]},
+            ]}}
+        names = {"A-white": "hb", "B-black": "hb", "A-black": "hm", "B-white": "hm"}
+        stream = io.StringIO()
+        write_bpgn(stream, record, names)
+        text = stream.getvalue()
+        self.assertIn('[WhiteA "hb"]\n[BlackA "hm"]\n[WhiteB "hm"]\n[BlackB "hb"]', text)
+        self.assertIn(
+            "1A. e4 1a. d5 2A. exd5 {[%clk 0:01:58.1] [%eval 3.19] 1.9s} "
+            "1B. Nf3 {[%clk 0:01:58.0] 2.0s}\n"
+            "{A-black sits @3.0s} 1b. P@e4 {[%clk 0:59:58.0] [%eval #-2] 4.0s} "
+            "{A-black illegal e2e5 @4.1s} 1-0\n", text)
+        # What the app's reader does: drop the tags, then every move token
+        # must play in order on its own board.
+        game = Bughouse()
+        body = re.sub(r"\{[^}]*\}", " ", re.sub(r"\[[^\]]*\]", " ", text))
+        for number, letter, san in re.findall(r"(\d+)([AaBb])\.\s*(\S+)", body):
+            board = "ab".index(letter.lower())
+            position = game.boards[board]
+            self.assertEqual((position.fullmove_number, position.turn), (int(number), letter.isupper()))
+            game.push(board, position.parse_san(san).uci())
+        self.assertEqual(len(game.moves), 5)
+
+    def test_last_score_is_the_final_info_line_before_bestmove(self):
+        lines = ["info depth 3 score cp 12 nodes 9 pv e2e4",
+                 "info string hb_summary main_score_cp=999",
+                 "info depth 4 score mate -3 nodes 20 time 5 pv e2e4",
+                 "info depth 5 currmove e2e4 currmovenumber 1",
+                 "bestmove e2e4"]
+        self.assertEqual(_last_score(lines), {"mate": -3})
+        self.assertEqual(_last_score(lines[:2]), {"cp": 12})
+        self.assertIsNone(_last_score(["info string no score here", "bestmove e2e4"]))
 
 
 TOOLS = Path(__file__).resolve().parent

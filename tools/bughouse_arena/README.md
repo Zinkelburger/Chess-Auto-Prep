@@ -161,9 +161,10 @@ shipped engine.
 The match directory (default
 `~/.local/share/chess-prep/bughouse-arena/<contender>-vs-<baseline>`) holds
 `results.jsonl` (one game per line, with every move, sit, wake and advantage
-flip and the clocks at each, and each engine seat's searches, nodes, search
-latencies, passes, mandatory sits and wake requests), `games.bpgn` (moves
-with time stamps), `manifest.json` and `summary.json`: score, Elo with a 95%
+flip and the clocks at each, the engine's own score for each move or sit as
+`eval`, and each engine seat's searches, nodes, search latencies, passes,
+mandatory sits and wake requests), `games.bpgn` (below), `manifest.json` and
+`summary.json`: score, Elo with a 95%
 CI over opening pairs, the pentanomial, SPRT state, terminations, per-side
 sitting behaviour (sits, seconds sat per game, share of decisions taken up on
 time, timer wakes), per-side search latency (mean/median/p95/max), and the
@@ -172,6 +173,18 @@ Openings are random (`--opening-plies` per board) or read from `--openings`
 (engine-format move lists such as `1e2e4 2d2d4`, or dual FENs). The legacy
 statistics port Hivemind's `engine/src/tools/tournament.cc`, so those numbers
 mean the same thing.
+
+`games.bpgn` opens in the app (Bughouse, **Open BPGN…**): each game is
+written from the start in SAN with the opening included, the four players in
+`WhiteA`/`BlackA`/`WhiteB`/`BlackB`, and after each move
+`{[%clk 0:01:38.6] [%eval 3.19] 45.2s}`: the mover's clock after the move, the
+engine's score, and the game time the move was played at. `[%eval]` is in
+pawns (`#N` for a mate) from the point of view of White on that board, as PGN
+readers expect. In `results.jsonl` the same score is `{"cp": n}` or
+`{"mate": n}` as the engine reported it, for the side that moved. Hivemind
+reports one score for its team, so it speaks for both boards. HypeBeast's is
+its main search of its own board, even when the coordinator played another
+move.
 
 `manifest.json` pins the run: each side's kind, settings and the SHA-256 of
 its binary, model, ONNX Runtime and net, the engine's own `uci` description
