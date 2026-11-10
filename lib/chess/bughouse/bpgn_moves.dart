@@ -60,7 +60,13 @@ String tableLineText(TableLine line, {TableGame? game}) {
   final result = game?.tags['Result'];
   final moves = bpgnMovetext(
     line,
-    closing: [if (game?.ending case final ending?) '{$ending}', ?result],
+    closing: [
+      // A Termination tag already says it.
+      if (game?.ending case final ending?
+          when ending != game?.tags['Termination'])
+        '{$ending}',
+      ?result,
+    ],
   );
   final tags = [
     if (game != null)
@@ -162,10 +168,16 @@ TableGame? tableGameOf(String text) {
 
 /// One BPGN game back into a line: what [tableLineText] writes, hand edits
 /// included, a FICS game, or an arena game. A move is SAN or coordinates
-/// (`e7e5`, `f7g8q`), and the comment right after it its clock. A
-/// `SetUpDualFEN` tag is the start, the other tags are the game's, and
-/// other comments are passed over but the last, which says how the game
-/// ended. Every move must play, in order, or nothing is taken.
+/// (`e7e5`, `f7g8q`), and the comment right after it holds its clock. A
+/// `SetUpDualFEN` tag is the start and the other tags are the game's.
+/// Other comments are passed over but the last, which says how the game
+/// ended when no `Termination` tag does. Every move must play, in order, or
+/// nothing is taken.
+///
+/// An older arena file kept its opening in an `Opening` tag, as engine
+/// moves, and started its movetext after it; the arena now writes the
+/// opening in the movetext and keeps the tag. So the movetext is read from
+/// the start, and when it does not play from there, after the tag's moves.
 PastedMoves readTableLineText(String text) {
   final (:tags, :setup, :opening) = _tags(text);
   var root = TablePosition.initial;
@@ -177,28 +189,47 @@ PastedMoves readTableLineText(String text) {
         return PastedMovesRefused('[SetUpDualFEN "$setup"]');
     }
   }
+  final whole = _read(text, root, tags, const []);
+  if (whole.result is PastedLine || opening.isEmpty) return whole.result;
+  final after = _read(text, root, tags, opening);
+  return after.result is PastedLine || after.played > whole.played
+      ? after.result
+      : whole.result;
+}
+
+/// [text]'s movetext played from [root] after the engine moves [opening];
+/// [played] is how many of its moves played, which is how far it got when
+/// it was refused.
+({PastedMoves result, int played}) _read(
+  String text,
+  TablePosition root,
+  Map<String, String> tags,
+  List<String> opening,
+) {
   var line = TableLine(root);
   var position = root;
   var taken = false;
+  var played = 0;
 
   /// Plays [move], SAN or coordinates, on [board]; false when it does not.
   bool play(BoardNumber board, String move, {Duration? clock}) {
     final uci = position.moveBySan(board, move)?.uci ?? move;
-    final played = lineMove(position, board, uci, clock: clock);
-    if (played == null) return false;
-    line = line.played(played.move);
-    position = played.after;
+    final next = lineMove(position, board, uci, clock: clock);
+    if (next == null) return false;
+    line = line.played(next.move);
+    position = next.after;
+    played++;
     return taken = true;
   }
 
   for (final move in opening) {
     final board = move[0] == '1' ? BoardNumber.one : BoardNumber.two;
-    if (!play(board, move.substring(1))) return PastedMovesRefused(move);
+    if (!play(board, move.substring(1))) {
+      return (result: PastedMovesRefused(move), played: played);
+    }
   }
-  String? ending;
-  final tokens = _token
-      .allMatches(text.replaceAll(RegExp(r'\[[^\]]*\]'), ' '))
-      .toList();
+  String? closing;
+  final tokens = _token.allMatches(text.replaceAll(_tag, ' ')).toList();
   for (final (i, token) in tokens.indexed) {
     if (token[1] case final digit?) {
       final board = digit == '1' ? BoardNumber.one : BoardNumber.two;
@@ -222,7 +253,7 @@ PastedMoves readTableLineText(String text) {
           clockComment(note) == null &&
           !note.startsWith('C:') &&
           note.contains(RegExp('[A-Za-z]'));
-      if (said) ending = note;
+      if (said) closing = note;
       continue;
     }
     final board = token[5]!.toUpperCase() == 'A'
@@ -231,15 +262,15 @@ PastedMoves readTableLineText(String text) {
     final after = i + 1 < tokens.length ? tokens[i + 1][3] : null;
     final clock = after == null ? null : clockComment(after);
     if (!play(board, token[6]!, clock: clock)) {
-      return PastedMovesRefused(token[0]);
+      return (result: PastedMovesRefused(token[0]), played: played);
     }
-    ending = null;
+    closing = null;
   }
-  if (!taken) return const PastedMovesRefused(null);
-  return PastedLine(
-    line,
-    game: tags.isEmpty
-        ? null
-        : TableGame(tags, ending: ending ?? tags['Termination']),
-  );
+  if (!taken) {
+    return (result: const PastedMovesRefused(null), played: played);
+  }
+  final game = tags.isEmpty
+      ? null
+      : TableGame(tags, ending: tags['Termination'] ?? closing);
+  return (result: PastedLine(line, game: game), played: played);
 }

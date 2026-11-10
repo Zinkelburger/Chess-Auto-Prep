@@ -9,8 +9,8 @@ final class TableGame {
   /// line starts from.
   final Map<String, String> tags;
 
-  /// How the game ended in the file's own words, `LinusO checkmated`: its
-  /// closing comment, else its `Termination` tag.
+  /// How the game ended in the file's own words: its `Termination` tag
+  /// (`checkmate`), else its closing comment (`LinusO checkmated`).
   final String? ending;
 
   /// Board A of a BPGN is board 1, where A has White and C Black; on board
@@ -47,17 +47,18 @@ final class TableGame {
     _ => null,
   };
 
-  /// One line that says which game this is and how it went: `Hivemind Arena
-  /// · Round 3 · 2026.11.10 · A + B won · hm-n1500 checkmated`.
+  /// One line that says how the game went and which it is, the result
+  /// first since the line is cut short where the room ends: `A + B won ·
+  /// checkmate · Hivemind Arena · Round 3 · 2026.11.10`.
   String get heading => [
-    ?_known(tags['Event']),
-    if (_known(tags['Round']) case final round?) 'Round $round',
-    if (_known(tags['Date']) case final date? when !date.contains('?')) date,
     if (winner case final team?)
       '${team.label} won'
     else if (tags['Result']?.trim() == '1/2-1/2')
       'Draw',
     ?ending,
+    ?_known(tags['Event']),
+    if (_known(tags['Round']) case final round?) 'Round $round',
+    if (_known(tags['Date']) case final date? when !date.contains('?')) date,
   ].join(' · ');
 }
 
@@ -70,15 +71,21 @@ String? _known(String? value) {
 Duration _seconds(String text) =>
     Duration(milliseconds: (double.parse(text) * 1000).round());
 
-/// A BPGN clock comment as the time left: FICS's `119.000`, seconds, or an
-/// older arena file's `1.9s 118.1`, the game's time then the clock. Null
-/// for any other comment.
+/// The clock in the comment after a BPGN move, as the time left: FICS's
+/// `119.000`, seconds; the arena's `[%clk 0:01:58.1]` among its other
+/// notes; or an older arena file's `1.9s 118.1`, the game's time then the
+/// clock. Null for a comment without one.
 Duration? clockComment(String comment) {
-  final seconds = RegExp(
-    r'^\s*(?:\d+(?:\.\d+)?s\s+)?(\d+(?:\.\d+)?)\s*$',
-  ).firstMatch(comment)?[1];
+  if (_clk.firstMatch(comment) case final clk?) {
+    return Duration(hours: int.parse(clk[1]!), minutes: int.parse(clk[2]!)) +
+        _seconds(clk[3]!);
+  }
+  final seconds = _bareClock.firstMatch(comment)?[1];
   return seconds == null ? null : _seconds(seconds);
 }
+
+final _clk = RegExp(r'\[%clk\s+(\d+):(\d+):(\d+(?:\.\d+)?)\]');
+final _bareClock = RegExp(r'^\s*(?:\d+(?:\.\d+)?s\s+)?(\d+(?:\.\d+)?)\s*$');
 
 /// [clock] as a chess clock shows it: `1:58`, tenths under ten seconds
 /// (`0:07.4`), hours when there are any (`1:02:05`).

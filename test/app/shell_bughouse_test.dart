@@ -278,7 +278,10 @@ void main() {
       );
       await open(tester, '/games/playout.bpgn');
       expect(picker().offered.single, bpgnExtensions);
-      expect(w.lab.movesText, '1A. e4 1B. d4 1a. e5');
+      expect(
+        w.lab.movesText,
+        '[Event "Hivemind playout"]\n\n1A. e4 1B. d4 1a. e5',
+      );
       // A game opens on both boards at its first move; → plays it through.
       expect(w.lab.single, isFalse);
       expect(w.lab.line.applied, isEmpty);
@@ -286,6 +289,25 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pumpAndSettle();
       expect(w.lab.line.applied.map((m) => m.san), ['e4', 'd4']);
+    });
+
+    testWidgets('↓ and ↑ walk the games of a file', (tester) async {
+      await toBughouse(tester);
+      files().picked['/games/night.bpgn'] = const PickedText(
+        '[Event "Night"]\n[WhiteA "ann"]\n\n1A. e4 1B. d4 1-0\n\n'
+        '[Event "Night"]\n[WhiteA "eve"]\n\n1A. d4 1B. e4 0-1\n',
+      );
+      await open(tester, '/games/night.bpgn');
+      expect((w.lab.gameCount, w.lab.gameAt), (2, 0));
+      expect(find.text('ann', findRichText: true), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(w.lab.gameAt, 1);
+      expect(find.text('eve', findRichText: true), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(w.lab.gameAt, 0);
     });
 
     testWidgets('says which file could not be used', (tester) async {

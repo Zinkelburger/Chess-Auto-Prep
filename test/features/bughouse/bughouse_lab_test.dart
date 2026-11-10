@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:chess_auto_prep/chess/bughouse/bpgn_moves.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/chess/bughouse/table_line.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_lab.dart';
@@ -357,7 +358,7 @@ void main() {
     lab.newGame();
     lab.pasteMoves('[Event "FICS"]\n$copied {a comment} 1-0');
     expect(lab.problem, isNull);
-    expect(lab.movesText, copied);
+    expect(bpgnMovetext(lab.line), copied);
     expect(lab.line.upto(BoardNumber.two), 2);
     expect(lab.position.two.pockets!.of(Side.black, Role.pawn), 0);
   });
@@ -378,7 +379,106 @@ void main() {
       file: 'games.bpgn',
     );
     expect(lab.problem, isNull);
-    expect(lab.movesText, '1A. e4 1a. d5 2A. exd5 1B. Nf3 1b. P@e4');
+    expect(lab.line.moves.map((m) => m.san), [
+      'e4',
+      'd5',
+      'exd5',
+      'Nf3',
+      'P@e4',
+    ]);
+    // Its players and clocks are kept, and copied with the moves.
+    expect(lab.game!.name(Seat.a), 'hb-v4');
+    expect(lab.game!.name(Seat.c), 'hm-n1500');
+    expect(
+      lab.movesText,
+      '[Event "Hivemind Arena"]\n[Round "1"]\n'
+      '[WhiteA "hb-v4"]\n[BlackA "hm-n1500"]\n'
+      '[WhiteB "hm-n1500"]\n[BlackB "hb-v4"]\n'
+      '[TimeControl "120"]\n[Result "1-0"]\n[Termination "checkmate"]\n\n'
+      '1A. e4 1a. d5 2A. exd5 {118.100} 1B. Nf3 {118.000} 1b. P@e4 {118.000} '
+      '1-0',
+    );
+  });
+
+  group('a file of several games', () {
+    String game(int round, String moves, {String white = 'ann'}) =>
+        '[Event "Club night"]\n[Round "$round"]\n'
+        '[WhiteA "$white"]\n[BlackA "cat"]\n'
+        '[WhiteB "dan"]\n[BlackB "bob"]\n'
+        '[TimeControl "180+0"]\n[Result "1-0"]\n\n$moves 1-0\n\n';
+
+    final file =
+        game(
+          1,
+          '1A. e4 {179.0} 1a. d5 {178.5} 1B. d4 {177.0} 2A. exd5 {170.2}',
+        ) +
+        game(2, '1A. e4 1a. Ke7', white: 'eve') +
+        game(3, '1B. c4 {179.9} 1b. e5 {9.4}');
+
+    setUp(() => lab.pasteMoves(file, file: 'night.bpgn'));
+
+    test('opens on the first, at its start, with its players', () {
+      expect((lab.gameCount, lab.gameAt), (3, 0));
+      expect(lab.problem, isNull);
+      expect(lab.single, isFalse);
+      expect(lab.line.applied, isEmpty);
+      expect(lab.line.moves, hasLength(4));
+      expect(lab.game!.name(Seat.a), 'ann');
+      expect(lab.game!.name(Seat.b), 'bob');
+      expect(lab.game!.heading, 'A + B won · Club night · Round 1');
+    });
+
+    test('each seat\'s clock follows the boards', () {
+      for (final seat in Seat.values) {
+        expect(lab.timeLeft(seat), const Duration(minutes: 3));
+      }
+      lab.toEnd();
+      expect(lab.timeLeft(Seat.a), const Duration(milliseconds: 170200));
+      expect(lab.timeLeft(Seat.c), const Duration(milliseconds: 178500));
+      expect(lab.timeLeft(Seat.d), const Duration(seconds: 177));
+      expect(lab.timeLeft(Seat.b), const Duration(minutes: 3));
+      lab.step(-1);
+      expect(lab.timeLeft(Seat.a), const Duration(seconds: 179));
+    });
+
+    test('steps to another game and stops at the ends', () {
+      lab.showGame(2);
+      expect(lab.gameAt, 2);
+      expect(lab.problem, isNull);
+      expect(lab.line.moves.map((m) => m.san), ['c4', 'e5']);
+      expect(lab.game!.tags['Round'], '3');
+      lab.showGame(3);
+      lab.showGame(-1);
+      expect(lab.gameAt, 2);
+    });
+
+    test('a game that does not play is shown without moves, and named', () {
+      lab.toEnd();
+      lab.showGame(1);
+      expect(lab.gameAt, 1);
+      expect(lab.problem, isA<MovesRefused>());
+      expect((lab.problem! as MovesRefused).token, '1a. Ke7');
+      expect((lab.problem! as MovesRefused).file, 'night.bpgn');
+      expect(lab.line.isEmpty, isTrue);
+      expect(lab.position.dualFen, TablePosition.initial.dualFen);
+      expect(lab.game!.name(Seat.a), 'eve');
+      // The games after it are still a step away.
+      lab.showGame(2);
+      expect(lab.problem, isNull);
+      expect(lab.line.moves, hasLength(2));
+    });
+
+    test('a new game is no game of the file', () {
+      lab.newGame();
+      expect((lab.gameCount, lab.game), (0, null));
+      expect(lab.timeLeft(Seat.a), isNull);
+    });
+
+    test('one game pasted over it takes the file\'s place', () {
+      lab.pasteMoves('1A. d4 1a. d5');
+      expect((lab.gameCount, lab.game), (0, null));
+      expect(lab.movesText, '1A. d4 1a. d5');
+    });
   });
 
   test('pasted moves that do not play change nothing and say which', () {

@@ -7,6 +7,7 @@ import 'package:chess_auto_prep/features/bughouse/bughouse_screen.dart';
 import 'package:chess_auto_prep/features/bughouse/lab_engine.dart';
 import 'package:chess_auto_prep/features/bughouse/lab_lines.dart';
 import 'package:chess_auto_prep/features/bughouse/pocket.dart';
+import 'package:chess_auto_prep/ui/game_stepper.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/board/board_view.dart';
 import 'package:chessground/chessground.dart';
@@ -104,6 +105,95 @@ void main() {
     await tester.tap(finder, buttons: kSecondaryButton);
     await tester.pumpAndSettle();
   }
+
+  group('a game from a BPGN', () {
+    const file =
+        '[Event "Club night"]\n[Round "1"]\n'
+        '[WhiteA "ann"][WhiteAElo "2100"]\n[BlackA "cat"]\n'
+        '[WhiteB "dan"]\n[BlackB "bob"]\n'
+        '[TimeControl "180+0"]\n[Result "1-0"]\n\n'
+        '1A. e4 {179.0} 1a. d5 {9.4} 1B. d4 {177.0} 1-0\n\n'
+        '[Event "Club night"]\n[Round "2"]\n'
+        '[WhiteA "eve"]\n[BlackA "cat"]\n'
+        '[WhiteB "dan"]\n[BlackB "bob"]\n'
+        '[Result "0-1"]\n\n'
+        '1A. d4 1B. e4 0-1\n';
+
+    testWidgets('names each seat and shows its clock as the boards stand', (
+      tester,
+    ) async {
+      build();
+      await pump(tester);
+      expect(find.text('3:00'), findsNothing);
+      lab.pasteMoves(file, file: 'night.bpgn');
+      await tester.pumpAndSettle();
+      for (final name in ['ann 2100', 'cat', 'dan', 'bob']) {
+        expect(find.text(name, findRichText: true), findsOneWidget);
+      }
+      expect(find.text('3:00'), findsNWidgets(4));
+      await tester.sendKeyEvent(LogicalKeyboardKey.end);
+      await tester.pumpAndSettle();
+      expect(find.text('2:59'), findsOneWidget);
+      expect(find.text('0:09.4'), findsOneWidget);
+      expect(find.text('2:57'), findsOneWidget);
+      expect(find.text('3:00'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('says which game it is and steps through the file', (
+      tester,
+    ) async {
+      build();
+      await pump(tester);
+      expect(find.byType(GameStepper), findsNothing);
+      lab.pasteMoves(file, file: 'night.bpgn');
+      await tester.pumpAndSettle();
+      expect(find.text('A + B won · Club night · Round 1'), findsOneWidget);
+      expect(find.text('of 2'), findsOneWidget);
+      await tester.tap(find.byTooltip('Next game (↓)'));
+      await tester.pumpAndSettle();
+      expect(lab.gameAt, 1);
+      expect(find.text('C + D won · Club night · Round 2'), findsOneWidget);
+      expect(find.text('eve', findRichText: true), findsOneWidget);
+      // The second game notes no clocks, so none are shown.
+      expect(find.text('3:00'), findsNothing);
+      await tester.enterText(find.byType(TextField), '1');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(lab.gameAt, 0);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('one game has its heading and no counter', (tester) async {
+      build();
+      await pump(tester);
+      lab.pasteMoves(file.split('\n\n[Event').first, file: 'one.bpgn');
+      await tester.pumpAndSettle();
+      expect(find.text('A + B won · Club night · Round 1'), findsOneWidget);
+      expect(find.byType(GameStepper), findsNothing);
+    });
+
+    testWidgets('fits on the smallest boards', (tester) async {
+      build();
+      await tester.binding.setSurfaceSize(const Size(900, 420));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: darkTheme(),
+          home: Scaffold(
+            body: BughouseScreen(lab: lab, engine: engine),
+          ),
+        ),
+      );
+      lab.pasteMoves(
+        file.replaceFirst('"ann"', '"a-very-long-handle-indeed"'),
+        file: 'night.bpgn',
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('3:00'), findsNWidgets(4));
+    });
+  });
 
   group('promotion', () {
     const promoting = 'k7/4P3/8/8/8/8/8/K7[] w - - 0 1';

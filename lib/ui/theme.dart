@@ -752,7 +752,7 @@ const labSeatTwoLines = 40.0;
 /// The row over the Bughouse moves that says which game they are, and the
 /// room its `‹ n of N ›` takes at the row's start.
 const labGameRowHeight = 36.0;
-const labGameStepperWidth = 184.0;
+const labGameStepperWidth = 168.0;
 
 /// The − and + in a pocket slot's upper corners while the pointer is over
 /// it: a dark chip with a white sign, about two fifths of the slot

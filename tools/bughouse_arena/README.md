@@ -174,7 +174,9 @@ Openings are random (`--opening-plies` per board) or read from `--openings`
 statistics port Hivemind's `engine/src/tools/tournament.cc`, so those numbers
 mean the same thing.
 
-`games.bpgn` opens in the app (Bughouse, **Open BPGN…**): each game is
+`games.bpgn` opens in the app (Bughouse, **Open BPGN…**), which steps
+through the file's games and shows the four players beside the boards with
+their clocks as each move left them: each game is
 written from the start in SAN with the opening included, the four players in
 `WhiteA`/`BlackA`/`WhiteB`/`BlackB`, and after each move
 `{[%clk 0:01:38.6] [%eval 3.19] 45.2s}`: the mover's clock after the move, the

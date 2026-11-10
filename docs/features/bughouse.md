@@ -3,10 +3,13 @@
 A bughouse analysis board with Hivemind, the two-board engine. The player
 moves pieces on one board, or on both boards of a game. They put any piece in
 any hand with + and −, and switch the engine on to see its score and lines.
+They open a BPGN file, a FICS archive or an arena match, and play its games
+through with the players' names and clocks beside the boards.
 
 Code: `lib/features/bughouse/` (`BughouseLab` table owner, `LabEngine`, screen,
 boards, hands, engine lines and panel), plus `lib/chess/bughouse/` (table, line,
-FEN reading, BPGN, crazyhouse PGN, engine-line steps, Hivemind score scale), `lib/engines/hivemind_engine.dart`,
+FEN reading, BPGN reading and writing, a game's tags and clocks, crazyhouse
+PGN, engine-line steps, Hivemind score scale), `lib/engines/hivemind_engine.dart`,
 `lib/engines/hivemind_install.dart`, `lib/app/bughouse_view.dart` (`BughouseView`),
 the shared board editor `lib/workspace/board/board_editor.dart` and
 `lib/app/self_test.dart`. Engine internals: [Hivemind](../HIVEMIND.md).
@@ -33,6 +36,14 @@ panel on the right: 440–640 px beside board 1 alone, 440–480 px beside both.
   left out. Only the
   player on move can drop: click the piece (its legal squares ringed) then a
   square, or drag it.
+- **Players and clocks** — with a game read from a BPGN, the end of each
+  hand's row has who sits there (`larso 2121`, the rating muted, the whole
+  name on hover) over that seat's clock in 16 px mono (`1:58`, tenths under
+  ten seconds: `0:07.4`), the clock of the player on move in full ink. The
+  clock is what the game noted after that seat's last move on the board now,
+  or the time the game started with before it has moved, so it follows the
+  boards as they are stepped. A hand under 40 px tall has the name beside
+  the clock. A line made in the mode has neither.
 - **Arrows** — while the engine is on, each board shows its best moves as
   lila's analysis board does: the first in lila's pale blue (15/64 of a
   square wide), the others in pale grey, 12/64 wide when level with it down
@@ -71,6 +82,12 @@ panel on the right: 440–640 px beside board 1 alone, 440–480 px beside both.
   White on board 1, Black on board 2. Hivemind's scale, not pawns.`).
 - **Problem line** — one fixed line saying why a move, step or paste was
   refused.
+- **Game row** — only with a game read from a BPGN that has tags: who won
+  and how, then the event, round and date (`A + B won · checkmate · Hivemind
+  Arena · Round 3`), cut short where the panel ends and whole on hover. When
+  the file holds several games the row starts with `‹ [n] of N ›`, the
+  viewer's game counter: the arrows step a game, a number typed and Enter
+  jumps to it.
 - **Moves** — the rest of the panel. With one board, board 1's moves and
   hand edits; with two, board 1's and board 2's lists side by side, each
   under its board's name, the list of the board last used outlined in the
@@ -122,6 +139,11 @@ does not play from the table on screen, the other board's), ← takes off the
 move made last, Home puts both boards at their starts and End at the ends of
 their lines. The board that moved is the board last used. F flips the
 boards.
+**Step the file** — the game row's arrows or number, or ↓ and ↑ → the next
+or previous game of the opened file, at its first move, with its players. A
+game with a move that does not play is shown without its moves, its players
+kept and the move named (`Not opened: <token> in <file> does not play.`),
+so the games after it can still be reached.
 **Point at a line** — draws its move on its board alone, in the best
 move's blue (an arrow, or a ringed piece for a drop), until the pointer
 leaves. Resting on one of its moves for
@@ -178,14 +200,18 @@ or a BPGN file takes that or the bracket form (`…/RNB1K2R[PNpnb] w …`);
 Hivemind is still sent brackets. Moves
 are each board's line without its variations, as BPGN movetext in played order (`1A. e4 1B. d4 1a. e5`), after
 `[SetUpDualFEN "…"]` for a set-up start; a hand edit is a comment where it
-was made, `{ Hands edited on board 1: +2n }`, and pastes back. A paste takes that or a FICS game,
-and is refused whole (`Not pasted: <token> does not play.`, `No bughouse
-moves to paste.`). Pasted moves are shown at their end, to go on from.
+was made, `{ Hands edited on board 1: +2n }`, and pastes back. A game read
+from a BPGN is copied whole: its tags first, each move's clock after it as
+FICS writes it (`1A. e4 {119.000}`), then how it ended and its result. A
+paste takes any of the forms under Data, and one game is refused whole
+(`Not pasted: <token> does not play.`, `No bughouse moves to paste.`).
+Pasted moves are shown at their end, to go on from; several games pasted
+at once are a file, shown at the first game's start.
 `Open BPGN…` asks for a `.bpgn`, `.pgn` or `.txt` file and reads it as a
-paste, where it is, without keeping it, and shows the game at its first
-move, to play through (`Not opened: <token> in <file> does not play.`,
-`<file> could not be read.`). Moves on board 2, pasted or opened, switch to
-`2 boards`. The window's
+paste, where it is, without keeping it, and shows its first game at its
+first move, to play through (`Not opened: <token> in <file> does not
+play.`, `<file> could not be read.`). Moves on board 2, pasted or opened,
+switch to `2 boards`. The window's
 paste commands are refused here with
 `Bughouse pastes from Actions: Paste FEN or dual FEN, or Paste moves.`
 
@@ -209,6 +235,20 @@ paste commands are refused here with
   one team was not searched or has not reported yet. The right to sit stays
   in the score: a level opening reads about +2.3 when A + B may sit and
   −2.3 when C + D may. It is not pawns.
+- **BPGN** — a file is split into games where a tag follows movetext. Read
+  from a game: `WhiteA`, `BlackA`, `WhiteB`, `BlackB` (A, C, D and B) and
+  their `…Elo`, `TimeControl` (`120+0` or `120`, the seconds each clock
+  starts with), `Result` (`1-0` is A + B's win), `Termination`,
+  `SetUpDualFEN`, and the moves in the order played: `1A.` is board 1's
+  White, `1a.` its Black, `1B.` and `1b.` board 2's. A move is SAN or
+  coordinates (`e7e5`, `f7g8q`, `N@f3`). The comment right after a move is
+  the mover's clock: FICS's `{119.000}`, the arena's `{[%clk 0:01:58.1]
+  [%eval 3.19] 45.2s}`, or an older arena file's `{1.9s 118.1}`. Scores and
+  other comments are passed over; with no `Termination` tag the last
+  comment says how the game ended (`LinusO checkmated`). An older arena
+  file kept its opening only in an `Opening` tag of engine moves (`1e2e4
+  2d2d4`): when the movetext does not play from the start, it is played
+  after those. The other tags are kept and copied back.
 - Nothing is saved. Leaving the mode keeps the table for the session; quitting
   the app loses it. No database is read or written.
 
