@@ -33,6 +33,7 @@ class BoardAndCounter extends StatefulWidget {
     required this.engine,
     required this.analysis,
     this.noteEditable = false,
+    this.reserveNote,
     this.editing,
     this.quiet = false,
     this.engineInBoard = true,
@@ -42,6 +43,12 @@ class BoardAndCounter extends StatefulWidget {
   final SettingsStore settings;
   final EngineAnalysis analysis;
   final bool noteEditable;
+
+  /// Whether the board leaves room for the note under it. By default it
+  /// does where the note is edited there; a mode whose note is written
+  /// elsewhere for now (the Notes tab) keeps the room, so the board does
+  /// not change size as that tab comes and goes.
+  final bool? reserveNote;
   final ValueNotifier<bool>? editing;
 
   /// Whether the engine's row, the move field and an empty note stay away
@@ -127,13 +134,19 @@ class _BoardAndCounterState extends State<BoardAndCounter>
     return LayoutBuilder(
       builder: (context, constraints) {
         final room = navRowHeight + moveFeedbackHeight + Space.m + _engineRoom;
-        final noteRoom = widget.editing != null || widget.noteEditable
+        final noteRoom =
+            widget.reserveNote ??
+                (widget.editing != null || widget.noteEditable)
             ? moveNoteMinHeight + Space.s
             : 0.0;
-        final side = min(
-          constraints.maxWidth,
-          max(0.0, constraints.maxHeight - room - noteRoom),
-        );
+        final most = max(0.0, constraints.maxHeight - room);
+        var side = min(constraints.maxWidth, max(0.0, most - noteRoom));
+        // In a short window the board comes before the note's box: it
+        // takes the note's room up to a size worth playing on, and the note
+        // is written in the Notes tab or the edit strip.
+        if (side < boardComfortSide) {
+          side = min(constraints.maxWidth, min(most, boardComfortSide));
+        }
         final below = constraints.maxHeight - side - room - Space.s;
         return Align(
           alignment: Alignment.topCenter,

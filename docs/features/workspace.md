@@ -52,7 +52,7 @@ Top to bottom, left to right:
   mode. The builder and the trainer share their documents (one repertoire
   list); modes with a screen of their own leave the board as it is.
 - **List column** (`«` in its corner hides it) — the mode's own list,
-  or `Positions`, the searches' finds (Actions ▸ Panels ▸ `Positions`,
+  or `Positions`, the searches' finds (Actions ▸ View ▸ `Positions`,
   or the list button on the Expectimax bar).
 - **Board** — Lichess's chessground board: click-click or drag; only legal
   moves land; a pawn on the last rank waits for its piece. Coordinates are a
@@ -83,7 +83,7 @@ Top to bottom, left to right:
   quiet board (the viewer and Study on Read) keeps it blank until the engine
   is on, and a hidden
   puzzle answer keeps it blank too.
-- **Reading card** — the pane tabs (`WorkspaceTab`: `Moves`, `Analysis`, `Game
+- **Reading card** — the pane tabs (`WorkspaceTab`: `Moves`, `Notes`, `Analysis`, `Game
   review`, `Solitaire`, `Train`, `Replies`, `Explorer`, `Expectimax`, `Audit`,
   `Puzzle`, `Game`, `Book`, `Filter`, `Player openings`, `My book`; each mode
   lists its own). Moves alone has no tab strip and no frame; the game or
@@ -95,6 +95,13 @@ Top to bottom, left to right:
   replaces. Glyphs follow the SAN. The editing strip opens under it from Actions ▸
   `Edit`, or with `Edit` at the card's foot in the viewer and Study (see
   [pgn-viewer](pgn-viewer.md) for `Read | Edit` and held edits).
+- **Notes** (`notes_pane.dart`) — the note on the move under the cursor (the
+  chapter's introduction at the start) as a page: one box the height of the
+  pane in the reading prose size, named `Note on 9... b5` or `Note before the
+  first move`. It is the same note the moves show under the move and commits
+  the same way (leaving the box, Ctrl+Enter, moving to another move). While it
+  is up, the note card under the board and the edit strip show the note to
+  read and keep no second box. Blank while part of the game is hidden.
 - **Explorer** — a source row `Book | Masters | Lichess | TWIC | This file |
   My games` (one typeable `Database` box when narrow), `Filters` at its end for
   the chosen source's chips (folded by default; Lichess `Speed` and `Rating`,
@@ -147,7 +154,7 @@ to study…` in the viewer and Study, the quiz markers in Study).
 
 **Edit a note or glyph** — Actions ▸ `Edit`, or `Edit` at the card's
 foot in the viewer and Study opens the strip; in the builder also the pencil on
-the move note. The comment field edits the prose only; machine
+the move note; the `Notes` tab from a pane's `+` gives the note a whole pane. The comment field edits the prose only; machine
 tokens are re-attached after the prose on save, clearing the prose keeps them,
 and a comment left empty is removed rather than written as `{}`. Clicking
 another move while typing goes there in one click, and the note stays on the
@@ -216,11 +223,13 @@ dialog and the tournament's position dialog.
 place changes). A file gone since leaves that mode on an empty analysis
 board, with nothing said. The first launch opens the Repertoire builder.
 
-**Full screen** — F11 or Actions ▸ Window ▸ `Full screen`, every mode.
+**Full screen** — F11 or Actions ▸ View ▸ `Full screen`, every mode.
 
 **Layout** — panes, open tabs and board size are remembered per mode and
-document in `settings.json` `workspaceLayouts`; Actions ▸ `Reset workspace
-layout` restores the mode's default.
+document in `settings.json` `workspaceLayouts`; Actions ▸ View ▸ `Reset
+workspace layout` restores the mode's default. The board and the panes are
+resized by dragging their dividers (a pane also from its `+`: `More room` /
+`Less room`).
 
 ### Keys
 

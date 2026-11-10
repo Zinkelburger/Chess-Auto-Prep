@@ -67,7 +67,7 @@ search.
   depth` (default 14, 1–40), `Evaluation` (`Engine`, `ChessDB`, `Lichess`).
   While running: `Pause the search to change these.` The same settings are in
   Settings ▸ Expectimax (`Settings.expectimax` in `settings.json`).
-- **Positions list** — replaces the left list column (Actions ▸ Panels ▸
+- **Positions list** — replaces the left list column (Actions ▸ View ▸
   `Positions`, the bar's Positions button, or `N found`; `Back to the list`
   restores the list). `Top` |
   `Often` | `New` ordering, a typeable `Kind` field (`Every kind`, `Trap`,

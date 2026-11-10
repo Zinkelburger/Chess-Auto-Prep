@@ -22,13 +22,23 @@ import '../document/document_session.dart';
 /// to wherever the cursor has reached by then, so words typed under one move
 /// cannot land on another — nor in another document.
 class CommentField extends StatefulWidget {
-  const CommentField({super.key, required this.session, this.labelled = true});
+  const CommentField({
+    super.key,
+    required this.session,
+    this.labelled = true,
+    this.fill = false,
+  });
 
   final DocumentSession session;
 
   /// Whether the field names the move its words are for. Where a heading
   /// above it already shows the move, it carries no label of its own.
   final bool labelled;
+
+  /// Whether the box takes all the height it is given, in the reading
+  /// card's prose size: the Notes tab's page. Otherwise it is two to four
+  /// lines.
+  final bool fill;
 
   @override
   State<CommentField> createState() => _CommentFieldState();
@@ -173,6 +183,29 @@ class _CommentFieldState extends State<CommentField>
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final introduction = _introduction;
+    final field = CallbackShortcuts(
+      bindings: AppKey.commitComment.bind(_commit),
+      child: Semantics(
+        label: _at?.isRoot ?? true ? 'Chapter notes' : 'Move notes',
+        child: TextField(
+          controller: _controller,
+          focusNode: _focus,
+          enabled: _at != null,
+          minLines: widget.fill ? null : 2,
+          maxLines: widget.fill ? null : 4,
+          expands: widget.fill,
+          textAlignVertical: TextAlignVertical.top,
+          style: widget.fill ? readingProseText : text.bodyMedium,
+          // The label sits above the box, never inside it as a prompt.
+          decoration: InputDecoration(
+            isDense: true,
+            border: const OutlineInputBorder(),
+            labelText: widget.labelled ? _label(context) : null,
+            floatingLabelBehavior: FloatingLabelBehavior.always,
+          ),
+        ),
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -185,27 +218,7 @@ class _CommentFieldState extends State<CommentField>
           ),
           const SizedBox(height: Space.s),
         ],
-        CallbackShortcuts(
-          bindings: AppKey.commitComment.bind(_commit),
-          child: Semantics(
-            label: _at?.isRoot ?? true ? 'Chapter notes' : 'Move notes',
-            child: TextField(
-              controller: _controller,
-              focusNode: _focus,
-              enabled: _at != null,
-              minLines: 2,
-              maxLines: 4,
-              style: text.bodyMedium,
-              // The label sits above the box, never inside it as a prompt.
-              decoration: InputDecoration(
-                isDense: true,
-                border: const OutlineInputBorder(),
-                labelText: widget.labelled ? _label(context) : null,
-                floatingLabelBehavior: FloatingLabelBehavior.always,
-              ),
-            ),
-          ),
-        ),
+        if (widget.fill) Expanded(child: field) else field,
       ],
     );
   }

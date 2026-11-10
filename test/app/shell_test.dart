@@ -51,11 +51,9 @@ void main() {
       await pump(tester);
       await tester.tap(find.text('Actions'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(
-        find.widgetWithText(SubmenuButton, 'Action Tabs'),
-      );
+      await tester.ensureVisible(find.widgetWithText(SubmenuButton, 'View'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(SubmenuButton, 'Action Tabs'));
+      await tester.tap(find.widgetWithText(SubmenuButton, 'View'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Show Replies'));
       await tester.tap(
@@ -391,11 +389,9 @@ void main() {
     expect(find.text('Replies'), findsOneWidget);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(
-      find.widgetWithText(SubmenuButton, 'Action Tabs'),
-    );
+    await tester.ensureVisible(find.widgetWithText(SubmenuButton, 'View'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(SubmenuButton, 'Action Tabs'));
+    await tester.tap(find.widgetWithText(SubmenuButton, 'View'));
     await tester.pumpAndSettle();
     expect(find.text('Next tab'), findsOneWidget);
     expect(find.text('Ctrl+Tab'), findsOneWidget);
@@ -405,11 +401,9 @@ void main() {
     expect(find.text('Replies'), findsNothing);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(
-      find.widgetWithText(SubmenuButton, 'Action Tabs'),
-    );
+    await tester.ensureVisible(find.widgetWithText(SubmenuButton, 'View'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(SubmenuButton, 'Action Tabs'));
+    await tester.tap(find.widgetWithText(SubmenuButton, 'View'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Show Replies'));
     await tester.tap(find.text('Show Replies'));

@@ -579,16 +579,16 @@ final class ActionLayout extends ChangeNotifier {
       canSplit(tabs.selected)
           ? () => split(active, tabs.selected, PaneSplitDirection.right)
           : null,
-      group: 'Layout',
+      group: 'View',
     ),
     AppAction(
       'Split below',
       canSplit(tabs.selected)
           ? () => split(active, tabs.selected, PaneSplitDirection.below)
           : null,
-      group: 'Layout',
+      group: 'View',
     ),
-    AppAction('Join all panes', count > 1 ? joinAll : null, group: 'Layout'),
+    AppAction('Join all panes', count > 1 ? joinAll : null, group: 'View'),
   ];
 
   /// Whether the opening book shows under the moves, as Lichess's book

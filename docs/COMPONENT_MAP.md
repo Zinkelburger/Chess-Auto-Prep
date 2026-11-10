@@ -193,10 +193,13 @@ Bughouse mode is offered when its engine assets are present.
   orientation-aware arrow navigation, Enter/Space selection and keyboard promotion
   to the shared pointer board. Modified history shortcuts still pass through.
   Submitted notation errors use a stable feedback row below the board controls.
+- `PlaceMemory` keeps the mode and file on the board in Settings (`lastPlace`)
+  as they change; `WorkspaceRequests.resume` opens there at launch.
 - `LayoutMemory` stores deliberate tool/split/board-width choices in Settings,
   per mode and, for document views, per file. Auxiliary modes keep their layout
-  while browsing source games. Writes participate in exit settling. Actions offers
-  Reset workspace layout, board width and active pane sizing; tab context menus
+  while browsing source games. Writes participate in exit settling. Actions ▸
+  View holds Reset workspace layout, the splits, the tabs, Positions and Full
+  screen; board width and pane sizes are dragged; tab context menus
   also open with Shift+F10. Mode navigation is grouped and searchable through
   Find a mode and the Actions menu. The reading surface names its Tools menu.
 - Engine jobs publish a named kind through `EngineJobs`; the top bar's running

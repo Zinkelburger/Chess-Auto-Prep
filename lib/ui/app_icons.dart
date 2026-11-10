@@ -73,10 +73,7 @@ abstract final class AppIcons {
   static const showList = Icons.keyboard_double_arrow_right;
 
   /// The Actions menu's submenus.
-  static const panels = Icons.view_sidebar_outlined;
-  static const paneTabs = Icons.tab_outlined;
   static const layout = Icons.grid_view_outlined;
-  static const window = Icons.fullscreen;
   static const newPane = Icons.horizontal_split_outlined;
   static const keyboard = Icons.keyboard_outlined;
 

@@ -22,6 +22,7 @@ import 'explorer/explorer_pane.dart';
 import 'review/game_review_pane.dart';
 import 'board/move_field.dart';
 import 'reading/move_tree_view.dart';
+import 'reading/notes_pane.dart';
 import 'board/nav_row.dart';
 import 'reading/reading_header.dart';
 import 'book/replies_pane.dart';
@@ -78,7 +79,25 @@ class WorkspaceView extends StatelessWidget {
   /// side leaves it.
   @override
   Widget build(BuildContext context) {
-    return BoardAndCard(board: _board, card: _column, layout: layout);
+    return ListenableBuilder(
+      listenable: layout ?? tabs,
+      builder: (context, _) =>
+          BoardAndCard(board: _board, card: _column, layout: layout),
+    );
+  }
+
+  /// Whether the Notes tab is up in a pane. It is where the note is
+  /// written then, so the card under the board and the edit strip show
+  /// theirs to read and keep no second box for the same words.
+  bool get _notesUp {
+    final layout = this.layout;
+    return layout == null
+        ? tabs.selected == WorkspaceTab.notes
+        : layout.visible.any(
+            (i) =>
+                !layout.isEmpty(i) &&
+                layout.pane(i).selected == WorkspaceTab.notes,
+          );
   }
 
   Widget _board(BuildContext context) => Padding(
@@ -88,8 +107,9 @@ class WorkspaceView extends StatelessWidget {
       builder: (context, claim, _) => claim == null
           ? BoardAndCounter(
               session: workspace.session,
-              noteEditable: hooks.builder,
-              editing: hooks.noteEditing ? editing : null,
+              noteEditable: hooks.builder && !_notesUp,
+              reserveNote: hooks.builder || hooks.noteEditing,
+              editing: hooks.noteEditing && !_notesUp ? editing : null,
               quiet: hooks.quietBoard,
               engineInBoard: !hooks.trainingTools,
               settings: workspace.settings,
@@ -146,7 +166,7 @@ class WorkspaceView extends StatelessWidget {
             saver: workspace.saver,
             editing: editing,
             onSave: hooks.onSaveHeld,
-            commentInNote: hooks.noteEditing,
+            commentInNote: hooks.noteEditing || _notesUp,
             studyTools: hooks.studyTools,
             done: !hooks.editSwitch,
           ),
@@ -215,6 +235,7 @@ class _Tabbed extends StatelessWidget {
       onMove: hooks.onEngineMove,
     ),
     WorkspaceTab.moves || WorkspaceTab.analysis => _moves(),
+    WorkspaceTab.notes => NotesPane(session: workspace.session),
     WorkspaceTab.review =>
       workspace.review == null
           ? const SizedBox.shrink()
@@ -320,6 +341,7 @@ class _Tabbed extends StatelessWidget {
   /// The tabs that show the document's moves or what follows them.
   static bool _tellsAnswers(WorkspaceTab tab) => switch (tab) {
     WorkspaceTab.moves ||
+    WorkspaceTab.notes ||
     WorkspaceTab.analysis ||
     WorkspaceTab.review ||
     WorkspaceTab.replies ||

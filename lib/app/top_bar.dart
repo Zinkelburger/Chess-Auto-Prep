@@ -276,13 +276,7 @@ class _ActionsMenuState extends State<_ActionsMenu> {
   }
 
   /// Keep the document's work in view; secondary controls expand beside it.
-  static const _secondary = {
-    'Copy': AppIcons.copy,
-    'Panels': AppIcons.panels,
-    'Action Tabs': AppIcons.paneTabs,
-    'Layout': AppIcons.layout,
-    'Window': AppIcons.window,
-  };
+  static const _secondary = {'Copy': AppIcons.copy, 'View': AppIcons.layout};
 
   @override
   Widget build(BuildContext context) {

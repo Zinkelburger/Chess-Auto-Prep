@@ -78,41 +78,19 @@ final class WindowActions {
   /// Everything the Actions menu offers now, in the mode on screen.
   List<AppAction> entries(BuildContext context) => [
     ..._modeActions(context),
-    AppAction('Reset workspace layout', _resetLayout, group: 'Layout'),
-    AppAction(
-      'Widen board',
-      () => _view.layout.resizeBoard(_view.layout.boardFraction + 0.05),
-      group: 'Layout',
-    ),
-    AppAction(
-      'Widen reading area',
-      () => _view.layout.resizeBoard(_view.layout.boardFraction - 0.05),
-      group: 'Layout',
-    ),
-    if (_view.layout.count > 1) ...[
-      AppAction(
-        'Give this pane more room',
-        () => _view.layout.resizeActive(0.05),
-        group: 'Layout',
-      ),
-      AppAction(
-        'Give this pane less room',
-        () => _view.layout.resizeActive(-0.05),
-        group: 'Layout',
-      ),
-    ],
+    AppAction('Reset workspace layout', _resetLayout, group: 'View'),
     if (_view is! ViewerView)
       AppAction(
         columns.positionsUp ? 'Back to the list' : 'Positions',
         columns.togglePositions,
-        group: 'Panels',
+        group: 'View',
       ),
     if (_view is! ViewerView)
       AppAction(
         fullScreen.on ? 'Leave full screen' : 'Full screen',
         fullScreen.toggle,
         shortcut: AppKey.fullScreen.label,
-        group: 'Window',
+        group: 'View',
       ),
   ];
 

@@ -103,7 +103,7 @@ void main() {
     expect(find.text('Positions'), findsWidgets);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
-    final layoutMenu = find.widgetWithText(SubmenuButton, 'Layout');
+    final layoutMenu = find.widgetWithText(SubmenuButton, 'View');
     await tester.ensureVisible(layoutMenu);
     await tester.tap(layoutMenu);
     await tester.pumpAndSettle();

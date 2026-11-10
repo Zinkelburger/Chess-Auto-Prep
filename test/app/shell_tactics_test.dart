@@ -178,11 +178,9 @@ void main() {
     await toTactics(tester);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(
-      find.widgetWithText(SubmenuButton, 'Action Tabs'),
-    );
+    await tester.ensureVisible(find.widgetWithText(SubmenuButton, 'View'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(SubmenuButton, 'Action Tabs'));
+    await tester.tap(find.widgetWithText(SubmenuButton, 'View'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Show Explorer'));
     await tester.tap(find.text('Show Explorer'));

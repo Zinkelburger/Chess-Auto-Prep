@@ -574,9 +574,7 @@ final class ViewerView extends _ReadingView {
   /// are the games list's own.
   @override
   bool _keeps(AppAction action) =>
-      action.group != 'File' &&
-      action.group != 'Panels' &&
-      action.label != 'Save a copy…';
+      action.group != 'File' && action.label != 'Save a copy…';
 
   @override
   List<AppAction> actions(ModeMenu menu) => [

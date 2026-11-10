@@ -346,11 +346,11 @@ Future<void> chooseAction(WidgetTester tester, String label) async {
   await tester.pumpAndSettle();
 }
 
-/// Actions ▸ Panels ▸ [entry]: `Positions`, or `Back to the list`.
+/// Actions ▸ View ▸ [entry]: `Positions`, or `Back to the list`.
 Future<void> choosePanel(WidgetTester tester, String entry) async {
   await tester.tap(find.text('Actions'));
   await tester.pumpAndSettle();
-  final panels = find.widgetWithText(SubmenuButton, 'Panels');
+  final panels = find.widgetWithText(SubmenuButton, 'View');
   await tester.ensureVisible(panels);
   await tester.tap(panels);
   await tester.pumpAndSettle();

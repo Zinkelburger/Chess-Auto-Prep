@@ -165,6 +165,10 @@ const readingCardInset = Space.xl;
 /// looked at, so bigger than a hover board and smaller than the board.
 const diagramSize = 160.0;
 
+/// The board's side a short window still gives it before the note under it
+/// gets any room: below this the pieces are too small to play on.
+const boardComfortSide = 360.0;
+
 /// The least room under the board worth showing the move's note in: its
 /// move row and two lines of prose.
 const moveNoteMinHeight = 120.0;
