@@ -132,14 +132,16 @@ Bughouse mode is offered when its engine assets are present.
   Cleanup is limited to explicitly selected derived data.
 - Generation owns search trees and draft publication; Replies/gaps and Audit
   use the current workspace and chapter revision. A practical search from the
-  board (`workspace/search/fill_gaps.dart`) builds two trees in one run, the board's
-  side and the other; `FillGaps.nodeAtBoard(side:)` reads either, and
-  `workspace/search/search_table.dart` merges them into the Expectimax table's
-  White, Black and Engine columns. Saved-tree loading and automatic board-follow
-  restarts share one start generation: navigation, a newer accepted start/resume,
-  or any stop command invalidates earlier pending starts, including an away-and-back
-  navigation. Exact-root results take precedence while preserving newest-first
-  order. Engine depths and continuation lines share the same source/depth scope.
+  board (`workspace/search/fill_gaps.dart`) builds the board's side's tree,
+  with the chapter's own moves as pins (`chapterPins`), and, when asked, the
+  other side's beside it; `FillGaps.nodeAtBoard(side:)` reads either, and
+  `workspace/search/search_table.dart` turns them into the Expectimax table's
+  value and Engine columns, each row with the traps below it
+  (`chess/generation/trap_scent.dart`, kept by subtree). A run stays where it
+  was started while the board moves. Saved-tree loading shares one start
+  generation: navigation, a newer accepted start/resume, or any stop command
+  invalidates earlier pending starts, including an away-and-back navigation.
+  Exact-root results take precedence while preserving newest-first order. Engine depths and continuation lines share the same source/depth scope.
   Turning a finished run into a draft chapter, and retrying that draft's save,
   is `workspace/search/fill_lines.dart`'s.
 - `workspace/explorer/index_build.dart` owns each opening-index build. Incremental work
