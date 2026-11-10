@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/chess/bughouse/table_line.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_lab.dart';
@@ -53,20 +55,42 @@ void main() {
     expect(lab.problem, isNull);
   });
 
-  test('each board steps on its own; a step that breaks a drop is refused', () {
+  test('a board steps to its move with the other board where it was then', () {
     capture();
     lab.play(BoardNumber.two, 'e2e4');
     lab.play(BoardNumber.two, 'P@d5');
+    // Board 1 had made its three moves before board 2 moved.
     go(BoardNumber.two, 1);
     expect(lab.line.upto(BoardNumber.one), 3);
     go(BoardNumber.two, 2);
+    // Board 1 back before its capture: board 2 had not moved yet, so its
+    // drop goes with it rather than standing without a pawn.
     go(BoardNumber.one, 2);
-    expect((lab.problem as StepRefused).move.san, 'P@d5');
-    expect(lab.line.upto(BoardNumber.one), 3);
+    expect(lab.problem, isNull);
+    expect(lab.line.upto(BoardNumber.one), 2);
+    expect(lab.line.upto(BoardNumber.two), 0);
     expect(lab.focus, BoardNumber.one);
+    // The drop brings the capture it came from.
+    go(BoardNumber.two, 2);
+    expect(lab.problem, isNull);
+    expect(lab.line.upto(BoardNumber.one), 3);
+    expect(lab.position.two.pockets!.of(Side.black, Role.pawn), 0);
   });
 
-  test('the arrow keys step the focused board and stop at its ends', () {
+  test('a step is refused only when its drop has lost its capture', () {
+    capture();
+    lab.play(BoardNumber.two, 'e2e4');
+    lab.play(BoardNumber.two, 'P@d5');
+    go(BoardNumber.two, 0);
+    // Board 1's capture taken out of the line: nothing gives the pawn now.
+    lab.deleteFrom(lab.line.at(BoardNumber.one)!);
+    expect(lab.problem, isNull);
+    lab.goTo(BoardNumber.two, lab.line.lineOf(BoardNumber.two).last);
+    expect((lab.problem as StepRefused).move.san, 'P@d5');
+    expect(lab.line.upto(BoardNumber.two), 0);
+  });
+
+  test('with one board the arrow keys step board 1 and stop at its ends', () {
     capture();
     lab.step(-1);
     expect(lab.line.upto(BoardNumber.one), 2);
@@ -75,6 +99,120 @@ void main() {
     expect(lab.line.upto(BoardNumber.one), 0);
     lab.toEnd();
     expect(lab.line.upto(BoardNumber.one), 3);
+  });
+
+  group('a game on both boards', () {
+    final game = File(
+      'test/support/bughouse/hypebeast_v4_vs_hivemind.bpgn',
+    ).readAsStringSync();
+
+    /// How many moves each board has on it.
+    (int, int) at() =>
+        (lab.line.upto(BoardNumber.one), lab.line.upto(BoardNumber.two));
+
+    setUp(() => lab.pasteMoves(game, file: 'game1.bpgn'));
+
+    test('opens at its first move, on both boards', () {
+      expect(lab.problem, isNull);
+      expect(lab.single, isFalse);
+      expect(at(), (0, 0));
+      expect(lab.position.dualFen, TablePosition.initial.dualFen);
+      expect(lab.line.of(BoardNumber.one), hasLength(48));
+      expect(lab.line.of(BoardNumber.two), hasLength(52));
+    });
+
+    test('the arrow keys play it through in the order played and back', () {
+      // 1A. Nf3 1a. Nf6 1B. d4 2A. g3 1b. e6
+      final seen = <(int, int)>[];
+      for (var i = 0; i < 5; i++) {
+        lab.step(1);
+        seen.add(at());
+      }
+      expect(seen, [(1, 0), (2, 0), (2, 1), (3, 1), (3, 2)]);
+      expect(lab.focus, BoardNumber.two);
+      var steps = 5;
+      for (; at() != (48, 52); steps++) {
+        lab.step(1);
+        expect(lab.problem, isNull, reason: 'after $steps steps');
+      }
+      expect(steps, 100);
+      lab.step(1);
+      expect(at(), (48, 52));
+      for (; steps > 3; steps--) {
+        lab.step(-1);
+        expect(lab.problem, isNull, reason: 'back to $steps');
+      }
+      expect(at(), (2, 1));
+      lab.toEnd();
+      expect(at(), (48, 52));
+      lab.toStart();
+      expect(at(), (0, 0));
+      lab.step(-1);
+      expect((at(), lab.problem), ((0, 0), null));
+    });
+
+    test('any move of either board shows the table as it was then', () {
+      for (final board in BoardNumber.values) {
+        for (final node in lab.line.lineOf(board)) {
+          lab.goTo(board, node);
+          expect(lab.problem, isNull);
+          expect(lab.line.at(board), node);
+          expect(
+            lab.position.dualFen,
+            lab.positionAfter(node)!.dualFen,
+            reason: (lab.line.entry(node) as LineMove).san,
+          );
+        }
+      }
+      // 7a. N@d4 drops the knight 7B. Qxd2 took; board 2 had gone on to
+      // 8B. Bb5+ by then.
+      go(BoardNumber.one, 14);
+      expect(lab.line.current(BoardNumber.one)!.san, 'N@d4');
+      expect(lab.line.current(BoardNumber.two)!.san, 'Bb5+');
+      expect(lab.line.applied.map((m) => m.san), contains('Qxd2'));
+    });
+
+    test('a board steps from either end without a refusal', () {
+      lab.toEnd();
+      lab.goTo(BoardNumber.two, null);
+      // Board 1 is where it was when board 2 first moved: 1A. Nf3 1a. Nf6.
+      expect((at(), lab.problem), ((2, 0), null));
+      lab.toEnd();
+      for (var i = 0; i < 52; i++) {
+        lab.stepOn(BoardNumber.two, -1);
+        expect(lab.problem, isNull);
+      }
+      expect(at(), (2, 0));
+      for (var i = 0; i < 48; i++) {
+        lab.stepOn(BoardNumber.one, 1);
+        expect(lab.problem, isNull);
+      }
+      expect(lab.line.upto(BoardNumber.one), 48);
+    });
+
+    test('pasted rather than opened, it is at its end', () {
+      lab
+        ..newGame()
+        ..showBoards(LabBoards.one)
+        ..pasteMoves(game);
+      expect(at(), (48, 52));
+      expect(lab.single, isFalse);
+    });
+
+    test('the keys go on along a variation, then with the other board', () {
+      for (var i = 0; i < 3; i++) {
+        lab.step(1);
+      }
+      // 2A. g3 was played; a different move there is a variation.
+      lab.play(BoardNumber.one, 'e2e4');
+      lab.step(1);
+      // Nothing follows e4 on board 1, so board 2 goes on: 1b. e6.
+      expect(lab.line.current(BoardNumber.one)!.san, 'e4');
+      expect(lab.line.current(BoardNumber.two)!.san, 'e6');
+      lab.step(-1);
+      lab.step(-1);
+      expect(at(), (2, 1));
+    });
   });
 
   test('a new game or a pasted position starts a new line', () {

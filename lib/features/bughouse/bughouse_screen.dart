@@ -14,8 +14,9 @@ import '../../ui/screen_keys.dart';
 /// The Bughouse mode: board 1 alone or both boards on the left, the engine
 /// and the move lists on the right. The boards take what the window leaves.
 ///
-/// ← → step the board last moved or stepped on, Home / PgUp and End / PgDn
-/// go to its ends and F flips the boards.
+/// With one board ← → step board 1 and Home / PgUp and End / PgDn go to its
+/// ends; with two they step the game, both boards in the order their moves
+/// were made. F flips the boards.
 class BughouseScreen extends StatelessWidget {
   const BughouseScreen({
     super.key,

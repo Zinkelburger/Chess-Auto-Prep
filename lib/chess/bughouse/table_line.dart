@@ -58,13 +58,17 @@ final class LineNode {
 /// Both boards' moves and hand edits, each board a tree of lines as the
 /// workspace's move list has, with a cursor per board.
 ///
-/// The boards are two games, so each steps through its own tree: the
-/// position is the start plus the nodes from each board's start to its
-/// cursor, replayed in the order they were made. A capture crosses boards,
-/// so stepping one board elsewhere can take away the piece the other board
-/// dropped; [replay] then answers where the line breaks and the step is
-/// refused. A move or hand edit made where the board already goes on is a
-/// variation there; the board's first continuation is its main line.
+/// The boards are two games, each with its own tree: the position is the
+/// start plus the nodes from each board's start to its cursor, replayed in
+/// the order they were made. A capture crosses boards, so a drop plays only
+/// while the other board has made the capture it came from. Each node
+/// remembers where the other board was when it was made, so [asAt] shows
+/// any move with the table as it then stood, and [stepsOn] and
+/// [steppedBack] step both boards in the order made. A cursor moved alone
+/// with [goTo] can leave a drop without its piece; [replay] then answers
+/// where the line breaks. A move or hand edit made where the board already
+/// goes on is a variation there; the board's first continuation is its main
+/// line.
 final class TableLine {
   const TableLine(this.root)
     : nodes = const [],
@@ -163,6 +167,64 @@ final class TableLine {
     _children,
     board == BoardNumber.one ? (node, _at.$2) : (_at.$1, node),
   );
+
+  /// The table as it was when [node] was made: its board at it and the
+  /// other board where it was then, so every drop up to it has its piece.
+  TableLine asAt(int node) {
+    final partner = nodes[node].partner;
+    return TableLine._(
+      root,
+      nodes,
+      _children,
+      nodes[node].board == BoardNumber.one ? (node, partner) : (partner, node),
+    );
+  }
+
+  /// [board] at its start, with the other board where it was when [board]
+  /// made the first move of the line it is on.
+  TableLine beforeFirst(BoardNumber board) {
+    final path = pathTo(at(board));
+    if (path.isEmpty) return this;
+    return goTo(board.other, nodes[path.first].partner).goTo(board, null);
+  }
+
+  /// Both boards at their starts.
+  TableLine get atStart =>
+      TableLine._(root, nodes, _children, const (null, null));
+
+  /// Both boards at the ends of the lines they are on.
+  TableLine get atEnd {
+    final one = lineOf(BoardNumber.one);
+    final two = lineOf(BoardNumber.two);
+    return TableLine._(root, nodes, _children, (
+      one.isEmpty ? null : one.last,
+      two.isEmpty ? null : two.last,
+    ));
+  }
+
+  /// The ways one step on in the order the moves were made, the first that
+  /// replays being the step: of the two boards' next moves the one made
+  /// first, on its board alone, then the other, then the one made first
+  /// with the other board where it was then. Empty at the end of both lines.
+  Iterable<TableLine> get stepsOn sync* {
+    final next = [
+      for (final board in BoardNumber.values) ?mainChild(board, at(board)),
+    ]..sort();
+    for (final node in next) {
+      yield goTo(nodes[node].board, node);
+    }
+    if (next.isNotEmpty) yield asAt(next.first);
+  }
+
+  /// One step back in the order made: the board whose move was made last
+  /// goes back a move, which always replays. Null with both at their starts.
+  TableLine? get steppedBack {
+    final last = switch (_at) {
+      (final one?, final two?) => one > two ? one : two,
+      (final one, final two) => one ?? two,
+    };
+    return last == null ? null : goTo(nodes[last].board, nodes[last].parent);
+  }
 
   /// [move] played at its board's cursor: the continuation already there
   /// when it is the same move, or a new one, which is a variation when the

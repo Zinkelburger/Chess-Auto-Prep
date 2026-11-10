@@ -100,18 +100,45 @@ final class BughouseLab extends ChangeNotifier {
     _show(position, focus: _focus);
   }
 
-  /// [board] at [node] of its lines (null for its start), unless the other
-  /// board's moves would no longer play from there.
-  void goTo(BoardNumber board, int? node) {
-    final next = _line.goTo(board, node);
-    switch (next.replay()) {
-      case LineReplayed(:final position):
-        _line = next;
-        _show(position, focus: board);
-      case LineBroken(:final move):
-        _focus = board;
-        _refuse(StepRefused(move));
+  /// [board] at [node] of its lines (null for its start), with the other
+  /// board where it was when that move was made, so every drop on either
+  /// has its piece; [board] alone when that table no longer replays.
+  void goTo(BoardNumber board, int? node) => _stepTo([
+    if (node == null) _line.beforeFirst(board) else _line.asAt(node),
+    _line.goTo(board, node),
+  ], focus: board);
+
+  /// The first of [ways] that replays, on the boards; when none does, the
+  /// boards stay and the move that would not play is named.
+  void _stepTo(Iterable<TableLine> ways, {BoardNumber? focus}) {
+    LineMove? broken;
+    for (final next in ways) {
+      switch (next.replay()) {
+        case LineReplayed(:final position):
+          final moved = focus ?? _moved(next);
+          _line = next;
+          _show(position, focus: moved);
+          return;
+        case LineBroken(:final move):
+          broken ??= move;
+      }
     }
+    if (broken == null) return;
+    if (focus != null) _focus = focus;
+    _refuse(StepRefused(broken));
+  }
+
+  /// The board a step to [next] moves: the one whose place changes, the
+  /// later-made of the two when both do, the focused one when neither.
+  BoardNumber _moved(TableLine next) {
+    final changed = [
+      for (final board in BoardNumber.values)
+        if (next.at(board) != _line.at(board)) board,
+    ];
+    if (changed.length != 2) return changed.firstOrNull ?? _focus;
+    final one = next.at(BoardNumber.one) ?? -1;
+    final two = next.at(BoardNumber.two) ?? -1;
+    return one > two ? BoardNumber.one : BoardNumber.two;
   }
 
   /// [node] and everything after it on its board taken out of the line,
@@ -130,12 +157,18 @@ final class BughouseLab extends ChangeNotifier {
     }
   }
 
-  /// The focused board a step forward (1), along its main continuation,
-  /// or back (−1).
-  void step(int by) => stepOn(_focus, by);
+  /// What ← and → do. With one board, board 1 a step forward (1) or back
+  /// (−1). With two, the game a step in the order its moves were made:
+  /// forward plays the next move of the two boards' lines, back takes the
+  /// last one made off.
+  void step(int by) {
+    if (single) return stepOn(_focus, by);
+    if (by > 0) return _stepTo(_line.stepsOn);
+    if (_line.steppedBack case final back?) _stepTo([back]);
+  }
 
-  /// [board] a step forward (1), along its main continuation, or back (−1);
-  /// nothing at either end.
+  /// [board] a step forward (1), along its main continuation, or back (−1),
+  /// as [goTo] goes there; nothing at either end.
   void stepOn(BoardNumber board, int by) {
     final at = _line.at(board);
     if (by < 0 && at != null) goTo(board, _line.nodes[at].parent);
@@ -144,12 +177,31 @@ final class BughouseLab extends ChangeNotifier {
     }
   }
 
-  void toStart() => goTo(_focus, null);
+  /// Board 1 at its start with one board; with two, both at theirs.
+  void toStart() =>
+      single ? goTo(_focus, null) : _stepTo([_line.atStart], focus: _focus);
 
-  /// The focused board at the end of the line it is on.
+  /// Board 1 at the end of the line it is on with one board; with two,
+  /// both boards at the ends of theirs, or as far on as the moves play in
+  /// the order made.
   void toEnd() {
-    final line = _line.lineOf(_focus);
-    if (line.isNotEmpty) goTo(_focus, line.last);
+    if (single) {
+      final line = _line.lineOf(_focus);
+      if (line.isNotEmpty) goTo(_focus, line.last);
+      return;
+    }
+    var end = _line.atEnd;
+    if (end.replay() is! LineReplayed) {
+      end = _line;
+      for (var steps = 0; steps < _line.nodes.length; steps++) {
+        final next = end.stepsOn
+            .where((way) => way.replay() is LineReplayed)
+            .firstOrNull;
+        if (next == null) break;
+        end = next;
+      }
+    }
+    _stepTo([end], focus: _focus);
   }
 
   /// The variation [node] is in one place up among the lines there.
@@ -253,11 +305,17 @@ final class BughouseLab extends ChangeNotifier {
 
   /// Pasted movetext as a new line, every move played; refused whole when
   /// one does not play. [file] names the file it was read from, when it was
-  /// opened rather than pasted.
+  /// opened rather than pasted: a pasted line is shown at its end, to go on
+  /// from, and an opened game at its start, to play through. Moves on board
+  /// 2 show both boards.
   void pasteMoves(String text, {String? file}) {
     switch (readTableLineText(text)) {
       case PastedLine(:final line):
-        showLine(line);
+        if (line.nodes.any((node) => node.board == BoardNumber.two)) {
+          _boards = LabBoards.two;
+        }
+        if (file != null) _focus = BoardNumber.one;
+        showLine(file == null ? line : line.atStart);
       case PastedMovesRefused(:final token):
         _refuse(MovesRefused(token, file: file));
     }
@@ -353,8 +411,8 @@ final class LineMisfits extends TableRefusal {
   const LineMisfits();
 }
 
-/// A step that would leave [move], on the other board, without the piece
-/// it dropped.
+/// A step that would leave [move] without the piece it dropped: the capture
+/// it came from, on the other board, is no longer in the line.
 final class StepRefused extends TableRefusal {
   const StepRefused(this.move);
 

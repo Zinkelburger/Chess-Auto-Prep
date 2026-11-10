@@ -279,6 +279,13 @@ void main() {
       await open(tester, '/games/playout.bpgn');
       expect(picker().offered.single, bpgnExtensions);
       expect(w.lab.movesText, '1A. e4 1B. d4 1a. e5');
+      // A game opens on both boards at its first move; → plays it through.
+      expect(w.lab.single, isFalse);
+      expect(w.lab.line.applied, isEmpty);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(w.lab.line.applied.map((m) => m.san), ['e4', 'd4']);
     });
 
     testWidgets('says which file could not be used', (tester) async {

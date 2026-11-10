@@ -80,7 +80,7 @@ panel on the right: 440–640 px beside board 1 alone, 440–480 px beside both.
   its number (`2... d6 3. d4`), and the move the board is at tinted in the
   accent. A hand edit is a token of its own in muted ink (`+2n −P`, White's
   pieces in upper case). Each list has `First move`, `Back`, `Forward` and
-  `Last move` under it.
+  `Last move` under it, which step that board.
 
 ## Actions
 
@@ -106,13 +106,22 @@ variation.
 board last clicked (two boards), without the hands → `Use this position` sets
 that board's pieces, side to move and castling, keeps both hands and starts a
 new line. A board no game can go on from: `That board cannot be played from.`
-**Step a board** — its list, its buttons, or ← → and Home / PgUp, End / PgDn
-for the board last used (always board 1 with one board); the mouse wheel over
-a board steps that board, down forward and up back. Forward and End follow
-the main continuation from where the board is, as in the workspace; a
-variation is entered by clicking it. F flips the boards. Only that board
-moves. The boards replay in the order their moves were made. A refused step:
-`Can't step there: <san> on board 2 would have no piece to drop.`
+**Step a board** — its list, its buttons, or the mouse wheel over it, down
+forward and up back → that board is at the move, and the other board is
+where it was when that move was played, so both hands are as they were and
+every drop has its piece. `First move` puts the other board where it was
+when this one first moved. Forward and `Last move` follow the main
+continuation from where the board is, as in the workspace; a variation is
+entered by clicking it. The boards replay in the order their moves were
+made. A step is refused only when the capture a drop came from has been
+deleted: `Can't step there: <san> on board 2 would have no piece to drop.`
+**Step the game** — ← → and Home / PgUp, End / PgDn. With one board they
+step board 1. With two they step the game in the order its moves were made:
+→ plays the next move of the two boards' lines, the one made first (when it
+does not play from the table on screen, the other board's), ← takes off the
+move made last, Home puts both boards at their starts and End at the ends of
+their lines. The board that moved is the board last used. F flips the
+boards.
 **Point at a line** — draws its move on its board alone, in the best
 move's blue (an arrow, or a ringed piece for a drop), until the pointer
 leaves. Resting on one of its moves for
@@ -171,9 +180,12 @@ are each board's line without its variations, as BPGN movetext in played order (
 `[SetUpDualFEN "…"]` for a set-up start; a hand edit is a comment where it
 was made, `{ Hands edited on board 1: +2n }`, and pastes back. A paste takes that or a FICS game,
 and is refused whole (`Not pasted: <token> does not play.`, `No bughouse
-moves to paste.`). `Open BPGN…` asks for a `.bpgn`, `.pgn` or `.txt` file
-and reads it as a paste, where it is, without keeping it (`Not opened:
-<token> in <file> does not play.`, `<file> could not be read.`). The window's
+moves to paste.`). Pasted moves are shown at their end, to go on from.
+`Open BPGN…` asks for a `.bpgn`, `.pgn` or `.txt` file and reads it as a
+paste, where it is, without keeping it, and shows the game at its first
+move, to play through (`Not opened: <token> in <file> does not play.`,
+`<file> could not be read.`). Moves on board 2, pasted or opened, switch to
+`2 boards`. The window's
 paste commands are refused here with
 `Bughouse pastes from Actions: Paste FEN or dual FEN, or Paste moves.`
 

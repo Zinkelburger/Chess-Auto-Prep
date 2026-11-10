@@ -7,7 +7,6 @@ import 'package:chess_auto_prep/features/bughouse/bughouse_screen.dart';
 import 'package:chess_auto_prep/features/bughouse/lab_engine.dart';
 import 'package:chess_auto_prep/features/bughouse/lab_lines.dart';
 import 'package:chess_auto_prep/features/bughouse/pocket.dart';
-import 'package:chess_auto_prep/ui/app_keys.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/board/board_view.dart';
 import 'package:chessground/chessground.dart';
@@ -248,9 +247,7 @@ void main() {
       expect(two.top, one.top);
       // Without the lists under them the boards are larger than they were.
       expect(board2.width, greaterThan(300));
-      await tester.tap(
-        find.byTooltip('${AppKey.firstMove.tip('First move')}, board 2'),
-      );
+      await tester.tap(find.byTooltip('First move, board 2'));
       await tester.pumpAndSettle();
       expect(lab.line.upto(BoardNumber.two), 0);
       expect(lab.line.upto(BoardNumber.one), 1);

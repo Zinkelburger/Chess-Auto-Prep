@@ -18,8 +18,8 @@ import '../../ui/tool_button.dart';
 /// A board's moves read like the workspace's move list: its main line as
 /// running text, each variation an indented block right after the move it
 /// replaces, hand edits in muted ink where they were made. Clicking a move
-/// puts the board there; the four step buttons are under it. The list takes
-/// the height its parent leaves.
+/// puts the board there and the other board where it was then; the four
+/// step buttons are under it. The list takes the height its parent leaves.
 class BoardMoves extends StatelessWidget {
   const BoardMoves({super.key, required this.lab, required this.board});
 
@@ -52,25 +52,29 @@ class BoardMoves extends StatelessWidget {
           children: [
             _step(
               AppIcons.first,
-              AppKey.firstMove.tip('First move'),
+              AppKey.firstMove,
+              'First move',
               at != null,
               () => lab.goTo(board, null),
             ),
             _step(
               AppIcons.previous,
-              AppKey.stepBack.tip('Back'),
+              AppKey.stepBack,
+              'Back',
               at != null,
               () => lab.stepOn(board, -1),
             ),
             _step(
               AppIcons.next,
-              AppKey.stepForward.tip('Forward'),
+              AppKey.stepForward,
+              'Forward',
               ahead,
               () => lab.stepOn(board, 1),
             ),
             _step(
               AppIcons.last,
-              AppKey.lastMove.tip('Last move'),
+              AppKey.lastMove,
+              'Last move',
               ahead,
               () => lab.goTo(board, line.lineOf(board).last),
             ),
@@ -80,12 +84,19 @@ class BoardMoves extends StatelessWidget {
     );
   }
 
-  Widget _step(IconData icon, String tip, bool enabled, VoidCallback go) =>
-      ToolButton(
-        icon: icon,
-        tooltip: lab.single ? tip : '$tip, ${board.label.toLowerCase()}',
-        onPressed: enabled ? go : null,
-      );
+  /// With two boards the keys step the game, not this board, so the
+  /// tooltip names the board and no key.
+  Widget _step(
+    IconData icon,
+    AppKey key,
+    String name,
+    bool enabled,
+    VoidCallback go,
+  ) => ToolButton(
+    icon: icon,
+    tooltip: lab.single ? key.tip(name) : '$name, ${board.label.toLowerCase()}',
+    onPressed: enabled ? go : null,
+  );
 }
 
 /// The board's tree of lines as text, scrolled so the move it is at shows.
