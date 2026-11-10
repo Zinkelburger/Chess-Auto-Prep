@@ -121,8 +121,8 @@ final class BughouseView extends ModeView {
 
   /// The desktop's file dialog, then the chosen file's moves on the boards,
   /// as Paste moves would put them. The file is read where it is and not
-  /// kept; its games are found off the UI isolate. A file opened while an
-  /// earlier one was still being read is the one shown.
+  /// kept; its games are found off the UI isolate. A file opened, or moves
+  /// pasted, while an earlier file was still being read is what is shown.
   Future<void> _open() async {
     final path = await _labs.picker.pickPgn(extensions: bpgnExtensions);
     if (path == null) return;
@@ -131,17 +131,21 @@ final class BughouseView extends ModeView {
     switch (await _labs.files.read(path)) {
       case PickedText(:final text):
         final games = await BpgnGames.index(text);
-        if (opening == _opening) _labs.lab.openGames(games, file: name);
+        if (_current(opening)) _labs.lab.openGames(games, file: name);
       case PickedUnread():
-        if (opening == _opening) _labs.lab.fileUnread(name);
+        if (_current(opening)) _labs.lab.fileUnread(name);
     }
   }
 
-  /// Counts the files opened, so only the latest is shown.
+  /// Counts the files opened and the pastes, so only the latest is shown.
   int _opening = 0;
 
+  bool _current(int opening) => opening == _opening && !_labs.disposed;
+
   Future<void> _paste(void Function(String text) into) async {
+    final opening = ++_opening;
     final text = await _input.clipboard();
-    if (text != null && text.trim().isNotEmpty) into(text);
+    if (!_current(opening) || text == null || text.trim().isEmpty) return;
+    into(text);
   }
 }

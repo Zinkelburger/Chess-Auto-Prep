@@ -299,11 +299,10 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       _train.lines.selection.enter(_ws.session.source);
     }
     // The mode the window opens on is entered as one switched to is: its
-    // side of `Read | Edit` decides what a move on the board does.
-    if (_view.editSwitch) {
-      _editing.value = _view.startsEditing;
-      _view.entered();
-    }
+    // side of `Read | Edit` decides what a move on the board does, and its
+    // own start (Bughouse's engine, a page's refresh) runs.
+    if (_view.editSwitch) _editing.value = _view.startsEditing;
+    _view.entered();
     _editing.addListener(_redraw);
     _columns.addListener(_redraw);
     _requests.addListener(_modeMayHaveChanged);

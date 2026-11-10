@@ -76,6 +76,7 @@ void main() {
       ),
     );
     await w.parts.start();
+    await w.parts.resumed;
     expect(w.parts.requests.mode, Mode.trainer);
     expect(w.parts.session.source, benkoMain);
     expect(w.parts.requests.backTo, isNull);
@@ -95,6 +96,7 @@ void main() {
       ),
     );
     await w.parts.start();
+    await w.parts.resumed;
     expect(w.parts.requests.mode, Mode.repertoires);
     expect(w.parts.session.isScratch, isTrue);
     expect(w.parts.requests.status, isNull);
@@ -102,6 +104,7 @@ void main() {
 
   test('the place is kept as the user moves between files and modes', () async {
     await w.parts.start();
+    await w.parts.resumed;
     await w.parts.requests.open(kidMain);
     expect(
       w.settings.value.lastPlace,

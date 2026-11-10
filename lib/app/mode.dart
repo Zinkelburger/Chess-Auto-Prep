@@ -163,6 +163,9 @@ final class LabModes {
   final offered = ValueNotifier(false);
   bool _disposed = false;
 
+  /// Whether the parts have closed, so late file reads drop their result.
+  bool get disposed => _disposed;
+
   /// Asks whether the build carries the engine, and offers the Bughouse
   /// mode if so.
   Future<void> offer(Future<bool> Function() bundled) async {

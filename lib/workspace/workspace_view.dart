@@ -79,9 +79,11 @@ class WorkspaceView extends StatelessWidget {
   /// side leaves it.
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: layout ?? tabs,
-      builder: (context, _) =>
+    // Rebuilt when the Notes tab comes up or goes, not on every drag or tab
+    // switch the layout tells of.
+    return ValueListenableBuilder<bool>(
+      valueListenable: _Changes(layout ?? tabs, () => _notesUp),
+      builder: (context, _, _) =>
           BoardAndCard(board: _board, card: _column, layout: layout),
     );
   }
@@ -451,4 +453,37 @@ class _NoClaim implements ValueListenable<BoardClaim?> {
 
   @override
   void removeListener(VoidCallback listener) {}
+}
+
+/// [read] from [source], telling a listener only when its value changes.
+final class _Changes<T> implements ValueListenable<T> {
+  _Changes(this.source, this.read);
+
+  final Listenable source;
+  final T Function() read;
+  final _relays = <VoidCallback, VoidCallback>{};
+
+  @override
+  T get value => read();
+
+  @override
+  void addListener(VoidCallback listener) {
+    var last = read();
+    void relay() {
+      final now = read();
+      if (now == last) return;
+      last = now;
+      listener();
+    }
+
+    _relays[listener] = relay;
+    source.addListener(relay);
+  }
+
+  @override
+  void removeListener(VoidCallback listener) {
+    if (_relays.remove(listener) case final relay?) {
+      source.removeListener(relay);
+    }
+  }
 }
