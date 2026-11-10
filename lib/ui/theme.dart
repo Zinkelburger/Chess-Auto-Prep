@@ -738,6 +738,22 @@ const labColumnGap = 16.0;
 const labSeatPadding = 8.0;
 const labTurnDot = 11.0;
 
+/// A seat's clock, at the end of its hand's row under the player's name:
+/// mono at the reading size, as a clock is read at a glance. A hand shorter
+/// than [labSeatTwoLines] has the name beside the clock instead.
+const labClockText = TextStyle(
+  fontFamily: 'SourceCodePro',
+  fontSize: 16,
+  fontWeight: FontWeight.w600,
+  height: 1.2,
+);
+const labSeatTwoLines = 40.0;
+
+/// The row over the Bughouse moves that says which game they are, and the
+/// room its `‹ n of N ›` takes at the row's start.
+const labGameRowHeight = 36.0;
+const labGameStepperWidth = 184.0;
+
 /// The − and + in a pocket slot's upper corners while the pointer is over
 /// it: a dark chip with a white sign, about two fifths of the slot
 /// within these bounds.

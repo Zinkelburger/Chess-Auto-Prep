@@ -1,6 +1,7 @@
 import 'package:dartchess/dartchess.dart' show Role, Side;
 
 import 'table.dart';
+import 'table_game.dart';
 import 'table_line.dart';
 import 'table_setup.dart';
 
@@ -8,19 +9,28 @@ import 'table_setup.dart';
 /// 1a. e5`: the number is the board's own move number and the letter's case
 /// is the mover's colour. The order is what makes it replayable, since a
 /// drop on one board needs the capture on the other that came before it. A
-/// hand edit is a comment where it was made, `{ Hands edited on board 1:
-/// +N −2p }`, White's pieces in upper case. Only each board's line is
-/// written, not its variations. Lines are wrapped at 80 columns, as PGN
-/// writes them.
-String bpgnMovetext(TableLine line) {
+/// move whose clock is known is followed by it, in seconds, as FICS writes
+/// it: `1A. e4 {119.000}`. A hand edit is a comment where it was made,
+/// `{ Hands edited on board 1: +N −2p }`, White's pieces in upper case.
+/// Only each board's line is written, not its variations. Lines are wrapped
+/// at 80 columns, as PGN writes them; [closing] goes last.
+String bpgnMovetext(TableLine line, {List<String> closing = const []}) {
   final tokens = <String>[
     for (final node in line.shown.nodes)
       switch (node.entry) {
-        LineMove(:final board, :final side, :final number, :final san) =>
-          '$number${_letter(board, side)}. $san',
+        LineMove(
+          :final board,
+          :final side,
+          :final number,
+          :final san,
+          :final clock,
+        ) =>
+          '$number${_letter(board, side)}. $san'
+              '${clock == null ? '' : ' {${clockSeconds(clock)}}'}',
         HandEdit(:final board, :final changes) =>
           '{ $_editNote ${board.digit}: ${handChangeText(changes)} }',
       },
+    ...closing,
   ];
   final lines = <String>[];
   var current = '';
@@ -43,22 +53,62 @@ String _letter(BoardNumber board, Side side) {
 }
 
 /// What the Bughouse mode copies: the line's movetext, after a
-/// `SetUpDualFEN` tag when it does not start from the usual table.
-String tableLineText(TableLine line) {
-  final moves = bpgnMovetext(line);
-  return line.root.dualFen == TablePosition.initial.dualFen
-      ? moves
-      : '[SetUpDualFEN "${line.root.lichessDualFen}"]\n\n$moves';
+/// `SetUpDualFEN` tag when it does not start from the usual table. With
+/// [game], a whole BPGN game: its tags first, and its ending and result
+/// after the moves.
+String tableLineText(TableLine line, {TableGame? game}) {
+  final result = game?.tags['Result'];
+  final moves = bpgnMovetext(
+    line,
+    closing: [if (game?.ending case final ending?) '{$ending}', ?result],
+  );
+  final tags = [
+    if (game != null)
+      for (final MapEntry(:key, :value) in game.tags.entries)
+        '[$key "${value.replaceAll(r'\', r'\\').replaceAll('"', r'\"')}"]',
+    if (line.root.dualFen != TablePosition.initial.dualFen)
+      '[SetUpDualFEN "${line.root.lichessDualFen}"]',
+  ];
+  return tags.isEmpty ? moves : '${tags.join('\n')}\n\n$moves';
 }
+
+/// The games in [text], each its own text: a game is its tags and the
+/// movetext after them, so a tag after movetext starts the next. Text
+/// without tags is one game.
+List<String> bpgnGames(String text) {
+  final games = <String>[];
+  var current = StringBuffer();
+  var moves = false;
+  void end() {
+    if (current.toString().trim().isNotEmpty) games.add(current.toString());
+    current = StringBuffer();
+    moves = false;
+  }
+
+  for (final line in text.split(RegExp(r'\r?\n'))) {
+    final tag = _tagLine.hasMatch(line);
+    if (tag && moves) end();
+    if (!tag && line.trim().isNotEmpty) moves = true;
+    current.writeln(line);
+  }
+  end();
+  return games;
+}
+
+final _tagLine = RegExp(r'^\s*\[\w+\s+"');
+final _tag = RegExp(r'\[(\w+)\s+"((?:[^"\\]|\\.)*)"\]');
 
 sealed class PastedMoves {
   const PastedMoves();
 }
 
 final class PastedLine extends PastedMoves {
-  const PastedLine(this.line);
+  const PastedLine(this.line, {this.game});
 
   final TableLine line;
+
+  /// What the text's tags say of the game; null when it has none.
+  final TableGame? game;
 }
 
 /// Nothing was pasted. [token] is the first move that does not play, or
@@ -73,31 +123,83 @@ final _token = RegExp(
   r'\{\s*'
   '$_editNote'
   r'\s*([12])\s*:([^}]*)\}'
-  r'|\{[^}]*\}'
+  r'|\{([^}]*)\}'
   r'|(\d+)([AaBb])\.\s*([^\s{}()]+)',
 );
 final _change = RegExp('([+−-])(\\d*)([pnbrqPNBRQ])');
 
-/// BPGN movetext back into a line: what [tableLineText] writes, hand edits
-/// included, or a FICS game. Tags other than `SetUpDualFEN`, other comments
-/// and results are passed over; every move must play, in order, or nothing
-/// is taken.
+/// Moves as the engines write them, `1e2e4 2N@f3`: the board's digit, then
+/// the move in coordinates. What an older arena file's `Opening` tag holds.
+final _engineMoves = RegExp(
+  r'^[12](?:[a-h][1-8][a-h][1-8][nbrq]?|[PNBRQ]@[a-h][1-8])'
+  r'(?:\s+[12](?:[a-h][1-8][a-h][1-8][nbrq]?|[PNBRQ]@[a-h][1-8]))*$',
+);
+
+/// The tags of one game's [text], as written, and the engine moves an
+/// older arena file's `Opening` tag played before its movetext.
+({Map<String, String> tags, String? setup, List<String> opening}) _tags(
+  String text,
+) {
+  final tags = <String, String>{};
+  for (final tag in _tag.allMatches(text)) {
+    tags[tag[1]!] = tag[2]!.replaceAllMapped(RegExp(r'\\(.)'), (m) => m[1]!);
+  }
+  final setup = tags.remove('SetUpDualFEN');
+  final opening = tags['Opening']?.trim() ?? '';
+  if (!_engineMoves.hasMatch(opening)) {
+    return (tags: tags, setup: setup, opening: const []);
+  }
+  tags.remove('Opening');
+  return (tags: tags, setup: setup, opening: opening.split(RegExp(r'\s+')));
+}
+
+/// What [text]'s tags say of its game, without reading its moves; null
+/// when it has none.
+TableGame? tableGameOf(String text) {
+  final tags = _tags(text).tags;
+  return tags.isEmpty ? null : TableGame(tags, ending: tags['Termination']);
+}
+
+/// One BPGN game back into a line: what [tableLineText] writes, hand edits
+/// included, a FICS game, or an arena game. A move is SAN or coordinates
+/// (`e7e5`, `f7g8q`), and the comment right after it its clock. A
+/// `SetUpDualFEN` tag is the start, the other tags are the game's, and
+/// other comments are passed over but the last, which says how the game
+/// ended. Every move must play, in order, or nothing is taken.
 PastedMoves readTableLineText(String text) {
+  final (:tags, :setup, :opening) = _tags(text);
   var root = TablePosition.initial;
-  final setup = RegExp(r'\[SetUpDualFEN "([^"]*)"\]').firstMatch(text);
   if (setup != null) {
-    switch (readDualFen(setup[1]!)) {
+    switch (readDualFen(setup)) {
       case SetupReady(:final position):
         root = position;
       case SetupRefused():
-        return PastedMovesRefused(setup[0]);
+        return PastedMovesRefused('[SetUpDualFEN "$setup"]');
     }
   }
-  final body = text.replaceAll(RegExp(r'\[[^\]]*\]'), ' ');
   var line = TableLine(root);
   var position = root;
   var taken = false;
-  for (final token in _token.allMatches(body)) {
+
+  /// Plays [move], SAN or coordinates, on [board]; false when it does not.
+  bool play(BoardNumber board, String move, {Duration? clock}) {
+    final uci = position.moveBySan(board, move)?.uci ?? move;
+    final played = lineMove(position, board, uci, clock: clock);
+    if (played == null) return false;
+    line = line.played(played.move);
+    position = played.after;
+    return taken = true;
+  }
+
+  for (final move in opening) {
+    final board = move[0] == '1' ? BoardNumber.one : BoardNumber.two;
+    if (!play(board, move.substring(1))) return PastedMovesRefused(move);
+  }
+  String? ending;
+  final tokens = _token
+      .allMatches(text.replaceAll(RegExp(r'\[[^\]]*\]'), ' '))
+      .toList();
+  for (final (i, token) in tokens.indexed) {
     if (token[1] case final digit?) {
       final board = digit == '1' ? BoardNumber.one : BoardNumber.two;
       for (final change in _change.allMatches(token[2]!)) {
@@ -114,18 +216,30 @@ PastedMoves readTableLineText(String text) {
       position = (line.replay() as LineReplayed).position;
       continue;
     }
-    final san = token[5];
-    if (san == null) continue;
-    final board = token[4]!.toUpperCase() == 'A'
+    if (token[3] case final comment?) {
+      final note = comment.trim();
+      final said =
+          clockComment(note) == null &&
+          !note.startsWith('C:') &&
+          note.contains(RegExp('[A-Za-z]'));
+      if (said) ending = note;
+      continue;
+    }
+    final board = token[5]!.toUpperCase() == 'A'
         ? BoardNumber.one
         : BoardNumber.two;
-    final move = position.moveBySan(board, san);
-    final played = move == null ? null : lineMove(position, board, move.uci);
-    if (played == null) return PastedMovesRefused(token[0]);
-    line = line.played(played.move);
-    position = played.after;
-    taken = true;
+    final after = i + 1 < tokens.length ? tokens[i + 1][3] : null;
+    final clock = after == null ? null : clockComment(after);
+    if (!play(board, token[6]!, clock: clock)) {
+      return PastedMovesRefused(token[0]);
+    }
+    ending = null;
   }
   if (!taken) return const PastedMovesRefused(null);
-  return PastedLine(line);
+  return PastedLine(
+    line,
+    game: tags.isEmpty
+        ? null
+        : TableGame(tags, ending: ending ?? tags['Termination']),
+  );
 }

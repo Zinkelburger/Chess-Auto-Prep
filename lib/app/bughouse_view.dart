@@ -56,6 +56,14 @@ final class BughouseView extends ModeView {
 
   static const _pauseReason = 'Paused while Bughouse is open';
 
+  /// ↓ and ↑ walk the games of the opened file; with one game or none they
+  /// do nothing here, rather than walk the workspace's file out of sight.
+  @override
+  bool walk(int by) {
+    _labs.lab.showGame(_labs.lab.gameAt + by);
+    return true;
+  }
+
   @override
   List<AppAction> actions(ModeMenu menu) {
     final lab = _labs.lab;

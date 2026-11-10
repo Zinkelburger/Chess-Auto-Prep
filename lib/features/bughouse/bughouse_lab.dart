@@ -5,6 +5,7 @@ import '../../chess/bughouse/bpgn_moves.dart';
 import '../../chess/bughouse/crazyhouse_pgn.dart';
 import '../../chess/bughouse/hivemind.dart';
 import '../../chess/bughouse/table.dart';
+import '../../chess/bughouse/table_game.dart';
 import '../../chess/bughouse/table_line.dart';
 import '../../chess/bughouse/table_setup.dart';
 
@@ -21,7 +22,8 @@ enum LabBoards {
 
 /// The Bughouse mode's table: the two boards, the line played on them with
 /// a cursor per board, how many boards are shown, the clock case the engine
-/// answers for, and what the user is pointing at.
+/// answers for, and what the user is pointing at. When the line is a game
+/// from a BPGN, also who played it and the other games of its file.
 ///
 /// A scratchpad: nothing here is saved. Leaving the mode keeps the table
 /// for when the user comes back; quitting the app loses it.
@@ -33,6 +35,10 @@ final class BughouseLab extends ChangeNotifier {
   ClockCase _clock = ClockCase.cdMaySit;
   bool _flipped = false;
   TableRefusal? _problem;
+  TableGame? _game;
+  List<String> _games = const [];
+  int _gameAt = 0;
+  String? _file;
 
   /// The move a table row, an analysis row or an archive row is pointing
   /// at, drawn as an arrow on its board. Apart from the rest, so a pointer
@@ -52,6 +58,20 @@ final class BughouseLab extends ChangeNotifier {
 
   /// Why the last move or step was refused, for the status line.
   TableRefusal? get problem => _problem;
+
+  /// Who played the line on the boards and how it ended, when it was read
+  /// from a BPGN with tags; null for a line made here.
+  TableGame? get game => _game;
+
+  /// How many games the opened file holds, and which is on the boards,
+  /// from 0. One game, or a line made here, is not counted: 0.
+  int get gameCount => _games.length;
+  int get gameAt => _gameAt;
+
+  /// What [seat]'s clock reads with the boards as they are: after its last
+  /// move, or the time the game started with; null when the game notes
+  /// neither.
+  Duration? timeLeft(Seat seat) => _line.clock(seat) ?? _game?.startClock;
 
   /// The colour at the bottom of [board]: A + B's, unless flipped.
   Side bottom(BoardNumber board) {
@@ -266,8 +286,9 @@ final class BughouseLab extends ChangeNotifier {
     }
   }
 
-  /// Each board's line as the mode copies it (see [tableLineText]).
-  String get movesText => tableLineText(_line);
+  /// Each board's line as the mode copies it, a whole BPGN game when the
+  /// line is one (see [tableLineText]).
+  String get movesText => tableLineText(_line, game: _game);
 
   /// The line up to and including [node] as a PGN: with one board, a
   /// crazyhouse PGN of board 1 that Lichess imports; with two, the BPGN
@@ -303,21 +324,58 @@ final class BughouseLab extends ChangeNotifier {
         : tableLineText(line);
   }
 
-  /// Pasted movetext as a new line, every move played; refused whole when
-  /// one does not play. [file] names the file it was read from, when it was
+  /// Pasted BPGN as a new line, every move played; refused whole when one
+  /// does not play. [file] names the file it was read from, when it was
   /// opened rather than pasted: a pasted line is shown at its end, to go on
   /// from, and an opened game at its start, to play through. Moves on board
-  /// 2 show both boards.
+  /// 2 show both boards. Text with several games shows the first, the rest
+  /// a step away with [showGame].
   void pasteMoves(String text, {String? file}) {
+    final games = bpgnGames(text);
+    if (games.length > 1) {
+      _games = games;
+      _file = file;
+      showGame(0);
+      return;
+    }
     switch (readTableLineText(text)) {
-      case PastedLine(:final line):
-        if (line.nodes.any((node) => node.board == BoardNumber.two)) {
-          _boards = LabBoards.two;
-        }
+      case PastedLine(:final line, :final game):
+        _games = const [];
+        _gameAt = 0;
+        _file = null;
+        _game = game;
+        _bothBoardsFor(line);
         if (file != null) _focus = BoardNumber.one;
         showLine(file == null ? line : line.atStart);
       case PastedMovesRefused(:final token):
         _refuse(MovesRefused(token, file: file));
+    }
+  }
+
+  /// Game [index] of the opened file on the boards, at its start. One that
+  /// does not play is shown without its moves, with the move that broke it
+  /// named, so the games after it can still be reached.
+  void showGame(int index) {
+    if (index < 0 || index >= _games.length) return;
+    _gameAt = index;
+    _focus = BoardNumber.one;
+    switch (readTableLineText(_games[index])) {
+      case PastedLine(:final line, :final game):
+        _game = game;
+        _bothBoardsFor(line);
+        showLine(line.atStart);
+      case PastedMovesRefused(:final token):
+        _game = tableGameOf(_games[index]);
+        _line = const TableLine(TablePosition.initial);
+        _position = TablePosition.initial;
+        preview.value = null;
+        _refuse(MovesRefused(token, file: _file));
+    }
+  }
+
+  void _bothBoardsFor(TableLine line) {
+    if (line.nodes.any((node) => node.board == BoardNumber.two)) {
+      _boards = LabBoards.two;
     }
   }
 
@@ -339,7 +397,12 @@ final class BughouseLab extends ChangeNotifier {
     if (board != _focus) _change(() => _focus = board);
   }
 
+  /// A new line from [position], which is no game of a file.
   void _reset(TablePosition position, {BoardNumber focus = BoardNumber.one}) {
+    _game = null;
+    _games = const [];
+    _gameAt = 0;
+    _file = null;
     _line = TableLine(position);
     _show(position, focus: focus);
   }

@@ -18,12 +18,19 @@ final class LineMove extends LineEntry {
     required this.san,
     required this.side,
     required this.number,
+    this.clock,
   });
 
   final String uci;
   final String san;
   final Side side;
   final int number;
+
+  /// What the mover's clock read once the move was made, when the game it
+  /// is from noted it.
+  final Duration? clock;
+
+  Seat get seat => Seat.of(board, side);
 }
 
 /// The hands on [board] changed by [changes], as the website notes it after
@@ -151,6 +158,20 @@ final class TableLine {
   LineMove? current(BoardNumber board) {
     for (int? n = at(board); n != null; n = nodes[n].parent) {
       if (nodes[n].entry case final LineMove move) return move;
+    }
+    return null;
+  }
+
+  /// What [seat]'s clock read after its last move on the boards now that
+  /// has one noted; null when it has made none.
+  Duration? clock(Seat seat) {
+    for (int? n = at(seat.board); n != null; n = nodes[n].parent) {
+      if (nodes[n].entry case LineMove(
+        :final clock?,
+        seat: final mover,
+      ) when mover == seat) {
+        return clock;
+      }
     }
     return null;
   }
@@ -461,8 +482,9 @@ final class LineBroken extends LineReplay {
 ({TablePosition after, LineMove move})? lineMove(
   TablePosition position,
   BoardNumber board,
-  String uci,
-) {
+  String uci, {
+  Duration? clock,
+}) {
   final played = position.play(board, uci);
   if (played == null) return null;
   final before = position.board(board);
@@ -474,6 +496,7 @@ final class LineBroken extends LineReplay {
       san: played.move.san,
       side: before.turn,
       number: before.fullmoves,
+      clock: clock,
     ),
   );
 }
