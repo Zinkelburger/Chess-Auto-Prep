@@ -34,10 +34,17 @@ abstract final class SearchSettingCopy {
       '${choice.speedsInOrder.map((s) => s.title).join(' ')} · '
       '${choice.ratingsInOrder.join(' ')}';
   static const rating = ('Maia rating', 'opponent replies at this Elo');
-  static const rootMoves = ('First move', 'our best engine moves searched');
+  static const rootMoves = (
+    'First move',
+    'our best engine moves compared where the search starts',
+  );
   static const candidateMoves = (
     'Later moves',
-    'our best engine moves searched',
+    'our best engine moves at every move after; 1 goes deepest',
+  );
+  static const bothSides = (
+    'Other side too',
+    'its values in a second column; about twice the time',
   );
   static const rare = (
     'Search replies met once in',
@@ -132,6 +139,20 @@ class SearchSettingsView extends StatelessWidget {
     ),
   );
 
+  /// The tick that searches the board for the other side as well.
+  Widget _bothSides(ExpectimaxOptions e) => _SettingLine(
+    copy: SearchSettingCopy.bothSides,
+    leading: Checkbox(
+      value: e.bothSides,
+      semanticLabel: SearchSettingCopy.bothSides.$1,
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      onChanged: locked
+          ? null
+          : (on) => _change((o) => o.copyWith(bothSides: on ?? false)),
+    ),
+  );
+
   /// Who answers for the opponent besides the bar's choice: which Lichess
   /// games, whether Maia fills in, and Maia's rating where it is asked.
   List<Widget> _opponent(Settings s) {
@@ -202,6 +223,7 @@ class SearchSettingsView extends StatelessWidget {
             max: ExpectimaxOptions.maxMoves,
             onChanged: (n) => _change((o) => o.copyWith(candidateMoves: n)),
           ),
+          _bothSides(e),
           _number(
             SearchSettingCopy.rare,
             value: e.rareOnceIn,

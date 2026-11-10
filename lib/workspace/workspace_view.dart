@@ -253,6 +253,7 @@ class _Tabbed extends StatelessWidget {
       settings: workspace.settings,
       onOpenChapter: hooks.onOpenChapter,
       onShowPositions: hooks.onShowPositions,
+      onTogglePositions: hooks.onTogglePositions,
     ),
     WorkspaceTab.audit =>
       workspace.audit == null

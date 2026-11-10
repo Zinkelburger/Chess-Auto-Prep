@@ -125,22 +125,32 @@ ChapterEdit lineAdded(Chapter chapter, List<String> sans) {
 
 /// Every decision [chapter] already makes for its side, as
 /// [DraftMove.decision] spells one, in both spellings of a castling move.
-Set<String> chapterDecisions(Chapter chapter) {
-  final decisions = <String>{};
+Set<String> chapterDecisions(Chapter chapter) => {
+  for (final MapEntry(key: position, value: moves) in chapterPins(
+    chapter,
+  ).entries)
+    for (final uci in moves) '$position|$uci',
+};
+
+/// The moves [chapter] already plays for its side, by the position each is
+/// played from (four FEN fields), in both spellings of a castling move:
+/// what a search of the chapter plays rather than choosing again.
+Map<String, Set<String>> chapterPins(Chapter chapter) {
+  final pins = <String, Set<String>>{};
   final ours = chapter.side == Side.white;
   void visit(Fen fen, List<MoveNode> children) {
     for (final child in children) {
       if (fen.whiteToMove == ours) {
-        decisions.add('${fen.position}|${child.uci}');
+        final moves = pins.putIfAbsent(fen.position, () => {})..add(child.uci);
         final standard = standardCastling(child.uci, fen);
-        if (standard != null) decisions.add('${fen.position}|$standard');
+        if (standard != null) moves.add(standard);
       }
       visit(child.fen, child.children);
     }
   }
 
   visit(chapter.tree.rootFen, chapter.tree.children);
-  return decisions;
+  return pins;
 }
 
 /// The model's spelling of a castling move the tree spells king-to-rook,

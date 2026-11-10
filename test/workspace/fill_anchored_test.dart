@@ -45,8 +45,8 @@ final class _Gated implements PositionEvaluator {
   }
 }
 
-/// A run goes from searching to saving to over, and only a run still
-/// searching follows the board: what each stop and each move does on the
+/// A run goes from searching to saving to over, and stays where it was
+/// started while the board moves: what each stop and each move does on the
 /// way.
 void main() {
   late SessionFixture fixture;
@@ -123,7 +123,7 @@ void main() {
       reason: 'the run is not over until its tree is saved',
     );
 
-    expect(await fill.followMove('e2e4'), isNull);
+    fixture.session.playMove('e2e4');
     await pumpEventQueue();
     expect(engines, hasLength(1));
     expect(fill.state, isA<FillDone>());
@@ -188,8 +188,50 @@ void main() {
     expect(analysis.paused, isFalse);
   });
 
-  test('after a cancel the board moves freely, and a search started again '
-      'follows it', () async {
+  test('a running search stays where it was started while the board moves, '
+      'and its tree is read at the board', () async {
+    final fill = fillWith(_Gated.new);
+    final run = fill.start(request);
+    await pumpEventQueue();
+    expect(fill.running, isTrue);
+
+    fixture.session.playMove('e2e4');
+    await pumpEventQueue();
+    expect(fill.running, isTrue, reason: 'a move on the board stops nothing');
+    expect((fill.state as FillRunning).stopping, isFalse);
+    expect(engines, hasLength(1), reason: 'and starts no second search');
+
+    (engines.single as _Gated).open();
+    await run;
+    expect(fill.state, isA<FillDone>());
+    expect(
+      fill.found!.target.sans,
+      isEmpty,
+      reason: 'the run is still the one started at the first board',
+    );
+    expect(
+      fill.nodeAtBoard()?.fen.value,
+      afterUci(positionOf(kingAndPawn), 'e2e4').fen,
+      reason: 'the table reads the tree at the position browsed to',
+    );
+    expect(releases, 1);
+  });
+
+  test('a running search stops and keeps what it has when the board is '
+      'turned to the other side', () async {
+    final fill = fillWith(_Gated.new);
+    final run = fill.start(request);
+    await pumpEventQueue();
+    fixture.session.flip();
+    expect((fill.state as FillRunning).finishing, isTrue);
+    (engines.single as _Gated).open();
+    await run;
+    expect(fill.state, isA<FillDone>());
+    expect(fill.found, isNotNull);
+    expect(engines, hasLength(1));
+  });
+
+  test('after a cancel the board moves freely and nothing starts', () async {
     final fill = fillWith(_Gated.new);
     final first = fill.start(request);
     await pumpEventQueue();
@@ -200,60 +242,7 @@ void main() {
     await first;
     await pumpEventQueue();
     expect(fill.state, isA<FillIdle>());
-    expect(engines, hasLength(1), reason: 'a cancelled search follows nothing');
-    expect(releases, 1);
-
-    final second = fill.start(request);
-    await pumpEventQueue();
-    expect(fill.running, isTrue);
-    final following = fill.followMove('e2e4');
-    (engines[1] as _Gated).open();
-    await second;
-    await until(() => engines.length == 3);
-    expect(fill.running, isTrue);
-    expect(
-      (engines[2] as _Gated).asked.first,
-      afterUci(positionOf(kingAndPawn), 'e2e4').fen,
-      reason: 'the new run starts at the board it followed',
-    );
-    fill.cancel();
-    (engines[2] as _Gated).open();
-    expect(await following, isNull);
-    expect(fill.state, isA<FillIdle>());
-    expect(releases, 3);
-  });
-
-  test('a stop asked while the search waits to follow the board starts '
-      'nothing', () async {
-    final gate = Completer<void>();
-    var saves = 0;
-    final fill = fillWith(
-      ScriptedEvaluator.new,
-      keepTree: (_, _, {required runId}) async {
-        if (++saves == 1) await gate.future;
-      },
-    );
-    Future<String?>? following;
-    void follow() {
-      if (fill.running && fill.found != null && following == null) {
-        following = Future.value();
-        following = fill.followMove('e2e4');
-      }
-    }
-
-    fill.addListener(follow);
-    final run = fill.start(request);
-    await until(() => saves > 0);
-    fill.removeListener(follow);
-    expect(fill.state, isA<FillDone>());
-    expect(fill.canStart, isFalse);
-    fill.finish();
-    gate.complete();
-    await run;
-    expect(await following, isNull);
-    await pumpEventQueue();
     expect(engines, hasLength(1));
-    expect(fill.running, isFalse);
-    expect(fill.canStart, isTrue);
+    expect(releases, 1);
   });
 }

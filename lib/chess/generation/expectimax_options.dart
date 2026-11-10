@@ -36,7 +36,8 @@ final class ExpectimaxOptions {
     this.method = SearchMethod.practical,
     this.depth,
     this.rootMoves = 4,
-    this.candidateMoves = 4,
+    this.candidateMoves = 1,
+    this.bothSides = false,
     this.rareOnceIn = 100,
     this.evalDepth = defaultEvalDepth,
     this.source = EvaluationSource.stockfish,
@@ -54,8 +55,14 @@ final class ExpectimaxOptions {
   /// Our moves kept for the first move of the search.
   final int rootMoves;
 
-  /// Our moves kept at every later move of ours.
+  /// Our moves kept at every later move of ours. One by default: the
+  /// choice is compared where the search starts and played on from there,
+  /// so the search goes deep along the lines games take instead of wide.
   final int candidateMoves;
+
+  /// Whether the board is searched for the other side as well, for its
+  /// column of values. It is a second tree: about twice the work.
+  final bool bothSides;
 
   /// A reply path met less than once in this many games keeps its engine
   /// value and is not searched further. Zero searches every reply.
@@ -102,6 +109,7 @@ final class ExpectimaxOptions {
     SearchMethod? method,
     int? rootMoves,
     int? candidateMoves,
+    bool? bothSides,
     int? rareOnceIn,
     int? evalDepth,
     EvaluationSource? source,
@@ -113,6 +121,7 @@ final class ExpectimaxOptions {
     depth: depth,
     rootMoves: rootMoves ?? this.rootMoves,
     candidateMoves: candidateMoves ?? this.candidateMoves,
+    bothSides: bothSides ?? this.bothSides,
     rareOnceIn: rareOnceIn ?? this.rareOnceIn,
     evalDepth: evalDepth ?? this.evalDepth,
     source: source ?? this.source,
@@ -127,6 +136,7 @@ final class ExpectimaxOptions {
     depth: depth,
     rootMoves: rootMoves,
     candidateMoves: candidateMoves,
+    bothSides: bothSides,
     rareOnceIn: rareOnceIn,
     evalDepth: evalDepth,
     source: source,
@@ -139,7 +149,8 @@ final class ExpectimaxOptions {
     'method': method.name,
     'depth': depth,
     'rootMoves': rootMoves,
-    'candidateMoves': candidateMoves,
+    'laterMoves': candidateMoves,
+    'bothSides': bothSides,
     'rareOnceIn': rareOnceIn,
     'evalDepth': evalDepth,
     'source': source.name,
@@ -149,7 +160,9 @@ final class ExpectimaxOptions {
   };
 
   /// Reads [value]; a field that is missing, of the wrong type or out of
-  /// range keeps its default.
+  /// range keeps its default. Later moves are read from `laterMoves`: the
+  /// `candidateMoves` older settings wrote was the wide default of four,
+  /// saved whether or not it was chosen, and is not read.
   factory ExpectimaxOptions.fromJson(Object? value) {
     if (value is! Map<String, Object?>) return defaults;
     int number(String key, int fallback, int min, int max) {
@@ -167,11 +180,14 @@ final class ExpectimaxOptions {
           : null,
       rootMoves: number('rootMoves', defaults.rootMoves, 1, maxMoves),
       candidateMoves: number(
-        'candidateMoves',
+        'laterMoves',
         defaults.candidateMoves,
         1,
         maxMoves,
       ),
+      bothSides: value['bothSides'] is bool
+          ? value['bothSides'] as bool
+          : defaults.bothSides,
       rareOnceIn: rare == 1 ? defaults.rareOnceIn : rare,
       evalDepth: number(
         'evalDepth',
@@ -203,6 +219,7 @@ final class ExpectimaxOptions {
       depth == other.depth &&
       rootMoves == other.rootMoves &&
       candidateMoves == other.candidateMoves &&
+      bothSides == other.bothSides &&
       rareOnceIn == other.rareOnceIn &&
       evalDepth == other.evalDepth &&
       source == other.source &&
@@ -216,6 +233,7 @@ final class ExpectimaxOptions {
     depth,
     rootMoves,
     candidateMoves,
+    bothSides,
     rareOnceIn,
     evalDepth,
     source,

@@ -1,4 +1,3 @@
-import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:dartchess/dartchess.dart' show Position;
@@ -20,6 +19,10 @@ typedef CancelSignal = bool Function();
 /// How far a search has got, told after every expansion: the nodes the tree
 /// holds and the deepest ply expanded so far.
 typedef SearchProgress = ({int nodes, int depth});
+
+/// How much of the level under way is done, told as each of its positions
+/// is: [done] of the [of] positions the level has to expand.
+typedef LevelProgress = void Function(int done, int of);
 
 /// The ply no node at or past is expanded, asked before every expansion;
 /// null while there is none. The search goes level by level, so a cap set
@@ -70,6 +73,7 @@ Future<SearchResult> buildSearchTree({
   CancelSignal isCancelled = _neverCancelled,
   LastPly? lastPly,
   void Function(SearchProgress progress)? onProgress,
+  LevelProgress? onLevel,
   SearchSnapshot? onSnapshot,
   SearchNode? seed,
 }) => _Search(
@@ -80,6 +84,7 @@ Future<SearchResult> buildSearchTree({
   isCancelled: isCancelled,
   lastPly: lastPly,
   onProgress: onProgress,
+  onLevel: onLevel,
   onSnapshot: onSnapshot,
 ).run(root, seed);
 
@@ -144,6 +149,7 @@ final class _Search {
     required this.isCancelled,
     required this.lastPly,
     required this.onProgress,
+    required this.onLevel,
     required this.onSnapshot,
   });
 
@@ -154,6 +160,7 @@ final class _Search {
   final CancelSignal isCancelled;
   final LastPly? lastPly;
   final void Function(SearchProgress progress)? onProgress;
+  final LevelProgress? onLevel;
   final SearchSnapshot? onSnapshot;
 
   _Stop? _stop;
@@ -245,6 +252,16 @@ final class _Search {
       return _restore(_play(path, named, share: share).$2, node);
     }
 
+    final pinned = saved is OurNode
+        ? _pinned(path, legal.values.toList())
+        : const <NamedMove>[];
+    // A saved choice the pins have since replaced is made again.
+    if (saved is OurNode &&
+        pinned.isNotEmpty &&
+        !_comparesPins(path) &&
+        !_sameMoves(saved.candidates, pinned)) {
+      return pending;
+    }
     pending.expansion = switch (saved) {
       OurNode(:final candidates) => OurMoves([
         for (final c in candidates) (c.move, await child(c.move, c.child, 1)),
@@ -261,12 +278,14 @@ final class _Search {
     if (saved is OurNode &&
         config.maxOurMoves != null &&
         path.ply < 2 &&
-        !config.pins.containsKey(path.fen.position) &&
-        saved.candidates.length <
-            math.min(
-              config.ourMovesAt(path.ply) ?? legal.length,
-              legal.length,
-            )) {
+        (saved.candidates.length <
+                math.min(
+                  config.ourMovesAt(path.ply) ?? legal.length,
+                  legal.length,
+                ) ||
+            pinned.any(
+              (pin) => !saved.candidates.any((c) => c.move.uci == pin.uci),
+            ))) {
       _topUp.add(pending);
     }
     return pending;
@@ -346,49 +365,77 @@ final class _Search {
     );
   }
 
-  /// Expands the shallowest unexpanded node first, until the horizon is
-  /// reached everywhere or the search stops.
+  /// Expands the shallowest unexpanded nodes first, a level at a time, until
+  /// the horizon is reached everywhere or the search stops.
   ///
-  /// The queue is what makes an unfinished answer worth having: work is spent
-  /// evenly across the tree, so what comes back is the whole choice seen
-  /// shallowly rather than one line seen deeply.
+  /// The levels are what make an unfinished answer worth having: work is
+  /// spent evenly across the tree, so what comes back is the whole choice
+  /// seen shallowly rather than one line seen deeply. Within a level the
+  /// positions games reach most often go first, so a search stopped in the
+  /// middle of one has answered the likeliest lines of it.
   Future<void> _expandByDepth(PendingNode start) async {
-    final queue = Queue<PendingNode>()..add(start);
-    while (queue.isNotEmpty && !_stopping()) {
-      if (_holding) await _letGo();
-      final pending = queue.removeFirst();
-      final topUp = _topUp.contains(pending);
-      if (pending.expansion case final expanded? when !topUp) {
-        queue.addAll(expanded.children);
-        continue;
+    var level = [start];
+    while (level.isNotEmpty && !_stopping()) {
+      final next = <PendingNode>[];
+      final owed = level.where(_unexpanded).length;
+      var done = 0;
+      for (final pending in _mostReachedFirst(level)) {
+        if (_stopping()) break;
+        if (_unexpanded(pending)) onLevel?.call(done++, owed);
+        if (_holding) await _letGo();
+        final topUp = _topUp.contains(pending);
+        if (pending.expansion case final expanded? when !topUp) {
+          next.addAll(expanded.children);
+          continue;
+        }
+        if (pending.leaf is! FrontierNode) continue;
+        // Every node still waiting is at least this deep.
+        if (lastPly?.call() case final last? when pending.path.ply >= last) {
+          _stop ??= const _Requested(StopReason.levelDone);
+          break;
+        }
+        // The first node of a new level means every level above it is done.
+        if (onSnapshot != null &&
+            (pending.path.ply > _level ||
+                _sinceSnapshot.elapsed > snapshotEvery)) {
+          _level = pending.path.ply;
+          _sinceSnapshot.reset();
+          onSnapshot!(assembleTree(start));
+        }
+        final expansion = topUp
+            ? await _ourMoves(
+                pending.path,
+                saved: pending.expansion as OurMoves?,
+              )
+            : pending.path.position.turn == config.side
+            ? await _ourMoves(pending.path)
+            : await _replies(pending.path);
+        if (expansion == null) continue;
+        _topUp.remove(pending);
+        pending.expansion = expansion;
+        next.addAll(expansion.children);
+        if (pending.path.ply + 1 > _deepest) _deepest = pending.path.ply + 1;
+        onProgress?.call((nodes: _nodes, depth: _deepest));
       }
-      if (pending.leaf is! FrontierNode) continue;
-      // Every node still queued is at least this deep.
-      if (lastPly?.call() case final last? when pending.path.ply >= last) {
-        _stop ??= const _Requested(StopReason.levelDone);
-        break;
-      }
-      // The queue is ordered by depth, so the first node of a new level
-      // means every level above it is done.
-      if (onSnapshot != null &&
-          (pending.path.ply > _level ||
-              _sinceSnapshot.elapsed > snapshotEvery)) {
-        _level = pending.path.ply;
-        _sinceSnapshot.reset();
-        onSnapshot!(assembleTree(start));
-      }
-      final expansion = topUp
-          ? await _ourMoves(pending.path, saved: pending.expansion as OurMoves?)
-          : pending.path.position.turn == config.side
-          ? await _ourMoves(pending.path)
-          : await _replies(pending.path);
-      if (expansion == null) continue;
-      _topUp.remove(pending);
-      pending.expansion = expansion;
-      queue.addAll(expansion.children);
-      if (pending.path.ply + 1 > _deepest) _deepest = pending.path.ply + 1;
-      onProgress?.call((nodes: _nodes, depth: _deepest));
+      level = next;
     }
+  }
+
+  /// Whether [pending] is still to be expanded: a position neither finished
+  /// nor past the horizon that has no moves yet, or is owed more of them.
+  bool _unexpanded(PendingNode pending) =>
+      _topUp.contains(pending) ||
+      (pending.expansion == null && pending.leaf is FrontierNode);
+
+  /// [level] with the positions reached most often first; those reached
+  /// alike keep the order they were found in.
+  List<PendingNode> _mostReachedFirst(List<PendingNode> level) {
+    final ordered = level.indexed.toList()
+      ..sort((a, b) {
+        final byReach = b.$2.path.reach.compareTo(a.$2.path.reach);
+        return byReach != 0 ? byReach : a.$1.compareTo(b.$1);
+      });
+    return [for (final (_, pending) in ordered) pending];
   }
 
   /// Our turn: play every legal move, evaluate what it reaches, and keep the
@@ -399,12 +446,16 @@ final class _Search {
   /// With [saved], the moves it already holds keep their subtrees and only
   /// the missing ones are evaluated.
   Future<Expansion?> _ourMoves(SearchPath path, {OurMoves? saved}) async {
-    var legal = _pinnedOrAll(path, legalMovesOf(path.position));
+    final all = legalMovesOf(path.position);
+    final pinned = _pinned(path, all);
     final limit = config.ourMovesAt(path.ply);
     final shortlist = candidates;
+    // A pinned position plays its pins alone, except at the first move of a
+    // shortlisted search, where they are set beside the engine's best.
+    var legal = pinned.isEmpty || _comparesPins(path) ? all : pinned;
     if (shortlist != null &&
         limit != null &&
-        !config.pins.containsKey(path.fen.position) &&
+        (pinned.isEmpty || _comparesPins(path)) &&
         legal.length > limit) {
       List<String>? ranked;
       try {
@@ -428,7 +479,11 @@ final class _Search {
         );
         return null;
       }
-      legal = selected;
+      legal = [
+        ...selected,
+        for (final pin in pinned)
+          if (!selected.contains(pin)) pin,
+      ];
     }
     final have = {
       if (saved != null)
@@ -452,7 +507,12 @@ final class _Search {
     ], lossLimitCp: config.lossLimitCp);
     if (limit case final count?) {
       admitted.sort((a, b) => b.evalForUs.cp.compareTo(a.evalForUs.cp));
-      admitted = admitted.take(count).toList();
+      // A pin is ours whatever the engine ranks it.
+      final pins = {for (final pin in pinned) pin.uci};
+      admitted = [
+        ...admitted.take(count),
+        ...admitted.skip(count).where((c) => pins.contains(c.move.uci)),
+      ];
     }
     // Moves are told apart by their name, never by the identity of the
     // candidate the window handed back.
@@ -468,20 +528,25 @@ final class _Search {
     ]);
   }
 
-  /// [legal] narrowed to the moves pinned at [path]'s position, when any of
-  /// them is legal there. A pin names a move in the model's spelling or in
-  /// dartchess's — castling is `e1g1` to one and `e1h1` to the other — so
-  /// both are tried.
-  List<NamedMove> _pinnedOrAll(SearchPath path, List<NamedMove> legal) {
+  /// The moves of [legal] pinned at [path]'s position; none when it has no
+  /// pin, or none of them is legal there. A pin names a move in the model's
+  /// spelling or in dartchess's — castling is `e1g1` to one and `e1h1` to
+  /// the other — so both are tried.
+  List<NamedMove> _pinned(SearchPath path, List<NamedMove> legal) {
     final pinned = config.pins[path.fen.position];
-    if (pinned == null || pinned.isEmpty) return legal;
-    final kept = [
+    if (pinned == null || pinned.isEmpty) return const [];
+    return [
       for (final named in legal)
         if (pinned.contains(named.uci) || pinned.contains(named.move.uci))
           named,
     ];
-    return kept.isEmpty ? legal : kept;
   }
+
+  /// Whether the pins at [path] are compared with the engine's shortlist
+  /// rather than played alone: at the first move of a shortlisted search,
+  /// which is the position the user asked about.
+  bool _comparesPins(SearchPath path) =>
+      path.ply < 2 && config.ourMovesAt(path.ply) != null;
 
   /// The opponent's turn: take the model's distribution over the legal
   /// replies and keep the likeliest ones the config allows, renormalised
@@ -536,6 +601,13 @@ final class _Search {
     }
     return played;
   }
+
+  /// Whether [candidates] are exactly the moves of [pinned].
+  bool _sameMoves(List<CandidateMove> candidates, List<NamedMove> pinned) =>
+      candidates.length == pinned.length &&
+      candidates.every(
+        (candidate) => pinned.any((pin) => pin.uci == candidate.move.uci),
+      );
 
   String _policyReason(PolicyResult result) => switch (result) {
     PolicyUnavailable(:final reason) => reason,

@@ -50,11 +50,20 @@ class SearchStatusLine extends StatelessWidget {
         'Pausing after depth $lastPly · $nodes positions',
         false,
       ),
-      FillRunning(:final depth, :final of, :final nodes, :final stopping) => (
-        '${stopping ? 'Pausing at depth' : 'Depth'} $depth'
-            '${of == null || stopping ? '' : ' of $of'} · $nodes positions',
-        false,
-      ),
+      FillRunning(
+        :final depth,
+        :final of,
+        :final nodes,
+        :final stopping,
+        :final levelShare,
+      ) =>
+        (
+          '${stopping ? 'Pausing at depth' : 'Depth'} $depth'
+              '${of == null || stopping ? '' : ' of $of'}'
+              '${levelShare == null || stopping ? '' : ' (${(levelShare * 100).floor()}%)'}'
+              ' · $nodes positions',
+          false,
+        ),
       FillDone(
         :final depth,
         :final nodes,
@@ -63,7 +72,7 @@ class SearchStatusLine extends StatelessWidget {
         :final stoppedBy,
       ) =>
         (
-          '${complete ? 'Depth' : 'Stopped at depth'} $depth · '
+          '${complete ? 'Finished depth' : 'Stopped at depth'} $depth · '
               '$nodes positions'
               '${sourceLost ? ' · ChessDB stopped answering' : ''}'
               '${stoppedBy == null ? '' : ' · $stoppedBy'}${_findsWords()}',
@@ -113,6 +122,7 @@ class SearchStatusLine extends StatelessWidget {
       else if (e.maiaFallback)
         '$maia under ${e.fallbackUnder} games',
       'best ${e.rootMoves}, then ${e.candidateMoves}',
+      if (e.bothSides) 'both sides',
       if (e.source != EvaluationSource.stockfish) e.source.label,
     ].join(' · ');
   }

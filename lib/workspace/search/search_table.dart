@@ -6,6 +6,7 @@ import '../../chess/generation/draft_lines.dart' show expectimaxText;
 import '../../chess/generation/eval.dart';
 import '../../chess/generation/search_node.dart';
 import '../../chess/generation/sources.dart' show RepliesFrom;
+import '../../chess/generation/trap_scent.dart';
 import '../../chess/generation/traps.dart'
     show trapMinLossCp, trapMinShare, trapRepliesAt;
 import '../../engines/engine_line.dart' show Centipawns;
@@ -30,6 +31,7 @@ final class SearchRow {
     this.white,
     this.black,
     this.trapLossCp,
+    this.below = noTraps,
   });
 
   final MoveRef move;
@@ -59,6 +61,10 @@ final class SearchRow {
   /// trap for the board's side by [trapRepliesAt]'s rule; null otherwise.
   final int? trapLossCp;
 
+  /// The traps in the lines after the move, in the search made for the
+  /// board's side: which row is worth following.
+  final TrapScent below;
+
   bool get trap => trapLossCp != null;
 
   SideValue? valueFor(Side side) => side == Side.white ? white : black;
@@ -77,6 +83,12 @@ List<SearchRow> searchRows({
   for (final (prepared, node) in [(side, mine), (side.opposite, other)]) {
     final white = prepared == Side.white;
     final from = node is OpponentNode ? node.repliesFrom : null;
+    // What a move of ours must beat for a reply to it to be a trap.
+    final best = prepared == side && node is OurNode
+        ? node.candidates
+              .map((c) => c.evalForUs.cp)
+              .reduce((a, b) => a > b ? a : b)
+        : null;
     for (final (move, child, share, trap) in _movesOf(node)) {
       final value = child.valuation.value;
       final SideValue worth = (
@@ -96,6 +108,9 @@ List<SearchRow> searchRows({
         white: white ? worth : held?.white,
         black: white ? held?.black : worth,
         trapLossCp: held?.trapLossCp ?? (prepared == side ? trap : null),
+        below: prepared == side
+            ? trapsBelow(child, bestBefore: best)
+            : held?.below ?? noTraps,
       );
     }
   }
@@ -129,7 +144,8 @@ List<(MoveRef, SearchNode, double?, int?)> _movesOf(SearchNode? node) {
 /// where, for the floated board.
 ///
 /// Every row and the header keep one height, and the columns their widths.
-/// A pane too narrow for all of them leaves out Played.
+/// A pane too narrow for all of them leaves out Played. A move with traps
+/// in the lines after it says how many beside its name.
 class SearchTable extends StatelessWidget {
   const SearchTable({
     super.key,
@@ -141,6 +157,7 @@ class SearchTable extends StatelessWidget {
     required this.onLeave,
     required this.onPlay,
     this.shareTip,
+    this.valueTip,
   });
 
   final List<SearchRow> rows;
@@ -161,6 +178,10 @@ class SearchTable extends StatelessWidget {
   /// What a share's tooltip says about who gave it ([repliesFromTip]).
   final String Function(RepliesFrom from)? shareTip;
 
+  /// What the one `Value` column is, where only one side was searched;
+  /// null for the book, whose value is ChessDB's.
+  final String? valueTip;
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, size) {
@@ -173,7 +194,7 @@ class SearchTable extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Header(ours: ours, sides: sides, played: played),
+          _Header(ours: ours, sides: sides, played: played, valueTip: valueTip),
           if (played && rows.any((row) => row.shareFrom == RepliesFrom.maia))
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.m),
@@ -239,13 +260,16 @@ class _Header extends StatelessWidget {
     required this.ours,
     required this.sides,
     required this.played,
+    this.valueTip,
   });
 
   final bool ours;
   final List<Side> sides;
   final bool played;
+  final String? valueTip;
 
-  static String _tip(Side side) {
+  /// What a side's column holds, in the header's tooltip.
+  static String sideTip(Side side) {
     final (prepared, modelled) = side == Side.white
         ? ('White', 'Black')
         : ('Black', 'White');
@@ -287,13 +311,20 @@ class _Header extends StatelessWidget {
               ),
             ),
             if (played) _Cell('Played', width: searchShareWidth, style: style),
-            // The book's one column is ChessDB's value, not a model's.
+            // One side searched is one column; the book's is ChessDB's
+            // value, not a model's, and says nothing more.
             if (sides case [_])
-              _Cell('Value', width: searchValueWidth, style: style)
+              switch (valueTip) {
+                final tip? => Tooltip(
+                  message: tip,
+                  child: _Cell('Value', width: searchValueWidth, style: style),
+                ),
+                null => _Cell('Value', width: searchValueWidth, style: style),
+              }
             else
               for (final side in sides)
                 Tooltip(
-                  message: _tip(side),
+                  message: sideTip(side),
                   child: _Cell(
                     side == Side.white ? 'White' : 'Black',
                     width: searchValueWidth,
@@ -346,7 +377,8 @@ class _RowView extends StatelessWidget {
         : Tooltip(message: tip, child: cell);
   }
 
-  /// The move, a trap's marked `?` and saying on hover what it costs.
+  /// The move, a trap's marked `?` and saying on hover what it costs, then
+  /// how many traps wait in the lines after it.
   Widget _move(BuildContext context, TextStyle style) {
     final text = Text(
       displaySan(context, row.trap ? '${row.move.san}?' : row.move.san),
@@ -356,16 +388,34 @@ class _RowView extends StatelessWidget {
       overflow: TextOverflow.clip,
     );
     final loss = row.trapLossCp;
-    if (loss == null) return text;
     final played = row.share == null ? '' : 'Played ${_percent(row.share!)}, ';
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Tooltip(
-        message:
-            'Trap: ${played}loses ${(loss / 100).toStringAsFixed(1)} '
-            'against their best',
-        child: text,
-      ),
+    final move = loss == null
+        ? text
+        : Tooltip(
+            message:
+                'Trap: ${played}loses ${(loss / 100).toStringAsFixed(1)} '
+                'against their best',
+            child: text,
+          );
+    final traps = row.below.traps;
+    if (traps == 0) return Align(alignment: Alignment.centerLeft, child: move);
+    return Row(
+      children: [
+        move,
+        const SizedBox(width: Space.s),
+        Flexible(
+          child: Tooltip(
+            message: trapsBelowTip(row.below),
+            child: Text(
+              traps == 1 ? '1 trap' : '$traps traps',
+              style: Theme.of(context).textTheme.labelSmall,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.clip,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -429,6 +479,25 @@ String _percent(double share) {
   final percent = (share * 100).round();
   return percent < 1 ? '<1%' : '$percent%';
 }
+
+/// What a row's trap count means, for its tooltip.
+///
+/// Example: `2 traps in the lines after this move. The likeliest comes up
+/// in 1 of 12 games from here.`
+String trapsBelowTip(TrapScent below) {
+  final count = below.traps == 1 ? '1 trap' : '${below.traps} traps';
+  final onceIn = below.likeliest <= 0 ? 0 : (1 / below.likeliest).round();
+  final often = onceIn <= 1
+      ? 'nearly every game'
+      : onceIn > 9999
+      ? 'very few games'
+      : '1 of $onceIn games';
+  return '$count in the lines after this move. '
+      'The likeliest comes up in $often from here.';
+}
+
+/// What the one value column of a search made for [side] holds.
+String searchValueTip(Side side) => _Header.sideTip(side);
 
 /// Who gave a share, for its tooltip: the [database]'s games, or Maia at
 /// [elo] where the database had fewer than [fallbackUnder] games.
