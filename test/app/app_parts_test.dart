@@ -79,6 +79,9 @@ void main() {
     expect(w.parts.requests.mode, Mode.trainer);
     expect(w.parts.session.source, benkoMain);
     expect(w.parts.requests.backTo, isNull);
+    expect(w.parts.requests.documents.tabs.tabs.map((tab) => tab.title), [
+      'Trainer · Main',
+    ], reason: 'the empty board the window was made with is gone');
   });
 
   test('a file gone since leaves the mode on an empty board, with nothing '

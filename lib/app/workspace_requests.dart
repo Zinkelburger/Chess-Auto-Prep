@@ -210,11 +210,16 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (path == null) return documents.entered(mode);
     final ticket = _nextRequest();
     final ref = ChapterRef.at(path, section: place.section);
+    // The empty board the window was made with, which the file replaces.
+    final blank = documents.tabs.selected;
     final result = mode == Mode.pgnViewer
         ? await _inViewer(ticket, ref)
         : await _open(ticket, ref, game: place.game);
     if (_disposed || ticket.overtaken) return;
-    if (result is RequestDone) return documents.carry(mode);
+    if (result is RequestDone) {
+      documents.carry(mode);
+      return documents.close(blank);
+    }
     if (result is RequestRefused) say(null);
     documents.entered(mode);
   }
