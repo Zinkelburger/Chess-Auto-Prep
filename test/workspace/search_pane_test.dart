@@ -8,6 +8,7 @@ import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
+import 'package:chess_auto_prep/workspace/board/preview_target.dart';
 import 'package:chess_auto_prep/workspace/search/fill_gaps.dart';
 import 'package:chess_auto_prep/workspace/search/fill_states.dart';
 import 'package:chess_auto_prep/workspace/search/search_pane.dart';
@@ -446,6 +447,60 @@ void main() {
     await tester.pump();
     expect(find.text('Their reply'), findsOneWidget, reason: 'other rows');
     expect(find.byType(StaticChessboard), findsNothing);
+  });
+
+  testWidgets('a clicked row floats no board over the rows that come up '
+      'under the still pointer; it floats once the pointer moves', (
+    tester,
+  ) async {
+    await searched(tester);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer();
+    addTearDown(mouse.removePointer);
+    final at = tester.getCenter(find.byType(PreviewTarget).first);
+    await mouse.moveTo(at);
+    await tester.pump(previewDelay);
+    expect(find.byType(StaticChessboard), findsOneWidget);
+    await mouse.down(at);
+    await mouse.up();
+    await tester.pump();
+    expect(find.text('Their reply'), findsOneWidget, reason: 'the move played');
+    await tester.pump(previewDelay);
+    expect(
+      find.byType(StaticChessboard),
+      findsNothing,
+      reason: 'the reply now under the pointer was not pointed at',
+    );
+    await mouse.moveTo(at + const Offset(3, 0));
+    await tester.pump(previewDelay);
+    expect(find.byType(StaticChessboard), findsOneWidget);
+  });
+
+  testWidgets('a board another search covered with other settings says so '
+      'rather than that nothing is saved', (tester) async {
+    await searched(tester);
+    await settings.update(settings.value.copyWith(opponentElo: 1500));
+    fixture.session.playMove('e2e4');
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.widgetWithText(FilledButton, 'Expectimax'));
+      while (!fill.running) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      while (fill.running) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    });
+    await tester.pumpAndSettle();
+    fixture.session.cursor.back();
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'The results here are from a search with other settings. '
+        'Expectimax searches again with these.',
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the side\'s button turns the board, and the next search is '

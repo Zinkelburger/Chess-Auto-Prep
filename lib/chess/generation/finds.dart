@@ -167,28 +167,7 @@ List<Find> findsOf(SearchNode root, {int limit = findsPerSearch}) {
     if (held == null || find.worth > held.worth) found[key] = find;
   }
 
-  for (final trap in trapsOf(root, everyMove: true)) {
-    final (evalCp, given, bestBefore) = _walkTo(root, [
-      for (final move in [...trap.toTrap, trap.blunder]) move.move.uci,
-    ]);
-    if (evalCp < trapMinEvalCp) continue;
-    if (bestBefore != null && evalCp - bestBefore < trapMinGainCp) continue;
-    keep(
-      Find(
-        kind: FindKind.trap,
-        sans: [for (final move in trap.moves) move.move.san],
-        ply: trap.toTrap.length + 1,
-        keyPly: trap.toTrap.length,
-        fen: trap.blunder.after,
-        evalCp: evalCp,
-        lossCp: trap.lossCp,
-        share: trap.share,
-        reach: trap.reach,
-        worth: trap.springs * math.min(trap.lossCp, findRankLossCapCp),
-      ),
-      given,
-    );
-  }
+  _trapFinds(root, keep);
 
   void walk(
     SearchNode node,
@@ -238,6 +217,35 @@ List<Find> findsOf(SearchNode root, {int limit = findsPerSearch}) {
           : a.sans.join(' ').compareTo(b.sans.join(' '));
     });
   return ranked.length > limit ? ranked.sublist(0, limit) : ranked;
+}
+
+/// The traps of [root] as finds, each handed to [keep] with what our moves
+/// on the way to it gave up: every move of ours is followed, and a trap
+/// that leaves us worse, or no better than our best move before it would
+/// have, is not one.
+void _trapFinds(SearchNode root, void Function(Find find, int given) keep) {
+  for (final trap in trapsOf(root, everyMove: true)) {
+    final (evalCp, given, bestBefore) = _walkTo(root, [
+      for (final move in [...trap.toTrap, trap.blunder]) move.move.uci,
+    ]);
+    if (evalCp < trapMinEvalCp) continue;
+    if (bestBefore != null && evalCp - bestBefore < trapMinGainCp) continue;
+    keep(
+      Find(
+        kind: FindKind.trap,
+        sans: [for (final move in trap.moves) move.move.san],
+        ply: trap.toTrap.length + 1,
+        keyPly: trap.toTrap.length,
+        fen: trap.blunder.after,
+        evalCp: evalCp,
+        lossCp: trap.lossCp,
+        share: trap.share,
+        reach: trap.reach,
+        worth: trap.springs * math.min(trap.lossCp, findRankLossCapCp),
+      ),
+      given,
+    );
+  }
 }
 
 /// The score of the position [ucis] reach, what our moves on the way gave

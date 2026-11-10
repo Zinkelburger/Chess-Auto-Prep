@@ -449,42 +449,15 @@ final class _Search {
     final all = legalMovesOf(path.position);
     final pinned = _pinned(path, all);
     final limit = config.ourMovesAt(path.ply);
-    final shortlist = candidates;
     // A pinned position plays its pins alone, except at the first move of a
     // shortlisted search, where they are set beside the engine's best.
-    var legal = pinned.isEmpty || _comparesPins(path) ? all : pinned;
-    if (shortlist != null &&
-        limit != null &&
-        (pinned.isEmpty || _comparesPins(path)) &&
-        legal.length > limit) {
-      List<String>? ranked;
-      try {
-        ranked = await shortlist.candidates(path.position, limit);
-      } catch (error) {
-        if (!_stopping()) _stop = _EvaluationFailed(path.fen, '$error');
-        return null;
-      }
-      if (_stopping()) return null;
-      final selected = legal
-          .where(
-            (move) =>
-                ranked?.any((uci) => uci == move.uci || uci == move.move.uci) ==
-                true,
-          )
-          .toList();
-      if (selected.length != limit) {
-        _stop = _EvaluationFailed(
-          path.fen,
-          'The engine could not rank the candidate moves.',
-        );
-        return null;
-      }
-      legal = [
-        ...selected,
-        for (final pin in pinned)
-          if (!selected.contains(pin)) pin,
-      ];
-    }
+    final legal = await _shortlisted(
+      path,
+      pinned.isEmpty || _comparesPins(path) ? all : pinned,
+      limit: limit,
+      pinned: pinned,
+    );
+    if (legal == null) return null;
     final have = {
       if (saved != null)
         for (final (move, child) in saved.admitted) move.uci: child,
@@ -526,6 +499,53 @@ final class _Search {
       for (final (index, (move, _)) in played.indexed)
         if (kept.contains(move.uci)) (move, pendings[index]),
     ]);
+  }
+
+  /// [legal] cut to the engine's [limit] best, with the [pinned] moves it
+  /// left out put back after them; [legal] itself where there is no
+  /// shortlist to ask, nothing to cut, or a pinned position plays its pins
+  /// alone. Null when the engine could not rank them, or the search stopped
+  /// meanwhile.
+  Future<List<NamedMove>?> _shortlisted(
+    SearchPath path,
+    List<NamedMove> legal, {
+    required int? limit,
+    required List<NamedMove> pinned,
+  }) async {
+    final shortlist = candidates;
+    if (shortlist == null ||
+        limit == null ||
+        (pinned.isNotEmpty && !_comparesPins(path)) ||
+        legal.length <= limit) {
+      return legal;
+    }
+    List<String>? ranked;
+    try {
+      ranked = await shortlist.candidates(path.position, limit);
+    } catch (error) {
+      if (!_stopping()) _stop = _EvaluationFailed(path.fen, '$error');
+      return null;
+    }
+    if (_stopping()) return null;
+    final selected = legal
+        .where(
+          (move) =>
+              ranked?.any((uci) => uci == move.uci || uci == move.move.uci) ==
+              true,
+        )
+        .toList();
+    if (selected.length != limit) {
+      _stop = _EvaluationFailed(
+        path.fen,
+        'The engine could not rank the candidate moves.',
+      );
+      return null;
+    }
+    return [
+      ...selected,
+      for (final pin in pinned)
+        if (!selected.contains(pin)) pin,
+    ];
   }
 
   /// The moves of [legal] pinned at [path]'s position; none when it has no
