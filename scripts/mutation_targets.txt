@@ -67,6 +67,8 @@
 #   lib/chess/pgn/study_edits.dart:117 `by < 0` -> `< 1` (the refusal's
 #     words for a move of none, which the editor never asks for), :209 the
 #     `0` focus when nothing was taken (a moved chapter is always found).
+#   lib/chess/tactics/analyzed_games.dart:19, :47 `end < 0` -> `<= 0` or
+#     `< 1`: the newline follows the prefix, so it is never at 0.
 # Listed with one equivalent mutant a --max 30 sample can draw:
 #   lib/chess/game_filter.dart:168 `> 32` -> `>= 32`: when the pattern cache
 #     is emptied, which no result shows.
