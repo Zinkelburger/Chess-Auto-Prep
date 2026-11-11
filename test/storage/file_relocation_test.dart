@@ -47,7 +47,8 @@ void main() {
       isA<Moved>(),
     );
     final actual = jsonDecode(await books.readAsString()) as Map;
-    expect(actual['books'][0]['chapters'][0], {
+    final book = (actual['books'] as List).first as Map;
+    expect((book['chapters'] as List).first, {
       'path': 'Course/Renamed.pgn',
       'section': null,
       'annotation': 7,
@@ -219,7 +220,7 @@ void main() {
         expect(await reopened.open(to), isA<Opened>());
         expect(
           (await attempts.readAsLines()).map(
-            (line) => jsonDecode(line)['repertoireId'],
+            (line) => (jsonDecode(line) as Map)['repertoireId'],
           ),
           [to.path, aliasTo.path],
         );

@@ -182,7 +182,7 @@ void main() {
         books.includes(ChapterRef.at(original.path, section: 'C')),
         isTrue,
       );
-      expect(jsonDecode(await bookFile.readAsString())['future'], {
+      expect((jsonDecode(await bookFile.readAsString()) as Map)['future'], {
         'preserved': [1, 2],
       });
       expect(await session.undo(), isA<Restored>());

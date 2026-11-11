@@ -65,12 +65,14 @@ linter:
     - prefer_single_quotes
     - unnecessary_await_in_return
     - use_super_parameters
+    - avoid_dynamic_calls
 
-    # Deliberately NOT enabled yet, with the count measured at b1c2a13:
-    #   directives_ordering (626), avoid_redundant_argument_values (408),
-    #   avoid_slow_async_io (155), prefer_relative_imports (151),
-    #   avoid_dynamic_calls (43). Each is a mechanical sweep of its own; turn
-    #   one on in the same commit that clears it, never before.
+    # Deliberately NOT enabled yet, with the count in lib/, test/ and
+    # integration_test/ measured at 5f667a9b:
+    #   directives_ordering (725), avoid_slow_async_io (294),
+    #   avoid_redundant_argument_values (57), prefer_relative_imports (0).
+    #   Each is a mechanical sweep of its own; turn one on in the same commit
+    #   that clears it, never before.
     # cancel_subscriptions is a false positive here: the rule only inspects the
     # function that creates the subscription, and TournamentOpenWatcher
     # correctly cancels in stop().
