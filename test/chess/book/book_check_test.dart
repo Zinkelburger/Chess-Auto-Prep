@@ -149,6 +149,19 @@ void main() {
     expect(a.sameWay, isNot(c.sameWay));
   });
 
+  test('two files level on lines: the first one listed is where to read, '
+      'and the move counts both', () {
+    final verdict =
+        checkGame(game('1. e4 c5 2. Nc3'), [
+              book(openSicilian, 'First'),
+              book(openSicilian, 'Second'),
+            ])
+            as LeftBook;
+    expect(verdict.place.file.name, 'First');
+    expect(verdict.book.single.file.name, 'First');
+    expect(verdict.book.single.lines, 4);
+  });
+
   group('a played game', () {
     test('is read from the user\'s side, whichever colour they had', () {
       final won = game('1. e4 e5', result: '1-0');
