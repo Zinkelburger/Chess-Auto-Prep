@@ -102,6 +102,11 @@ void main() {
       expect(withShapeDrawn(one, red), [red]);
       expect(withShapeDrawn(one, _arrow), isEmpty);
       expect(withShapeDrawn(one, _circle), [_arrow, _circle]);
+      const shorter = BoardShape(Square.e2, Square.e3, ShapeColour.green);
+      expect(withShapeDrawn(one, shorter), [
+        _arrow,
+        shorter,
+      ], reason: 'from the same square to another is another arrow');
     });
   });
 
