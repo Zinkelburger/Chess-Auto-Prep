@@ -29,6 +29,7 @@ import time
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / 'tools/mcp'), str(ROOT / 'tools')]
 import chess  # noqa: E402
+import chess.variant  # noqa: E402
 from bughouse import analysis  # noqa: E402
 from bughouse_db import book  # noqa: E402
 
@@ -48,10 +49,12 @@ class Fsf:
         self.version = self.id
 
     def send(self, line: str):
+        assert self.proc.stdin is not None  # opened with PIPE
         self.proc.stdin.write(line + '\n')
 
     def wait(self, prefix: str) -> list[str]:
         lines = []
+        assert self.proc.stdout is not None  # opened with PIPE
         for line in self.proc.stdout:
             line = line.strip()
             if line.startswith('id name'):
