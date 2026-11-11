@@ -25,6 +25,8 @@
 #     the default is that least too.
 #   lib/chess/generation/finds.dart:408 `gain < practicalMinGain` -> `<=`:
 #     a gain of exactly 0.02 cannot be built from expected scores.
+#   lib/chess/generation/legal_moves.dart:61 `>` -> `>=`: a move never
+#     lands where it started.
 # Listed with one equivalent mutant a --max 30 sample can draw:
 #   lib/chess/game_filter.dart:168 `> 32` -> `>= 32`: when the pattern cache
 #     is emptied, which no result shows.
