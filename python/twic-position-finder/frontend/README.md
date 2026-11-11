@@ -79,7 +79,10 @@ checksum-verified chunks. Every file fits Cloudflare Pages' 25 MiB asset limit.
   - for `/bughouse` only: `tree.ts` (a board's move tree by bughouse rules,
     and hand edits), `engine.ts` (HypeBeast), `partner.ts` (the partner
     panel), `hand.ts` (a hand with + and −), `practice.ts` (Practice with
-    computer) and `app.ts` (the page, both boards).
+    computer), `editor-draft.ts` (the editor's side to move, castling, en
+    passant, hands and move number), `saved-boards.ts` (both trees kept in
+    this browser and the positions in the link) and `app.ts` (the page,
+    both boards).
 - `src/prep/` — the PGN and Expectimax tabs (below). `pgn.ts`,
   `pgn-client.ts`/`pgn.worker.ts` and `storage.ts` (IndexedDB
   `cap-preparation`) are also used by the Tactics Trainer.
