@@ -36,6 +36,29 @@ Chapter white() => parseChapter(name: 'Gambit', text: whiteChapter);
 Chapter black() => parseChapter(name: 'Sicilian', text: blackChapter);
 
 void main() {
+  test('the first game of an empty file starts the file, with no blank '
+      'lines before it', () {
+    final empty = parseChapter(name: 'Empty', text: '');
+    final text = writeChapter(added(empty, const NodePath.root(), 'e2e4'));
+    expect(text, startsWith('[Event'));
+  });
+
+  test('a chapter showing a game past the end of its file writes no move', () {
+    final read = white();
+    final past = Chapter(
+      name: read.name,
+      side: read.side,
+      preamble: read.preamble,
+      lines: read.lines,
+      tree: read.tree,
+      game: read.lines.length,
+    );
+    expect(
+      addMove(past, at: const NodePath.root(), uci: 'a2a3'),
+      isA<MoveRefused>(),
+    );
+  });
+
   // 1. d4 d5 2. c4 c6 3. Nf3, the whole of the second game: a leaf.
   final leaf = NodePath.of([0, 0, 0, 1, 0]);
   final beforeLeaf = white();
