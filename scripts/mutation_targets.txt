@@ -91,3 +91,4 @@ lib/chess/pgn/pgn_chars.dart|test/chess/pgn/pgn_reader_test.dart test/chess/pgn/
 lib/chess/pgn/chapter_line.dart|test/chess/pgn/chapter_line_test.dart|test/chess/pgn/rewrite_gate_test.dart test/chess/pgn/chapter_showing_test.dart
 lib/chess/pgn/collection_player.dart|test/chess/pgn/collection_player_test.dart|test/features/pgn_viewer/pgn_viewer_panel_test.dart test/features/pgn_viewer/viewer_perspective_test.dart
 lib/chess/pgn/comment_edits.dart|test/chess/pgn/comment_edits_test.dart|test/chess/pgn/board_shapes_test.dart test/chess/pgn/chapter_edits_scope_test.dart test/chess/pgn/chapter_edits_test.dart test/chess/pgn/chapter_test.dart test/chess/pgn/glyph_edits_test.dart test/chess/pgn/one_game_edits_test.dart test/chess/pgn/rewrite_gate_test.dart test/workspace/game_review_test.dart
+lib/chess/pgn/comment_text.dart|test/chess/pgn/comment_text_test.dart|test/chess/pgn/board_shapes_test.dart test/chess/pgn/game_tree_test.dart
