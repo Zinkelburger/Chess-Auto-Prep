@@ -23,7 +23,6 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -401,7 +400,7 @@ def match_by_round_results(
         return None
 
     # Build a USCF ID → ordinal map
-    id_to_ordinal = {s.member_id: s.ordinal for s in uscf_standings}
+    {s.member_id: s.ordinal for s in uscf_standings}
 
     # Get games from chess.com for pattern matching
     tourn = chesscom_get_tournament(chesscom_slug)
@@ -479,9 +478,9 @@ def resolve(uscf_id: str, event_id: str | None = None, verbose: bool = True) -> 
     # Step 1: Get player info
     if verbose:
         print(f"\n{'═'*60}")
-        print(f"  USCF → Chess.com Username Resolver")
+        print("  USCF → Chess.com Username Resolver")
         print(f"{'═'*60}")
-        print(f"\n[1/5] Fetching player info...")
+        print("\n[1/5] Fetching player info...")
 
     player = uscf_get_player(uscf_id)
     result["name"] = f"{player.first_name} {player.last_name}"
@@ -497,7 +496,7 @@ def resolve(uscf_id: str, event_id: str | None = None, verbose: bool = True) -> 
 
     # Step 2: Find chess.com events
     if verbose:
-        print(f"\n[2/5] Searching for chess.com events...")
+        print("\n[2/5] Searching for chess.com events...")
 
     if event_id:
         events = [USCFEvent(event_id=event_id, name="(specified)", start_date="", end_date="", player_count=0)]
@@ -569,7 +568,7 @@ def resolve(uscf_id: str, event_id: str | None = None, verbose: bool = True) -> 
 
     # Step 4: Find matching chess.com tournament
     if verbose:
-        print(f"\n[4/5] Finding chess.com tournament...")
+        print("\n[4/5] Finding chess.com tournament...")
 
     event_date = event_info.get("startDate", target_event.start_date)
 
@@ -588,12 +587,12 @@ def resolve(uscf_id: str, event_id: str | None = None, verbose: bool = True) -> 
     if not chesscom_slug:
         if verbose:
             print("  ✗ Could not auto-find tournament on chess.com")
-            print(f"\n  Manual lookup instructions:")
+            print("\n  Manual lookup instructions:")
             print(f"  1. Open: https://www.chess.com/club/live-tournaments/{CHESSCOM_CLUB}")
             print(f"  2. Look for a tournament around {event_date}")
             print(f"     Name pattern: {event_info.get('name', '?')}")
             print(f"  3. The player finished #{target_standing.ordinal} with {target_standing.score} pts")
-            print(f"  4. Run again with: --tournament <chess.com-tournament-slug>")
+            print("  4. Run again with: --tournament <chess.com-tournament-slug>")
         return result
 
     if verbose:
@@ -601,7 +600,7 @@ def resolve(uscf_id: str, event_id: str | None = None, verbose: bool = True) -> 
 
     # Step 5: Match player
     if verbose:
-        print(f"\n[5/5] Matching player in chess.com standings...")
+        print("\n[5/5] Matching player in chess.com standings...")
 
     chesscom_players = chesscom_get_tournament_players_with_scores(chesscom_slug)
 
@@ -627,14 +626,14 @@ def resolve(uscf_id: str, event_id: str | None = None, verbose: bool = True) -> 
                 print(f"  ✓ MATCH: {best['username']}")
                 print(f"    Confidence: HIGH - {best.get('reason', '')}")
             else:
-                print(f"  ? Candidates (sorted by likelihood):")
+                print("  ? Candidates (sorted by likelihood):")
                 for c in candidates[:5]:
                     print(f"    • {c['username']} ({c.get('confidence','?')}) - {c.get('reason','')}")
     else:
         if verbose:
-            print(f"  ✗ No score match found.")
+            print("  ✗ No score match found.")
             print(f"    USCF score: {target_standing.score}")
-            print(f"    Chess.com scores available:")
+            print("    Chess.com scores available:")
             scores = sorted(set(p["score"] for p in chesscom_players), reverse=True)
             print(f"    {scores[:10]}")
 
@@ -656,7 +655,7 @@ def resolve_with_slug(uscf_id: str, event_id: str, chesscom_slug: str, verbose: 
 
     if verbose:
         print(f"\n{'═'*60}")
-        print(f"  Direct Resolution Mode")
+        print("  Direct Resolution Mode")
         print(f"{'═'*60}")
 
     # Get USCF standings
@@ -675,7 +674,7 @@ def resolve_with_slug(uscf_id: str, event_id: str, chesscom_slug: str, verbose: 
 
     if not target:
         if verbose:
-            print(f"  ✗ Player not found in USCF standings")
+            print("  ✗ Player not found in USCF standings")
         return result
 
     if verbose:
