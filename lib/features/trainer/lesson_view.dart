@@ -9,7 +9,11 @@ import '../../chess/pgn/move_label.dart';
 import '../../chess/training/drill.dart';
 import '../../chess/training/schedule.dart';
 import '../../ui/app_action.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/app_keys.dart';
+import '../../ui/listening_state.dart';
+import '../../ui/move_notation.dart';
+import '../../ui/problem_line.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
 import '../../workspace/board/move_field.dart';
@@ -17,10 +21,6 @@ import 'lesson.dart';
 import 'trainer.dart';
 import 'trainer_state.dart';
 import 'trainer_words.dart';
-import '../../ui/listening_state.dart';
-import '../../ui/move_notation.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/problem_line.dart';
 
 /// The Train tab while a sitting runs: the line and how far the sitting has
 /// to go, what the lesson wants now, the moves played so far with the note

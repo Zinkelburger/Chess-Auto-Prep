@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:chess_auto_prep/chess/pgn/collection_player.dart';
 import 'package:chess_auto_prep/chess/pgn/game_order.dart';
 import 'package:chess_auto_prep/chess/pgn/game_text.dart';
-import 'package:chess_auto_prep/chess/pgn/reading_place.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/chess/pgn/reading_place.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 

@@ -1,32 +1,32 @@
-import '../../chess/pgn/chapter_line.dart';
-import '../../chess/pgn/study_cleanup.dart';
-import 'chapter_dialogs.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../chess/pgn/chapter_line.dart';
 import '../../chess/pgn/study.dart';
-import '../../ui/status_bar.dart';
+import '../../chess/pgn/study_cleanup.dart';
 import '../../storage/chapter_files.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/confirm_dialog.dart';
-import '../../ui/name_dialog.dart';
-import '../../ui/row_actions.dart';
-import '../../ui/search_field.dart';
-import '../../ui/theme.dart';
-import '../../workspace/board/board_editor.dart';
-import '../../workspace/document/document_session.dart';
-import 'studies.dart';
-import 'studies_state.dart';
-import 'study_commands.dart';
-import 'study_chapter_list.dart';
-import 'chapter_position_dialog.dart';
-import 'study_actions.dart';
-import 'study_recovery_dialog.dart';
 import '../../ui/list_message.dart';
 import '../../ui/list_row.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/tool_button.dart';
+import '../../ui/name_dialog.dart';
 import '../../ui/pane_header.dart';
+import '../../ui/row_actions.dart';
+import '../../ui/search_field.dart';
+import '../../ui/status_bar.dart';
+import '../../ui/theme.dart';
+import '../../ui/tool_button.dart';
+import '../../workspace/board/board_editor.dart';
+import '../../workspace/document/document_session.dart';
+import 'chapter_dialogs.dart';
+import 'chapter_position_dialog.dart';
+import 'studies.dart';
+import 'studies_state.dart';
+import 'study_actions.dart';
+import 'study_chapter_list.dart';
+import 'study_commands.dart';
+import 'study_recovery_dialog.dart';
 
 /// Opens one chapter of a study in the workspace.
 typedef OpenChapter = void Function(ChapterRef study, int chapter);

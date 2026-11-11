@@ -5,10 +5,10 @@ import 'package:flutter/services.dart';
 
 import '../../chess/pgn/chapter.dart';
 import '../../ui/app_action.dart';
-import 'document_session.dart';
-import '../analysis/engine_analysis.dart';
-import '../../ui/app_keys.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/app_keys.dart';
+import '../analysis/engine_analysis.dart';
+import 'document_session.dart';
 
 /// What can be done to the document on the board, whatever mode opened it:
 /// the Actions menu's second half. Each entry is off when there is nothing

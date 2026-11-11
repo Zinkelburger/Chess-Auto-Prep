@@ -6,12 +6,12 @@ import 'package:flutter/material.dart';
 import '../../chess/pgn/game_review.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/move_label.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/check_row.dart';
+import '../../ui/move_notation.dart';
+import '../../ui/problem_line.dart';
 import '../../ui/theme.dart';
 import 'game_review.dart';
-import '../../ui/move_notation.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/problem_line.dart';
-import '../../ui/check_row.dart';
 
 /// The game's evaluation as a graph, the old viewer's way: White's
 /// advantage light above the middle, Black's dark below, each marked move a

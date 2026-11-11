@@ -1,14 +1,14 @@
-import 'package:chess_auto_prep/storage/pgn_file_import.dart';
-import '../../support/viewer_fixture.dart';
 import 'package:chess_auto_prep/features/study/study_panel.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/pgn_file_import.dart';
 import 'package:chess_auto_prep/storage/study_files.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../support/study_fixture.dart';
 import '../../support/status_host.dart';
+import '../../support/study_fixture.dart';
+import '../../support/viewer_fixture.dart';
 
 /// About as wide as the list pane opens.
 const _panelWidth = 300.0;

@@ -4,16 +4,16 @@ import 'package:flutter/material.dart';
 
 import '../../chess/training/training_line.dart';
 import '../../storage/chapter_files.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/choice_field.dart';
 import '../../ui/list_message.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
+import '../../ui/tool_button.dart';
 import 'trainer.dart';
 import 'trainer_state.dart';
 import 'training_scope.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/tool_button.dart';
 
 /// One repertoire's outline. The general library stays in the builder.
 class TrainingOutline extends StatefulWidget {

@@ -3,23 +3,23 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../chess/players/player.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/choice_dialog.dart';
 import '../../ui/confirm_dialog.dart';
+import '../../ui/list_message.dart';
+import '../../ui/list_row.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/progress_line.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
+import '../../ui/segments.dart';
 import '../../ui/theme.dart';
+import '../../ui/tool_button.dart';
 import 'group_dialog.dart';
 import 'person_row.dart';
 import 'player_dialogs.dart';
 import 'players.dart';
 import 'saved_games.dart';
-import '../../ui/list_message.dart';
-import '../../ui/list_row.dart';
-import '../../ui/problem_line.dart';
-import '../../ui/progress_line.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/segments.dart';
-import '../../ui/tool_button.dart';
 
 /// The Players & prep page: everyone the user prepares for, or the groups
 /// they are collected in for an event, as one dense list. A row has the two

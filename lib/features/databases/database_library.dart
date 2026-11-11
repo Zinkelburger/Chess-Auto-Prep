@@ -5,15 +5,15 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-import '../../storage/chapter_files.dart';
 import '../../chess/explorer_answer.dart';
 import '../../chess/explorer_choice.dart';
-import '../../workspace/explorer/game_fetcher.dart';
+import '../../storage/chapter_files.dart';
 import '../../storage/disk_usage.dart';
 import '../../storage/master_corpus.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/pgn_document_store.dart';
 import '../../storage/pgn_file_picker.dart';
+import '../../workspace/explorer/game_fetcher.dart';
 import 'twic_download.dart';
 
 enum DatabaseActivity { idle, reading, importing }

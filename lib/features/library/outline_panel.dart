@@ -4,27 +4,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../storage/chapter_files.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/choice_dialog.dart';
-import '../../ui/status_bar.dart';
+import '../../ui/list_message.dart';
+import '../../ui/move_notation.dart';
 import '../../ui/name_dialog.dart';
-import '../../ui/search_field.dart';
+import '../../ui/pane_header.dart';
+import '../../ui/progress_line.dart';
 import '../../ui/row_actions.dart';
+import '../../ui/search_field.dart';
+import '../../ui/status_bar.dart';
 import '../../ui/theme.dart';
+import '../../ui/tool_button.dart';
 import '../../workspace/document/chapter_commands.dart';
 import '../../workspace/document/document_session.dart';
-import 'chapter_outline.dart';
 import 'backup_history_dialog.dart';
+import 'chapter_outline.dart';
 import 'library.dart';
 import 'library_actions.dart';
 import 'library_messages.dart';
 import 'library_state.dart';
 import 'outline_rows.dart';
-import '../../ui/move_notation.dart';
-import '../../ui/list_message.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/progress_line.dart';
-import '../../ui/tool_button.dart';
-import '../../ui/pane_header.dart';
 
 /// The chapters of the open repertoire and, under the open one, its lines.
 ///

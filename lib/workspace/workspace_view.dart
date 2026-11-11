@@ -3,34 +3,34 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import 'action_layout.dart';
-import 'action_panes.dart';
-import 'review/audit_pane.dart';
-import 'explorer/explorer.dart';
 import '../ui/app_action.dart';
 import '../ui/app_icons.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
-import 'board/board_claim.dart';
+import 'action_layout.dart';
+import 'action_panes.dart';
+import 'analysis/engine_pane.dart';
+import 'analysis/training_analysis_pane.dart';
 import 'board/board_and_card.dart';
+import 'board/board_claim.dart';
 import 'board/board_column.dart';
+import 'board/move_field.dart';
+import 'board/nav_row.dart';
+import 'book/replies_pane.dart';
 import 'document/document_session.dart';
+import 'explorer/explorer.dart';
+import 'explorer/explorer_pane.dart';
 import 'reading/edit_strip.dart';
 import 'reading/edit_switch.dart';
-import 'analysis/engine_pane.dart';
-import 'explorer/explorer_pane.dart';
-import 'review/game_review_pane.dart';
-import 'board/move_field.dart';
 import 'reading/move_tree_view.dart';
 import 'reading/notes_pane.dart';
-import 'board/nav_row.dart';
 import 'reading/reading_header.dart';
-import 'book/replies_pane.dart';
+import 'review/audit_pane.dart';
+import 'review/game_review_pane.dart';
 import 'search/search_pane.dart';
 import 'workspace.dart';
 import 'workspace_hooks.dart';
 import 'workspace_tabs.dart';
-import 'analysis/training_analysis_pane.dart';
 
 /// The board with the game counter, the engine's lines and the move's note
 /// under it on the left; on the right the reading card: the panes of tabs

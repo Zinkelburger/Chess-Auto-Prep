@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
-import 'package:chess_auto_prep/storage/recovery_quarantine.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart' hide Saved;
+import 'package:chess_auto_prep/storage/recovery_quarantine.dart';
 import 'package:chess_auto_prep/storage/viewer_drafts.dart';
 import 'package:chess_auto_prep/ui/status_bar.dart' show StatusAction;
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
@@ -13,7 +13,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../storage/store_fixture.dart';
-
 import '../support/scripted_store.dart';
 import '../support/viewer_fixture.dart';
 

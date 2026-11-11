@@ -68,12 +68,10 @@ linter:
     - avoid_dynamic_calls
     - prefer_relative_imports
     - avoid_redundant_argument_values
+    - directives_ordering
 
-    # Deliberately NOT enabled yet, with the count in lib/, test/ and
-    # integration_test/ measured at 5f667a9b:
-    #   directives_ordering (725). A mechanical sweep of its own; turn it on
-    #   in the same commit that clears it, never before.
-    # avoid_slow_async_io (294) stays off: its fix in lib/ swaps the async
+    # Deliberately NOT enabled: avoid_slow_async_io (294 in lib/, test/ and
+    # integration_test/ at 5f667a9b). Its fix in lib/ swaps the async
     # file probes in storage and engines for blocking ones, run on the
     # window's isolate, where a slow or network Documents folder would hold
     # up every frame.

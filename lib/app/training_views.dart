@@ -16,6 +16,7 @@ import '../features/tactics/source_game_pane.dart';
 import '../features/tactics/tactics_actions.dart';
 import '../features/tactics/tactics_panel.dart';
 import '../ui/app_action.dart';
+import '../ui/app_icons.dart';
 import '../workspace/book/book_chip.dart';
 import '../workspace/book/repertoire_shelf.dart' show BookFileRef;
 import '../workspace/workspace.dart';
@@ -23,7 +24,6 @@ import '../workspace/workspace_tabs.dart';
 import 'mode.dart';
 import 'mode_view.dart';
 import 'workspace_requests.dart';
-import '../ui/app_icons.dart';
 
 /// Tactics: the puzzle set on the left, the puzzle and the game it came
 /// from on the card. It is for solving, so it starts with the engine off

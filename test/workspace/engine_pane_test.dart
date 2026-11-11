@@ -5,18 +5,18 @@ import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/workspace/document/document_session.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_pane.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_settings.dart';
+import 'package:chess_auto_prep/workspace/document/document_session.dart';
 import 'package:chessground/chessground.dart' show StaticChessboard;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';
-import '../support/session_fixture.dart';
 import '../support/scripted_engine.dart';
+import '../support/session_fixture.dart';
 
 void main() {
   late SessionFixture fixture;

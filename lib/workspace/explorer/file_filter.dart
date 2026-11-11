@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../../chess/game_filter.dart';
 import '../../chess/fen.dart';
+import '../../chess/game_filter.dart';
 import '../../chess/pgn/chapter.dart' show movesBeingRead;
 import '../../chess/pgn/chapter_line.dart';
 import '../../chess/pgn/game_text.dart';

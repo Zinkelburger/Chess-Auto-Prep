@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
+
 import '../../storage/chapter_files.dart';
-import '../../ui/theme.dart';
-import 'studies.dart';
-import 'studies_state.dart';
-import 'study_import_source.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/attempting.dart';
 import '../../ui/form_dialog.dart';
 import '../../ui/segments.dart';
+import '../../ui/theme.dart';
+import 'studies.dart';
+import 'studies_state.dart';
+import 'study_import_source.dart';
 
 Future<StudyResult?> showStudyImport(
   BuildContext context,

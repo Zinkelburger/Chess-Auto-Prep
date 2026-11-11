@@ -7,19 +7,19 @@ import 'package:flutter/material.dart';
 import '../../chess/fen.dart';
 import '../../chess/tournament/config.dart';
 import '../../chess/tournament/result.dart';
-import '../../ui/confirm_dialog.dart';
-import '../../ui/problem_line.dart';
 import '../../storage/settings_store.dart';
 import '../../storage/tournaments.dart';
-import '../../ui/theme.dart';
-import 'engine_manager.dart';
-import 'setup_dialog.dart';
-import 'tournament_run.dart';
-import 'standings_table.dart';
-import 'history_list.dart';
 import '../../ui/app_icons.dart';
-import '../../ui/tool_button.dart';
 import '../../ui/check_row.dart';
+import '../../ui/confirm_dialog.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/theme.dart';
+import '../../ui/tool_button.dart';
+import 'engine_manager.dart';
+import 'history_list.dart';
+import 'setup_dialog.dart';
+import 'standings_table.dart';
+import 'tournament_run.dart';
 
 class TournamentsScreen extends StatefulWidget {
   const TournamentsScreen({

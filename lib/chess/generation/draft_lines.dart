@@ -3,8 +3,8 @@ import 'dart:math' as math;
 import 'package:collection/collection.dart' show HeapPriorityQueue;
 
 import '../fen.dart';
-import '../pv_text.dart';
 import '../pgn/game_tree.dart';
+import '../pv_text.dart';
 import 'eval.dart';
 import 'search_node.dart';
 import 'traps.dart' show trapRepliesAt;

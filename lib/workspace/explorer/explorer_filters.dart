@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../chess/explorer_choice.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/choice_field.dart';
 import '../../ui/fold_button.dart';
-import '../../ui/theme.dart';
-import 'explorer.dart';
-import '../../ui/app_icons.dart';
 import '../../ui/segments.dart';
+import '../../ui/theme.dart';
 import '../../ui/toggle_chip.dart';
+import 'explorer.dart';
 
 /// The top of the Explorer tab: the databases side by side, the chosen one
 /// pressed, and at the end `Filters` for the one that can be narrowed.

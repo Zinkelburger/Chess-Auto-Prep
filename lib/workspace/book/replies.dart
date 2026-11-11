@@ -12,9 +12,9 @@ import '../../diagnostics/log.dart';
 import '../../engines/maia/move_policy.dart';
 import '../../storage/settings_store.dart';
 import '../document/document_session.dart';
+import '../latest.dart';
 import 'gap_hunt.dart';
 import 'gap_walk.dart' show GapWalk, indexOfReply;
-import '../latest.dart';
 
 /// One move the model expects at the position on the board.
 final class ReplyRow {

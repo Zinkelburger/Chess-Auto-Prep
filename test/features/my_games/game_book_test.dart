@@ -1,18 +1,18 @@
 import 'package:chess_auto_prep/chess/book/book_check.dart';
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/chess/tactics/mistake_counts.dart';
-import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/features/my_games/book_words.dart';
 import 'package:chess_auto_prep/features/my_games/game_book.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/storage/settings.dart';
+import 'package:chess_auto_prep/workspace/book/repertoire_shelf.dart'
+    show BookFileRef;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/book_fixture.dart';
 import '../../support/scripted_files.dart';
 import '../../support/scripted_store.dart';
-import 'package:chess_auto_prep/workspace/book/repertoire_shelf.dart'
-    show BookFileRef;
 
 void main() {
   late BookFixture fixture;

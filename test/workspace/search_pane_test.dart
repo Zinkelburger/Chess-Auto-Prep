@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/generation/evaluation_source.dart';
+import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/ui/theme.dart';

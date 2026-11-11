@@ -1,22 +1,22 @@
-import 'dart:io';
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:chess_auto_prep/chess/pgn/games_written.dart';
 import 'package:chess_auto_prep/features/library/library.dart';
 import 'package:chess_auto_prep/features/library/library_state.dart';
 import 'package:chess_auto_prep/storage/book_list.dart';
-import 'package:chess_auto_prep/storage/pgn_file_store.dart';
-import 'package:chess_auto_prep/storage/compound_write.dart';
-import 'package:chess_auto_prep/storage/compound_commit.dart';
-import 'package:chess_auto_prep/storage/pgn_document_store.dart' as storage;
-import 'package:chess_auto_prep/storage/edit_scope.dart';
-import 'package:chess_auto_prep/storage/reference_change.dart';
-import 'package:chess_auto_prep/chess/pgn/games_written.dart';
-import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/chapter_directory.dart';
+import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/compound_commit.dart';
+import 'package:chess_auto_prep/storage/compound_write.dart';
+import 'package:chess_auto_prep/storage/edit_scope.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart' as storage;
+import 'package:chess_auto_prep/storage/pgn_file_store.dart';
+import 'package:chess_auto_prep/storage/reference_change.dart';
 import 'package:chess_auto_prep/workspace/book/books.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
-import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:chess_auto_prep/workspace/document/document_session.dart';
+import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

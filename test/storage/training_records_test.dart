@@ -6,8 +6,8 @@ import 'package:chess_auto_prep/storage/document_ref.dart';
 // Both stores name a failure to touch the disk; here it is always the
 // training records' own.
 import 'package:chess_auto_prep/storage/pgn_document_store.dart' hide IoFailure;
-import 'package:chess_auto_prep/storage/training_records.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart' as store;
+import 'package:chess_auto_prep/storage/training_records.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

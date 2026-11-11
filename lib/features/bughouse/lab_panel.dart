@@ -2,19 +2,19 @@ import 'package:dartchess/dartchess.dart' show Setup;
 import 'package:flutter/material.dart';
 
 import '../../chess/bughouse/hivemind.dart';
-import '../../chess/fen.dart';
 import '../../chess/bughouse/table.dart';
-import '../../ui/problem_line.dart';
-import '../../ui/progress_line.dart';
+import '../../chess/fen.dart';
 import '../../ui/engine_switch.dart';
 import '../../ui/game_stepper.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/progress_line.dart';
+import '../../ui/segments.dart';
 import '../../ui/theme.dart';
 import '../../workspace/board/board_editor.dart';
 import 'board_moves.dart';
 import 'bughouse_lab.dart';
 import 'lab_engine.dart';
 import 'lab_lines.dart';
-import '../../ui/segments.dart';
 
 /// The column beside the boards: how many boards, who may sit, the engine
 /// switch with its score, then the moves: with one board its best moves and

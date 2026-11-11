@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'theme.dart';
 import 'app_icons.dart';
 import 'listening_state.dart';
+import 'theme.dart';
 
 /// A box to type a choice into, suggesting what fits as it is typed: the
 /// typeable choice field the app uses instead of a drop-down menu, which

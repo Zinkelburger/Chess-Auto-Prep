@@ -9,8 +9,8 @@ import 'package:chess_auto_prep/storage/recovery_gate.dart';
 import 'package:chess_auto_prep/storage/study_files.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document/document_session.dart';
-import 'package:path/path.dart' as p;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 import '../support/other_copy_lock.dart';
 import '../support/study_fixture.dart' show ScriptedLichess;

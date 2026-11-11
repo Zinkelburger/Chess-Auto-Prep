@@ -26,8 +26,8 @@ import 'package:crypto/crypto.dart';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
-import 'directory_entries.dart';
 import '../diagnostics/log.dart';
+import 'directory_entries.dart';
 
 /// Where the staged copy of [path] lives while it is being written.
 String temporaryPathFor(String path) {

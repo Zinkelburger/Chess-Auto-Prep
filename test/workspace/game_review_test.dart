@@ -1,21 +1,21 @@
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
+import 'package:chess_auto_prep/chess/pgn/chapter_edit.dart';
 import 'package:chess_auto_prep/chess/pgn/comment_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/game_review.dart';
-import 'package:chess_auto_prep/chess/pgn/chapter_edit.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/move_text.dart';
 import 'package:chess_auto_prep/chess/pgn/rewrite_gate.dart';
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
-import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
-import 'package:dartchess/dartchess.dart' show Move;
 import 'package:chess_auto_prep/engines/engine_line.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
-import 'package:chess_auto_prep/workspace/review/game_review.dart';
-import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document/document_session.dart';
+import 'package:chess_auto_prep/workspace/review/game_review.dart';
+import 'package:dartchess/dartchess.dart' show Move;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_engine.dart';

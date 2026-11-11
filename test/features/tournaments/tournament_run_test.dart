@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/tournament/config.dart';
 import 'package:chess_auto_prep/chess/tournament/result.dart';
@@ -13,9 +14,10 @@ import 'package:chess_auto_prep/storage/tournaments.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+
 import '../../storage/store_fixture.dart';
-import 'game_runner_test.dart' show ScriptEngine, config;
 import '../../support/engine_jobs_fixture.dart';
+import 'game_runner_test.dart' show ScriptEngine, config;
 
 final class FallibleTournaments implements TournamentStore {
   FallibleTournaments(this.base);

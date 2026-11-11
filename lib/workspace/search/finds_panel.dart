@@ -8,22 +8,22 @@ import '../../chess/generation/finds.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/tree_edit.dart' show positionOf;
 import '../../storage/finds_store.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/choice_field.dart';
 import '../../ui/list_message.dart';
 import '../../ui/list_row.dart';
 import '../../ui/listening_state.dart';
+import '../../ui/move_notation.dart';
+import '../../ui/pane_header.dart';
 import '../../ui/problem_line.dart';
 import '../../ui/row_actions.dart';
+import '../../ui/segments.dart';
 import '../../ui/theme.dart';
 import '../../ui/toggle_chip.dart';
+import '../../ui/tool_button.dart';
+import '../board/line_preview.dart';
 import '../document/document_session.dart';
 import 'finds.dart';
-import '../board/line_preview.dart';
-import '../../ui/move_notation.dart';
-import '../../ui/segments.dart';
-import '../../ui/pane_header.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/tool_button.dart';
 
 /// The Positions column: everything the searches have pointed out, one row
 /// a position, in the column a mode keeps its own list in.

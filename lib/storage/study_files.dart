@@ -2,11 +2,11 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import 'directory_entries.dart';
 import 'chapter_files.dart';
 import 'deleted_chapters.dart';
-import 'recovery_gate.dart';
+import 'directory_entries.dart';
 import 'recovery_files.dart';
+import 'recovery_gate.dart';
 
 /// The study files under `Documents/studies/`: one `.pgn` per study, one
 /// game in it per chapter.

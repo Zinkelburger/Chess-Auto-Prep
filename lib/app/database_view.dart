@@ -7,14 +7,14 @@ import '../features/databases/databases_screen.dart';
 import '../features/databases/twic_download_dialog.dart';
 import '../storage/master_corpus.dart';
 import '../ui/app_action.dart';
+import '../ui/app_icons.dart';
 import '../ui/screen_keys.dart';
 import '../workspace/latest.dart';
-import '../workspace/workspace_tabs.dart';
 import '../workspace/workspace.dart';
+import '../workspace/workspace_tabs.dart';
 import 'mode.dart';
 import 'mode_view.dart';
 import 'workspace_requests.dart';
-import '../ui/app_icons.dart';
 
 final class DatabasesView extends ModeView {
   DatabasesView(Workspace workspace, this.library, this.requests)

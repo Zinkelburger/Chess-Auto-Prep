@@ -2,18 +2,18 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:isolate';
 
-import 'package:dartchess/dartchess.dart' show Side;
 import 'package:crypto/crypto.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 
 import '../../chess/fen.dart';
 import '../../chess/opening_index.dart';
-import '../../chess/pgn/game_text.dart';
 import '../../chess/pgn/chapter.dart' show readOffThreadFrom;
+import '../../chess/pgn/game_text.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/pgn_reader.dart';
+import '../../chess/players/player.dart';
 import '../../chess/tactics/game_ids.dart';
 import '../../storage/document_ref.dart';
-import '../../chess/players/player.dart';
 
 final class PlayerGame {
   const PlayerGame({

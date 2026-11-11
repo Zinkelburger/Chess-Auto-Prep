@@ -1,10 +1,10 @@
 import 'package:path/path.dart' as p;
 
-import 'book_snapshot.dart';
-import 'training_snapshot.dart';
 import '../chess/pgn/chapter_heading.dart';
+import 'book_snapshot.dart';
 import 'deleted_chapters.dart';
 import 'document_ref.dart';
+import 'training_snapshot.dart';
 
 /// One chapter on disk: a file, or the games of a file that name one
 /// chapter by tag ([section]), plus what the lists show about it without

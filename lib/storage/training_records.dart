@@ -20,8 +20,8 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
 import 'package:document_file_io/document_file_io.dart';
+import 'package:path/path.dart' as p;
 
 import '../diagnostics/log.dart';
 import 'atomic_write.dart';
@@ -29,8 +29,8 @@ import 'csv_records.dart';
 import 'document_ref.dart';
 import 'operation_id.dart';
 import 'operation_participants.dart';
-import 'training_rows.dart';
 import 'recovery_files.dart';
+import 'training_rows.dart';
 
 /// The training records under one Documents folder.
 final class TrainingRecords {

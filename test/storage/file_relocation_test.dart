@@ -2,11 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/chess/pgn/games_written.dart';
+import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
+import 'package:chess_auto_prep/storage/file_relocation.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/pgn_file_store.dart';
-import 'package:chess_auto_prep/storage/document_ref.dart';
-import 'package:chess_auto_prep/storage/file_relocation.dart';
 import 'package:chess_auto_prep/storage/training_rows.dart';
 import 'package:document_file_io/document_file_io.dart'
     show NativeCall, runWithNativeCalls;

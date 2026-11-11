@@ -7,8 +7,8 @@ import 'package:chess_auto_prep/workspace/explorer/local_games.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/my_games_fixture.dart';
-import '../support/scripted_store.dart';
 import '../support/scripted_explorer.dart';
+import '../support/scripted_store.dart';
 
 /// A game of the user's on Lichess, played on [date].
 String lichessGame(String id, String date, String moves, String result) =>

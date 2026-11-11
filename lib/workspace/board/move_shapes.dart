@@ -2,8 +2,8 @@ import 'package:dartchess/dartchess.dart' show Move, NormalMove;
 
 import '../../chess/pgn/board_shapes.dart';
 import '../../chess/pgn/comment_edits.dart';
-import '../document/document_session.dart';
 import '../analysis/engine_analysis.dart';
+import '../document/document_session.dart';
 
 /// The arrows and circles the workspace board shows from the comment on the
 /// move under the cursor — the chapter's introduction at the start.

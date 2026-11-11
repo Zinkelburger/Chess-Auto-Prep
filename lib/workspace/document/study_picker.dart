@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../storage/chapter_files.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/list_message.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/search_field.dart';
-import '../../ui/list_message.dart';
 import '../../ui/theme.dart';
 import 'study_choice.dart';
-import '../../ui/app_icons.dart';
 
 /// The answer of [showStudyPicker]: the study, and the chapter's name when
 /// one chapter is going in (empty for `Chapter N`).

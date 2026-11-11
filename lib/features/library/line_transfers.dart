@@ -7,9 +7,9 @@ import '../../chess/pgn/line_id_pins.dart';
 import '../../chess/pgn/line_moves.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/edit_scope.dart';
+import '../../storage/operation_id.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/pgn_document_store.dart' as store;
-import '../../storage/operation_id.dart';
 import '../../workspace/document/document_session.dart';
 import 'library_state.dart';
 

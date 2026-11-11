@@ -9,19 +9,19 @@ import '../../chess/training/schedule.dart';
 import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
 import '../../storage/training_progress.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/move_notation.dart';
 import '../../ui/problem_line.dart';
 import '../../ui/relative_time.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
+import '../../ui/segments.dart';
 import '../../ui/theme.dart';
 import 'progress.dart';
+import 'study_training_controls.dart';
 import 'trainer.dart';
 import 'trainer_state.dart';
-import 'study_training_controls.dart';
 import 'trainer_words.dart';
-import '../../ui/move_notation.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/segments.dart';
 
 /// The trainer between sittings: the scope, where its lines stand, Review
 /// and Learn, and the lines themselves — or the wrong answers given in

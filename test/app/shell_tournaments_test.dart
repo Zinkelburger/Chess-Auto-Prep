@@ -1,8 +1,9 @@
-import 'package:chess_auto_prep/chess/tournament/result.dart';
 import 'package:chess_auto_prep/app/mode.dart';
+import 'package:chess_auto_prep/chess/tournament/result.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
 import '../support/scripted_tournaments.dart';
 import '../support/window_fixture.dart';
 

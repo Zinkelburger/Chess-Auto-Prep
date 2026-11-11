@@ -5,8 +5,8 @@ import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/chapter_heading.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../ui/name_dialog.dart';
-import '../../ui/theme.dart';
 import '../../ui/segments.dart';
+import '../../ui/theme.dart';
 
 /// What the user asked for: a name, and the moves the chapter starts after,
 /// empty for a chapter that starts at the start.

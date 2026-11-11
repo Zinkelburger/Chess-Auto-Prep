@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../ui/app_icons.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/theme.dart';
-import '../document/document_session.dart';
-import '../../ui/app_icons.dart';
 import '../../ui/tool_button.dart';
+import '../document/document_session.dart';
 
 /// The four buttons under the moves that walk the line: start, back,
 /// forward, end. Each says its key, because each has one.

@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 import '../../chess/book/book_check.dart';
 import '../../chess/book/played_game.dart';
 import '../../chess/pgn/game_tree.dart' show NodePath;
+import '../../ui/list_message.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
+import '../document/document_session.dart';
 import 'board_book.dart';
 import 'book_verdict_view.dart';
-import '../document/document_session.dart';
-import '../../ui/list_message.dart';
 
 /// The My books tab: what the book in use says about the game on the board,
 /// read from the side the board is seen from — flip the board to check the

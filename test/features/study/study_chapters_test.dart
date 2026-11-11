@@ -1,8 +1,8 @@
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/comment_text.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
-import 'package:chess_auto_prep/chess/pgn/study.dart';
 import 'package:chess_auto_prep/chess/pgn/line_id_pins.dart';
+import 'package:chess_auto_prep/chess/pgn/study.dart';
 import 'package:chess_auto_prep/features/study/study_commands.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';

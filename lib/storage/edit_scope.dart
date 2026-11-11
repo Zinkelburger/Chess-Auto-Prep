@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
+import '../chess/pgn/game_text.dart';
 import '../chess/pgn/games_written.dart';
+import '../chess/tactics/analyzed_games.dart';
 import 'compound_commit.dart';
 import 'reference_change.dart';
-import '../chess/pgn/game_text.dart';
-import '../chess/tactics/analyzed_games.dart';
 
 /// What a save says it is about to change.
 ///

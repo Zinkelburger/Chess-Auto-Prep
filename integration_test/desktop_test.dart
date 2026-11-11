@@ -1,8 +1,8 @@
 import 'dart:io';
 
-import 'package:chess_auto_prep/debug/desktop_self_test.dart';
 import 'package:chess_auto_prep/app/app.dart';
 import 'package:chess_auto_prep/app/shell.dart';
+import 'package:chess_auto_prep/debug/desktop_self_test.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';

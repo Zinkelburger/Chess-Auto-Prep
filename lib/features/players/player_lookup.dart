@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../../chess/players/player.dart';
 import '../../chess/tactics/game_ids.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/theme.dart';
 import 'players.dart';
-import '../../ui/app_icons.dart';
 
 /// What the account research found for a person, folded under their row:
 /// each suggested account with the evidence for it and the button that

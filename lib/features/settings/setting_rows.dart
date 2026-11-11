@@ -3,11 +3,11 @@ import 'package:flutter/foundation.dart';
 import '../../chess/generation/expectimax_options.dart';
 import '../../storage/settings.dart';
 import '../../storage/settings_store.dart';
-import 'app_updates.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/move_notation.dart';
 import '../../workspace/analysis/engine_settings.dart';
 import '../../workspace/search/search_settings.dart';
+import 'app_updates.dart';
 import 'lichess_account.dart';
 import 'update_rows.dart';
 

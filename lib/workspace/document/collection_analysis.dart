@@ -6,12 +6,12 @@ import '../../chess/pgn/analysis_board.dart';
 import '../../chess/pgn/chapter.dart';
 import '../../engines/engine_supervisor.dart';
 import '../../storage/pgn_document_store.dart';
+import '../analysis/engine_analysis.dart';
+import '../latest.dart';
 import 'document_actions.dart';
 import 'document_history.dart';
 import 'document_saver.dart';
 import 'document_session.dart';
-import '../analysis/engine_analysis.dart';
-import '../latest.dart';
 
 /// A scratch game inside its source collection. The source session never
 /// changes, so its game list, filters, draft and file tab remain in place.

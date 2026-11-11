@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 
 import '../../chess/tactics/game_ids.dart';
 import '../../storage/my_accounts.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/form_dialog.dart';
+import '../../ui/problem_line.dart';
 import '../../ui/theme.dart';
 import '../../ui/toggle_chip.dart';
 import 'my_games.dart';
 import 'my_games_words.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/problem_line.dart';
 
 /// The top of the Tactics column: whose games these are, the one button
 /// that fetches and reviews them, and one line saying where that stands.

@@ -4,13 +4,13 @@ import 'package:flutter/widgets.dart';
 
 import '../features/books/books_screen.dart';
 import '../ui/app_action.dart';
+import '../ui/app_icons.dart';
 import '../ui/screen_keys.dart';
 import '../workspace/workspace.dart';
 import '../workspace/workspace_tabs.dart';
 import 'mode.dart';
 import 'mode_view.dart';
 import 'workspace_requests.dart';
-import '../ui/app_icons.dart';
 
 /// Books: the user's books and what is in each, a screen of its own. A
 /// chapter opens in the builder.

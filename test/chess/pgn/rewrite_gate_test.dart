@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
-import 'package:chess_auto_prep/chess/pgn/comment_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_line.dart';
+import 'package:chess_auto_prep/chess/pgn/comment_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/pgn_reader.dart';
 import 'package:chess_auto_prep/chess/pgn/rewrite_gate.dart';

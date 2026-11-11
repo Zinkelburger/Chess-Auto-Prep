@@ -4,10 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../chess/tactics/puzzle.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/confirm_dialog.dart';
-import '../../ui/status_bar.dart';
-import '../../ui/search_field.dart';
+import '../../ui/list_message.dart';
+import '../../ui/list_row.dart';
+import '../../ui/pane_header.dart';
 import '../../ui/row_actions.dart';
+import '../../ui/search_field.dart';
+import '../../ui/status_bar.dart';
 import '../../ui/theme.dart';
 import 'my_games.dart';
 import 'my_games_block.dart';
@@ -15,10 +19,6 @@ import 'puzzle_filters.dart';
 import 'puzzle_trainer.dart';
 import 'source_games.dart';
 import 'tactics_set.dart';
-import '../../ui/list_message.dart';
-import '../../ui/list_row.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/pane_header.dart';
 
 /// The Tactics column: the one button that starts a sitting, the filters
 /// beside the count they change, and the puzzles they let through, which

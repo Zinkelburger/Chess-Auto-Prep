@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../chess/book/book_check.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/progress_line.dart';
 import '../../ui/theme.dart';
 import 'player_book.dart';
-import '../../ui/progress_line.dart';
 
 /// The My book tab: the player's games walked through the book in use for
 /// the other colour, and the places they left it — a reply the book does

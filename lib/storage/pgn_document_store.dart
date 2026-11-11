@@ -1,5 +1,5 @@
-import 'document_ref.dart';
 import 'compound_commit.dart';
+import 'document_ref.dart';
 import 'edit_scope.dart';
 import 'training_records.dart';
 

@@ -8,9 +8,9 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/books_fixture.dart';
 import '../support/scripted_files.dart';
 import '../support/session_fixture.dart';
-import '../support/books_fixture.dart';
 
 /// The chapter on the board: two lines of the Italian.
 const italian = '''

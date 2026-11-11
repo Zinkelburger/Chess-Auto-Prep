@@ -3,12 +3,12 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
-import 'package:path/path.dart' as p;
 import 'package:document_file_io/document_file_io.dart';
+import 'package:path/path.dart' as p;
 
 import '../chess/tournament/config.dart';
-import '../chess/tournament/result.dart';
 import '../chess/tournament/positions.dart';
+import '../chess/tournament/result.dart';
 import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'document_ref.dart';

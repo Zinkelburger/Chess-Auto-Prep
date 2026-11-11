@@ -12,8 +12,8 @@ import '../../engines/engine.dart';
 import '../../engines/engine_line.dart';
 import '../../engines/engine_supervisor.dart';
 import '../../engines/fixed_depth.dart';
-import '../document/document_session.dart';
 import '../analysis/engine_jobs.dart';
+import '../document/document_session.dart';
 import '../latest.dart';
 
 /// A bounded whole-game review. Navigation to another game or an edit cancels

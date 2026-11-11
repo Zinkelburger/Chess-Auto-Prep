@@ -1,26 +1,25 @@
 import 'dart:async';
 
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
-
-import 'package:dartchess/dartchess.dart' show Side;
 
 import '../../chess/game_filter.dart';
 import '../../chess/pgn/game_order.dart';
 import '../../chess/pgn/game_summary.dart';
 import '../../storage/chapter_files.dart';
-import '../../ui/choice_field.dart';
-import '../../ui/search_field.dart';
-import '../../ui/listening_state.dart';
-import '../../ui/theme.dart';
-import '../../workspace/explorer/file_filter.dart';
-import 'pgn_viewer.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/app_keys.dart';
+import '../../ui/choice_field.dart';
 import '../../ui/list_message.dart';
 import '../../ui/list_row.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/tool_button.dart';
+import '../../ui/listening_state.dart';
 import '../../ui/pane_header.dart';
+import '../../ui/search_field.dart';
+import '../../ui/theme.dart';
+import '../../ui/tool_button.dart';
+import '../../workspace/explorer/file_filter.dart';
+import 'pgn_viewer.dart';
 
 /// Opens a PGN file in the workspace with its first game on the board.
 typedef OpenPgnFile = void Function(ChapterRef file);

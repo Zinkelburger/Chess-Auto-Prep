@@ -9,8 +9,8 @@ import 'package:http/testing.dart';
 import 'package:path/path.dart' as p;
 
 import '../app/app.dart';
-import '../app/native_engines.dart';
 import '../app/exit_guard.dart';
+import '../app/native_engines.dart';
 import '../chess/fen.dart';
 import '../chess/pgn/game_tree.dart';
 import '../engines/engine_supervisor.dart';

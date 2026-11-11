@@ -4,8 +4,8 @@ import 'package:flutter/foundation.dart';
 
 import '../../diagnostics/log.dart';
 import '../../net/lichess_login.dart';
-import '../../storage/pending_writes.dart';
 import '../../storage/lichess_token.dart';
+import '../../storage/pending_writes.dart';
 
 /// The Lichess account as the settings show it: signed out, waiting for
 /// the browser, or signed in as someone. The one owner of that state; the

@@ -1,18 +1,18 @@
 import 'dart:io';
 
-import 'package:chess_auto_prep/storage/book_list.dart';
-import 'package:chess_auto_prep/storage/chapter_files.dart';
-import 'package:chess_auto_prep/storage/deleted_chapters.dart';
-import 'package:chess_auto_prep/storage/chapter_directory.dart';
-import 'package:chess_auto_prep/storage/document_ref.dart';
-import 'package:chess_auto_prep/storage/document_repository.dart';
-import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/workspace/document/document_projection.dart'
-    as projection;
-import 'package:chess_auto_prep/workspace/book/repertoire_catalog.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_edit.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_sections.dart';
+import 'package:chess_auto_prep/storage/book_list.dart';
+import 'package:chess_auto_prep/storage/chapter_directory.dart';
+import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/deleted_chapters.dart';
+import 'package:chess_auto_prep/storage/document_ref.dart';
+import 'package:chess_auto_prep/storage/document_repository.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/workspace/book/repertoire_catalog.dart';
+import 'package:chess_auto_prep/workspace/document/document_projection.dart'
+    as projection;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
