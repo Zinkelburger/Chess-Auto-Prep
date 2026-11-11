@@ -23,3 +23,6 @@ lib/storage/pgn_file_store.dart|test/storage/pgn_file_store_test.dart|test/stora
 # file_relocation.dart:434 (create: true on a source's existing parents) and :123 ($1 -> $2:
 # admission refuses the same changes) survive at seed 1 as equivalent mutants.
 lib/storage/file_relocation.dart|test/storage/file_relocation_test.dart test/storage/folder_relocation_test.dart|test/storage/compound_alias_test.dart test/storage/file_delete_recovery_test.dart test/storage/file_relocation_recovery_test.dart test/storage/folder_relocation_recovery_test.dart test/storage/journal_format_test.dart test/storage/operation_journal_test.dart test/storage/recovery_access_test.dart test/storage/relocation_sync_test.dart test/storage/training_during_move_test.dart test/features/library_unfinished_move_test.dart test/features/library_import_recovery_test.dart
+# search.dart:400 and :638 move a wall-clock threshold (snapshot every 2 s, yield after 16 ms)
+# and :241 stores the value already held; they survive at seed 1 as equivalent mutants.
+lib/chess/generation/search.dart|test/chess/generation/search_test.dart|test/chess/generation test/workspace/fill_gaps_test.dart
