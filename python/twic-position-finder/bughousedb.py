@@ -232,9 +232,9 @@ def push(boards: list[CrazyhouseBoard], which: int, move: chess.Move) -> list[Cr
     if move.drop is None:
         if board.is_en_passant(move):
             captured = chess.PAWN
-        elif board.piece_at(move.to_square) is not None:
+        elif (victim := board.piece_at(move.to_square)) is not None:
             captured = chess.PAWN if board.promoted & chess.BB_SQUARES[move.to_square] \
-                else board.piece_at(move.to_square).piece_type
+                else victim.piece_type
     mover = board.turn
     board.push(move)
     if captured is not None:
@@ -433,12 +433,12 @@ def read_position(conn: sqlite3.Connection, fen: str, moves: str = "") -> dict:
         evaluations = [dict(profile=e['profile'], nodes=e['nodes'], analysis=json.loads(e['data']))
                        for e in conn.execute('SELECT profile,nodes,data FROM lab_evaluation WHERE pos=? AND fen=?',
                        (key, bughouse_expectimax.canonical(boards)))]
-    moves = [{**m, "scores": scores.get((m["board"], m["uci"]))} for m in legal_moves(boards)]
+    move_rows = [{**m, "scores": scores.get((m["board"], m["uci"]))} for m in legal_moves(boards)]
     return {
         "key": str(key), "fen": dual_fen(boards), "found": bool(row),
         "turn": {"A": "white" if boards[0].turn else "black", "B": "white" if boards[1].turn else "black"},
         "teams": [t for t in TEAMS if team_can_move(boards, t)],
-        "moves": moves, "picks": picks, "evaluations": evaluations,
+        "moves": move_rows, "picks": picks, "evaluations": evaluations,
         "expectimax": bughouse_expectimax.read(key, bughouse_expectimax.canonical(boards)),
         "meta": None if not row else {
             "source": row["source"], "engine": row["engine"], "nodes": row["nodes"],

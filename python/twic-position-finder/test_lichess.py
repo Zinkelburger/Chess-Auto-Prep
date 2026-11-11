@@ -1,3 +1,5 @@
+# A None here fails the test on its own, so pyright's None checks add nothing.
+# pyright: reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportOptionalIterable=false, reportOptionalOperand=false
 """Lichess view-URL helper — imported games vs analysis fallback."""
 
 import unittest
@@ -17,7 +19,7 @@ class ViewLichessUrlTests(unittest.TestCase):
 
     def test_analysis_fallback_from_pgn(self):
         url = view_lichess_url({"pgn_text": "1. e4 e5"})
-        self.assertIsNotNone(url)
+        assert url is not None
         self.assertTrue(url.startswith("https://lichess.org/analysis/pgn/"))
         self.assertIn("1.", url)
 

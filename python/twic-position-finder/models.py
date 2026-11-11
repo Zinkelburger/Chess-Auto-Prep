@@ -199,6 +199,7 @@ def insert_game(db: sqlite3.Connection, headers: dict, pgn_text: str,
             twic_number,
         ),
     )
+    assert cur.lastrowid is not None  # set by the INSERT above
     return cur.lastrowid
 
 

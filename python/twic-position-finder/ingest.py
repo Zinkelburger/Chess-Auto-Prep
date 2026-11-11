@@ -7,7 +7,7 @@ import chess
 import chess.pgn
 
 from models import get_db, insert_game, insert_positions_batch, highest_twic_number, signed_zobrist
-from downloader import download_latest, download_twic, parse_twic_number, DEFAULT_FIRST_TWIC
+from downloader import download_latest, parse_twic_number, DEFAULT_FIRST_TWIC
 
 
 def _game_to_pgn_text(game: chess.pgn.Game) -> str:
@@ -29,7 +29,7 @@ def ingest_pgn(db, pgn_path: Path, twic_number: int | None = None) -> int:
         while True:
             try:
                 game = chess.pgn.read_game(f)
-            except Exception as e:
+            except (ValueError, AssertionError, IndexError) as e:
                 errors += 1
                 if errors <= 5:
                     print(f"  Warning: parse error: {e}")
@@ -43,7 +43,7 @@ def ingest_pgn(db, pgn_path: Path, twic_number: int | None = None) -> int:
             game_id = insert_game(db, headers, pgn_text, source, twic_number)
 
             board = game.board()
-            positions = [
+            positions: list[tuple] = [
                 (game_id, 0, signed_zobrist(board), board.fen(), None)
             ]
 

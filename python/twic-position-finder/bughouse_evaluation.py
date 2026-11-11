@@ -121,9 +121,9 @@ def store(conn, upload, contributor):
     if theirs and theirs.best:
         joint(boards, theirs.best, 'black' if upload.team == 'white' else 'white')
     measured = theirs is not None and ours.mate is None and theirs.mate is None
-    advantage = (ours.q - theirs.q) / 2 if measured else None
+    advantage = (ours.q - theirs.q) / 2 if theirs is not None and measured else None
     if fallback and ours.mate is None:
-        advantage = max(-1, min(1, ours.q - sum(upload.static_values) / 2))
+        advantage = max(-1, min(1, ours.q - sum(upload.static_values or ()) / 2))
     lines = [{"best": joint(boards, move, upload.team, upload.required)} for move in upload.candidates]
     result = dict(best=best, lines=lines, advantage=advantage,
                   mate=ours.mate, nodes=ours.nodes or 0,

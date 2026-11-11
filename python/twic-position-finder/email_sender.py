@@ -2,11 +2,13 @@
 
 import html
 import os
+from collections.abc import Mapping
+from typing import Any
 
 from models import parse_fen_list
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 
 SES_REGION = os.getenv("AWS_SES_REGION", "us-east-1")
 FROM_EMAIL = os.getenv("TWIC_FROM_EMAIL", "subscriptions@chessautoprep.com")
@@ -94,7 +96,7 @@ def _game_card_html(game: dict, lichess_url: str | None = None) -> str:
 
 
 def build_email_html(subscription: dict, games: list[dict],
-                     lichess_urls: dict[int, str],
+                     lichess_urls: Mapping[Any, str],
                      manage_token: str | None = None,
                      unsub_token: str | None = None,
                      total_matches: int | None = None) -> str:
@@ -213,7 +215,7 @@ def build_email_html(subscription: dict, games: list[dict],
 
 
 def build_email_text(subscription: dict, games: list[dict],
-                     lichess_urls: dict[int, str],
+                     lichess_urls: Mapping[Any, str],
                      manage_token: str | None = None,
                      unsub_token: str | None = None,
                      total_matches: int | None = None) -> str:
@@ -276,7 +278,7 @@ def send_ses_email(to: str, subject: str, html_body: str, text_body: str) -> boo
             },
         )
         return True
-    except Exception as e:
+    except (BotoCoreError, ClientError) as e:
         print(f"  SES error sending to {to}: {e}")
         return False
 
