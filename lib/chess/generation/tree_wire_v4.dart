@@ -146,7 +146,7 @@ Map<String, Object?> _configJson(
   SearchConfig config,
   int? evalDepth,
   int? opponentRating, {
-  bool maiaOnly = true,
+  required bool maiaOnly,
 }) => <String, Object?>{
   'algorithm_version': config.maxOurMoves == null
       ? pureAlgorithmVersion

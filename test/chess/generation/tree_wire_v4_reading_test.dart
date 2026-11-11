@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:chess_auto_prep/chess/generation/search_config.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/chess/generation/tree_wire_v4_reader.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -233,6 +234,53 @@ void main() {
 
     expect((result as TreeMalformed).detail, contains('checkmate worth 0.0'));
     expect(result.detail, contains(afterE4), reason: 'which node it was');
+  });
+
+  test('a tree may nest 512 plies deep and no further', () {
+    String? refusedFor(int plies) {
+      var node = <String, Object?>{
+        ...oneNode,
+        'move_uci': 'e2e4',
+        'move_san': 'e4',
+      };
+      for (var depth = 0; depth < plies; depth++) {
+        node = <String, Object?>{
+          ...oneNode,
+          'move_uci': 'e2e4',
+          'move_san': 'e4',
+          'children': [node],
+        };
+      }
+      return switch (decodeTreeV4(wireDocument(tree: node))) {
+        TreeMalformed(:final detail) => detail,
+        _ => null,
+      };
+    }
+
+    expect(refusedFor(512) ?? '', isNot(contains('deeper')));
+    expect(refusedFor(513), contains('deeper than 512'));
+  });
+
+  test('a budget, reply mass or reply cap of nothing reads as none', () {
+    SearchConfig read(Map<String, Object?> extra) => decodedTree(
+      wireDocument(
+        config: {
+          'algorithm_version': 3,
+          'search_algorithm': 'pure',
+          'play_as_white': true,
+          'max_depth': 4,
+          'max_eval_loss_cp': 200,
+          ...extra,
+        },
+      ),
+    ).config;
+
+    expect(read({'max_nodes': 1}).nodeBudget, 1);
+    expect(read({'max_nodes': 0}).nodeBudget, isNull);
+    expect(read({'v2_reply_mass': 0}).replyMass, isNull);
+    expect(read({'v2_reply_mass': 1}).replyMass, 1);
+    expect(read({'v2_max_replies': 1}).maxReplies, 1);
+    expect(read({'v2_max_replies': 0}).maxReplies, isNull);
   });
 
   test('a tree nested deeper than any search goes is malformed', () {
