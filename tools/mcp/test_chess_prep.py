@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# A None here fails the test on its own, so pyright's None checks add nothing.
+# pyright: reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportOptionalIterable=false, reportOptionalOperand=false
 """Tests for the standalone prep MCP server.
 
 Zero dependencies (unittest only). Network-touching tools are exercised
@@ -198,6 +200,7 @@ class DirectoryLookup(unittest.TestCase):
 
     def test_ambiguous_name_returns_candidates(self):
         identity = self.directory.resolve(name="John Smith")
+        assert identity is not None
         self.assertEqual(identity["confidence"], "ambiguous")
         self.assertNotIn("chesscom_username", identity)
         self.assertEqual(len(identity["alternates"]), 2)
@@ -672,7 +675,7 @@ class Protocol(TempRosterCase):
         stdin = io.StringIO("".join(json.dumps(m) + "\n" for m in messages))
         stdout = io.StringIO()
         server = Server(stdin=stdin, stdout=stdout)
-        server.registry._directory = _fake_directory()
+        server.registry._directory = _fake_directory()  # pyright: ignore[reportAttributeAccessIssue]
         server.serve_forever()
         return [json.loads(line) for line in stdout.getvalue().splitlines() if line]
 

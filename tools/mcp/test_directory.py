@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# A None here fails the test on its own, so pyright's None checks add nothing.
+# pyright: reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportOptionalIterable=false, reportOptionalOperand=false
 """Tests for player lookup: `chess_prep.directory`, `chess_prep.uscf` and
 `chess_prep.app_games`.
 
@@ -28,6 +30,7 @@ import sys
 import tempfile
 import time
 import unittest
+import email.message
 import urllib.error
 from pathlib import Path
 from unittest import mock
@@ -294,10 +297,13 @@ class Resolve(unittest.TestCase):
     def test_the_title_rides_along(self):
         self.assertEqual(self.directory.resolve(uscf_id="44444444")["title"], "WFM")
         self.assertEqual(self.directory.resolve(name="Jane Doe")["title"], "IM")
-        self.assertNotIn("title", self.directory.resolve(uscf_id="11111111"))
+        untitled = self.directory.resolve(uscf_id="11111111")
+        assert untitled is not None
+        self.assertNotIn("title", untitled)
 
     def test_two_rows_sharing_a_name_refuse_to_pick(self):
         identity = self.directory.resolve(name="John Smith")
+        assert identity is not None
         self.assertEqual(identity["confidence"], "ambiguous")
         self.assertNotIn(
             "chesscom_username",
@@ -342,6 +348,7 @@ class Resolve(unittest.TestCase):
     def test_a_whole_name_match_is_not_labelled(self):
         # The label has to mean something, so a full match must not carry it.
         identity = self.directory.resolve(name="Cruz, Maria")
+        assert identity is not None
         self.assertEqual(identity["chesscom_username"], "delta")
         self.assertNotIn("dropped_name_parts", identity)
         self.assertNotIn("only part of the name", identity["evidence"])
@@ -752,7 +759,7 @@ class Transport(unittest.TestCase):
 
     def test_an_http_error_names_the_status(self):
         with mock.patch("urllib.request.urlopen") as urlopen:
-            error = urllib.error.HTTPError("u", 404, "Not Found", {}, io.BytesIO(b""))
+            error = urllib.error.HTTPError("u", 404, "Not Found", email.message.Message(), io.BytesIO(b""))
             self.addCleanup(error.close)
             urlopen.side_effect = error
             with self.assertRaises(uscf.UscfError) as caught:
@@ -981,6 +988,7 @@ class OwnGames(unittest.TestCase):
 
     def test_headers_are_decoded_and_the_raw_column_is_gone(self):
         game = self.db.game(1)
+        assert game is not None
         self.assertEqual(game["headers"], {"White": "MyName"})
         self.assertNotIn("headers_json", game)
         self.assertEqual(game["pgn"], "1. e4 e5")
