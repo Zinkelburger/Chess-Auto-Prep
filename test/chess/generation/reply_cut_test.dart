@@ -53,6 +53,14 @@ void main() {
 
     test('always keeps one reply, and keeps all with no cut', () {
       expect(likeliestReplies({'a': 0.95, 'b': 0.05}, mass: 0.1), {'a': 1.0});
+      expect(
+        likeliestReplies({
+          'a': 0.75 - 5e-13,
+          'b': 0.25 + 5e-13,
+        }, mass: 0.75).keys,
+        ['a'],
+        reason: 'short of the mass by rounding alone is covering it',
+      );
       expect(likeliestReplies(_spread.weights), same(_spread.weights));
     });
 
