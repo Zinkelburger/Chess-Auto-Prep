@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../chess/tactics/puzzle.dart';
 import '../../chess/tactics/puzzle_queue.dart';
 import '../../ui/check_row.dart';
+import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
 import '../../ui/toggle_chip.dart';
 
@@ -117,16 +118,16 @@ class _Days extends StatefulWidget {
   State<_Days> createState() => _DaysState();
 }
 
-class _DaysState extends State<_Days> {
+class _DaysState extends State<_Days> with ListeningState<_Days> {
   late final _number = TextEditingController(text: '${widget.days ?? 14}');
   final _focus = FocusNode();
 
   @override
-  void initState() {
-    super.initState();
-    _focus.addListener(() {
-      if (!_focus.hasFocus && mounted) _take(_number.text);
-    });
+  Listenable listenableOf(_Days widget) => _focus;
+
+  @override
+  void changed() {
+    if (!_focus.hasFocus) _take(_number.text);
   }
 
   @override
@@ -138,6 +139,7 @@ class _DaysState extends State<_Days> {
 
   @override
   void dispose() {
+    stopListening();
     _focus.dispose();
     _number.dispose();
     super.dispose();

@@ -304,23 +304,13 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       _editing.value = _view.startsEditing;
       _view.entered();
     }
-    _editing.addListener(_redraw);
-    _columns.addListener(_redraw);
     _requests.addListener(_modeMayHaveChanged);
     _ws.inspection?.addListener(_analysisChanged);
     _ws.jobs?.addListener(_jobChanged);
   }
 
-  /// Reading quiets the board and editing gives it its tools back; the
-  /// columns redraw what they hold.
-  void _redraw() {
-    if (mounted) setState(() {});
-  }
-
   @override
   void dispose() {
-    _editing.removeListener(_redraw);
-    _columns.removeListener(_redraw);
     _requests.removeListener(_modeMayHaveChanged);
     _ws.jobs?.removeListener(_jobChanged);
     _ws.inspection?.removeListener(_analysisChanged);
@@ -443,7 +433,14 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
           say: _requests.say,
           child: ListenableBuilder(
             key: _statusContext,
-            listenable: Listenable.merge([_requests, widget.labs.offered]),
+            // Reading quiets the board and editing gives it its tools back;
+            // the columns redraw what they hold.
+            listenable: Listenable.merge([
+              _requests,
+              widget.labs.offered,
+              _editing,
+              _columns,
+            ]),
             builder: (context, _) => _requests.mode == Mode.repertoires
                 ? PgnDropRegion(
                     library: _docs.library,
