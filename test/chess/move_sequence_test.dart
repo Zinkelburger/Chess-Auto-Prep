@@ -91,6 +91,17 @@ void main() {
       );
       expect(filter.readsMoves, isTrue);
       expect(filter.reachIn(sicilian), 7);
+      HeaderRule starts(String value) => HeaderRule(
+        field: movesField,
+        rule: FilterRule.startsWith,
+        value: value,
+      );
+      expect(starts('1.e4 c5').reachIn(sicilian), 2);
+      expect(
+        starts('c5').reachIn(sicilian),
+        isNull,
+        reason: 'a game that starts otherwise does not play it from the start',
+      );
       expect(byEvent.readsMoves, isFalse);
     });
   });

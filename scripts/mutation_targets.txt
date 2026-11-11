@@ -18,6 +18,9 @@
 #   lib/chess/bughouse/table_line.dart:250 the `-1` floor: nodes are never negative.
 #   lib/chess/fen.dart:84,142,145,185: each only sends the fast writer to
 #     dartchess's own FEN, which writes the same characters.
+# Listed with one equivalent mutant a --max 30 sample can draw:
+#   lib/chess/game_filter.dart:168 `> 32` -> `>= 32`: when the pattern cache
+#     is emptied, which no result shows.
 lib/chess/pgn/game_review.dart|test/workspace/game_review_test.dart|test/chess/pgn/edit_laws_test.dart test/app
 lib/chess/pgn/line_edits.dart|test/chess/pgn/line_edits_test.dart|test/chess/pgn test/workspace
 lib/chess/pgn/chapter_edits.dart|test/chess/pgn/chapter_edits_test.dart|test/chess/pgn test/workspace
