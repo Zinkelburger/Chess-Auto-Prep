@@ -90,6 +90,7 @@ def tag_themes(fen: str, line: list[str], cp: int | None) -> list[str]:
         if moves[-1].drop:
             tags.append("dropMate")
         king = final.king(not pov)
+        assert king is not None  # the mated side has a king
         if moves[-1].to_square in final.checkers() and square_distance(moves[-1].to_square, king) == 1:
             tags.append("contactMate")
     if len(solver) >= 4:
@@ -149,6 +150,7 @@ def _mate_pattern(board: CrazyhouseBoard, move: chess.Move, pov: chess.Color) ->
     king = board.king(not pov)
     assert king is not None
     moved = board.piece_type_at(move.to_square)
+    assert moved is not None  # the mating piece stands on its destination
     if _smothered(board, king, pov):
         return "smotheredMate"
     if _back_rank(board, king, pov):
