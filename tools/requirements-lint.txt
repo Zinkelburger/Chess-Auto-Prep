@@ -1,0 +1,22 @@
+# Pinned for `scripts/ci.sh lint`. scripts/python_checks.py installs this file
+# into a private virtual environment; nothing else reads it. The libraries are
+# here so pyright checks calls against their real types.
+ruff==0.17.4
+pyright==1.1.414
+
+aiohttp==3.14.5
+beautifulsoup4==4.15.0
+boto3==1.44.0
+chess==1.11.2
+fastapi==0.162.4
+matplotlib==3.11.2
+numpy==2.5.4
+pillow==13.0.0
+pydantic[email]==2.14.3
+pymupdf==2.1
+pytesseract==0.3.13
+python-dotenv==1.2.4
+requests==2.34.2
+scipy==1.18.1
+slowapi==0.1.10
+uvicorn==0.54.0
