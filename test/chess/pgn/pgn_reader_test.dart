@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/chess/fen.dart';
+import 'package:chess_auto_prep/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/chess/pgn/pgn_reader.dart';
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,6 +26,25 @@ void main() {
       expect(e5.children.single.san, 'Nf3');
     },
   );
+
+  test('each glyph reads as its NAG', () {
+    final tree = readGame('1. e4! e5? 2. Nf3!! Nc6?? 3. Bb5!? a6?! *').tree!;
+    expect(
+      [for (final node in tree.mainLine) node.nags.single],
+      [1, 2, 3, 4, 5, 6],
+    );
+  });
+
+  test('a tag name may hold digits and the punctuation exports use', () {
+    final read = readGame(
+      '[Opening2 "a"]\n[Score+ "b"]\n[Ply#Count "c"]\n[Time-Zone "d"]\n\n*',
+    );
+    expect(read.issues, isEmpty);
+    expect(tagValue(read.tags, 'Opening2'), 'a');
+    expect(tagValue(read.tags, 'Score+'), 'b');
+    expect(tagValue(read.tags, 'Ply#Count'), 'c');
+    expect(tagValue(read.tags, 'Time-Zone'), 'd');
+  });
 
   test('starts from the FEN header', () {
     final read = readGame('''

@@ -58,6 +58,11 @@ void main() {
     test('moves after it are reported', () {
       final read = readGame('1. e4 * e5');
       expect(read.issues.single, isA<MovesAfterTermination>());
+      expect(
+        readGame('1. e4 * e5 2. Nf3 Nc6').issues.single,
+        isA<MovesAfterTermination>(),
+        reason: 'once, however many moves follow',
+      );
     });
   });
 
