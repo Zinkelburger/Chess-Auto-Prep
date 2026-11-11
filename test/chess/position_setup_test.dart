@@ -42,6 +42,26 @@ void main() {
     expect(setup.withEnPassant(Square.a6).epSquare, isNull);
   });
 
+  test('en passant at the edge files, and only beside a pawn', () {
+    List<Square> squares(String board) =>
+        SetupEdits.read('4k3/8/8/$board/8/8/8/4K3 w - - 0 1')!.enPassantSquares;
+    expect(squares('pP6'), [Square.a6], reason: 'a black pawn on a5, ours b5');
+    expect(squares('6Pp'), [Square.h6], reason: 'a black pawn on h5, ours g5');
+    expect(squares('Pp6'), [Square.b6], reason: 'ours on the a-file takes');
+    expect(squares('6pP'), [Square.g6], reason: 'ours on the h-file takes');
+    expect(
+      squares('3pN3'),
+      isEmpty,
+      reason: 'a knight beside it takes nothing',
+    );
+    // A board with no black king yet, so no legal-capture check hides the
+    // answer: the square past the h-file is no neighbour.
+    expect(
+      SetupEdits.read('8/8/P7/7p/8/8/8/4K3 w - - 0 1')!.enPassantSquares,
+      isEmpty,
+    );
+  });
+
   test('reads a FEN with missing fields; text that is none is null', () {
     expect(
       SetupEdits.read('8/8/4k3/8/8/4K3/4R3/8')?.fen,
