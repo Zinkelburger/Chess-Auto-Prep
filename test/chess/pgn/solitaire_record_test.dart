@@ -36,6 +36,26 @@ GameTree _roundTrip(GameRead source, GameTree tree) {
 }
 
 void main() {
+  test('progress is only shown along the main line', () {
+    final game = readGame('1. e4 (1. d4) e5 *').tree!;
+    expect(
+      () => solitaireProgress(game, const [], NodePath.of(const [1])),
+      throwsArgumentError,
+    );
+  });
+
+  test('an attempt at a place that is no place records nothing', () {
+    final game = readGame('1. e4 e5 *').tree!;
+    final review = solitaireReview(game, [
+      SolitaireAttempt(
+        at: NodePath.of(const [-1]),
+        uci: 'e7e5',
+        outcome: SolitaireOutcome.gameMove,
+      ),
+    ]);
+    expect(identical(review, game), isTrue);
+  });
+
   test(
     'review keeps the original game and records every attempt beside it',
     () {
