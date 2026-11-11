@@ -121,7 +121,10 @@ GameOutcome _outcome(String? result, Side side) =>
       _ => GameOutcome.unfinished,
     };
 
+/// [value], or null when PGN says it is unknown: empty, `?`, or a date of
+/// `????.??.??`.
 String? _known(String? value) {
   final trimmed = value?.trim();
-  return trimmed == null || trimmed.isEmpty || trimmed == '?' ? null : trimmed;
+  if (trimmed == null || trimmed.isEmpty) return null;
+  return trimmed == '?' || trimmed == '????.??.??' ? null : trimmed;
 }
