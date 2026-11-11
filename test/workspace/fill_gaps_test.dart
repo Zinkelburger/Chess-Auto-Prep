@@ -715,6 +715,72 @@ void main() {
     expect(seen.last.nodes, greaterThan(1));
   });
 
+  test('back two roots still finds the first one', () async {
+    final fill = fillWith(ScriptedEvaluator());
+    const shallow = FillRequest(elo: 2200, depthPlies: 1);
+    await fill.start(shallow);
+    final original = fill.found!.tree;
+    fixture.session.playMove('e2e4');
+    await fill.start(shallow);
+    fixture.session.playMove('e8d8');
+    await fill.start(shallow);
+    fixture.session.cursor.back();
+    fixture.session.cursor.back();
+    expect(fill.nodeAtBoard(), same(original));
+  });
+
+  test(
+    'the result history keeps the 32 searches before the current one',
+    () async {
+      final fill = fillWith(ScriptedEvaluator());
+      FillRequest at(int elo) => FillRequest(elo: elo, depthPlies: 1);
+      for (var elo = 1800; elo < 1834; elo++) {
+        await fill.start(at(elo));
+      }
+      expect(fill.nodeAtBoard(request: at(1801)), isNotNull);
+      expect(fill.nodeAtBoard(request: at(1800)), isNull, reason: 'the oldest');
+    },
+  );
+
+  test('a failed tree save is told, and so is giving it up', () async {
+    final pending = PendingWrites();
+    final fill = fillWith(
+      ScriptedEvaluator(scores: e4Best()),
+      pending: pending,
+      keepTree: (ref, text, {required runId}) async =>
+          throw StateError('disk full'),
+    );
+    String? told;
+    var notified = 0;
+    fill.addListener(() {
+      told = fill.treeSaveProblem;
+      notified++;
+    });
+    await fill.start(request);
+    expect(told, isNotNull);
+    notified = 0;
+    fill.discardTreeSave();
+    expect(notified, 1);
+    expect(told, isNull);
+    expect(fill.canRetryTree, isFalse);
+  });
+
+  test(
+    'the root is a level of one, reported before anything is expanded',
+    () async {
+      final fill = fillWith(ScriptedEvaluator());
+      final seen = <FillRunning>[];
+      fill.addListener(() {
+        if (fill.state case final FillRunning running) seen.add(running);
+      });
+      await fill.start(request);
+      expect(
+        seen.where((r) => r.depth == 0).map((r) => r.levelShare),
+        contains(0.0),
+      );
+    },
+  );
+
   test('the search starts from the board, not the chapter root', () async {
     fixture.session.cursor.forward();
     fixture.session.cursor.forward();

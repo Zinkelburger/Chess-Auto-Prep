@@ -26,3 +26,7 @@ lib/storage/file_relocation.dart|test/storage/file_relocation_test.dart test/sto
 # search.dart:400 and :638 move a wall-clock threshold (snapshot every 2 s, yield after 16 ms)
 # and :241 stores the value already held; they survive at seed 1 as equivalent mutants.
 lib/chess/generation/search.dart|test/chess/generation/search_test.dart|test/chess/generation test/workspace/fill_gaps_test.dart
+# fill_gaps.dart:165 (_stopping is read only while a run is FillRunning), :589 (a 25000-node
+# budget one larger) and :689 (the run's end notifies a microtask later) survive at seed 1
+# as equivalent mutants.
+lib/workspace/search/fill_gaps.dart|test/workspace/fill_gaps_test.dart|test/workspace/fill_anchored_test.dart test/workspace/fill_lines_test.dart test/workspace/fill_mirror_test.dart test/workspace/fill_resume_test.dart test/workspace/fill_stops_test.dart test/workspace/search_opponents_test.dart test/workspace/search_pane_test.dart
