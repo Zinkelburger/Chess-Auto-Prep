@@ -63,6 +63,27 @@ void main() {
     ]);
   });
 
+  test('both boards stop at eight joint actions unless told otherwise', () {
+    final sits = List.filled(10, const JointMove(null, null));
+    expect(pvSteps(TablePosition.initial, sits), hasLength(8));
+  });
+
+  test('one board stops at exactly its limit of moves', () {
+    final steps = pvSteps(
+      TablePosition.initial,
+      pv,
+      board: BoardNumber.one,
+      limit: 2,
+    );
+    expect(steps.map((s) => s.san), ['e4', 'e5']);
+  });
+
+  test('playing to the first step plays it; before the first plays none', () {
+    final steps = pvSteps(TablePosition.initial, pv, board: BoardNumber.one);
+    expect(pvMovesTo(steps, 0), [(BoardNumber.one, 'e2e4')]);
+    expect(pvMovesTo(steps, -1), isEmpty);
+  });
+
   test('a line stops at the first move that does not play', () {
     final steps = pvSteps(TablePosition.initial, const [
       JointMove('e2e4', null),

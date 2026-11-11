@@ -48,6 +48,32 @@ void main() {
     );
   });
 
+  test('a repetition is of the position reached, not of the start', () {
+    // 1.e4 e5, then the knights out and back twice: the position after
+    // 1...e5 comes a third time; the start never comes again.
+    expect(
+      kindAfter([
+        'e4', 'e5', //
+        'Nf3', 'Nf6', 'Ng1', 'Ng8', 'Nf3', 'Nf6', 'Ng1', 'Ng8',
+      ]),
+      TerminalKind.repetition,
+    );
+  });
+
+  test('a path\'s reach is one at the root, one past our moves, and the '
+      'opponent\'s share past theirs', () {
+    final root = SearchPath.root(Chess.initial);
+    expect(root.reach, 1);
+    final ours = root.next(lineFrom(Chess.initial, ['e4']).last);
+    expect(ours.reach, 1);
+    final theirs = ours.next(
+      lineFrom(Chess.initial, ['e4', 'e5']).last,
+      share: 0.4,
+    );
+    expect(theirs.reach, 0.4);
+    expect(theirs.ply, 2);
+  });
+
   test('counts only the path it is given, never a sibling line', () {
     final shuffle = ['Nf3', 'Nf6', 'Ng1', 'Ng8'];
     final line = lineFrom(Chess.initial, shuffle);

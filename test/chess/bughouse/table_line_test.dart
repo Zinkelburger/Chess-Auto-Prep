@@ -81,6 +81,41 @@ void main() {
     }
   });
 
+  group('a step on', () {
+    // A table no replay of these lines can reach, so a result built on it
+    // was played on what it was given.
+    final given = TablePosition.initial.withHand(
+      BoardNumber.two,
+      Side.white,
+      Role.knight,
+      1,
+    );
+
+    test('adding the newest node is played on the table given', () {
+      final step = playedLine('1e2e4').atStart.stepOnFrom(given)!;
+      expect(
+        step.position.dualFen,
+        given.play(BoardNumber.one, 'e2e4')!.after.dualFen,
+      );
+    });
+
+    test('adding a node older than one on the boards is replayed', () {
+      final line = stepped(playedLine('1e2e4 2d2d4'), BoardNumber.one, 0);
+      final step = line.stepOnFrom(given)!;
+      expect(step.position.dualFen, positionOf(step.line).dualFen);
+    });
+  });
+
+  test('what the moves copy as leaves each board at its end', () {
+    final shown = stepped(
+      playedLine('1e2e4 2d2d4 1e7e5 2d7d5'),
+      BoardNumber.one,
+      1,
+    ).shown;
+    expect(shown.current(BoardNumber.one)!.san, 'e5');
+    expect(shown.current(BoardNumber.two)!.san, 'd5');
+  });
+
   test('replaying the next move steps forward instead of branching', () {
     final back = stepped(playedLine('1e2e4 1e7e5'), BoardNumber.one, 1);
     final again = playedLine('1e7e5', back);

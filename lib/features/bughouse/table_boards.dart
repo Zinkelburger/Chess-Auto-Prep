@@ -326,7 +326,7 @@ class _SeatRow extends StatelessWidget {
     final toMove = position.turn(board) == side;
     final pockets = position.board(board).pockets!;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: labSeatPadding / 2),
+      padding: const EdgeInsets.symmetric(vertical: labSeatInset),
       child: Row(
         children: [
           TurnDot(side: side, shown: toMove),

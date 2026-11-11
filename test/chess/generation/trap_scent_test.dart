@@ -22,19 +22,22 @@ SearchNode ours(String name, List<(String, SearchNode)> moves) => OurNode.over(
   ],
 );
 
-SearchNode theirs(String name, List<(String, double, SearchNode)> replies) =>
-    OpponentNode.over(
-      fen: board(name),
-      evalForUs: const Eval(0),
-      replies: [
-        for (final (uci, share, child) in replies)
-          ReplyMove(
-            move: MoveRef(uci: uci, san: uci),
-            probability: share,
-            child: child,
-          ),
-      ],
-    );
+SearchNode theirs(
+  String name,
+  List<(String, double, SearchNode)> replies, {
+  int cp = 0,
+}) => OpponentNode.over(
+  fen: board(name),
+  evalForUs: Eval(cp),
+  replies: [
+    for (final (uci, share, child) in replies)
+      ReplyMove(
+        move: MoveRef(uci: uci, san: uci),
+        probability: share,
+        child: child,
+      ),
+  ],
+);
 
 /// The opponent's position with a sound reply, leaving us [sound], and a
 /// blunder played [share] of the time that leaves us [cp].
@@ -49,6 +52,47 @@ SearchNode trapAt(
 ]);
 
 void main() {
+  group('at the edges', () {
+    test('a blunder that leaves us exactly level is a trap', () {
+      expect(trapsBelow(trapAt('level', cp: 0, sound: -100)).traps, 1);
+    });
+
+    test('a blunder exactly half a pawn past our best move is a trap', () {
+      final tree = ours('root', [
+        (
+          'move',
+          theirs('after', cp: 100, [
+            ('sound', 0.6, leaf('sound', 50)),
+            ('blunder', 0.4, leaf('blunder', 150)),
+          ]),
+        ),
+      ]);
+      expect(trapsBelow(tree).traps, 1);
+    });
+
+    test('a move of ours giving up exactly 300 is followed, more is not', () {
+      SearchNode tree(int bestCp) => ours('root', [
+        ('best', leaf('best', bestCp)),
+        ('other', trapAt('other', cp: 400)),
+      ]);
+      expect(trapsBelow(tree(300)).traps, 1);
+      expect(trapsBelow(tree(301)).traps, 0);
+    });
+
+    test('our best move is always followed, whatever it is worth', () {
+      final tree = ours('root', [
+        (
+          'best',
+          theirs('after', cp: 200, [
+            ('sound', 0.6, leaf('sound', 200)),
+            ('blunder', 0.4, leaf('blunder', 500)),
+          ]),
+        ),
+      ]);
+      expect(trapsBelow(tree).traps, 1);
+    });
+  });
+
   test('a position with no trap under it has none', () {
     final tree = theirs('root', [
       ('a', 0.6, leaf('a', 0)),

@@ -57,7 +57,10 @@ DraftLine fake(List<String> ucis, {double reach = 1}) => DraftLine(
 );
 
 /// The draft of a Ruy Lopez line with a d3 sideline folded into it.
-String ruyLopezDraft({Openings openings = Openings.none}) {
+String ruyLopezDraft({
+  Openings openings = Openings.none,
+  Side side = Side.white,
+}) {
   final kept = line('e4 e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6 O-O', reach: 0.6, value: 0.6);
   final aside = line(
     'e4 e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6 d3',
@@ -68,7 +71,7 @@ String ruyLopezDraft({Openings openings = Openings.none}) {
   expect(plan.entries.single.sidelines, hasLength(1));
   return draftChapterText(
     name: 'Main (draft)',
-    side: Side.white,
+    side: side,
     rootFen: Fen.initial,
     rootMoves: const [],
     prefix: const [],
@@ -93,6 +96,14 @@ DraftLine oneMove(String uci, {required String before}) => DraftLine(
 );
 
 void main() {
+  test('a draft names the user as the side it is for', () {
+    expect(ruyLopezDraft(), contains('[White "Me"]\n[Black "Training"]'));
+    expect(
+      ruyLopezDraft(side: Side.black),
+      contains('[White "Training"]\n[Black "Me"]'),
+    );
+  });
+
   group('lines of a searched tree', () {
     test('follow our chosen move and every answered reply, most reached '
         'first, ending on our move', () async {
@@ -125,6 +136,7 @@ void main() {
         anything,
       ]);
       expect(lines.first.moves.last.ours, isTrue);
+      expect(lines.first.moves[1].ours, isFalse, reason: 'Kd8 is theirs');
       expect(lines.last.reach, 0.3);
       expect(lines.last.moves.map((m) => m.move.san), ['e4', 'Kf8', anything]);
     });
@@ -149,6 +161,37 @@ void main() {
   });
 
   group('near-copies', () {
+    // Sixteen plies, ours on the even ones: eight decisions.
+    final base = [for (var i = 0; i < 16; i++) 'm$i'];
+
+    test('a near-copy that only goes on past a kept line folds in where '
+        'that line ends', () {
+      final plan = planDraft([
+        fake(base, reach: 0.5),
+        fake([...base, 'm16', 'm17'], reach: 0.4),
+      ]);
+      final (divergeAt, _) = plan.entries.single.sidelines.single;
+      expect(divergeAt, 16);
+    });
+
+    test('a near-copy that shares only the first move folds in after it', () {
+      final plan = planDraft([
+        fake(base, reach: 0.5),
+        fake(['m0', 'other', ...base.sublist(2, 7)], reach: 0.4),
+      ]);
+      final (divergeAt, _) = plan.entries.single.sidelines.single;
+      expect(divergeAt, 1);
+    });
+
+    test('a near-copy that leaves at the first move shares nothing and is '
+        'dropped', () {
+      final plan = planDraft([
+        fake(base, reach: 0.5),
+        fake(['other', ...base.skip(1), 'm16', 'm17'], reach: 0.4),
+      ]);
+      expect(plan.entries.single.sidelines, isEmpty);
+    });
+
     test('a near-copy folds into the kept line it shares the longest '
         'prefix with, as a short sideline', () {
       // Five decisions, four of them already taught: too little that is
@@ -552,6 +595,36 @@ void main() {
   });
 
   group('the order of a draft', () {
+    test('lines that start on the opponent\'s move group by that move', () {
+      // From a position with the opponent to move: each line starts with
+      // their reply, and teaches decisions of its own.
+      DraftLine theirs(String reply, String ours, double reach) => DraftLine(
+        moves: [
+          DraftMove(
+            move: MoveRef(uci: reply, san: reply),
+            before: 'start',
+            after: Fen.initial,
+            value: 0.5,
+            ours: false,
+          ),
+          DraftMove(
+            move: MoveRef(uci: ours, san: ours),
+            before: 'after $reply',
+            after: Fen.initial,
+            value: 0.5,
+            ours: true,
+          ),
+        ],
+        reach: reach,
+      );
+      final plan = planDraft([
+        theirs('a', 'x', 0.3),
+        theirs('b', 'y', 0.25),
+        theirs('a', 'z', 0.2),
+      ]);
+      expect([for (final e in plan.entries) e.line.ucis.last], ['x', 'z', 'y']);
+    });
+
     test('lines that start with the same reply are kept together, the reply '
         'games take most often first', () {
       // Ours on the even plies: the first reply is the second move.

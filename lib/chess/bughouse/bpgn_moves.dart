@@ -125,7 +125,6 @@ List<int> _gameBounds(String text) {
     if (!blank) bounds.addAll([start, at]);
     start = at;
     moves = false;
-    blank = true;
   }
 
   for (var line = 0; line < text.length;) {

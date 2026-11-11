@@ -156,6 +156,34 @@ void main() {
     expect(BpgnGames('\n\n$arena').length, 1);
   });
 
+  test('a file that opens on a blank line still splits at each tag block', () {
+    expect(BpgnGames('\n$arena\n$oldArena').length, 2);
+  });
+
+  test('the first game keeps the blank lines before its tags', () {
+    expect(BpgnGames('\n$arena')[0], '\n$arena');
+  });
+
+  test('a tag\'s escapes are read back to what they stand for', () {
+    final game = read(
+      r'[Event "a \"b\" c\\d"]'
+      '\n\n1A. e4',
+    ).game!;
+    expect(game.tags['Event'], r'a "b" c\d');
+  });
+
+  test('a chat note or a note without words does not say how it ended', () {
+    expect(read('[Event "E"]\n\n1A. e4 {C: gg}').game!.ending, isNull);
+    expect(read('[Event "E"]\n\n1A. e4 {---}').game!.ending, isNull);
+    expect(read('[Event "E"]\n\n1A. e4 {A resigns}').game!.ending, 'A resigns');
+  });
+
+  test('movetext keeps its clocks unless told not to', () {
+    final line = read(fics).line;
+    expect(bpgnMovetext(line), startsWith('1A. e4 {119.000}'));
+    expect(bpgnMovetext(line, clocks: false), startsWith('1A. e4 1B. d4'));
+  });
+
   test('a large file is split off the UI isolate the same way', () async {
     final text = '$fics\r\n$arena\n' * 2000;
     expect(text.length, greaterThan(1 << 20));

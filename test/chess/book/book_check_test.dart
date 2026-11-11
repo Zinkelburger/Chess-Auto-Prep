@@ -149,6 +149,19 @@ void main() {
     expect(a.sameWay, isNot(c.sameWay));
   });
 
+  test('two files level on lines: the first one listed is where to read, '
+      'and the move counts both', () {
+    final verdict =
+        checkGame(game('1. e4 c5 2. Nc3'), [
+              book(openSicilian, 'First'),
+              book(openSicilian, 'Second'),
+            ])
+            as LeftBook;
+    expect(verdict.place.file.name, 'First');
+    expect(verdict.book.single.file.name, 'First');
+    expect(verdict.book.single.lines, 4);
+  });
+
   group('a played game', () {
     test('is read from the user\'s side, whichever colour they had', () {
       final won = game('1. e4 e5', result: '1-0');
@@ -159,6 +172,20 @@ void main() {
       expect(won.positions, hasLength(3));
       final lost = game('1. e4 e5', side: Side.black, result: '1-0');
       expect(lost.outcome, GameOutcome.lost);
+    });
+
+    test('a tag PGN marks unknown says nothing', () {
+      PlayedGame tagged(String tags) => readPlayedGame(
+        '[White "Me"]\n[Black "Rival"]\n$tags\n\n1. e4 *',
+        index: 0,
+        username: 'me',
+      )!;
+
+      expect(tagged('[BlackElo "?"]').opponentElo, '');
+      expect(tagged('[BlackElo ""]').opponentElo, '');
+      expect(tagged('[BlackElo "2105"]').opponentElo, '2105');
+      expect(tagged('[Date "????.??.??"]').date, '');
+      expect(tagged('[Date "2026.??.??"]').date, '2026.??.??');
     });
 
     test('is not the user\'s when neither player is them, nor a variant', () {

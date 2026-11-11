@@ -8,6 +8,7 @@ import '../../chess/generation/evaluation_source.dart';
 import '../../chess/generation/expectimax_options.dart';
 import '../../storage/settings.dart';
 import '../../storage/settings_store.dart';
+import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
 import '../../ui/segments.dart';
 
@@ -375,7 +376,8 @@ class SearchNumberBox extends StatefulWidget {
   State<SearchNumberBox> createState() => _SearchNumberBoxState();
 }
 
-class _SearchNumberBoxState extends State<SearchNumberBox> {
+class _SearchNumberBoxState extends State<SearchNumberBox>
+    with ListeningState<SearchNumberBox> {
   late final _box = TextEditingController(text: _shown);
   final _focus = FocusNode();
 
@@ -387,10 +389,7 @@ class _SearchNumberBoxState extends State<SearchNumberBox> {
       '${widget.empty == null ? '' : ', or empty'}';
 
   @override
-  void initState() {
-    super.initState();
-    _focus.addListener(_onFocus);
-  }
+  Listenable listenableOf(SearchNumberBox widget) => _focus;
 
   @override
   void didUpdateWidget(SearchNumberBox old) {
@@ -400,14 +399,15 @@ class _SearchNumberBoxState extends State<SearchNumberBox> {
 
   @override
   void dispose() {
-    _focus.removeListener(_onFocus);
+    stopListening();
     _focus.dispose();
     _box.dispose();
     super.dispose();
   }
 
-  void _onFocus() {
-    if (_focus.hasFocus || !mounted) return;
+  @override
+  void changed() {
+    if (_focus.hasFocus) return;
     if (_box.text != _shown) {
       _box.text = _shown;
       widget.onProblem(null);

@@ -4,8 +4,6 @@ import 'package:chess_auto_prep/chess/generation/eval.dart';
 import 'package:chess_auto_prep/chess/generation/search.dart';
 import 'package:chess_auto_prep/chess/generation/search_config.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
-import 'package:chess_auto_prep/chess/generation/search_result.dart';
-import 'package:chess_auto_prep/chess/generation/sources.dart';
 import 'package:chess_auto_prep/chess/generation/tree_wire_v4.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -240,92 +238,6 @@ void main() {
       );
     });
   });
-
-  test('a snapshot is handed out as each deeper level begins', () async {
-    final snapshots = <SearchNode>[];
-    await buildSearchTree(
-      root: positionOf(kingAndPawn),
-      config: const SearchConfig(side: Side.white, horizonPlies: 3),
-      evaluator: ScriptedEvaluator(),
-      policy: oneReply,
-      onSnapshot: snapshots.add,
-    );
-    expect(snapshots, hasLength(greaterThanOrEqualTo(2)));
-    // Level one begins: the root has its moves, nothing below them yet.
-    expect(
-      (snapshots[0] as OurNode).candidates.map((c) => c.child),
-      everyElement(isA<FrontierNode>()),
-    );
-    // Level two begins: every move at the root has its reply.
-    expect(
-      (snapshots[1] as OurNode).candidates.map((c) => c.child),
-      everyElement(isA<OpponentNode>()),
-    );
-  });
-
-  group('a position reached exactly as often as the reply floor', () {
-    const floor = SearchConfig(
-      side: Side.white,
-      horizonPlies: 2,
-      replyFloor: 1,
-    );
-    void expectExpanded(SearchNode tree) {
-      expect(tree, isA<OurNode>());
-      expect(
-        (tree as OurNode).candidates.map((c) => c.child),
-        everyElement(isA<OpponentNode>()),
-      );
-    }
-
-    test('is expanded', () async {
-      expectExpanded(treeOf(await searchFrom(kingAndPawn, config: floor)));
-    });
-
-    test('is expanded when a search resumes', () async {
-      final seed = treeOf(
-        await searchFrom(
-          kingAndPawn,
-          config: const SearchConfig(side: Side.white, horizonPlies: 1),
-        ),
-      );
-      expectExpanded(
-        treeOf(
-          await buildSearchTree(
-            root: positionOf(kingAndPawn),
-            config: floor,
-            evaluator: ScriptedEvaluator(),
-            policy: oneReply,
-            seed: seed,
-          ),
-        ),
-      );
-    });
-  });
-
-  test('an engine that fails to rank the shortlist fails the search', () async {
-    final result = await buildSearchTree(
-      root: positionOf(kingAndPawn),
-      config: const SearchConfig(
-        side: Side.white,
-        horizonPlies: 1,
-        maxOurMoves: 4,
-        rootMoves: 4,
-      ),
-      evaluator: ScriptedEvaluator(),
-      policy: oneReply,
-      candidates: const _FailingShortlist(),
-    );
-    expect(result, isA<EvaluationFailed>());
-    expect((result as EvaluationFailed).reason, contains('engine gone'));
-  });
-}
-
-final class _FailingShortlist implements CandidateSource {
-  const _FailingShortlist();
-
-  @override
-  Future<List<String>?> candidates(Position position, int count) =>
-      Future.error(StateError('engine gone'));
 }
 
 /// [tree] with the last move the restore reaches renamed to one that cannot

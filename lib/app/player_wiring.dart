@@ -314,6 +314,42 @@ final class PlayerModes {
   /// The group's study, created once from its members' non-empty prep
   /// chapters and linked from the group, with the members whose prep study
   /// could not be read and was left out; null after saying why not.
+  /// Every member's study as chapters of the group study [name], and the
+  /// members whose study could not be read.
+  Future<({List<String> chapters, List<String> skipped})> _memberChapters(
+    PlayerGroup group,
+    String name,
+  ) async {
+    final chapters = <String>[];
+    final skipped = <String>[];
+    for (final person in directory.players.where((p) => group.contains(p.id))) {
+      if (person.text('prep_file').isEmpty) continue;
+      final read = await env.store.open(
+        ChapterRef.at(person.text('prep_file')),
+      );
+      // A missing or unreadable member study is left out, not fatal.
+      if (read is! Opened) {
+        skipped.add(person.name);
+        continue;
+      }
+      final study = await readChapter(name: person.name, text: read.text);
+      for (final chapter in studyChapters(study.lines)) {
+        final tree = study.lines[chapter.index].tree;
+        if (tree == null || tree.isEmpty) continue;
+        chapters.add(
+          newStudyChapterText(
+            study: name,
+            chapter: '${person.name} · ${chapter.name}',
+            orientation: chapter.orientation,
+            root: tree.rootFen,
+            moves: tree,
+          ),
+        );
+      }
+    }
+    return (chapters: chapters, skipped: skipped);
+  }
+
   Future<({ChapterRef ref, List<String> leftOut})?> _groupStudy(
     PlayerGroup group,
   ) async {
@@ -322,36 +358,8 @@ final class PlayerModes {
     if (_disposed || usable == null) return null;
     if (usable) return (ref: ChapterRef.at(linked), leftOut: const <String>[]);
     final name = 'Prep – ${group.name}';
-    final chapters = <String>[];
-    final skipped = <String>[];
     try {
-      for (final person in directory.players.where(
-        (p) => group.contains(p.id),
-      )) {
-        if (person.text('prep_file').isEmpty) continue;
-        final read = await env.store.open(
-          ChapterRef.at(person.text('prep_file')),
-        );
-        // A missing or unreadable member study is left out, not fatal.
-        if (read is! Opened) {
-          skipped.add(person.name);
-          continue;
-        }
-        final study = await readChapter(name: person.name, text: read.text);
-        for (final chapter in studyChapters(study.lines)) {
-          final tree = study.lines[chapter.index].tree;
-          if (tree == null || tree.isEmpty) continue;
-          chapters.add(
-            newStudyChapterText(
-              study: name,
-              chapter: '${person.name} · ${chapter.name}',
-              orientation: chapter.orientation,
-              root: tree.rootFen,
-              moves: tree,
-            ),
-          );
-        }
-      }
+      final (:chapters, :skipped) = await _memberChapters(group, name);
       if (_disposed) return null;
       if (chapters.isEmpty) {
         chapters.add(newStudyText(study: name, chapter: 'Preparation'));

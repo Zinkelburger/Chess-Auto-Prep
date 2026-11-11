@@ -23,6 +23,23 @@ void main() {
     expect(read.rootMoves, ['e4', 'e5']);
   });
 
+  test('the family two or more lines and over half of the named share is '
+      'taken off their names', () {
+    expect(sharedFamily(['A: x', 'A: y', null]), 'A');
+    expect(sharedFamily(['A: x', 'B: y']), isNull, reason: 'one each');
+    expect(
+      sharedFamily(['A: x', 'A: y', 'B: z', 'B: w']),
+      isNull,
+      reason: 'half is not more than half',
+    );
+    expect(sharedFamily(['A: x', 'A: y', 'B: z']), 'A');
+    expect(
+      sharedFamily([': x', ': y']),
+      isNull,
+      reason: 'a name that starts with its colon has no family',
+    );
+  });
+
   group('a line added as one edit', () {
     Future<Chapter> chapterOf(String moves) => readChapter(
       name: 'Main (draft)',

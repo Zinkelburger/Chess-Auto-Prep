@@ -170,7 +170,7 @@ final class FenWrong extends FenCheck {
   final open = placement.indexOf('[');
   if (open >= 0) {
     final close = placement.indexOf(']', open + 1);
-    if (close < 0) return null;
+    if (close == -1) return null;
     return (
       board: placement.substring(0, open),
       hand: placement.substring(open + 1, close),

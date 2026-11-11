@@ -254,10 +254,7 @@ final class TableLine {
           if (way.at(board) != at(board)) board,
       ];
       final added = moved.length == 1 ? way.at(moved.single) : null;
-      final alone =
-          added != null &&
-          added > last &&
-          nodes[added].parent == at(moved.single);
+      final alone = added != null && added > last;
       if (alone) {
         if (_apply(position, nodes[added].entry) case final after?) {
           return (line: way, position: after);

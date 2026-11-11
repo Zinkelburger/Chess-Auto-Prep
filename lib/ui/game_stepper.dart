@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'app_icons.dart';
 import 'app_keys.dart';
+import 'listening_state.dart';
 import 'theme.dart';
 import 'tool_button.dart';
 
@@ -31,7 +32,8 @@ class GameStepper extends StatefulWidget {
   State<GameStepper> createState() => _GameStepperState();
 }
 
-class _GameStepperState extends State<GameStepper> {
+class _GameStepperState extends State<GameStepper>
+    with ListeningState<GameStepper> {
   final _number = TextEditingController();
   final _focus = FocusNode();
 
@@ -41,7 +43,6 @@ class _GameStepperState extends State<GameStepper> {
   @override
   void initState() {
     super.initState();
-    _focus.addListener(_focusChanged);
     _show();
   }
 
@@ -54,12 +55,17 @@ class _GameStepperState extends State<GameStepper> {
 
   @override
   void dispose() {
+    stopListening();
     _focus.dispose();
     _number.dispose();
     super.dispose();
   }
 
-  void _focusChanged() {
+  @override
+  Listenable listenableOf(GameStepper widget) => _focus;
+
+  @override
+  void changed() {
     if (_focus.hasFocus) return;
     _typing = false;
     _show();

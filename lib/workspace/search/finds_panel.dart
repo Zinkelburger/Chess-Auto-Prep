@@ -11,6 +11,7 @@ import '../../storage/finds_store.dart';
 import '../../ui/choice_field.dart';
 import '../../ui/list_message.dart';
 import '../../ui/list_row.dart';
+import '../../ui/listening_state.dart';
 import '../../ui/problem_line.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
@@ -68,7 +69,8 @@ class FindsPanel extends StatefulWidget {
   State<FindsPanel> createState() => _FindsPanelState();
 }
 
-class _FindsPanelState extends State<FindsPanel> {
+class _FindsPanelState extends State<FindsPanel>
+    with ListeningState<FindsPanel> {
   final _preview = HoverPreview<LinePreview>();
   Side _previewSide = Side.white;
 
@@ -79,10 +81,21 @@ class _FindsPanelState extends State<FindsPanel> {
   GameTree? _readTree;
   Set<String>? _chapterPositions;
 
+  /// While the state moves to a rebuilt widget's session: that is mid-frame,
+  /// and [didUpdateWidget] narrows after it.
+  bool _following = false;
+
+  @override
+  Listenable? listenableOf(FindsPanel widget) => widget.session;
+
+  @override
+  void changed() {
+    if (!_following) _narrow();
+  }
+
   @override
   void initState() {
     super.initState();
-    widget.session?.addListener(_narrow);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _narrow();
@@ -92,11 +105,9 @@ class _FindsPanelState extends State<FindsPanel> {
 
   @override
   void didUpdateWidget(FindsPanel old) {
+    _following = true;
     super.didUpdateWidget(old);
-    if (old.session != widget.session) {
-      old.session?.removeListener(_narrow);
-      widget.session?.addListener(_narrow);
-    }
+    _following = false;
     if (old.finds != widget.finds) {
       final gone = old.finds;
       WidgetsBinding.instance.addPostFrameCallback((_) => gone.within(null));
@@ -113,7 +124,6 @@ class _FindsPanelState extends State<FindsPanel> {
 
   @override
   void dispose() {
-    widget.session?.removeListener(_narrow);
     final finds = widget.finds;
     WidgetsBinding.instance.addPostFrameCallback((_) => finds.within(null));
     _preview.dispose();

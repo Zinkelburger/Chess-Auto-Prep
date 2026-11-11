@@ -10,6 +10,44 @@
 # that file misses may well be caught next door. Survivors are re-run against
 # the third field before being reported, otherwise the score is a lower bound
 # and it sends people to write tests that already exist.
+#
+# Not listed: files whose only survivors are equivalent mutants, which no
+# test can kill because the program behaves the same either way. Listing
+# them would report a hole that is not there on every sweep.
+#   lib/chess/explorer_answer.dart:109 `n >= 10` -> `>`: both branches print 10.
+#   lib/chess/bughouse/table_line.dart:250 the `-1` floor: nodes are never negative.
+#   lib/chess/fen.dart:84,142,145,185: each only sends the fast writer to
+#     dartchess's own FEN, which writes the same characters.
+#   lib/chess/generation/draft_lines.dart:98 the queue's first tie number,
+#     :111 `?? false` (the chosen move is always the first candidate), and
+#     :343 `fold(0` (a constant added to every group keeps their order).
+#   lib/chess/generation/expectimax_options.dart:185 the least later moves:
+#     the default is that least too.
+#   lib/chess/generation/finds.dart:408 `gain < practicalMinGain` -> `<=`:
+#     a gain of exactly 0.02 cannot be built from expected scores.
+#   lib/chess/generation/legal_moves.dart:61 `>` -> `>=`: a move never
+#     lands where it started.
+#   lib/chess/generation/mainline_book.dart:131 the `0` level of an empty
+#     queue (nothing runs), :397 the share given our adopted candidates
+#     (only replies' shares are read).
+#   lib/chess/generation/sources.dart:167 `covered >= mass - 1e-12` -> `>`:
+#     the tolerance already takes the equal case.
+#   lib/chess/generation/trap_scent.dart:48 the max's `>` -> `>=`.
+#   lib/chess/generation/traps.dart:306 `<` -> `<=` on the off-thread size:
+#     the same work either way.
+#   lib/chess/generation/tree_wire_v4.dart:196 `depth > deepest` -> `>=`.
+#   lib/chess/move_sequence.dart:65 `-` -> `+` on the last start: later
+#     starts fail the length check.
+# Listed with equivalent mutants a --max 30 sample can draw:
+#   lib/chess/game_filter.dart:168 `> 32` -> `>= 32`: when the pattern cache
+#     is emptied, which no result shows.
+#   lib/storage/file_relocation.dart:434 `create: true` for a source's parents,
+#     which exist; :123 `$1` -> `$2`: admission refuses the same changes.
+#   lib/chess/generation/search.dart:241 `> _deepest` -> `>=`, :400 the
+#     snapshot interval's `>` -> `>=`, :638 the 16 ms yield: timing only.
+#   lib/workspace/search/fill_gaps.dart:165 (read only while a run is
+#     running), :589 (a 25000-node budget one larger), :689 (the run's end
+#     notifies a microtask later).
 lib/chess/pgn/game_review.dart|test/workspace/game_review_test.dart|test/chess/pgn/edit_laws_test.dart test/app
 lib/chess/pgn/line_edits.dart|test/chess/pgn/line_edits_test.dart|test/chess/pgn test/workspace
 lib/chess/pgn/chapter_edits.dart|test/chess/pgn/chapter_edits_test.dart|test/chess/pgn test/workspace
@@ -18,15 +56,26 @@ lib/chess/game_filter.dart|test/chess/game_filter_test.dart|test/chess test/feat
 lib/chess/typed_move.dart|test/chess/typed_move_test.dart|test/workspace
 lib/storage/compound_write.dart|test/storage/compound_write_test.dart|test/storage
 lib/workspace/document/document_saver.dart|test/workspace/document_saver_test.dart|test/workspace
+lib/chess/audit/chapter_audit.dart|test/chess/audit/chapter_audit_test.dart test/workspace/chapter_audit_test.dart|test/workspace/audit_pane_test.dart
+lib/chess/book/book_check.dart|test/chess/book/book_check_test.dart|test/app/viewer_books_test.dart test/features/my_games/book_pane_test.dart test/features/my_games/game_book_test.dart test/workspace/book_verdict_view_test.dart
+lib/chess/book/played_game.dart|test/workspace/book_verdict_view_test.dart test/chess/book/book_check_test.dart|
+lib/chess/bughouse/bpgn_moves.dart|test/chess/bughouse/bpgn_moves_test.dart|test/features/bughouse/bughouse_lab_test.dart
+lib/chess/bughouse/crazyhouse_pgn.dart|test/chess/bughouse/crazyhouse_pgn_test.dart|
+lib/chess/bughouse/hivemind.dart|test/chess/bughouse/hivemind_test.dart|test/app/shell_bughouse_test.dart test/chess/bughouse/pv_steps_test.dart test/engines/hivemind_engine_test.dart test/engines/hivemind_real_test.dart test/features/bughouse/bughouse_screen_test.dart test/features/bughouse/lab_engine_test.dart
+lib/chess/bughouse/pv_steps.dart|test/chess/bughouse/pv_steps_test.dart|
+lib/chess/bughouse/table.dart|test/chess/bughouse/table_test.dart|test/app/shell_bughouse_test.dart test/chess/bughouse/bpgn_moves_test.dart test/chess/bughouse/crazyhouse_pgn_test.dart test/chess/bughouse/hivemind_test.dart test/chess/bughouse/pv_steps_test.dart test/chess/bughouse/table_line_test.dart test/chess/bughouse/table_setup_test.dart test/engines/hivemind_engine_test.dart test/engines/hivemind_real_test.dart test/features/bughouse/bughouse_lab_test.dart test/features/bughouse/bughouse_screen_test.dart test/features/bughouse/lab_engine_test.dart
+lib/chess/bughouse/table_game.dart|test/chess/bughouse/table_game_test.dart test/chess/bughouse/bpgn_moves_test.dart|
+lib/chess/bughouse/table_setup.dart|test/chess/bughouse/table_setup_test.dart|test/chess/bughouse/crazyhouse_pgn_test.dart test/chess/bughouse/table_test.dart
+lib/chess/explorer_choice.dart|test/chess/explorer_answer_test.dart test/workspace/explorer_databases_test.dart|test/net/lichess_explorer_test.dart test/workspace
+lib/chess/generation/draft_chapter.dart|test/chess/generation/draft_chapter_test.dart|test/chess/generation/draft_lines_test.dart
+lib/chess/generation/played_policy.dart|test/workspace/search_opponents_test.dart|
+lib/chess/generation/search_config.dart|test/chess/generation/search_config_test.dart|test/chess/generation/resume_test.dart test/chess/generation/reply_cut_test.dart
+lib/chess/generation/search_node.dart|test/chess/generation/search_node_test.dart|test/app/shell_positions_test.dart test/app/trap_training_test.dart test/chess/generation/backup_test.dart test/chess/generation/deep_narrow_test.dart test/chess/generation/draft_lines_test.dart test/chess/generation/finds_test.dart test/chess/generation/mainline_book_test.dart test/chess/generation/pure_oracle_test.dart test/chess/generation/pure_search_oracle_test.dart test/chess/generation/reply_cut_test.dart test/chess/generation/resume_test.dart test/chess/generation/search_limits_test.dart test/chess/generation/search_pins_floor_test.dart test/chess/generation/search_test.dart test/chess/generation/shortlist_test.dart test/chess/generation/terminal_test.dart test/chess/generation/trap_scent_test.dart test/chess/generation/traps_test.dart test/chess/generation/tree_wire_v4_laws_test.dart test/chess/generation/tree_wire_v4_reading_test.dart test/chess/generation/tree_wire_v4_test.dart test/workspace/builder_tree_seed_test.dart test/workspace/fill_gaps_test.dart test/workspace/fill_lines_test.dart test/workspace/fill_mirror_test.dart test/workspace/fill_resume_test.dart test/workspace/fill_stops_test.dart test/workspace/finds_test.dart test/workspace/search_opponents_test.dart test/workspace/search_table_test.dart
+lib/chess/generation/terminal.dart|test/chess/generation/terminal_test.dart|test/chess/generation/pure_search_oracle_test.dart
+lib/chess/generation/tree_wire_v4_reader.dart|test/workspace/builder_tree_seed_test.dart test/chess/generation/reply_cut_test.dart test/chess/generation/tree_wire_v4_laws_test.dart|test/chess/generation/mainline_book_test.dart test/chess/generation/tree_wire_v4_reading_test.dart test/chess/generation/tree_wire_v4_reading_test.dart
+lib/chess/generation/eval.dart|test/chess/generation/eval_test.dart|test/app/shell_positions_test.dart test/app/trap_training_test.dart test/chess/generation/draft_lines_test.dart test/chess/generation/finds_test.dart test/chess/generation/pure_oracle_test.dart test/chess/generation/pure_search_oracle_test.dart test/chess/generation/search_node_test.dart test/chess/generation/search_test.dart test/chess/generation/trap_scent_test.dart test/chess/generation/traps_test.dart test/chess/tactics/mining_test.dart test/engines/fixed_depth_test.dart test/features/players/practical_probe_test.dart test/workspace/audit_pane_test.dart test/workspace/fill_anchored_test.dart test/workspace/fill_gaps_test.dart test/workspace/fill_lines_test.dart test/workspace/finds_test.dart test/workspace/search_table_test.dart
 lib/storage/training_store.dart|test/storage/training_store_test.dart|test/storage/training_retry_test.dart test/storage/training_source_test.dart test/storage/training_codec_laws_test.dart test/storage/faults/training_faults_test.dart test/storage/recovery_access_test.dart test/storage/recovery_matrix_test.dart test/storage/unlocked_recovery_test.dart test/storage/profile_snapshot_test.dart test/storage/persistence_lifecycle_test.dart test/workspace/faults/rating_owner_faults_test.dart
 lib/storage/pgn_file_store.dart|test/storage/pgn_file_store_test.dart|test/storage/compound_completed_retry_test.dart test/storage/compound_write_test.dart test/storage/faults/create_faults_test.dart test/storage/faults/save_faults_test.dart test/storage/file_relocation_test.dart test/storage/my_games_files_test.dart test/storage/operation_journal_test.dart test/storage/pair_store_test.dart test/storage/pgn_file_import_test.dart test/storage/platform_documents_test.dart test/storage/profile_snapshot_test.dart test/storage/recovery_access_test.dart test/storage/unlocked_recovery_test.dart test/workspace/chapter_on_disk_test.dart test/workspace/external_document_edits_test.dart test/features/library_on_disk_test.dart test/features/library_open_course_test.dart test/features/compound_rename_test.dart
-# file_relocation.dart:434 (create: true on a source's existing parents) and :123 ($1 -> $2:
-# admission refuses the same changes) survive at seed 1 as equivalent mutants.
 lib/storage/file_relocation.dart|test/storage/file_relocation_test.dart test/storage/folder_relocation_test.dart|test/storage/compound_alias_test.dart test/storage/file_delete_recovery_test.dart test/storage/file_relocation_recovery_test.dart test/storage/folder_relocation_recovery_test.dart test/storage/journal_format_test.dart test/storage/operation_journal_test.dart test/storage/recovery_access_test.dart test/storage/relocation_sync_test.dart test/storage/training_during_move_test.dart test/features/library_unfinished_move_test.dart test/features/library_import_recovery_test.dart
-# search.dart:400 and :638 move a wall-clock threshold (snapshot every 2 s, yield after 16 ms)
-# and :241 stores the value already held; they survive at seed 1 as equivalent mutants.
-lib/chess/generation/search.dart|test/chess/generation/search_test.dart|test/chess/generation test/workspace/fill_gaps_test.dart
-# fill_gaps.dart:165 (_stopping is read only while a run is FillRunning), :589 (a 25000-node
-# budget one larger) and :689 (the run's end notifies a microtask later) survive at seed 1
-# as equivalent mutants.
+lib/chess/generation/search.dart|test/chess/generation/search_test.dart test/chess/generation/shortlist_test.dart|test/chess/generation test/workspace/fill_gaps_test.dart
 lib/workspace/search/fill_gaps.dart|test/workspace/fill_gaps_test.dart|test/workspace/fill_anchored_test.dart test/workspace/fill_lines_test.dart test/workspace/fill_mirror_test.dart test/workspace/fill_resume_test.dart test/workspace/fill_stops_test.dart test/workspace/search_opponents_test.dart test/workspace/search_pane_test.dart

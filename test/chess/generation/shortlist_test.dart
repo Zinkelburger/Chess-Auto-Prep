@@ -17,8 +17,117 @@ class Shortlist implements CandidateSource {
   }
 }
 
+class FailingShortlist implements CandidateSource {
+  @override
+  Future<List<String>?> candidates(Position position, int count) async =>
+      throw StateError('engine gone');
+}
+
 void main() {
   const fen = '4k3/8/8/8/8/8/4P3/4K3 w - - 0 1';
+  const halves = ScriptedPolicy({'e8d8': 0.5, 'e8f8': 0.5});
+
+  group('the reply floor', () {
+    const config = SearchConfig(
+      side: Side.white,
+      horizonPlies: 3,
+      replyFloor: 0.5,
+    );
+
+    List<SearchNode> answers(SearchNode tree) => [
+      for (final reply
+          in ((tree as OurNode).chosen.child as OpponentNode).replies)
+        reply.child,
+    ];
+
+    test('a reply reached exactly as often as the floor is answered, in a '
+        'fresh search and in a resumed one', () async {
+      final fresh = await buildSearchTree(
+        root: positionOf(fen),
+        config: config,
+        evaluator: ScriptedEvaluator(),
+        policy: halves,
+      );
+      final tree = (fresh as SearchComplete).tree;
+      expect(answers(tree), everyElement(isA<OurNode>()));
+      final resumed = await buildSearchTree(
+        root: positionOf(fen),
+        seed: tree,
+        config: config,
+        evaluator: ScriptedEvaluator(),
+        policy: halves,
+      );
+      expect(
+        answers((resumed as SearchComplete).tree),
+        everyElement(isA<OurNode>()),
+      );
+    });
+  });
+
+  test('a snapshot is taken as each new level starts, and only then', () async {
+    final snapshots = <SearchNode>[];
+    await buildSearchTree(
+      root: positionOf(fen),
+      config: const SearchConfig(side: Side.white, horizonPlies: 3),
+      evaluator: ScriptedEvaluator(),
+      policy: halves,
+      onSnapshot: snapshots.add,
+    );
+    expect(snapshots, hasLength(2), reason: 'levels one and two');
+  });
+
+  test('a shortlist that fails stops the search as a failure', () async {
+    final result = await buildSearchTree(
+      root: positionOf(fen),
+      config: const SearchConfig(
+        side: Side.white,
+        horizonPlies: 1,
+        maxOurMoves: 4,
+        rootMoves: 4,
+      ),
+      evaluator: ScriptedEvaluator(),
+      candidates: FailingShortlist(),
+      policy: const ScriptedPolicy({}),
+    );
+    expect(result, isA<EvaluationFailed>());
+  });
+
+  test('a resumed shortlist gains a pinned move it did not keep', () async {
+    final root = positionOf(fen);
+    final narrow = await buildSearchTree(
+      root: root,
+      config: const SearchConfig(
+        side: Side.white,
+        horizonPlies: 1,
+        maxOurMoves: 4,
+        rootMoves: 4,
+      ),
+      evaluator: ScriptedEvaluator(),
+      candidates: Shortlist(),
+      policy: const ScriptedPolicy({}),
+    );
+    final seed = (narrow as SearchComplete).tree as OurNode;
+    expect(seed.candidates.map((c) => c.move.uci), isNot(contains('e1d2')));
+    final pinned = await buildSearchTree(
+      root: root,
+      seed: seed,
+      config: const SearchConfig(
+        side: Side.white,
+        horizonPlies: 1,
+        maxOurMoves: 4,
+        rootMoves: 4,
+        pins: {
+          '4k3/8/8/8/8/8/4P3/4K3 w - -': {'e1d2'},
+        },
+      ),
+      evaluator: ScriptedEvaluator(),
+      candidates: Shortlist(),
+      policy: const ScriptedPolicy({}),
+    );
+    final tree = (pinned as SearchComplete).tree as OurNode;
+    expect(tree.candidates.map((c) => c.move.uci), contains('e1d2'));
+  });
+
   test(
     'the root evaluates only its shortlist; without one it stays broad',
     () async {
