@@ -88,6 +88,37 @@ void main() {
     });
   });
 
+  group('a FEN checked for shape', () {
+    const start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR';
+
+    String rest(String fen) => (checkFen(fen) as FenShape).rest;
+
+    test('fills in just the fields it left out', () {
+      expect(rest('$start w KQkq'), 'w KQkq - 0 1');
+      expect(rest('$start w KQkq e3'), 'w KQkq e3 0 1');
+      expect(rest('$start w KQkq e3 4'), 'w KQkq e3 4 1');
+      expect(rest('$start w KQkq e3 4 9'), 'w KQkq e3 4 9');
+    });
+
+    test('castling it does not say needs king and rook both at home', () {
+      expect(rest('4k2r/8/8/8/8/8/8/R3K3'), 'w Qk - 0 1');
+      expect(rest('r3k3/8/8/8/8/8/8/4K2R'), 'w Kq - 0 1');
+      expect(rest('r2k3r/8/8/8/8/8/8/R2K3R'), 'w - - 0 1');
+    });
+
+    test('a reserve opened at the very start and not closed says so', () {
+      expect(
+        (checkFen('[PN') as FenWrong).message,
+        'The reserve in brackets isn’t closed.',
+      );
+    });
+  });
+
+  test('a reserve holds at most thirty pieces', () {
+    expect(parseReserve('30P'), isA<ReservePieces>());
+    expect(parseReserve('31P'), isA<ReserveWrong>());
+  });
+
   group('a dual FEN', () {
     test('reads a hand written as Lichess writes it, a ninth rank', () {
       const board = 'r2qkb1r/ppp2ppp/2n5/1B1Q4/3pP3/8/PPP2PPP/RNB1K2R';

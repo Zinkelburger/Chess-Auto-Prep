@@ -10,6 +10,7 @@ void main() {
     expect(formatGameCount(12345), '12k');
     expect(formatGameCount(1000), '1k');
     expect(formatGameCount(1234567), '1.2M');
+    expect(formatGameCount(1000000), '1M');
   });
 
   test('a share is a whole percent, and <1% under half a percent', () {
@@ -33,6 +34,34 @@ void main() {
     expect(given.whiteTotal, 100);
     expect(given.total, 21, reason: 'the shares are against the moves');
     expect(ExplorerAnswer.empty.isEmpty, isTrue);
+    const unfinished = ExplorerAnswer(
+      moves: [
+        ExplorerMove(
+          uci: 'e2e4',
+          san: 'e4',
+          white: 0,
+          draws: 0,
+          black: 0,
+          undecided: 2,
+        ),
+        ExplorerMove(
+          uci: 'd2d4',
+          san: 'd4',
+          white: 0,
+          draws: 0,
+          black: 0,
+          undecided: 3,
+        ),
+      ],
+    );
+    expect(unfinished.undecidedTotal, 5);
+  });
+
+  test('a rating band Lichess does not offer is dropped when read', () {
+    final read = ExplorerChoice.fromJson({
+      'ratings': [1800, 1234, 'high'],
+    });
+    expect(read.ratings, {1800});
   });
 
   test('the choice survives the settings file, and a missing or unknown '
@@ -45,6 +74,7 @@ void main() {
     );
     final text = const Settings(explorer: chosen).toJson();
     expect(Settings.fromJson(text).explorer, chosen);
+    expect(Settings.fromJson(text).explorer.ratings, {1800});
     expect(Settings.fromJson('{}').explorer, ExplorerChoice.defaults);
     expect(
       ExplorerChoice.fromJson({
