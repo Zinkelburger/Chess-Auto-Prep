@@ -43,6 +43,35 @@ void main() {
     expect(await books.readAsBytes(), bytes);
   });
 
+  test('a moved folder answers with its PGNs and nothing else', () async {
+    final ref = fixture.ref('repertoires/Before/Main.pgn');
+    await fixture.put(ref, oneGame('1. e4'));
+    await File(p.join(p.dirname(ref.path), 'notes.txt')).writeAsString('x');
+    final to = p.join(fixture.documents.path, 'repertoires', 'After');
+    final moved = await fixture.store.moveFolder(p.dirname(ref.path), to);
+    expect(moved, isA<FolderMoved>());
+    expect((moved as FolderMoved).files.keys.map(p.basename), ['Main.pgn']);
+    expect(await File(p.join(to, 'notes.txt')).readAsString(), 'x');
+  });
+
+  test('a refused move into a folder that is not there yet leaves no folder '
+      'behind', () async {
+    final ref = fixture.ref('repertoires/Before/Main.pgn');
+    await fixture.put(ref, oneGame('1. e4'));
+    final attempts = File(p.join(fixture.documents.path, attemptsFile));
+    final answer = jsonEncode({'repertoireId': ref.path});
+    await attempts.writeAsString(answer.substring(0, answer.length - 1));
+    final parent = p.join(fixture.documents.path, 'repertoires', 'New');
+    expect(
+      await fixture.store.moveFolder(
+        p.dirname(ref.path),
+        p.join(parent, 'After'),
+      ),
+      isA<FolderMoveFailed>(),
+    );
+    expect(await Directory(parent).exists(), isFalse);
+  });
+
   test(
     'Support inside the source is refused before metadata is created',
     () async {

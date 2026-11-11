@@ -423,6 +423,26 @@ void main() {
       expect(fixture.quarantined(), isEmpty);
       await fixture.expectTrained(c);
     });
+
+    test('a later move of the folder holding it finishes it first', () async {
+      final owner = FileRelocations(
+        documents: fixture.documents,
+        support: fixture.support,
+        testHook: failOnce,
+      );
+      expect(
+        await owner.move(a, b, expected: revision, operationId: 'first'),
+        isA<IoFailure>(),
+      );
+      final to = p.join(fixture.documents.path, 'repertoires', 'Renamed');
+      expect(
+        await owner.moveFolder(p.dirname(a.path), to, operationId: 'folder'),
+        isA<FolderMoved>(),
+      );
+      expect(fixture.unfinishedMoves(), isEmpty);
+      expect(fixture.quarantined(), isEmpty);
+      await fixture.expectTrained(fixture.ref('repertoires/Renamed/B.pgn'));
+    });
   }, skip: !Platform.isLinux);
 }
 
