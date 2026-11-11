@@ -30,6 +30,7 @@ import re
 import sys
 import tempfile
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -164,9 +165,9 @@ class PeopleStore:
         *,
         uscf_id: str | None = None,
         fide_id: int | None = None,
-        chesscom: list[str] = (),
-        lichess: list[str] = (),
-        names: list[str] = (),
+        chesscom: Sequence[str] = (),
+        lichess: Sequence[str] = (),
+        names: Sequence[str] = (),
     ) -> dict | None:
         """The row these facts describe, strongest key first — USCF ID, FIDE
         ID, a handle, then an exact name or alias (the app's order, plus

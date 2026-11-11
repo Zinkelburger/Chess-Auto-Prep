@@ -137,6 +137,9 @@ class SwissRules:
     constraints: tuple[PairingConstraint, ...] = ()
 
 
+_DEFAULT_RULES = SwissRules()
+
+
 class _PlayerState:
     __slots__ = (
         "id",
@@ -178,7 +181,7 @@ _COLOR_SEARCH_WINDOW = 4
 class SwissPairer:
     """Pairs one event round by round. Deterministic given its inputs."""
 
-    def __init__(self, seeds: Iterable[SwissSeed], rules: SwissRules = SwissRules()):
+    def __init__(self, seeds: Iterable[SwissSeed], rules: SwissRules = _DEFAULT_RULES):
         self.rules = rules
         self._players: list[_PlayerState] = []
         self._by_id: dict[str, _PlayerState] = {}
@@ -441,6 +444,9 @@ class SimulationConfig:
     unrated_rating: int | None = None
 
 
+_DEFAULT_SIMULATION = SimulationConfig()
+
+
 @dataclass
 class OpponentProbability:
     player_id: str
@@ -556,7 +562,7 @@ def _constraints(roster: Roster) -> tuple[PairingConstraint, ...]:
     return tuple(out)
 
 
-def simulate(roster: Roster, config: SimulationConfig = SimulationConfig()) -> SimulationResult:
+def simulate(roster: Roster, config: SimulationConfig = _DEFAULT_SIMULATION) -> SimulationResult:
     """Simulate ``roster`` and return per-opponent pairing probabilities for
     the entrant flagged ``is_me``."""
     notes: list[str] = []
