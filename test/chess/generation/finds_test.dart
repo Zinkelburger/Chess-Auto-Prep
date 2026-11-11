@@ -101,6 +101,8 @@ void main() {
     expect(only.sans, ['Qd1']);
     expect(only.ply, 0);
     expect(only.lossCp, 220);
+    expect(only.reach, 1);
+    expect(only.worth, 220, reason: 'nothing given up on the way');
   });
 
   test('no only move when the second move also wins', () {
@@ -124,6 +126,7 @@ void main() {
     expect(theirOnly.sans, ['Kf8']);
     expect(theirOnly.share, 0.3);
     expect(theirOnly.lossCp, 300);
+    expect(theirOnly.worth, closeTo(0.7 * 300, 1e-9));
     // The likely reply that loses is a trap as well.
     expect(ofKind(finds, FindKind.trap), hasLength(1));
   });
@@ -144,6 +147,8 @@ void main() {
 
     expect(practical.sans, ['h4']);
     expect(practical.lossCp, 50);
+    final gain = expectedScore(const Eval(300)) - expectedScore(const Eval(50));
+    expect(practical.worth, closeTo(gain * 3000, 1e-9));
   });
 
   test('a find seen from further back keeps its place in the line', () {
@@ -172,6 +177,135 @@ void main() {
     expect(findsOf(tree, limit: 1), hasLength(1));
   });
 
+  group('the edges of each rule', () {
+    test('a trap that leaves us exactly level is one; a centipawn worse is '
+        'not', () {
+      SearchNode tree(int blunderCp) => theirs('root', [
+        ('Nf6', 0.6, leaf('best', -100)),
+        ('g5', 0.4, leaf('blunder', blunderCp)),
+      ]);
+      final trap = ofKind(findsOf(tree(0)), FindKind.trap).single;
+      expect(trap.evalCp, 0);
+      expect(trap.worth, closeTo(0.4 * 100, 1e-9), reason: 'nothing given');
+      expect(ofKind(findsOf(tree(-1)), FindKind.trap), isEmpty);
+    });
+
+    test('our only move stands while the second move is worth at most 300', () {
+      SearchNode tree(int second) => ours('root', [
+        ('Qd1', leaf('best', second + 200)),
+        ('Qe2', leaf('second', second)),
+      ]);
+      expect(ofKind(findsOf(tree(300)), FindKind.onlyMove), hasLength(1));
+      expect(ofKind(findsOf(tree(301)), FindKind.onlyMove), isEmpty);
+    });
+
+    group('their only move', () {
+      List<Find> of(int bestCp, int secondCp) => ofKind(
+        findsOf(
+          theirs('root', [
+            ('Kf8', 0.3, leaf('holds', bestCp)),
+            ('Ke7', 0.7, leaf('loses', secondCp)),
+          ]),
+        ),
+        FindKind.theirOnlyMove,
+      ).toList();
+
+      test('what it saves is the gap between their best and the rest', () {
+        expect(of(-50, 300).single.lossCp, 350);
+      });
+
+      test('stands while their best leaves us at most 150 up', () {
+        expect(of(150, 300), hasLength(1));
+        expect(of(200, 400), isEmpty, reason: 'they are lost already');
+      });
+    });
+
+    group('a practical choice', () {
+      List<Find> of(int engineBestCp, {int after = 300}) => ofKind(
+        findsOf(
+          ours('root', [
+            ('Nd5', leaf('engine best', engineBestCp)),
+            (
+              'h4',
+              theirs('after h4', [
+                ('g6', 0.5, leaf('g6', after)),
+                ('Nf6', 0.5, leaf('nf6', after)),
+              ]),
+            ),
+          ]),
+        ),
+        FindKind.practical,
+      ).toList();
+
+      test('gives up at least 30 against the engine\'s best', () {
+        expect(of(30), hasLength(1));
+        expect(of(29), isEmpty, reason: 'less is the same move');
+      });
+
+      test('giving up too little is no choice, however much it wins', () {
+        expect(of(10, after: 900), isEmpty);
+      });
+    });
+
+    group('what our moves gave up on the way', () {
+      List<Find> theirOnly(int otherMoveCp) => ofKind(
+        findsOf(
+          ours('root', [
+            ('e4', leaf('after e4', otherMoveCp)),
+            (
+              'd4',
+              theirs('after d4', [
+                ('Kf8', 0.3, leaf('holds', 0)),
+                ('Ke7', 0.7, leaf('loses', 300)),
+              ]),
+            ),
+          ]),
+        ),
+        FindKind.theirOnlyMove,
+      ).toList();
+
+      test('a find behind a move that gave up 300 is kept, ranked lower', () {
+        expect(theirOnly(300).single.worth, closeTo(0.7 * 300 / 4, 1e-9));
+      });
+
+      test('a find behind a move that gave up more is left out', () {
+        expect(theirOnly(301), isEmpty);
+      });
+
+      test('a pawn given up halves a find\'s worth', () {
+        final find = Find(
+          kind: FindKind.onlyMove,
+          sans: const ['Qd1'],
+          ply: 0,
+          keyPly: 0,
+          fen: board('root'),
+          evalCp: 0,
+          lossCp: 200,
+          share: 0,
+          reach: 1,
+          worth: 200,
+        );
+        expect(find.discounted(100).worth, 100);
+        expect(find.discounted(0).worth, 200);
+      });
+    });
+
+    test('the most worth comes first, whatever the moves are called', () {
+      final tree = theirs('root', [
+        ('a', 0.5, ours('a', [('x', leaf('ax', 0)), ('y', leaf('ay', -160))])),
+        ('b', 0.5, ours('b', [('x', leaf('bx', 0)), ('y', leaf('by', -300))])),
+      ]);
+      expect(findsOf(tree).first.sans, ['b', 'x']);
+    });
+
+    test('of two equal ways to one position, the first walked is kept', () {
+      SearchNode p() =>
+          ours('p', [('x', leaf('px', 0)), ('y', leaf('py', -300))]);
+      final tree = theirs('root', [('a', 0.5, p()), ('b', 0.5, p())]);
+      expect(ofKind(findsOf(tree), FindKind.onlyMove).single.sans, ['a', 'x']);
+    });
+  });
+
   group('an only move that is an obvious capture', () {
     // After 1.e4 e5 2.Nf3 Nc6 3.Bc4 Nf6 4.Ng5 d5: the pawn that has just
     // come forward attacks the bishop.
@@ -196,6 +330,20 @@ void main() {
       // The knight takes the f7 pawn: a sacrifice, not a plain win.
       expect(obviousCapture(twoKnights, 'g5f7', after: 'd7d5'), isFalse);
       expect(obviousCapture(twoKnights, 'c4b3', after: 'd7d5'), isFalse);
+    });
+
+    test('a pawn that moves to an empty square takes nothing', () {
+      expect(obviousCapture(twoKnights, 'd2d3', after: 'd7d5'), isFalse);
+    });
+
+    test('a pawn taking en passant takes the pawn that has just moved', () {
+      const passant = Fen('4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 2');
+      expect(obviousCapture(passant, 'e5d6', after: 'd7d5'), isTrue);
+    });
+
+    test('a trade of equal pieces is not obvious', () {
+      const knights = Fen('4k3/3n4/8/4N3/8/8/8/4K3 w - - 0 1');
+      expect(obviousCapture(knights, 'e5d7', after: 'e7e8'), isFalse);
     });
 
     test('a position that cannot be read is never called obvious', () {
