@@ -136,3 +136,4 @@ lib/chess/pgn/study_lichess.dart|test/chess/pgn/study_lichess_test.dart|test/app
 lib/chess/pgn/study_training.dart|test/chess/pgn/study_training_test.dart|
 lib/chess/pgn/tree_edit.dart|test/chess/pgn/tree_edit_test.dart|test/chess/pgn/tree_merge_test.dart test/chess/pgn/pgn_reader_test.dart
 lib/chess/players/download_range.dart|test/chess/players/download_range_test.dart|test/features/players/player_download_test.dart test/net/recent_games_test.dart
+lib/chess/players/player.dart|test/chess/players/player_test.dart|test/storage/player_files_test.dart test/features/players/players_owner_test.dart
