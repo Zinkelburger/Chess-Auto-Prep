@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# A None here fails the test on its own, so pyright's None checks add nothing.
+# pyright: reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportOptionalIterable=false, reportOptionalOperand=false
 """Tests for the FICS bughouse archive pipeline.
 
 Zero dependencies beyond python-chess (unittest only).  Everything runs off
@@ -18,6 +20,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -245,6 +248,14 @@ class TestIndexAndBook(unittest.TestCase):
 
 class TestHivemindBook(unittest.TestCase):
     """The engine-free parts of hivemind_book.py."""
+
+    def test_a_top_line_with_no_score_reports_nothing_instead_of_crashing(self):
+        import chess
+        from bughouse.engine import Line, SearchResult
+        from bughouse_db import hivemind_book as hb
+
+        result = SearchResult(None, None, [Line(depth=3)])
+        self.assertEqual(hb.for_ac(result, chess.WHITE, 0.0), (None, None))
 
     def test_key_is_the_fics_book_key(self):
         from bughouse_db import hivemind_book as hb
@@ -542,7 +553,7 @@ class TestPuzzleExport(unittest.TestCase):
     def candidate(self, **over):
         from bughouse_db.puzzles import Candidate
 
-        base = dict(
+        base: dict[str, Any] = dict(
             fen=self.FEN, dual=f"{START}|{self.FEN}", board="B", ply=101, last="f8g8",
             played="Nd7+", game=3677428, date="2017.12.31", tc="120+0", white="W",
             black="B", welo=1853, belo=1666, line=["c5d7", "f8g8", "N@e7"], mates=["N@e7"],
@@ -713,6 +724,7 @@ class TestPuzzleExport(unittest.TestCase):
             cp("a8b8", -500),                           # the final score and line
         ])
         s = solve_advantage(engine, self.ROOK, self.loose())
+        assert not isinstance(s, str)
         self.assertEqual((s.kind, s.line, s.cp), ("advantage", ["h1h2", "c7c6", "h2h3"], 500))
         self.assertEqual(engine.calls[0][2], 2, "solver moves use two principal variations")
         self.assertEqual(engine.calls[1][1], engine.calls[0][1] // 2, "defender at half the nodes")
@@ -742,6 +754,7 @@ class TestPuzzleExport(unittest.TestCase):
 
         engine = FakeEngine([{1: ("mate", 1, ["d6f7"]), 2: ("cp", 350, ["d6b5"])}])
         s = solve_advantage(engine, self.SMOTHER)
+        assert not isinstance(s, str)
         self.assertEqual((s.kind, s.line, s.mates), ("mate", ["d6f7"], ["d6f7"]))
         engine = FakeEngine([{1: ("mate", 1, ["h1h8"]), 2: ("cp", 350, ["h1h7"])}])
         self.assertEqual(solve_advantage(engine, self.ROOK), "blockable mate")
@@ -760,7 +773,7 @@ class TestPuzzleExport(unittest.TestCase):
         ])
 
     def test_a_forcing_material_win_is_a_tactic(self):
-        from bughouse_db.puzzles import TacticRules, solve_advantage
+        from bughouse_db.puzzles import solve_advantage
 
         engine = self.fork_engine(
             cp("d7c8", -650),                           # final score; its line takes nothing back
@@ -768,6 +781,7 @@ class TestPuzzleExport(unittest.TestCase):
             cp("d7c8", -450),                           # handed a knight
         )
         s = solve_advantage(engine, self.FORK, self.lila())
+        assert not isinstance(s, str)
         self.assertEqual((s.kind, s.line, s.gain, s.sit_cp), ("advantage", ["b5c7", "e8d7", "c7a8"], 5, 450))
 
     def test_a_fork_is_played_out_to_the_capture_accepting_any_that_wins(self):
@@ -783,6 +797,7 @@ class TestPuzzleExport(unittest.TestCase):
             cp("d7c8", -450),
         ])
         s = solve_advantage(engine, self.FORK, TacticRules())
+        assert not isinstance(s, str)
         self.assertEqual((s.line, s.mates, s.gain), (["b5c7", "e8d7", "c7a8"], ["c7a8"], 5))
         self.assertEqual(engine.calls[3][2], 5, "the collecting step weighs five moves")
 
@@ -795,7 +810,7 @@ class TestPuzzleExport(unittest.TestCase):
         self.assertEqual(solve_advantage(greedy, self.FORK, TacticRules(min_gain=6, collect_cp=None)), "wins too little")
 
     def test_a_recapture_wins_nothing(self):
-        from bughouse_db.puzzles import TacticRules, solve_advantage
+        from bughouse_db.puzzles import solve_advantage
 
         # Before Black's last move White also had the rook's worth: Black took a knight.
         before = "r3k3/8/8/1N6/8/8/P7/K7[N] b - - 0 1"
@@ -803,7 +818,7 @@ class TestPuzzleExport(unittest.TestCase):
         self.assertEqual(solve_advantage(engine, self.FORK, self.lila(), prev=before), "wins too little")
 
     def test_a_quiet_move_before_the_win_lets_them_sit(self):
-        from bughouse_db.puzzles import TacticRules, solve_advantage
+        from bughouse_db.puzzles import solve_advantage
 
         engine = FakeEngine([
             cp("b5d4", 600, ("cp", 0, ["b5a3"])),       # quiet: no check, no capture

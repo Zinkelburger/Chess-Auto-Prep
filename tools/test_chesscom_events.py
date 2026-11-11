@@ -154,7 +154,7 @@ class FakeWebSocket:
 class EventsSocketTest(unittest.TestCase):
     def test_get_game_over_scripted_socket(self):
         fake = FakeWebSocket()
-        sock = ce.EventsSocket(connect=lambda: fake)
+        sock = ce.EventsSocket(connect=lambda: fake)  # pyright: ignore[reportArgumentType]
         data = sock.game("2025-massachusetts-open", "01", "Wong_Wyatt-Alexander_Ivanov")
         self.assertEqual(len(data["moves"]), 3)
         self.assertIn("3", fake.sent)  # pong answered the ping
@@ -163,7 +163,7 @@ class EventsSocketTest(unittest.TestCase):
     def test_collect_event_writes_collection(self):
         ce.REQUEST_GAP_SECONDS = 0.0
         fake = FakeWebSocket()
-        sock = ce.EventsSocket(connect=lambda: fake)
+        sock = ce.EventsSocket(connect=lambda: fake)  # pyright: ignore[reportArgumentType]
         room_data = {"room": ROOM, "rounds": [ROUND], "games": [GAME]}
         with tempfile.TemporaryDirectory() as tmp:
             col = lb.Collection(Path(tmp) / "massachusetts")

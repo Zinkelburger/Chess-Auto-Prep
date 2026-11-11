@@ -90,7 +90,9 @@ def import_build(source: Path):
     record['files']['hypebeast-source.tar.gz'] = digest((PUBLIC / 'hypebeast-source.tar.gz').read_bytes())
     # The engine is GPL-3.0-or-later; its licence goes with the binaries.
     with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
-        copying = tar.extractfile(f'hypebeast-{commit[:12]}/engine/Copying.txt').read()
+        member = tar.extractfile(f'hypebeast-{commit[:12]}/engine/Copying.txt')
+        assert member is not None  # a regular file in the archive
+        copying = member.read()
     (PUBLIC / 'HYPEBEAST_LICENSE.txt').write_bytes(copying)
     (PUBLIC / 'build.json').write_text(json.dumps(record, indent=2) + '\n')
     print(f'Imported HypeBeast {commit[:12]} into {PUBLIC.relative_to(ROOT)}.')

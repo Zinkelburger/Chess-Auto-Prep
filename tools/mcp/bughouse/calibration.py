@@ -38,6 +38,7 @@ position move when only the stance changed.
 from __future__ import annotations
 
 import math
+from typing import overload
 
 TANGENT_SCALE = 180.0
 TANGENT_RATE = 1.56
@@ -51,6 +52,12 @@ either way.
 """
 
 
+@overload
+def to_q(cp: int | float) -> float: ...
+@overload
+def to_q(cp: None) -> None: ...
+@overload
+def to_q(cp: int | float | None) -> float | None: ...
 def to_q(cp: int | float | None) -> float | None:
     """The MCTS value behind a centipawn score, recovered exactly.
 

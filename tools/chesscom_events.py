@@ -206,7 +206,7 @@ class EventsSocket:
                 continue
             packet = json.loads(text[len(prefix):])
             reply = packet[1] if len(packet) > 1 and isinstance(packet[1], dict) else {}
-            inner = reply.get("message") if isinstance(reply.get("message"), dict) else reply
+            inner: dict[str, Any] = reply["message"] if isinstance(reply.get("message"), dict) else reply
             if inner.get("type") == message["type"]:
                 return inner
         raise TimeoutError(f"no reply to {message['type']}")

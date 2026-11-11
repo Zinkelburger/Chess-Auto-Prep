@@ -22,6 +22,7 @@ import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -52,7 +53,7 @@ def load_lock(path: Path = LOCKFILE) -> dict[str, object]:
     return data
 
 
-def verify(path: Path, lock: dict[str, object]) -> None:
+def verify(path: Path, lock: dict[str, Any]) -> None:
     if not path.is_file():
         raise VerificationError(f"{path} is missing")
     actual_size = path.stat().st_size
@@ -94,7 +95,7 @@ def download(lock: dict[str, object], destination: Path = DESTINATION) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=__doc__ and __doc__.splitlines()[0])
     parser.add_argument("--check", action="store_true", help="verify without downloading")
     parser.add_argument("--force", action="store_true", help="download even if already valid")
     args = parser.parse_args()

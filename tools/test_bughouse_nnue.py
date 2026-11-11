@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# A None here fails the test on its own, so pyright's None checks add nothing.
+# pyright: reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportOptionalIterable=false, reportOptionalOperand=false
 """Tests for the bughouse NNUE training-data pipeline.
 
 Offline and dependency-free beyond python-chess (unittest only): the replay,
@@ -15,7 +17,6 @@ import contextlib
 import io
 import json
 import math
-import os
 import random
 import sys
 import tempfile
@@ -151,6 +152,7 @@ class Sampling(unittest.TestCase):
     def sample(self, text, **settings):
         (game,) = games(text)
         snaps = extract.replay(game, extract.new_stats("x"))
+        assert snaps is not None
         s = extract.Settings(**{"quiet_only": False, **settings})
         out = extract.sample(game, snaps, s, random.Random(1), extract.RESULTS[game.result],
                              game.ended_on())
