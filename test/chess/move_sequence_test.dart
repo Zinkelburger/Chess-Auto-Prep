@@ -25,6 +25,10 @@ void main() {
         ['d6'],
         ['Nf6'],
       ]);
+      expect(MoveSequence.parse('e4 [GAP] Nf6').groups, [
+        ['e4'],
+        ['Nf6'],
+      ], reason: 'in any case');
       expect(MoveSequence.parse('   ').isEmpty, isTrue);
     });
   });
