@@ -367,11 +367,9 @@ bool _tooClose(Set<String> decisions, List<_Kept> kept, Set<String> taught) {
       kept.any((line) => _jaccard(decisions, line.decisions) > maxOverlap);
 }
 
-double _jaccard(Set<String> a, Set<String> b) {
-  final union = {...a, ...b};
-  if (union.isEmpty) return 0;
-  return a.intersection(b).length / union.length;
-}
+/// [a]'s overlap with [b]; [a] is never empty, as [_tooClose] checks.
+double _jaccard(Set<String> a, Set<String> b) =>
+    a.intersection(b).length / {...a, ...b}.length;
 
 /// The kept line [line] shares the longest prefix with, and how long that
 /// prefix is; null when no kept line shares even its first move.

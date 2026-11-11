@@ -18,6 +18,11 @@
 #   lib/chess/bughouse/table_line.dart:250 the `-1` floor: nodes are never negative.
 #   lib/chess/fen.dart:84,142,145,185: each only sends the fast writer to
 #     dartchess's own FEN, which writes the same characters.
+#   lib/chess/generation/draft_lines.dart:98 the queue's first tie number,
+#     :111 `?? false` (the chosen move is always the first candidate), and
+#     :343 `fold(0` (a constant added to every group keeps their order).
+#   lib/chess/generation/expectimax_options.dart:185 the least later moves:
+#     the default is that least too.
 # Listed with one equivalent mutant a --max 30 sample can draw:
 #   lib/chess/game_filter.dart:168 `> 32` -> `>= 32`: when the pattern cache
 #     is emptied, which no result shows.
