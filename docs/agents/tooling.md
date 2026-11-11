@@ -24,6 +24,7 @@ profile path.
 | `tools/mcp/chess_prep/` | Chess-data MCP server: use the `chess-prep-mcp` skill; its helper discovers the live tool list |
 | `tools/mcp/bughouse/` | Hivemind two-board MCP server: use `bughouse-mcp`; needs `python-chess` on the `python3` that `.mcp.json` launches; tests in `tools/mcp/test_bughouse.py` (`--engine` for engine checks). The engine itself is [Hivemind, end to end](../HIVEMIND.md) |
 | `tools/mcp/mcp_stdio.py` | Shared JSON-RPC stdio transport; keep it dependency-free because clients start it from a bare command |
+| `scripts/python_checks.py` | The Python gate, run by `scripts/ci.sh lint`: ruff and pyright over `tools/`, `scripts/` and `python/twic-position-finder`, configured in `pyproject.toml`, tools pinned in `tools/requirements-lint.txt` and installed into a private environment under the job cache on first use |
 | `tools/fetch_assets.py` | Fetch the host engines, pinned by `tools/assets.lock.json`: Stockfish into gitignored `assets/executables/` and the bughouse engine, ONNX Runtime and network into gitignored `assets/bughouse/`. `--only stockfish`/`--only bughouse` or a platform target narrows it; `--check` verifies; `--hivemind <checkout>` packs a local bughouse build |
 | `tools/package_bughouse_runtime.py` | Packages and verifies the Windows build’s private VC++ DLL archives and SHA-256 manifest; used by CMake and release checks |
 | `tools/test_bughouse_engine.py` | `deps [--all]` checks bundle dependencies; `run` searches with the extracted engine. Bughouse/release CI gates Linux and Windows bundles |
