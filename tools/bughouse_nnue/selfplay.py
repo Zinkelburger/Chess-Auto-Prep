@@ -42,6 +42,7 @@ import time
 from collections import Counter
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
+from typing import Any
 
 import chess
 import chess.variant
@@ -263,7 +264,7 @@ def selfplay(games: int, settings: Settings, jobs: int, seed: int | None) -> int
                     f"{stats['plies'] / stats['games'] / 2:.0f} plies/board", flush=True,
                 )
     stats["seconds"] = round(time.time() - started, 1)
-    history = json.loads(stats_path.read_text()) if stats_path.exists() else {"runs": []}
+    history: dict[str, Any] = json.loads(stats_path.read_text()) if stats_path.exists() else {"runs": []}
     history["runs"].append(stats)
     history["positions"] = {
         k: sum(run["positions"].get(k, 0) for run in history["runs"]) for k in ("train", "validation")

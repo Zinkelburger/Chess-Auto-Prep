@@ -23,6 +23,7 @@ import os
 import random
 import time
 from pathlib import Path
+from typing import Any
 
 from . import records
 from .engine import Engine
@@ -31,14 +32,15 @@ from .toolchain import require_binary
 
 SEED = 7
 
+_engine: Engine | None = None  # per worker process, started on first use
+
 
 def _probe_batch(args) -> list[tuple[int, int]]:
     binary, variant, options, depth, batch = args
     global _engine
-    try:
-        engine = _engine
-    except NameError:
-        engine = _engine = Engine(binary, variant, options)
+    if _engine is None:
+        _engine = Engine(binary, variant, options)
+    engine = _engine
     out = []
     for text in batch:
         rec = records.parse(text)
@@ -122,7 +124,7 @@ def evaluate(net: Path | None, n: int, depth: int, years: list[int] | None, jobs
     finally:
         pool.terminate()
         pool.join()
-    result = summarise(pairs)
+    result: dict[str, Any] = summarise(pairs)
     result.update({"eval": label, "variant": variant, "depth": depth,
                    "years": years, "seconds": round(time.time() - started, 1)})
     print(json.dumps(result, indent=2))
