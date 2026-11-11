@@ -36,6 +36,49 @@ void main() {
     },
   );
 
+  group('reading a study, at the edges', () {
+    List<ChapterLine> lines(String pgn) =>
+        parseChapter(name: 'x', text: pgn).lines;
+
+    test('a StudyName tag wins over the Event, and an Event that starts with '
+        'its colon names no study', () {
+      expect(
+        studyNameIn(lines('[Event "Other: Ch"]\n[StudyName "Mine"]\n\n*\n')),
+        'Mine',
+      );
+      expect(studyNameIn(lines('[Event ": Ch"]\n\n*\n')), isNull);
+    });
+
+    test(
+      'every chapter facing a side makes sides per chapter only in a study',
+      () {
+        expect(
+          sidesPerChapter(
+            lines('[Event "S: A"]\n[Orientation "black"]\n\n1. e4 *\n'),
+          ),
+          isTrue,
+        );
+        expect(
+          sidesPerChapter(
+            lines('[Event "A game"]\n[Orientation "black"]\n\n1. e4 *\n'),
+          ),
+          isFalse,
+          reason: 'no study name',
+        );
+      },
+    );
+
+    test('a chapter named from one player only is numbered instead', () {
+      final line = lines('[Event "?"]\n[White "Tal"]\n\n1. e4 *\n').single;
+      expect(studyChapterName(line, index: 0), 'Chapter 1');
+    });
+
+    test('the study name is peeled off a one-letter chapter name', () {
+      final line = lines('[Event "S: X"]\n\n1. e4 *\n').single;
+      expect(studyChapterName(line, index: 0, study: 'S'), 'X');
+    });
+  });
+
   test('reading a study: falls back to the players, then to a number', () {
     const pgn =
         '[Event "?"]\n[White "Tal"]\n[Black "Botvinnik"]\n\n1. e4 *\n\n'
