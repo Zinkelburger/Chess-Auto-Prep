@@ -72,7 +72,7 @@ void main() {
     );
     w.studyFiles.listing = StudiesListed([ref]);
     await w.pumpShell(tester);
-    await w.requests.openStudy(ref, chapter: 0);
+    await w.requests.openStudy(ref);
     await tester.pumpAndSettle();
     w.session.cursor.goTo(NodePath.of([0]));
     await tester.pumpAndSettle();
@@ -125,7 +125,7 @@ void main() {
       w.requests.switchTo(Mode.trainer);
       await tester.pumpAndSettle();
       expect(w.lineTrainer.selection.active, isTrue);
-      await w.requests.openStudy(ref, chapter: 0);
+      await w.requests.openStudy(ref);
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(OutlinedButton, 'Train study'));
       await tester.pumpAndSettle();

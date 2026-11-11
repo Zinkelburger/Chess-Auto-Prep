@@ -595,7 +595,6 @@ class _Docking extends StatelessWidget {
         ),
         if (canSplit)
           Expanded(
-            flex: 1,
             child: _DockTarget(
               panes: panes,
               index: index,

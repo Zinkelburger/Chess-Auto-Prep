@@ -367,7 +367,6 @@ Future<developer.ServiceExtensionResponse> _scroll(
     PointerScrollEvent(
       position: at,
       scrollDelta: Offset(dx, dy),
-      kind: PointerDeviceKind.mouse,
       device: _syntheticMouse,
     ),
   );

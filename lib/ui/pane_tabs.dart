@@ -243,7 +243,6 @@ class _PaneTabStripState<K extends Object> extends State<PaneTabStrip<K>>
       Scrollable.ensureVisible(
         target,
         alignment: 0.5,
-        duration: Duration.zero,
         alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
       );
     });

@@ -100,7 +100,6 @@ GameFilter keepingSide(GameFilter filter, String player, Side? side) =>
         if (side != null)
           HeaderRule(
             field: side == Side.white ? 'White' : 'Black',
-            rule: FilterRule.contains,
             value: player,
           ),
       ],

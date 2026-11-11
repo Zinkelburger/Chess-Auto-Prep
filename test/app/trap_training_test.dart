@@ -109,9 +109,7 @@ void main() {
       'lists every find, with no This chapter', (tester) async {
     await openWith(tester, chapterWith('1. d4 d5'));
     expect(find.text('None in this chapter.'), findsOneWidget);
-    await w.session.showAnalysisBoard(
-      analysisBoard(side: Side.white, root: Fen.initial),
-    );
+    await w.session.showAnalysisBoard(analysisBoard(side: Side.white));
     await tester.pumpAndSettle();
     expect(find.text('This chapter'), findsNothing);
     expect(find.text('None in this chapter.'), findsNothing);

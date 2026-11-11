@@ -267,7 +267,7 @@ List<List<String>> _lines(List<MoveNode> nodes) => [
 /// the review added; then the review taken out.
 final Generator<EditCase> _reviewCases = Generator(
   (r) => EditCase(
-    GeneratedFile(chapterSpecs(maxGames: 1, maxPlies: 6).sample(r)),
+    GeneratedFile(chapterSpecs(maxGames: 1).sample(r)),
     focus: Focus.game,
     edits: [
       sampleEdit(r, kinds: const [EditKind.annotate]),

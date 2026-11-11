@@ -77,7 +77,7 @@ void main() {
     });
 
     test('the same place found again replaces the older find', () {
-      keep([find('a', worth: 1)]);
+      keep([find('a')]);
       keep([find('a', worth: 5)], day: 2);
 
       final kept = store.all().single;
@@ -279,7 +279,7 @@ void main() {
     test('orders, filters and steps through what it shows', () {
       store.keep(
         [
-          find('small', worth: 1),
+          find('small'),
           find('big', worth: 9),
           find('only', worth: 5, kind: FindKind.onlyMove),
         ],

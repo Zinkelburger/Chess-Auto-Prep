@@ -328,9 +328,7 @@ void main() {
     final running = review.start();
     for (final cp in [30, 220, 20]) {
       await pumpEventQueue();
-      engine.current.emit(
-        line(depth: 14, score: Centipawns(cp), pv: const ['g1f3']),
-      );
+      engine.current.emit(line(depth: 14, score: Centipawns(cp)));
       engine.current.end();
     }
     await running;
@@ -348,9 +346,7 @@ void main() {
     final running = review.start();
     for (final cp in [30, 220, 20]) {
       await pumpEventQueue();
-      engine.current.emit(
-        line(depth: 14, score: Centipawns(cp), pv: const ['g1f3']),
-      );
+      engine.current.emit(line(depth: 14, score: Centipawns(cp)));
       engine.current.end();
     }
     await running;
@@ -416,7 +412,6 @@ void main() {
           depth: 14,
           // 1. e4 throws the first game away; the rest is level.
           score: Centipawns(search == 1 ? 250 : 20),
-          pv: const ['g1f3'],
         ),
       );
       engine.current.end();

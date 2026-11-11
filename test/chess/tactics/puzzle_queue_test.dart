@@ -173,7 +173,6 @@ $move. e4 *
       kinds: {MistakeKind.inaccuracy},
       unreviewedOnly: true,
       hideOneStar: false,
-      days: null,
     );
     expect(PuzzleFilter.fromJson(chosen.toJson()), chosen);
     expect(PuzzleFilter.fromJson(const {'order': 'random'}).days, isNull);

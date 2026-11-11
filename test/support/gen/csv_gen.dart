@@ -150,7 +150,7 @@ GeneratedCsv csvOf(
 /// A time as the files write it, or null.
 DateTime? csvTime(Rand rand) => rand.chance(25)
     ? null
-    : DateTime.utc(2026, 1, 1).add(
+    : DateTime.utc(2026).add(
         Duration(
           seconds: rand.between(-2000000000, 2000000000),
           milliseconds: rand.between(0, 999),

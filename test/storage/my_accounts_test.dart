@@ -73,13 +73,13 @@ void main() {
   test('reads the usernames and dates already saved', () async {
     SharedPreferences.setMockInitialValues({
       'lichess_username': 'Me',
-      'lichess_last_fetch_ms': DateTime(2026, 9, 1).millisecondsSinceEpoch,
+      'lichess_last_fetch_ms': DateTime(2026, 9).millisecondsSinceEpoch,
       'chesscom_username': '  ',
     });
     final read = await accounts.read();
     expect(read.keys, [GameSite.lichess]);
     expect(read[GameSite.lichess]?.username, 'Me');
-    expect(read[GameSite.lichess]?.downloaded, DateTime(2026, 9, 1));
+    expect(read[GameSite.lichess]?.downloaded, DateTime(2026, 9));
   });
 
   test('writes under the same keys; another name forgets the date, the same '

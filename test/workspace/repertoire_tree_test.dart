@@ -273,7 +273,7 @@ void main() {
             repertoire: 'e4',
             name: 'Ruy',
             path: chapterRef('e4', 'Ruy').path,
-            heading: const ChapterHeading(rootMoves: [], draft: true),
+            heading: const ChapterHeading(draft: true),
           ),
         ],
       ),

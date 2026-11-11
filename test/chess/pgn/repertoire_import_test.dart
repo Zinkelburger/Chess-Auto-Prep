@@ -13,7 +13,7 @@ GameTree line(String moves) =>
     readGame('[Event "x"]\n[Result "*"]\n\n$moves *\n').tree!;
 
 void main() {
-  final created = DateTime(2026, 9, 22, 12, 0, 0);
+  final created = DateTime(2026, 9, 22, 12);
 
   ImportedChapters imported(String text) =>
       readImport(text, created: created) as ImportedChapters;

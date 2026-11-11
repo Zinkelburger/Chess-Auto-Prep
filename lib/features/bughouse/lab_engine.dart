@@ -499,6 +499,8 @@ final class LabEngine extends ChangeNotifier {
     double offset,
     BoardNumber board,
   ) {
+    // The lab's count, which only happens to equal the default today.
+    // ignore: avoid_redundant_argument_values
     final choices = boardChoices(answer.lines, board, count: labLineCount);
     return [
       for (final line in choices)

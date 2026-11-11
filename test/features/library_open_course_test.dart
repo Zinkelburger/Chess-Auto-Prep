@@ -51,7 +51,7 @@ void main() {
       ..createSync(recursive: true);
     File(p.join(folder.path, 'Course.pgn')).writeAsStringSync(_course);
     final store = PgnFileStore(documents: documents, support: support);
-    saver = DocumentSaver(store, delay: const Duration(seconds: 1));
+    saver = DocumentSaver(store);
     session = DocumentSession(store, saver);
     final files = ChapterDirectory(Directory(root), recovery: store.recovery);
     library = libraryOver(files, store, session, saver, root: root);

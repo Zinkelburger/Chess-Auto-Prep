@@ -409,7 +409,7 @@ Future<String> _answer(_Profile profile, String? stop) async {
   final loaded = await store.read({source});
   if (loaded is! ProgressLoaded) return '${loaded.runtimeType}';
   final key = (source: source, id: 'line2');
-  final at = DateTime.utc(2026, 9, 1);
+  final at = DateTime.utc(2026, 9);
   final result = await store.write(
     reviews: [
       (

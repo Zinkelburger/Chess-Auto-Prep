@@ -383,7 +383,7 @@ void main() {
 
   test('chapter operations: a CRLF study keeps its line endings', () async {
     final crlf = threeChapterStudy.replaceAll('\n', '\r\n');
-    await open(text: crlf, chapter: 0);
+    await open(text: crlf);
     expect(moveStudyChapter(study.session, index: 1, by: 1), isNull);
     await pumpEventQueue();
     expect(study.onDisk, isNot(contains(RegExp(r'[^\r]\n'))));

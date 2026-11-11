@@ -134,15 +134,15 @@ void main() {
     // only gets us back to 200, not half a pawn past it.
     final tree = ours('root', [
       ('best', leaf('best', 180)),
-      ('other', trapAt('other', cp: 200)),
+      ('other', trapAt('other')),
     ]);
     expect(trapsBelow(tree), noTraps);
     expect(
-      trapsBelow(trapAt('other', cp: 200), bestBefore: 180),
+      trapsBelow(trapAt('other'), bestBefore: 180),
       noTraps,
       reason: 'the same rule when the row is the move itself',
     );
-    expect(trapsBelow(trapAt('other', cp: 200), bestBefore: 100).traps, 1);
+    expect(trapsBelow(trapAt('other'), bestBefore: 100).traps, 1);
   });
 
   test('a move of ours that gives up more than a line may is not followed', () {

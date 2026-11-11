@@ -91,7 +91,7 @@ void main() {
       final over = evaluator.evaluate(start);
       await pumpEventQueue();
       engine.current
-        ..emit(line(depth: 0, score: const Centipawns(0), pv: const []))
+        ..emit(line(depth: 0, pv: const []))
         ..end();
       expect(await over, isA<Evaluated>().having((e) => e.eval.cp, 'cp', 0));
     },

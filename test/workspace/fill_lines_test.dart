@@ -103,11 +103,7 @@ void main() {
   });
 
   for (final (label, next, reusable) in const [
-    (
-      'same evaluation settings',
-      FillRequest(elo: 2200, depthPlies: 3, evalDepth: 14),
-      true,
-    ),
+    ('same evaluation settings', FillRequest(elo: 2200, depthPlies: 3), true),
     (
       'changed depth',
       FillRequest(elo: 2200, depthPlies: 3, evalDepth: 20),
@@ -115,12 +111,7 @@ void main() {
     ),
     (
       'changed source',
-      FillRequest(
-        elo: 2200,
-        depthPlies: 3,
-        evalDepth: 14,
-        source: EvaluationSource.lichess,
-      ),
+      FillRequest(elo: 2200, depthPlies: 3, source: EvaluationSource.lichess),
       false,
     ),
   ]) {
@@ -140,9 +131,7 @@ void main() {
         ),
       );
       addTearDown(fill.dispose);
-      await fill.start(
-        const FillRequest(elo: 2200, depthPlies: 3, evalDepth: 14),
-      );
+      await fill.start(const FillRequest(elo: 2200, depthPlies: 3));
       expect(first.asked, isNotEmpty);
       useFirst = false;
       await fill.start(next);

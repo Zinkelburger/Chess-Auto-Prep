@@ -590,9 +590,7 @@ void main() {
     expect(find.text('70%'), findsOneWidget);
     expect(find.text('30%'), findsOneWidget);
     // Off the search: another root.
-    await fixture.session.showAnalysisBoard(
-      analysisBoard(side: Side.white, root: Fen.initial),
-    );
+    await fixture.session.showAnalysisBoard(analysisBoard(side: Side.white));
     await tester.pumpAndSettle();
     expect(
       find.text('No saved results here yet. Start Expectimax from this board.'),

@@ -1,5 +1,3 @@
-import 'package:chess_auto_prep/storage/training_records.dart'
-    show NothingToRepoint;
 import 'package:chess_auto_prep/net/lichess_studies.dart';
 import 'dart:io';
 
@@ -94,9 +92,7 @@ void main() {
       expect(await study.studies.restore(deleted), isA<StudyProblem>());
       expect(study.studies.canRetryRestore, isTrue);
       study.store.documents.remove(source);
-      study.store.moves.add(
-        Moved(revision, training: const NothingToRepoint()),
-      );
+      study.store.moves.add(Moved(revision));
       final reads = study.store.opens;
       expect(await study.studies.retryRestore(), isA<StudyDone>());
       expect(
