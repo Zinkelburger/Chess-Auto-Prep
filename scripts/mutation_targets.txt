@@ -51,6 +51,8 @@
 #     number), :396 which wrapped reading is tried first (unspecified).
 #   lib/chess/pgn/game_order.dart:30 the size of the 1 and -1 that put an
 #     unrated game last (only their sign is read).
+#   lib/chess/pgn/line_moves.dart:119 `.first` -> `.last` for an empty
+#     chapter's root: lines from two roots are refused either way.
 # Listed with one equivalent mutant a --max 30 sample can draw:
 #   lib/chess/game_filter.dart:168 `> 32` -> `>= 32`: when the pattern cache
 #     is emptied, which no result shows.
@@ -111,3 +113,5 @@ lib/storage/pgn_file_store.dart|test/storage/pgn_file_store_test.dart|test/stora
 lib/storage/file_relocation.dart|test/storage/file_relocation_test.dart test/storage/folder_relocation_test.dart|test/storage/compound_alias_test.dart test/storage/file_delete_recovery_test.dart test/storage/file_relocation_recovery_test.dart test/storage/folder_relocation_recovery_test.dart test/storage/journal_format_test.dart test/storage/operation_journal_test.dart test/storage/recovery_access_test.dart test/storage/relocation_sync_test.dart test/storage/training_during_move_test.dart test/features/library_unfinished_move_test.dart test/features/library_import_recovery_test.dart
 lib/chess/generation/search.dart|test/chess/generation/search_test.dart test/chess/generation/shortlist_test.dart|test/chess/generation test/workspace/fill_gaps_test.dart
 lib/workspace/search/fill_gaps.dart|test/workspace/fill_gaps_test.dart|test/workspace/fill_anchored_test.dart test/workspace/fill_lines_test.dart test/workspace/fill_mirror_test.dart test/workspace/fill_resume_test.dart test/workspace/fill_stops_test.dart test/workspace/search_opponents_test.dart test/workspace/search_pane_test.dart
+lib/chess/pgn/move_label.dart|test/chess/pgn/move_label_test.dart|test/chess/pgn/game_tree_test.dart
+lib/chess/pgn/move_text.dart|test/chess/pgn/move_text_test.dart|test/chess/pgn/branch_edits_test.dart test/chess/pgn/chapter_edits_test.dart test/chess/pgn/comment_edits_test.dart test/workspace/game_review_test.dart test/workspace/solitaire_engine_test.dart

@@ -124,6 +124,18 @@ void main() {
     expect(texts(onDisk(after.chapter)), texts(after.chapter));
   });
 
+  test('a line added after a file ending on one newline gets a blank line '
+      'before it, and the games before keep their bytes', () {
+    final file = oneGame('[Event "A"]\n\n1. e4 *\n\n[Event "B"]\n\n1. d4 *\n');
+    final source = oneGame('[Event "C"]\n\n1. c4 *\n').lines.single;
+
+    final after = edited(linesAddedTo(file, lines: [source])).chapter;
+
+    expect(writeChapter(after), contains('1. d4 *\n\n[Event "C"]'));
+    expect(after.lines.first.text, file.lines.first.text);
+    expect(after.lines.first.trailer, file.lines.first.trailer);
+  });
+
   test('a line whose id the chapter already has gets one of its own', () {
     final source = white().lines[1];
 
