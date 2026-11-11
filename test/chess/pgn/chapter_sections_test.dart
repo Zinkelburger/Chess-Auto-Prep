@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_edit.dart';
+import 'package:chess_auto_prep/chess/pgn/chapter_line.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_sections.dart';
 import 'package:chess_auto_prep/chess/pgn/games_written.dart';
 import 'package:chess_auto_prep/chess/pgn/line_edits.dart';
@@ -140,6 +141,42 @@ void main() {
     final loose = withSection(line, null)!;
     expect(sectionOf(loose), isNull);
     expect(loose.text, startsWith('[Event "Ruy"]\n\n1. e4'));
+  });
+
+  test('a chapter name that is the first header is replaced or removed, '
+      'never doubled', () {
+    final line = file.lines.first;
+    final first = ChapterLine(
+      tags: [...line.tags.reversed],
+      tree: line.tree,
+      text: line.text,
+      trailer: line.trailer,
+      terminator: line.terminator,
+      separator: line.separator,
+    );
+    final renamed = withSection(first, 'Sicilian')!;
+    expect(sectionOf(renamed), 'Sicilian');
+    expect('ChapterName'.allMatches(renamed.text), hasLength(1));
+    final loose = withSection(first, null)!;
+    expect(sectionOf(loose), isNull);
+    expect(loose.text, isNot(contains('ChapterName')));
+  });
+
+  test('one named chapter beside the unnamed games is not the whole file', () {
+    final two = parseChapter(
+      name: 'Two',
+      text:
+          '[Event "a"]\n[ChapterName "A"]\n\n1. e4 *\n\n'
+          '[Event "b"]\n\n1. d4 *\n',
+    );
+    expect(sectionView(two, null).places, [1]);
+  });
+
+  test('places outside the chapter or the file are passed over', () {
+    final view = sectionView(file, 'Open games');
+    expect(view.placesOf({-1, view.places.length, 0}), {view.places.first});
+    final named = linesNamed(file, {0, 99}, 'Sicilian') as ChapterEdited;
+    expect(sectionOf(named.chapter.lines.first), 'Sicilian');
   });
 
   test('a name with a quote in it reads back as written', () {
