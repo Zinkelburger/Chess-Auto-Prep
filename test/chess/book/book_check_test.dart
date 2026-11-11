@@ -174,6 +174,20 @@ void main() {
       expect(lost.outcome, GameOutcome.lost);
     });
 
+    test('a tag PGN marks unknown says nothing', () {
+      PlayedGame tagged(String tags) => readPlayedGame(
+        '[White "Me"]\n[Black "Rival"]\n$tags\n\n1. e4 *',
+        index: 0,
+        username: 'me',
+      )!;
+
+      expect(tagged('[BlackElo "?"]').opponentElo, '');
+      expect(tagged('[BlackElo ""]').opponentElo, '');
+      expect(tagged('[BlackElo "2105"]').opponentElo, '2105');
+      expect(tagged('[Date "????.??.??"]').date, '');
+      expect(tagged('[Date "2026.??.??"]').date, '2026.??.??');
+    });
+
     test('is not the user\'s when neither player is them, nor a variant', () {
       const other = '[White "A"]\n[Black "B"]\n\n1. e4 *';
       expect(readPlayedGame(other, index: 0, username: 'me'), isNull);
