@@ -16,6 +16,21 @@ const twiceOverGame = '''
 ''';
 
 void main() {
+  test('a move keeps the first game\'s glyphs, or the later game\'s where '
+      'the first has none', () {
+    final plain = readGame('1. e4 e5 *').tree!.children;
+    final marked = readGame('1. e4! e5 *').tree!.children;
+    expect(mergeForests(plain, marked).single.nags, [1]);
+    final doubted = readGame('1. e4? e5 *').tree!.children;
+    expect(mergeForests(marked, doubted).single.nags, [1]);
+  });
+
+  test('an ordinary game folded into nothing is taken as it is, not walked '
+      'again', () {
+    final game = readGame('1. e4 e5 (1... c5) 2. Nf3 *').tree!.children;
+    expect(identical(mergeForests(const [], game), game), isTrue);
+  });
+
   test('one game that plays a move twice keeps one node for it', () {
     final tree = readGame(twiceOverGame).tree!;
     final merged = mergeForests(const [], tree.children);
