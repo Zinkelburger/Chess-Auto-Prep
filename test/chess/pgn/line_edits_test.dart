@@ -14,6 +14,66 @@ Chapter white() => parseChapter(name: 'Gambit', text: whiteChapter);
 ChapterEdited edited(ChapterEdit edit) => edit as ChapterEdited;
 
 void main() {
+  const three =
+      '[Event "A"]\n\n1. e4 *\n\n[Event "B"]\n\n1. d4 *\n\n'
+      '[Event "C"]\n\n1. c4 *\n';
+
+  /// The game on the board after deleting game [took] of three while
+  /// [showing] is shown.
+  int? showingAfter(int showing, int took) => edited(
+    lineDeleted(
+      parseChapter(name: 'Study', text: three, game: showing),
+      game: took,
+    ),
+  ).chapter.game;
+
+  test('a line outside the file is neither renamed nor deleted', () {
+    final chapter = white();
+    for (final game in [-1, chapter.lines.length]) {
+      expect(
+        renamedLine(chapter, game: game, name: 'X'),
+        isA<ChapterUnchanged>(),
+      );
+      expect(lineDeleted(chapter, game: game), isA<ChapterUnchanged>());
+    }
+  });
+
+  test('a study keeps at least one chapter; a file of games need not', () {
+    const one = '[Event "A"]\n\n1. e4 *\n';
+    expect(
+      lineDeleted(parseChapter(name: 'S', text: one, game: 0), game: 0),
+      isA<ChapterEditRefused>(),
+    );
+    expect(
+      lineDeleted(parseChapter(name: 'F', text: one), game: 0),
+      isA<ChapterEdited>(),
+    );
+    expect(
+      lineDeleted(parseChapter(name: 'S', text: three, game: 0), game: 1),
+      isA<ChapterEdited>(),
+    );
+    const two = '[Event "A"]\n\n1. e4 *\n\n[Event "B"]\n\n1. d4 *\n';
+    expect(
+      lineDeleted(parseChapter(name: 'S', text: two, game: 0), game: 1),
+      isA<ChapterEdited>(),
+      reason: 'a study of two keeps one',
+    );
+  });
+
+  test('deleting another game keeps the one shown on the board', () {
+    expect(showingAfter(0, 2), 0);
+    expect(showingAfter(2, 0), 1);
+  });
+
+  test(
+    'deleting the game shown shows its neighbour, the last one before it',
+    () {
+      expect(showingAfter(0, 0), 0);
+      expect(showingAfter(1, 1), 1);
+      expect(showingAfter(2, 2), 1);
+    },
+  );
+
   test('renaming a line writes its Event tag and nothing else', () {
     final before = white();
 
