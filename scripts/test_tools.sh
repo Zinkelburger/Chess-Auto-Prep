@@ -8,6 +8,7 @@ cd "$ROOT"
 TESTS=(
   scripts/test_release_pipeline.py
   scripts/test_outdated_deps.py
+  scripts/epub_extract/test_fetch_games.py
   tools/test_app_updates.py
   tools/test_engine_pins.py
   tools/test_storage_contract.py

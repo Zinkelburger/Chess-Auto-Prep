@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# A None here fails the test on its own, so pyright's None checks add nothing.
+# pyright: reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportOptionalIterable=false, reportOptionalOperand=false
 """Offline tests for durable worktree creation and handoff verification."""
 import importlib.util
 from pathlib import Path
@@ -12,8 +14,8 @@ ROOT = Path(__file__).resolve().parent.parent
 SPEC = importlib.util.spec_from_file_location(
     'agent_worktree', ROOT / 'scripts/agent_worktree.py',
 )
+assert SPEC is not None and SPEC.loader is not None
 agent_worktree = importlib.util.module_from_spec(SPEC)
-assert SPEC.loader is not None
 SPEC.loader.exec_module(agent_worktree)
 
 

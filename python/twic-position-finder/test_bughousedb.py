@@ -1,6 +1,7 @@
+# A None here fails the test on its own, so pyright's None checks add nothing.
+# pyright: reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportOptionalIterable=false, reportOptionalOperand=false
 """BughouseDB: positions, the upload checks and the score arithmetic."""
 
-import sqlite3
 import tempfile
 import unittest
 from pathlib import Path

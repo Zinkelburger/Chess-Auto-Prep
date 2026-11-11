@@ -426,8 +426,8 @@ def start_job_process(job: Path) -> int:
 
 def job_summary(job: Path) -> dict:
     spec = _read_json(job / JOB_FILE) or {}
-    status = _read_json(job / STATUS_FILE) or {"state": "starting"}
-    pid = status.get("pid") or spec.get("pid")
+    status: dict[str, Any] = _read_json(job / STATUS_FILE) or {"state": "starting"}
+    pid: int | None = status.get("pid") or spec.get("pid")
     if status.get("state") in ("starting", "running") and not _pid_alive(pid):
         status["state"] = "died"
         status["note"] = "The process is gone; chessgames_download with the same collections resumes."
@@ -456,7 +456,7 @@ def running_job() -> Path | None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=__doc__ and __doc__.splitlines()[0])
     parser.add_argument("--job", required=True, help="download job directory")
     args = parser.parse_args(argv)
 
@@ -575,7 +575,7 @@ def register_chessgames_tools(registry: Any) -> None:
             raise ToolError("No running chessgames download.")
         summary = job_summary(job)
         pid = summary.get("pid")
-        if summary.get("state") in ("starting", "running") and _pid_alive(pid):
+        if summary.get("state") in ("starting", "running") and pid is not None and _pid_alive(pid):
             os.kill(pid, signal.SIGTERM)
             return {"id": job.name, "stopped": True,
                     "note": "Fetched games stay cached; the same collections resume."}

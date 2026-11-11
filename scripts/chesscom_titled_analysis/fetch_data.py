@@ -17,10 +17,9 @@ Usage:
 
 import argparse
 import json
-import os
-import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import requests
 
@@ -58,7 +57,7 @@ def api_get(url: str, retries: int = 3) -> dict | None:
     return None
 
 
-def load_json(path: Path) -> dict | list | None:
+def load_json(path: Path) -> Any:
     if path.exists():
         with open(path) as f:
             return json.load(f)
@@ -145,7 +144,7 @@ def fetch_nm_detail():
     """
     print("Phase 3: Fetching NM profiles + recent games…")
 
-    nm_file = DATA_DIR / f"titled_NM.json"
+    nm_file = DATA_DIR / "titled_NM.json"
     if not nm_file.exists():
         print("  No NM list — run fetch-titles first")
         return

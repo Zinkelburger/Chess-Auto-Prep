@@ -77,11 +77,11 @@ sys.path.insert(0, str(HERE.parent))
 import chess  # noqa: E402
 
 from bughouse.analysis import answering_team  # noqa: E402
-from bughouse.board import BOARD_NAMES, DualBoard, san  # noqa: E402
+from bughouse.board import BOARD_NAMES, DualBoard, IllegalMove, san  # noqa: E402
 from bughouse.calibration import assumed_offset, to_q, to_score  # noqa: E402
 from bughouse.engine import HivemindEngine, SearchResult  # noqa: E402
 from bughouse_db.book import explore, open_book  # noqa: E402
-from bughouse_db import provenance
+from bughouse_db import provenance  # noqa: E402
 from bughouse_db.paths import data_home  # noqa: E402
 from bughouse_db.poskey import dual_key_fen, position_key  # noqa: E402
 
@@ -90,6 +90,9 @@ from bughouse_db.poskey import dual_key_fen, position_key  # noqa: E402
 # "even" is nobody's. "both" is both inputs on, which no clock produces: with
 # neither team obliged to move it lands within about a tenth of a pawn of
 # "even", so it is not searched unless asked for.
+#: A move the board rejects: the two-board rules or python-chess underneath.
+_MOVE_ERRORS = (IllegalMove, ValueError, AssertionError, IndexError)
+
 CLOCKS = ("ahead", "even", "behind", "both")
 DEFAULT_CLOCKS = ("even",)
 TEAMS = (chess.WHITE, chess.BLACK)  # a team is named by its colour on board A
@@ -195,7 +198,7 @@ def readable_pv(dual: DualBoard, joints: list, limit: int = 6) -> str:
                 seat = seat_of(board, which)
                 ply = board.push(BOARD_NAMES[which], uci)
                 halves.append(f"{seat} {ply.san}")
-            except Exception:
+            except _MOVE_ERRORS:
                 return " · ".join(out)
         out.append(" ".join(halves) if halves else "sit")
     return " · ".join(out)
@@ -216,7 +219,7 @@ def joint_text(dual: DualBoard, joint, team: chess.Color) -> str:
         else:
             try:
                 parts.append(f"{seat} {san(board, board.parse_uci(uci))}")
-            except Exception:
+            except _MOVE_ERRORS:
                 parts.append(f"{seat} {uci}")
     return " · ".join(parts)
 
@@ -229,6 +232,8 @@ def for_ac(result: SearchResult, team: chess.Color, offset: float) -> tuple[floa
     sign = 1 if team == chess.WHITE else -1
     if top.mate is not None:
         return None, sign * top.mate
+    if top.score_cp is None:
+        return None, None
     adv = max(-1.0, min(1.0, to_q(top.score_cp) - offset))
     return round(sign * to_score(adv), 3), None
 
@@ -522,7 +527,7 @@ def expand_fics(con: sqlite3.Connection, fics: sqlite3.Connection, dual: DualBoa
         after = dual.copy()
         try:
             ply_done = after.push(name, m["san"])
-        except Exception:
+        except _MOVE_ERRORS:
             continue  # the archive's few impossible edges (see project notes)
         enqueue(con, after, (line + " " + f"{name}:{ply_done.san}").strip(), ply + 1, -float(m["games"]))
         queued += 1
@@ -678,7 +683,7 @@ def push(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap = argparse.ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     ap.add_argument("--db", type=Path, default=book_file())
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run", help="search queued positions, one at a time")

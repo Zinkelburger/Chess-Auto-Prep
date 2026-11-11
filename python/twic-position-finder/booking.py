@@ -284,7 +284,7 @@ def create_booking(body: BookRequest):
                 ),
             )
         if iso in booked:
-            raise HTTPException(status_code=409, detail="This slot is already booked")
+            raise HTTPException(status_code=409, detail="This slot is already booked") from None
         raise HTTPException(status_code=409, detail="This slot is no longer available")
     name = body.name.strip()
     if not name:
@@ -300,7 +300,7 @@ def create_booking(body: BookRequest):
                 (iso, name, message),
             )
     except sqlite3.IntegrityError:
-        raise HTTPException(status_code=409, detail="This slot is already booked")
+        raise HTTPException(status_code=409, detail="This slot is already booked") from None
     return {"ok": True, "slot": iso, "name": name}
 
 

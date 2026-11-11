@@ -12,13 +12,15 @@ from __future__ import annotations
 import json
 import sys
 import tempfile
+import contextlib
 import unittest
 import urllib.parse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from chess_prep.chessdb import ChessDbClient, fen4, parse_queryall, within
+from chess_prep import opening as _opening
+from chess_prep.chessdb import ChessDbClient, fen4, fen4 as _fen4, parse_queryall, within
 from chess_prep.tools import Registry, ToolError
 
 # White to move after 1.e4 e5 2.Nf3 Nc6 3.Bc4 Nf6 4.d4 exd4 5.e5 Ng4 6.O-O d6
@@ -68,11 +70,6 @@ REPERTOIRE_PGN = """
 1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. d4 exd4 5. e5 Ng4 6. O-O d6 7. exd6 Qxd6 *
 """
 
-
-import contextlib
-
-from chess_prep import opening as _opening
-from chess_prep.chessdb import fen4 as _fen4
 
 
 @contextlib.contextmanager
@@ -148,7 +145,7 @@ class QueryTool(unittest.TestCase):
     def setUp(self):
         self.registry = Registry()
         self.fetch = FakeFetch(SCRIPT)
-        self.registry._chessdb = ChessDbClient(fetch=self.fetch)
+        self.registry._chessdb = ChessDbClient(fetch=self.fetch)  # pyright: ignore[reportAttributeAccessIssue]
 
     def test_counts_opponent_good_replies(self):
         out = self.registry.call(
@@ -183,7 +180,7 @@ class AuditGaps(unittest.TestCase):
         self.path = Path(tmp.name)
         self.registry = Registry()
         self.fetch = FakeFetch(SCRIPT)
-        self.registry._chessdb = ChessDbClient(fetch=self.fetch)
+        self.registry._chessdb = ChessDbClient(fetch=self.fetch)  # pyright: ignore[reportAttributeAccessIssue]
         self.registry.call("pgn_open", {"path": str(self.path)})
 
     def tearDown(self):
@@ -224,7 +221,7 @@ class AuditGaps(unittest.TestCase):
         def down(url: str) -> str:
             raise ToolError("ChessDB unreachable: boom")
 
-        self.registry._chessdb = ChessDbClient(fetch=down)
+        self.registry._chessdb = ChessDbClient(fetch=down)  # pyright: ignore[reportAttributeAccessIssue]
         with _no_engine():
             out = self._audit()
         self.assertTrue(out["reply_check"].startswith("chessdb unavailable"))
@@ -232,7 +229,7 @@ class AuditGaps(unittest.TestCase):
 
     def test_stockfish_stands_in_where_chessdb_knows_nothing(self):
         # Nothing scripted: every position is unknown to ChessDB.
-        self.registry._chessdb = ChessDbClient(fetch=FakeFetch({}))
+        self.registry._chessdb = ChessDbClient(fetch=FakeFetch({}))  # pyright: ignore[reportAttributeAccessIssue]
         with _fake_engine(
             {
                 AFTER_D6: [("exd6", 45), ("Bg5", 4), ("Bb5", -55)],

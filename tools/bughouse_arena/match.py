@@ -27,7 +27,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable, overload
 
 import chess
 
@@ -120,7 +120,7 @@ class PlayerFactory:
         return (self.spec.describe() if self.spec
                 else {"kind": "random", "name": self.name, "random_sit": self.random_sit})
 
-    def make(self, label: str, seed: int):
+    def make(self, label: str, seed: int) -> Any:
         if self.spec is None:
             return RandomPlayer(seed, self.random_sit, self.name)
         log = self.log_dir / f"{label}.log" if self.log_dir else None
@@ -132,7 +132,7 @@ class PlayerFactory:
         spec = self.spec
         if spec is None:
             return {}
-        out = {"binary": file_record(spec.binary)}
+        out: dict[str, Any] = {"binary": file_record(spec.binary)}
         if spec.kind == "hivemind":
             out["model"] = file_record(spec.model)
             if spec.library_dir:
@@ -197,7 +197,7 @@ class SeatSet:
                     player.close()
                 setattr(self, role, self._make(role, offset))
 
-    def seating(self, contender_team: chess.Color) -> dict[int, object]:
+    def seating(self, contender_team: chess.Color) -> dict[int, Any]:
         seats = {}
         for side, team in ((self.contender, contender_team), (self.baseline, not contender_team)):
             for board in BOARDS:
@@ -333,6 +333,10 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+@overload
+def file_record(path: Path) -> dict: ...
+@overload
+def file_record(path: Path | None) -> dict | None: ...
 def file_record(path: Path | None) -> dict | None:
     if path is None:
         return None
@@ -542,14 +546,15 @@ def run_match(config: MatchConfig, contender: PlayerFactory, baseline: PlayerFac
                 games_played += 1
                 seating = seats.seating(team)
                 names = {SEAT_NAMES[s]: p.name for s, p in seating.items()}
-                on_event = None
-                if config.verbose:
-                    def on_event(event, game_index=game_index):
-                        if event["kind"] in ("move", "sit", "flag", "end"):
-                            clocks = " ".join(f"{c / 1000:5.1f}" for c in event["clocks"])
-                            detail = event.get("uci") or event.get("termination") or ""
-                            log(f"  g{game_index + 1} {event['t'] / 1000:6.1f}s "
-                                f"{event['seat'] or '':8} {event['kind']:5} {detail:8} [{clocks}]")
+
+                def log_event(event, game_index=game_index):
+                    if event["kind"] in ("move", "sit", "flag", "end"):
+                        clocks = " ".join(f"{c / 1000:5.1f}" for c in event["clocks"])
+                        detail = event.get("uci") or event.get("termination") or ""
+                        log(f"  g{game_index + 1} {event['t'] / 1000:6.1f}s "
+                            f"{event['seat'] or '':8} {event['kind']:5} {detail:8} [{clocks}]")
+
+                on_event = log_event if config.verbose else None
                 game_start = time.monotonic()
                 result = play_game(opening.build(), seating, config.clock,
                                    cost_key=f"{config.seed}:{pair}", on_event=on_event)
@@ -594,6 +599,7 @@ def run_match(config: MatchConfig, contender: PlayerFactory, baseline: PlayerFac
                 failures.append(f"worker {index}: {error}")
                 log(f"worker {index} failed: {error}")
             stop.set()
+            raise
         finally:
             if seats is not None:
                 seats.close()

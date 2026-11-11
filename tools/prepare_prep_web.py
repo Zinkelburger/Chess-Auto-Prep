@@ -13,7 +13,9 @@ def main():
     PUBLIC.mkdir(parents=True, exist_ok=True)
     model = (ROOT / 'assets/maia3_simplified.onnx').read_bytes()
     compressed = gzip.compress(model, mtime=0)
-    digest = lambda data: hashlib.sha256(data).hexdigest()
+    def digest(data):
+        return hashlib.sha256(data).hexdigest()
+
     chunks = []
     for i, start in enumerate(range(0, len(compressed), 16 * 1024 * 1024)):
         data = compressed[start:start + 16 * 1024 * 1024]

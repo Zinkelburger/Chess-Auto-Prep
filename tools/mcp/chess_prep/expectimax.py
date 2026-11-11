@@ -46,6 +46,7 @@ import struct
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -828,7 +829,7 @@ def builder_argv(chain: dict, base: Path, position: dict, args: dict) -> list[st
         "-v",
     ]
 
-    def add(flag: str, key: str, default: Any, cast=int) -> None:
+    def add(flag: str, key: str, default: Any, cast: Callable[[Any], Any] = int) -> None:
         value = args.get(key)
         value = default if value in (None, "") else cast(value)
         if value is not None:
@@ -916,7 +917,7 @@ def _slug(text: str) -> str:
 
 
 def register_expectimax_tools(registry: Any) -> None:
-    from .tools import _b, _i, _n, _obj, _s
+    from .tools import _b, _i, _obj, _s
 
     def _root() -> Path:
         return runs_dir()

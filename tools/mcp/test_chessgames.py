@@ -34,7 +34,7 @@ PAGE = """<html><head><title>Chess Game Collection: Kasparov on The King&#39;s I
 <a href="/perl/chessgame?gid=111">again</a> <a href="/perl/chessgame?gid=333">z</a></html>"""
 
 
-def pgn(gid: str) -> str:
+def pgn(gid: str | None) -> str:
     return f'[Event "E{gid}"]\n[Result "*"]\n\n1.e4 *'
 
 
@@ -161,7 +161,7 @@ class JobTest(unittest.TestCase):
         for _ in range(chessgames.DAILY_LIMIT - 1):
             self.assertEqual(chessgames.reserve_request(clock()), 0.0)
             clock.now += chessgames.MIN_GAP
-        self.assertIn("daily limit", chessgames.blocked_message(clock()))
+        self.assertIn("daily limit", chessgames.blocked_message(clock()) or "")
         status = run_job(self.job, fetch=lambda url, gid: (200, pgn(gid)), sleep=clock.sleep, clock=clock)
         self.assertEqual(status["state"], "banned")
 

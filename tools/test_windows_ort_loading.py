@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# A None here fails the test on its own, so pyright's None checks add nothing.
+# pyright: reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportOptionalIterable=false, reportOptionalOperand=false
 """Regression checks against the shipped Windows Hivemind executable.
 
 Native Windows by default. --wine runs on Linux in a disposable prefix;
@@ -123,7 +125,7 @@ def main():
                     except queue.Empty:
                         if proc.poll() is not None:
                             error_reader.join(timeout=2)
-                            raise AssertionError(f"Exited {proc.returncode} before {token}: {''.join(errors)}")
+                            raise AssertionError(f"Exited {proc.returncode} before {token}: {''.join(errors)}") from None
                 raise AssertionError(f"Timed out waiting for {token}: {''.join(errors)}")
 
             try:

@@ -149,5 +149,5 @@ def open_bpgn(path):
     import io
 
     if str(path).endswith(".bz2"):
-        return io.TextIOWrapper(bz2.open(path, "rb"), encoding="latin-1")
+        return io.TextIOWrapper(bz2.BZ2File(path, "rb"), encoding="latin-1")
     return open(path, "r", encoding="latin-1")

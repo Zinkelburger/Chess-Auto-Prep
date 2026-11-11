@@ -9,8 +9,7 @@ Usage:
     python3 fetch_games.py --output fetched_games.pgn
 """
 
-import json
-import re
+import http.client
 import sys
 import time
 import urllib.parse
@@ -50,8 +49,8 @@ class MoveExtractor(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         attr_dict = dict(attrs)
-        href = attr_dict.get('href', '')
-        cls = attr_dict.get('class', '')
+        href = attr_dict.get('href') or ''  # a bare <a href> has the value None
+        attr_dict.get('class', '')
 
         if tag == 'a':
             if 'view_game.php' in href or 'game.php' in href:
@@ -111,7 +110,7 @@ def search_and_extract(white: str, black: str, year: str, eco: str) -> dict | No
                 'black_full': parser.black_full,
                 'result': parser.result,
             }
-    except Exception as e:
+    except (OSError, ValueError, http.client.HTTPException) as e:
         print(f"  Search error: {e}", file=sys.stderr)
     return None
 
@@ -238,7 +237,7 @@ def main():
         else:
             not_found += 1
             not_found_list.append(label)
-            print(f"  ✗ Not found")
+            print("  ✗ Not found")
 
         time.sleep(args.delay)
 

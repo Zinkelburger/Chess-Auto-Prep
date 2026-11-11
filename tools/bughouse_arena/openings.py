@@ -114,7 +114,7 @@ def build(year: int, count: int, plies: int, min_board_plies: int = 6, min_elo: 
     if not source.exists():
         raise FileNotFoundError(f"{source}: fetch the archive with python3 -m bughouse_db fetch")
     keep = max(50, count * 6)
-    heap: list[tuple[str, int, list, str]] = []  # max-heap on rank via negation trick below
+    heap: list[tuple[_Inverted, int, list, str]] = []  # max-heap on rank via negation trick below
     with open_bpgn(source) as lines:
         for game in iter_games(lines):
             if not game.rated or min(game.elos()) < min_elo or len(game.moves) <= plies:

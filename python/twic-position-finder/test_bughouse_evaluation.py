@@ -2,6 +2,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from fastapi import HTTPException
 import bughousedb as bh
 import bughouse_evaluation as ev
@@ -20,7 +21,7 @@ class EvaluationTests(unittest.TestCase):
         self.temp.cleanup()
 
     def upload(self, **changes):
-        data = dict(fen=DUAL, ticket=ev.ticket(self.db, DUAL, 'test')['ticket'],
+        data: dict[str, Any] = dict(fen=DUAL, ticket=ev.ticket(self.db, DUAL, 'test')['ticket'],
                     ours=bh.Search(q=-.4, nodes=800, best='(e2e4,pass)'),
                     theirs=bh.Search(q=-.6, nodes=800, best='(pass,d2d4)'))
         data.update(changes)

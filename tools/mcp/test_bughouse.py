@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# A None here fails the test on its own, so pyright's None checks add nothing.
+# pyright: reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportOptionalIterable=false, reportOptionalOperand=false
 """Tests for the bughouse MCP server.
 
 Zero dependencies beyond python-chess (unittest only). The engine-backed tests
@@ -480,20 +482,25 @@ class WithEngine(unittest.TestCase):
             self.assertGreaterEqual(row["loss_vs_best"], 0)
 
 
+def _present(value: float | None) -> float:
+    assert value is not None
+    return value
+
+
 class Scores(unittest.TestCase):
     """The score arithmetic, without an engine."""
 
     def test_the_tangent_inverts_exactly(self):
         # Hivemind reports 180*tan(1.56*Q), so no constant is fitted.
-        self.assertAlmostEqual(to_q(0), 0.0, places=9)
-        self.assertAlmostEqual(to_q(-230), -SIT_BIT_Q, places=3)
-        self.assertAlmostEqual(to_q(230), SIT_BIT_Q, places=3)
-        self.assertAlmostEqual(to_score(to_q(-140)), -1.40, places=2)
+        self.assertAlmostEqual(_present(to_q(0)), 0.0, places=9)
+        self.assertAlmostEqual(_present(to_q(-230)), -SIT_BIT_Q, places=3)
+        self.assertAlmostEqual(_present(to_q(230)), SIT_BIT_Q, places=3)
+        self.assertAlmostEqual(to_score(_present(to_q(-140))), -1.40, places=2)
 
     def test_the_offset_is_measured_from_the_pair(self):
         # A symmetric Italian on both boards, as the engine scored it: -3.07
         # from our seat and -3.20 from theirs. Level by construction.
-        offset = measure_offset(-307, -320)
+        offset = _present(measure_offset(-307, -320))
         self.assertAlmostEqual(offset, -0.672, places=2)
         self.assertLess(abs(evaluate(-307, None, offset)["advantage"]), 0.02)
 
@@ -501,10 +508,10 @@ class Scores(unittest.TestCase):
         # Three exactly symmetric two-board positions, all dead equal. One
         # fixed constant read the third as more than a pawn up.
         for ours, theirs in ((-229, -222), (-307, -320), (-93, -117)):
-            offset = measure_offset(ours, theirs)
+            offset = _present(measure_offset(ours, theirs))
             self.assertLess(abs(evaluate(ours, None, offset)["advantage"]), 0.05)
-        self.assertAlmostEqual(measure_offset(-229, -222), -0.575, places=2)
-        self.assertAlmostEqual(measure_offset(-93, -117), -0.337, places=2)
+        self.assertAlmostEqual(_present(measure_offset(-229, -222)), -0.575, places=2)
+        self.assertAlmostEqual(_present(measure_offset(-93, -117)), -0.337, places=2)
 
     def test_a_mate_leaves_nothing_to_calibrate_with(self):
         self.assertIsNone(measure_offset(None, -230))

@@ -11,6 +11,7 @@ Usage:
 import json
 from collections import defaultdict
 from pathlib import Path
+from typing import Any
 
 import matplotlib
 matplotlib.use("Agg")
@@ -35,7 +36,7 @@ COLORS = {
 }
 
 
-def load(name):
+def load(name) -> Any:
     p = DATA_DIR / name
     if p.exists():
         with open(p) as f:

@@ -93,7 +93,7 @@ def query_sequential(fens: list[str], session: requests.Session | None = None) -
     return results
 
 
-async def query_parallel(fens: list[str]) -> list[QueryResult]:
+async def query_parallel(fens: list[str]) -> tuple[list[QueryResult], float]:
     results: list[QueryResult] = []
     async with aiohttp.ClientSession() as session:
         t0 = time.perf_counter()

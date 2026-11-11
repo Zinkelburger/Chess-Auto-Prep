@@ -1,0 +1,22 @@
+# Python gate for tools/, scripts/ and python/twic-position-finder.
+# scripts/ci.sh lint runs both through scripts/python_checks.py.
+
+[tool.pyright]
+include = ["tools", "scripts", "python/twic-position-finder"]
+exclude = ["**/node_modules", "**/__pycache__", "**/.venv", "**/dist", "python/twic-position-finder/frontend"]
+extraPaths = ["tools", "tools/mcp", "scripts", "python/twic-position-finder"]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+
+[tool.ruff]
+target-version = "py312"
+extend-exclude = ["python/twic-position-finder/frontend", "python/twic-position-finder/.venv"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "W6", "B", "BLE", "PLE"]
+# Style, not defects: one-line compound statements, the name `l`, and zip()
+# without strict= (adding strict=False says nothing, strict=True changes it).
+ignore = ["E701", "E702", "E741", "B905"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.Body", "fastapi.File", "fastapi.Form"]

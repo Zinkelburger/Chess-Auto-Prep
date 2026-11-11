@@ -2,7 +2,9 @@
 
 import logging
 import os
+import sqlite3
 import time
+from typing import cast
 from pathlib import Path
 
 import requests as http_requests
@@ -42,7 +44,7 @@ if not TURNSTILE_SECRET:
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="TWIC Position Finder", version="1.0.0")
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]
 
 _cors_origins = [FRONTEND_ORIGIN]
 if DEBUG:
@@ -134,7 +136,7 @@ def verify_turnstile(token: str, ip: str | None = None) -> bool:
         if not result.get("success"):
             log.warning("Turnstile validation failed: %s", result.get("error-codes", []))
         return result.get("success", False)
-    except Exception as e:
+    except (http_requests.RequestException, ValueError, AttributeError) as e:
         log.error("Turnstile siteverify request failed: %s", e)
         return False
 
@@ -147,6 +149,11 @@ def _require_subscription_filters(req) -> None:
         raise HTTPException(400, "At least one filter (FEN, player, ECO) is required.")
 
 
+def _fen_text(req) -> str | None:
+    """The field's validator has already joined a list of FENs into one string."""
+    return cast("str | None", req.fen)
+
+
 def _validate_request_fens(fen_field: str | list[str] | None) -> None:
     if isinstance(fen_field, list):
         fens = [s.strip() for s in fen_field if isinstance(s, str) and s.strip()]
@@ -157,7 +164,7 @@ def _validate_request_fens(fen_field: str | list[str] | None) -> None:
             validate_fen(fen)
         except ValueError:
             label = f" #{i + 1}" if len(fens) > 1 else ""
-            raise HTTPException(400, f"Invalid FEN position{label}. Please check the format.")
+            raise HTTPException(400, f"Invalid FEN position{label}. Please check the format.") from None
 
 
 def _match_latest_issue(conn, sub: dict) -> None:
@@ -173,7 +180,7 @@ def _match_latest_issue(conn, sub: dict) -> None:
         conn.commit()
         log.info("Sub #%d matched %d game(s) in TWIC #%d",
                  sub["id"], len(matches), latest)
-    except Exception as e:
+    except (sqlite3.Error, ImportError, ValueError, KeyError, TypeError) as e:
         log.warning("Failed to run immediate match for sub #%s: %s",
                     sub.get("id"), e)
 
@@ -224,7 +231,7 @@ def subscribe(req: SubscribeRequest, request: Request, conn=Depends(db)):
                                      "Manage existing ones on your alerts page.")
         add_subscription(
             conn, existing["id"],
-            label=req.label, fen=req.fen, player=req.player,
+            label=req.label, fen=_fen_text(req), player=req.player,
             white=req.white, black=req.black,
             exclude_site=req.exclude_site, site=req.site,
             min_elo=req.min_elo, max_elo=req.max_elo, eco=req.eco,
@@ -239,7 +246,7 @@ def subscribe(req: SubscribeRequest, request: Request, conn=Depends(db)):
     user = create_user(conn, req.email)
     add_subscription(
         conn, user["id"],
-        label=req.label, fen=req.fen, player=req.player,
+        label=req.label, fen=_fen_text(req), player=req.player,
         white=req.white, black=req.black,
         exclude_site=req.exclude_site, site=req.site,
         min_elo=req.min_elo, max_elo=req.max_elo, eco=req.eco,
@@ -374,7 +381,7 @@ def create_subscription(req: SubscriptionCreate, user=Depends(auth_user),
 
     sub = add_subscription(
         conn, user["id"],
-        label=req.label, fen=req.fen, player=req.player,
+        label=req.label, fen=_fen_text(req), player=req.player,
         white=req.white, black=req.black,
         exclude_site=req.exclude_site, site=req.site,
         min_elo=req.min_elo, max_elo=req.max_elo, eco=req.eco,
@@ -392,7 +399,7 @@ def replace_subscription(sub_id: int, req: SubscriptionCreate,
     _validate_request_fens(req.fen)
     sub = update_subscription(
         conn, sub_id, user["id"],
-        label=req.label, fen=req.fen, player=req.player,
+        label=req.label, fen=_fen_text(req), player=req.player,
         white=req.white, black=req.black,
         exclude_site=req.exclude_site, site=req.site,
         min_elo=req.min_elo, max_elo=req.max_elo, eco=req.eco,
@@ -452,7 +459,7 @@ def download_subscription_pgn(sub_id: int, twic: int | None = None,
         ).fetchone()
         if not latest_week or not latest_week["tw"]:
             raise HTTPException(404, "No matched games found for this subscription")
-        twic = latest_week["tw"]
+        twic = int(latest_week["tw"])
 
     games = get_matched_games(conn, sub_id, user["id"], twic)
     if games is None:

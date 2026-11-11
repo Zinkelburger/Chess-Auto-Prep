@@ -30,7 +30,6 @@ from collections import Counter
 from dataclasses import asdict
 from pathlib import Path
 
-from . import openings
 from .engine import Engine
 from .paths import VARIANT, nets_dir
 from .selfplay import Settings, eval_options, failed, game_settings, load_openings, play
@@ -53,7 +52,9 @@ def _play_pair(args) -> tuple[int, list[int], dict]:
     ends: Counter = Counter()
     try:
         if _engines is None:
-            _engines = tuple(Engine(binary, VARIANT, eval_options(net)) for net in nets)
+            net_one, net_two = nets
+            _engines = (Engine(binary, VARIANT, eval_options(net_one)),
+                        Engine(binary, VARIANT, eval_options(net_two)))
         outcomes = [
             play((_engines[1], _engines[0]) if swap else _engines, settings, random.Random(seed), opening)[1]
             for swap in (False, True)

@@ -68,6 +68,7 @@ def parse_chessable_text(text: str) -> list[dict]:
                     result = result_match.group(1) if result_match else "*"
 
                     # Try to extract year from event string
+                    assert event_str is not None  # set with black, above
                     year_match = re.search(r"(\d{4})\s*$", event_str)
                     date = f"{year_match.group(1)}" if year_match else "????"
                     event = (
@@ -99,9 +100,9 @@ def games_to_pgn(games: list[dict]) -> str:
     for g in games:
         headers = [
             f'[Event "{g["event"]}"]',
-            f'[Site "?"]',
+            '[Site "?"]',
             f'[Date "{g["date"]}"]',
-            f'[Round "?"]',
+            '[Round "?"]',
             f'[White "{g["white"]}"]',
             f'[Black "{g["black"]}"]',
             f'[Result "{g["result"]}"]',

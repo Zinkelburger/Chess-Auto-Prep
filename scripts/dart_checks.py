@@ -41,6 +41,7 @@ def run(gate, flutter, extra=()):
         with (logs / f'{name}.log').open('w') as log:
             with subprocess.Popen(args, stdout=subprocess.PIPE,
                                   stderr=subprocess.STDOUT, text=True) as child:
+                assert child.stdout is not None  # opened with PIPE
                 for line in child.stdout:
                     print(line, end='', flush=True)
                     log.write(line)
