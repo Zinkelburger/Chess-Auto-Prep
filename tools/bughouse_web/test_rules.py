@@ -12,7 +12,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools/mcp/bughouse"))
-from board import DualBoard, START_FEN  # noqa: E402
+from board import DualBoard, START_FEN  # noqa: E402  # pyright: ignore[reportMissingImports]
 from chess.variant import CrazyhouseBoard  # noqa: E402
 
 
