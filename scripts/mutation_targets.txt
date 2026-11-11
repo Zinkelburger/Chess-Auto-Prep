@@ -51,6 +51,8 @@
 #   lib/chess/pgn/comment_layout.dart:123 the `-1` of a marker with no
 #     closing name, :329 `next[1]` -> `next[2]` (the dots come with the
 #     number), :396 which wrapped reading is tried first (unspecified).
+#   lib/chess/pgn/game_order.dart:30 the size of the 1 and -1 that put an
+#     unrated game last (only their sign is read).
 # Listed with one equivalent mutant a --max 30 sample can draw:
 #   lib/chess/game_filter.dart:168 `> 32` -> `>= 32`: when the pattern cache
 #     is emptied, which no result shows.
