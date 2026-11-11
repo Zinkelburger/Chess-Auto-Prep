@@ -109,6 +109,12 @@ void main() {
       expect(shiftFrom(worse, best), 0);
       const mated = JointLine(rank: 3, mate: -2, nodes: 100, pv: []);
       expect(shiftFrom(best, mated), 0.5);
+      const unscored = JointLine(rank: 4, nodes: 100, pv: []);
+      expect(
+        shiftFrom(best, unscored),
+        0.5,
+        reason: 'a line with no score counts as lost',
+      );
     });
   });
 

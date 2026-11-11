@@ -21,3 +21,8 @@ lib/workspace/document/document_saver.dart|test/workspace/document_saver_test.da
 lib/chess/audit/chapter_audit.dart|test/chess/audit/chapter_audit_test.dart test/workspace/chapter_audit_test.dart|test/workspace/audit_pane_test.dart
 lib/chess/book/book_check.dart|test/chess/book/book_check_test.dart|test/app/viewer_books_test.dart test/features/my_games/book_pane_test.dart test/features/my_games/game_book_test.dart test/workspace/book_verdict_view_test.dart
 lib/chess/book/played_game.dart|test/workspace/book_verdict_view_test.dart test/chess/book/book_check_test.dart|
+lib/chess/bughouse/bpgn_moves.dart|test/chess/bughouse/bpgn_moves_test.dart|test/features/bughouse/bughouse_lab_test.dart
+lib/chess/bughouse/crazyhouse_pgn.dart|test/chess/bughouse/crazyhouse_pgn_test.dart|
+lib/chess/bughouse/hivemind.dart|test/chess/bughouse/hivemind_test.dart|test/app/shell_bughouse_test.dart test/chess/bughouse/pv_steps_test.dart test/engines/hivemind_engine_test.dart test/engines/hivemind_real_test.dart test/features/bughouse/bughouse_screen_test.dart test/features/bughouse/lab_engine_test.dart
+lib/chess/bughouse/pv_steps.dart|test/chess/bughouse/pv_steps_test.dart|
+lib/chess/bughouse/table.dart|test/chess/bughouse/table_test.dart|test/app/shell_bughouse_test.dart test/chess/bughouse/bpgn_moves_test.dart test/chess/bughouse/crazyhouse_pgn_test.dart test/chess/bughouse/hivemind_test.dart test/chess/bughouse/pv_steps_test.dart test/chess/bughouse/table_line_test.dart test/chess/bughouse/table_setup_test.dart test/engines/hivemind_engine_test.dart test/engines/hivemind_real_test.dart test/features/bughouse/bughouse_lab_test.dart test/features/bughouse/bughouse_screen_test.dart test/features/bughouse/lab_engine_test.dart
