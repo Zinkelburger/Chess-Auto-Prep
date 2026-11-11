@@ -45,7 +45,7 @@ void main() {
       [for (final n in line.tree!.mainLine) n.san],
       ['e4', 'e5', 'Nf3', 'Nc6'],
     );
-    expect(line.text, isNot(contains('{')));
+    expect(line.tree!.mainLine.map((n) => n.comment), everyElement(isNull));
   });
 
   test('a chapter\'s content counts its moves, notes and side lines', () {
