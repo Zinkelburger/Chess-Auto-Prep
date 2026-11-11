@@ -18,3 +18,4 @@ lib/chess/game_filter.dart|test/chess/game_filter_test.dart|test/chess test/feat
 lib/chess/typed_move.dart|test/chess/typed_move_test.dart|test/workspace
 lib/storage/compound_write.dart|test/storage/compound_write_test.dart|test/storage
 lib/workspace/document/document_saver.dart|test/workspace/document_saver_test.dart|test/workspace
+lib/chess/audit/chapter_audit.dart|test/chess/audit/chapter_audit_test.dart test/workspace/chapter_audit_test.dart|test/workspace/audit_pane_test.dart
