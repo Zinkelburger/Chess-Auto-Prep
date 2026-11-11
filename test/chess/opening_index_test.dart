@@ -112,6 +112,24 @@ void main() {
     expect(none.isEmpty, isTrue);
   });
 
+  test('moves played as often are in the order the kept games first play '
+      'them', () {
+    final index = OpeningIndex.of([
+      game('1. e4', '1-0'),
+      game('1. d4', '1-0'),
+      game('1. e4', '1-0'),
+    ]);
+    final kept = index.answer(Fen.initial, keeps: (game) => game != 0);
+    expect(kept.moves.map((m) => m.uci), ['d2d4', 'e2e4']);
+  });
+
+  test('a date of a year alone gives the year', () {
+    final index = OpeningIndex.of([
+      '[Date "2024"]\n[Result "1-0"]\n\n1. e4 1-0',
+    ]);
+    expect(index.games.single.year, 2024);
+  });
+
   test('a game that comes back to a position counts there once', () {
     final index = OpeningIndex.of([
       game('1. Nf3 Nf6 2. Ng1 Ng8 3. Nf3', '1/2-1/2'),
@@ -131,12 +149,13 @@ void main() {
   test('the main line is read to move 25, variations not at all', () {
     final index = OpeningIndex.of([game('1. e4 (1. d4 d5) e5 2. Nf3', '*')]);
     expect(index.answer(Fen.initial).moves.map((m) => m.uci), ['e2e4']);
-    final long = game(wanderingMoves(indexedPlies + 10), '*');
+    final long = game(wanderingMoves(60), '*');
     final tree = readGame(long).tree!;
     final deep = OpeningIndex.of([long]);
     Fen before(int ply) => tree.fenAt(NodePath.of(List.filled(ply, 0)));
-    expect(deep.answer(before(indexedPlies - 1)).isEmpty, isFalse);
-    expect(deep.answer(before(indexedPlies)).isEmpty, isTrue);
+    // Black's 25th move is the fiftieth ply, played from ply 49.
+    expect(deep.answer(before(49)).isEmpty, isFalse);
+    expect(deep.answer(before(50)).isEmpty, isTrue);
   });
 
   test('a text with no moves or no playable start is counted, not indexed', () {
