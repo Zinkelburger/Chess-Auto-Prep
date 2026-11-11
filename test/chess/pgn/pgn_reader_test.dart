@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/game_text.dart';
+import 'package:chess_auto_prep/chess/pgn/pgn_issue.dart';
 import 'package:chess_auto_prep/chess/pgn/pgn_reader.dart';
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -44,6 +45,20 @@ void main() {
     expect(tagValue(read.tags, 'Score+'), 'b');
     expect(tagValue(read.tags, 'Ply#Count'), 'c');
     expect(tagValue(read.tags, 'Time-Zone'), 'd');
+  });
+
+  test('a FEN nothing can play from is reported where its tag is', () {
+    UnreadablePosition issue(String text) =>
+        readGame(text).issues.whereType<UnreadablePosition>().single;
+    final second = issue('[Event "x"]\n[FEN "not a fen"]\n\n1. e4 *');
+    expect((second.line, second.column), (2, 1));
+    final first = issue('\n[FEN "not a fen"]\n\n1. e4 *');
+    expect((first.line, first.column), (2, 1));
+  });
+
+  test('the moves start past the header and the space after it', () {
+    const text = '[Event "x"]\n\n1. e4 *';
+    expect(movetextStart(text), text.indexOf('1.'));
   });
 
   test('starts from the FEN header', () {

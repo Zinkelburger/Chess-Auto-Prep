@@ -55,6 +55,8 @@
 #     chapter's root: lines from two roots are refused either way.
 #   lib/chess/pgn/pgn_issue.dart:149 `offset < length` -> `<=`: both give
 #     the length at the end.
+#   lib/chess/pgn/pgn_reader.dart:128 the `0` place of a FEN issue with no
+#     FEN tag: only a FEN tag makes the position unreadable.
 # Listed with one equivalent mutant a --max 30 sample can draw:
 #   lib/chess/game_filter.dart:168 `> 32` -> `>= 32`: when the pattern cache
 #     is emptied, which no result shows.
