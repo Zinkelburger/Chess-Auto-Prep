@@ -18,7 +18,7 @@ import re
 import sys
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +122,7 @@ class GameHeader:
     def pgn_headers(self) -> str:
         lines = [
             f'[Event "{self.event}"]',
-            f'[Site "?"]',
+            '[Site "?"]',
             f'[Date "{self.date}"]',
             f'[White "{self.white}"]',
             f'[Black "{self.black}"]',
@@ -250,7 +250,7 @@ COMMON_WORDS = {
     "move", "moves", "play", "plays", "played", "game", "games",
     "position", "square", "piece", "pieces", "attack", "defense",
     "check", "mate", "draw", "win", "wins", "won", "lose", "lost",
-    "after", "before", "better", "best", "worse", "worst",
+    "better", "best", "worse", "worst",
     "now", "first", "last", "next", "new", "old", "good", "bad",
     "side", "file", "rank", "diagonal", "center", "wing", "flank",
 }
@@ -873,7 +873,7 @@ def combine_and_segment(
     # Build game texts: from each header to the next
     # We need to track which pages belong to which game
     games = []
-    page_dict = {pn: txt for pn, txt in pages}
+    {pn: txt for pn, txt in pages}
     sorted_pages = sorted(pages, key=lambda x: x[0])
 
     for idx, (start_page, start_offset, hdr) in enumerate(all_headers):
@@ -1038,7 +1038,7 @@ def main():
 
     # Summary
     print(f"\n{'='*60}")
-    print(f"SUMMARY")
+    print("SUMMARY")
     print(f"  Games extracted: {len(all_games)}")
     total_moves = sum(len(g.moves) for g in all_games)
     total_ok = sum(sum(1 for m in g.moves if not m.is_guess) for g in all_games)

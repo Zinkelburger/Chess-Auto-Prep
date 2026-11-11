@@ -14,6 +14,7 @@ Actions against each action's latest release). Exit status is 0 whether or
 not anything is outdated; a source that cannot be checked is reported and
 skipped.
 """
+import http.client
 import json
 import os
 from pathlib import Path
@@ -24,6 +25,11 @@ import sys
 import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
+
+#: A registry that could not be asked: the request failed, or the reply was
+#: not the JSON shape expected.
+_CHECK_ERRORS = (OSError, http.client.HTTPException, subprocess.SubprocessError,
+                 ValueError, KeyError, TypeError)
 USER_AGENT = 'outdated-deps-scanner'
 SKIP_DIRS = {'build', 'node_modules', '.dart_tool', '.git', 'ephemeral'}
 
@@ -141,7 +147,7 @@ def check_python():
                 continue
             try:
                 latest = fetch_json(f'https://pypi.org/pypi/{name}/json')['info']['version']
-            except Exception as error:  # noqa: BLE001 - report and continue
+            except _CHECK_ERRORS as error:  # report and continue
                 behind.append(f'    {name}: could not check ({error})')
                 continue
             if version_key(latest) > version_key(version):
@@ -187,7 +193,7 @@ def check_actions():
     for action, found in sorted(pins.items()):
         try:
             latest, latest_sha = latest_release(action)
-        except Exception as error:  # noqa: BLE001 - report and continue
+        except _CHECK_ERRORS as error:  # report and continue
             lines.append(f'  {action}: could not check ({error})')
             continue
         for sha, comment in sorted(found):

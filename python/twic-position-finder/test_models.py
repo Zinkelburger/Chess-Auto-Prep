@@ -1,9 +1,12 @@
+# A None here fails the test on its own, so pyright's None checks add nothing.
+# pyright: reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportOptionalIterable=false, reportOptionalOperand=false
 """Subscription helpers — delete must succeed even after matched games exist."""
 
 import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 
 from models import (
     add_subscription,
@@ -30,7 +33,7 @@ class SubscriptionLifecycleTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def _sub(self, **kwargs):
-        defaults = {"player": "Carlsen", "label": "Test"}
+        defaults: dict[str, Any] = {"player": "Carlsen", "label": "Test"}
         defaults.update(kwargs)
         return add_subscription(self.db, self.user_id, **defaults)
 
@@ -49,7 +52,7 @@ class SubscriptionLifecycleTests(unittest.TestCase):
         record_notification(self.db, sub["id"], game_id, 1600)
         self.db.commit()
         games = get_matched_games(self.db, sub["id"], self.user_id, 1600)
-        self.assertIsNotNone(games)
+        assert games is not None
         self.assertEqual(len(games), 1)
         self.assertEqual(games[0]["id"], game_id)
         self.assertEqual(games[0]["white"], "A")

@@ -13,10 +13,8 @@ Also simulates a mini-DFS to show total generation speed with Python's approach.
 
 import os
 import time
-import json
 import urllib.parse
 from dataclasses import dataclass, field
-from typing import Optional
 
 import requests
 from dotenv import load_dotenv
@@ -187,7 +185,7 @@ def run_mini_dfs(delay_ms: float, label: str) -> BenchmarkRun:
                 try:
                     board.push_san(best["san"])
                     stack.append((board.fen(), depth + 1))
-                except Exception:
+                except ValueError:
                     pass
             else:
                 # Branch on opponent replies (simulate opponent moves)
@@ -198,7 +196,7 @@ def run_mini_dfs(delay_ms: float, label: str) -> BenchmarkRun:
                             b = chess.Board(fen)
                             b.push_san(m["san"])
                             stack.append((b.fen(), depth + 1))
-                        except Exception:
+                        except ValueError:
                             pass
 
         print(f"  [{req_count:2d}] d={depth} {elapsed:7.1f}ms  "
@@ -211,7 +209,7 @@ def run_mini_dfs(delay_ms: float, label: str) -> BenchmarkRun:
 
 def print_summary(runs: list):
     print(f"\n{'='*80}")
-    print(f"  BENCHMARK SUMMARY")
+    print("  BENCHMARK SUMMARY")
     print(f"{'='*80}")
     print(f"  {'Test':<45s} {'Reqs':>5s} {'Avg':>8s} {'Min':>8s} {'Max':>8s} {'Wall':>10s}")
     print(f"  {'─'*45} {'─'*5} {'─'*8} {'─'*8} {'─'*8} {'─'*10}")
@@ -221,7 +219,7 @@ def print_summary(runs: list):
               f"{run.max_ms:>7.0f}ms {run.wall_ms:>9.0f}ms")
 
     print(f"\n  Auth token: {'YES' if TOKEN else 'NO'}")
-    print(f"  Note: Wall time includes delays between requests.")
+    print("  Note: Wall time includes delays between requests.")
     print(f"{'='*80}")
 
 

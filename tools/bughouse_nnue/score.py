@@ -26,14 +26,15 @@ from .toolchain import require_binary
 
 BATCH = 2000
 
+_engine: Engine | None = None  # per worker process, started on first use
+
 
 def _score_batch(args) -> list[str]:
     binary, depth, batch = args
-    global _engine  # one engine per worker process, started on first use
-    try:
-        engine = _engine
-    except NameError:
-        engine = _engine = Engine(binary, VARIANT, {"Use NNUE": "false"})
+    global _engine
+    if _engine is None:
+        _engine = Engine(binary, VARIANT, {"Use NNUE": "false"})
+    engine = _engine
     out = []
     for text in batch:
         fen = records.parse(text)["fen"]

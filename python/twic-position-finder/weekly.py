@@ -123,8 +123,8 @@ def _run_match_and_notify(db, new_issues: list[int], dry_run: bool):
         log.info("  [DRY RUN] Skipping Lichess import")
     else:
         all_matched_games = {}
-        for email, sub_matches in user_matches.items():
-            for sub, games in sub_matches:
+        for sub_matches in user_matches.values():
+            for _sub, games in sub_matches:
                 for g in games:
                     if g["id"] not in all_matched_games:
                         all_matched_games[g["id"]] = g

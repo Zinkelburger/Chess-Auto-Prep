@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# A None here fails the test on its own, so pyright's None checks add nothing.
+# pyright: reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportOptionalIterable=false, reportOptionalOperand=false
 """Tests for the bughouse arena (tools/bughouse_arena).
 
 Offline and unittest-only beyond python-chess. The referee cases are ported
@@ -18,7 +20,6 @@ from __future__ import annotations
 import hashlib
 import io
 import json
-import os
 import random
 import re
 import sys
@@ -26,6 +27,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from typing import Any
 
 import chess
 from chess.variant import CrazyhouseBoard
@@ -246,8 +248,8 @@ class Scripted:
         return moves[0]
 
 
-def seats(**overrides):
-    players = {index: Scripted() for index in range(4)}
+def seats(**overrides) -> dict[int, Any]:
+    players: dict[int, Any] = {index: Scripted() for index in range(4)}
     names = {"aw": A_WHITE, "ab": A_BLACK, "bw": B_WHITE, "bb": B_BLACK}
     players.update({names[key]: value for key, value in overrides.items()})
     return players
@@ -336,7 +338,7 @@ class VirtualTime(unittest.TestCase):
 
     def test_random_games_always_terminate(self):
         for seed in range(20):
-            players = {i: RandomPlayer(seed * 4 + i, sit_probability=0.3) for i in range(4)}
+            players: dict[int, Any] = {i: RandomPlayer(seed * 4 + i, sit_probability=0.3) for i in range(4)}
             result = play_game(Bughouse(), players, ClockConfig(initial_ms=30_000))
             self.assertIn(result.termination, {"checkmate", "flag", "draw"})
             self.assertLessEqual(result.duration_ms, 2 * 30_000)
@@ -368,7 +370,7 @@ class EngineProtocol(unittest.TestCase):
 class Statistics(unittest.TestCase):
     def test_elo_and_sprt_match_tournament_formulas(self):
         self.assertEqual(score_to_elo(0.5), 0.0)
-        self.assertAlmostEqual(score_to_elo(0.75), 190.85, places=2)
+        self.assertAlmostEqual(score_to_elo(0.75) or 0.0, 190.85, places=2)
         # Each perfect pair adds 2*ln(p1/p0) ~= 0.0576 against an upper bound
         # of ln(0.95/0.05) ~= 2.944, so 51 pairs continue and 52 accept.
         self.assertEqual(paired_sprt([1.0] * 51, 0.0, 10.0).decision, "continue")
@@ -675,6 +677,7 @@ class OptionGating(TempDir):
         self.assertFalse([c for c in commands if c.startswith(("setoption name Seat",
                                                                 "setoption name Clocks"))])
         self.assertIn("stop", commands)   # no PermanentBrain: stop after bestmove
+        assert move is not None
         self.assertTrue(game.is_legal(BOARD_B, move))
 
     def test_seat_and_clocks_follow_the_advertisement_not_the_kind(self):
@@ -827,6 +830,7 @@ class FsfAdapter(TempDir):
         self.assertFalse([c for c in commands if c.startswith(("setoption name Team",
                                                                 "setoption name Seat",
                                                                 "setoption name Clocks"))])
+        assert move is not None
         self.assertTrue(game.is_legal(BOARD_B, move))
 
     def test_full_game_against_random(self):
@@ -858,7 +862,7 @@ class FsfAdapter(TempDir):
         for name, behaviour in (("null", {"null": True}), ("illegal", {"illegal": True})):
             with self.subTest(name):
                 players = seats()
-                players[A_WHITE] = FsfSeat(self.fakes.spec("fsf", name, **behaviour))
+                players[A_WHITE] = FsfSeat(self.fakes.spec("fsf", name, "", **behaviour))
                 try:
                     result = play_game(Bughouse(), players, FIXED)
                 finally:
@@ -940,18 +944,24 @@ class WakeScheduling(unittest.TestCase):
             self.assertEqual(len([c for c in fakes.commands("w") if c.startswith("go ")]), 2)
 
 
+def _interval(pair_scores: list[float]) -> tuple[float, float]:
+    interval = pair_interval(pair_scores)
+    assert interval is not None
+    return interval
+
+
 class FixedSampleStatistics(unittest.TestCase):
     def test_boundaries_never_have_zero_width(self):
         for n in (1, 2, 20, 200):
             with self.subTest(n=n):
-                low, high = pair_interval([1.0] * n)
+                low, high = _interval([1.0] * n)
                 self.assertEqual(high, 1.0)
                 self.assertLess(low, 1.0)
-                low, high = pair_interval([0.0] * n)
+                low, high = _interval([0.0] * n)
                 self.assertEqual(low, 0.0)
                 self.assertGreater(high, 0.0)
                 for value in (0.25, 0.5, 0.75):
-                    low, high = pair_interval([value] * n)
+                    low, high = _interval([value] * n)
                     self.assertLess(low, value)
                     self.assertGreater(high, value)
         self.assertIsNone(pair_interval([]))
@@ -961,7 +971,7 @@ class FixedSampleStatistics(unittest.TestCase):
         values = [0, 0.25, 0.5, 0.75, 1]
         for _ in range(200):
             sample = rng.choices(values, k=rng.randint(1, 40))
-            low, high = pair_interval(sample)
+            low, high = _interval(sample)
             self.assertLessEqual(low, sum(sample) / len(sample))
             self.assertGreaterEqual(high, sum(sample) / len(sample))
         widths = [pair_interval([1.0, 0.5, 0.75, 0.25] * k) for k in (5, 50)]
@@ -974,7 +984,7 @@ class FixedSampleStatistics(unittest.TestCase):
             mean = sum(p * v for p, v in zip(probs, values))
             hits = 0
             for _ in range(1000):
-                low, high = pair_interval(rng.choices(values, probs, k=20))
+                low, high = _interval(rng.choices(values, probs, k=20))
                 hits += low <= mean <= high
             self.assertGreaterEqual(hits / 1000, 0.92, probs)
             self.assertLessEqual(hits / 1000, 0.99, probs)
@@ -1177,6 +1187,7 @@ class EngineTimeouts(TempDir):
         finally:
             players[A_WHITE].close()
         self.assertEqual(result.termination, "error")
+        assert result.error is not None
         self.assertIn("gave no bestmove", result.error)
         self.assertFalse([e for e in result.events if e["kind"] == "sit" and e["seat"] == "A-white"])
 
@@ -1260,10 +1271,10 @@ class Preflight(TempDir):
         self.assertLess(report["wall_seconds"], 10)
 
 
-def _engine_files():
+def _engine_files() -> Any:
     try:
         return EngineSpec.parse("hivemind,nodes=16")
-    except Exception:
+    except (ValueError, OSError, RuntimeError):
         return None
 
 
@@ -1292,11 +1303,13 @@ def _fsf_files(name: str):
 @unittest.skipUnless(WANT_ENGINE and _fsf_files("fsf-ref"), "needs bin/fsf-ref, its net and --engine")
 class RealFsf(unittest.TestCase):
     def play(self, contender: str, baseline: str, decisions: int):
-        binary, net = _fsf_files("fsf-ref")
+        files = _fsf_files("fsf-ref")
+        assert files is not None
+        binary, net = files
         spec = f"fsf,bin={binary},net={net},nodes=2000"
         factories = {"fsf": PlayerFactory(spec, None, None, None),
                      "random": PlayerFactory("random", None, None, None)}
-        players = {A_WHITE: factories[contender].make("aw", 1),
+        players: dict[int, Any] = {A_WHITE: factories[contender].make("aw", 1),
                    B_BLACK: factories[contender].make("bb", 2),
                    A_BLACK: factories[baseline].make("ab", 3),
                    B_WHITE: factories[baseline].make("bw", 4)}

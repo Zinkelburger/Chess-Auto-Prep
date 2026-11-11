@@ -115,6 +115,7 @@ def parse_pgn(text: str) -> list[Game]:
                 current = Game()
                 body = []
                 in_tags = True
+            assert current is not None  # a tag run always starts a game
             current.tags[m.group(1)] = m.group(2)
             continue
         if current is None:

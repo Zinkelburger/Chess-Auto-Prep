@@ -212,6 +212,7 @@ class Bughouse:
 
         checked = self.boards[board_in_check]
         king = checked.king(checked_side)
+        assert king is not None  # this side is in check, so it has a king
         checkers = checked.checkers_mask()
         if chess.popcount(checkers) > 1:
             return False

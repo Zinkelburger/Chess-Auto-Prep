@@ -14,6 +14,7 @@ import argparse
 import json
 from collections import Counter, defaultdict
 from pathlib import Path
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -43,7 +44,7 @@ TC_LABELS = {
 }
 
 
-def load_json(path: Path):
+def load_json(path: Path) -> Any:
     if path.exists():
         with open(path) as f:
             return json.load(f)
@@ -56,7 +57,7 @@ def extract_blitz_ratings(title: str) -> list[int]:
     if not stats:
         return []
     ratings = []
-    for username, s in stats.items():
+    for s in stats.values():
         blitz = s.get("chess_blitz", {})
         last = blitz.get("last", {})
         rating = last.get("rating")
@@ -138,7 +139,7 @@ def plot_nm_by_time_control(output_dir: Path):
         if not rating:
             continue
 
-        label = TC_LABELS.get(tc_raw, tc_raw)
+        label = str(TC_LABELS.get(tc_raw, tc_raw))
         tc_ratings[label].append(int(rating))
 
     if not tc_ratings:

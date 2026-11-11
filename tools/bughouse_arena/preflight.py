@@ -27,8 +27,8 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
-import chess
 
 from .match import (PlayerFactory, default_ort_threads, environment, file_record,
                     load_openings, suspend_clock)
@@ -90,12 +90,12 @@ def run(spec_text: str, positions: Path, movetimes: list[int], warmup: int,
     report says it is truncated. ``checkpoint(report)`` is called after
     every phase so a killed run still leaves its data."""
     factory = PlayerFactory(spec_text, None, ort_threads, None)
-    if factory.kind != "hivemind" or factory.spec.nodes is None:
+    spec = factory.spec
+    if factory.kind != "hivemind" or spec is None or spec.nodes is None:
         raise ValueError("the preflight measures a Hivemind spec with nodes=")
     factory.search_timeout = search_timeout
     if engine_log:
         factory.log_dir = engine_log.parent
-    spec = factory.spec
     work = samples(positions)
     if not work:
         raise ValueError(f"{positions}: no positions with a legal move")
@@ -103,9 +103,9 @@ def run(spec_text: str, positions: Path, movetimes: list[int], warmup: int,
     clock = time.monotonic()
     suspended_at_start = suspend_clock()
     phases: dict[str, dict] = {}
-    state = {"seat": None, "restarts": 0, "identity": None}
+    state: dict[str, Any] = {"seat": None, "restarts": 0, "identity": None}
 
-    def seat():
+    def seat() -> Any:
         if state["seat"] is None:
             state["seat"] = factory.make(engine_log.stem if engine_log else "preflight", 0)
             if state["identity"] is None:
@@ -280,7 +280,7 @@ def main(argv: list[str] | None = None) -> int:
                      log=log, search_timeout=args.search_timeout,
                      max_seconds=args.max_minutes * 60,
                      engine_log=args.output.with_suffix(".uci.log"), checkpoint=write)
-    except Exception as error:
+    except (ValueError, OSError, RuntimeError) as error:
         print(f"preflight: {error}", file=sys.stderr, flush=True)
         return 1
     write(report)

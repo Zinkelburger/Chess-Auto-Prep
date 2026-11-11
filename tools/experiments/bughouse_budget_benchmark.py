@@ -20,10 +20,10 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / 'tools/mcp'), str(ROOT / 'tools')]
-import chess
-from bughouse.board import DualBoard
-from bughouse.engine import HivemindEngine
-from bughouse.paths import EngineFiles
+import chess  # noqa: E402
+from bughouse.board import DualBoard, IllegalMove  # noqa: E402
+from bughouse.engine import HivemindEngine  # noqa: E402
+from bughouse.paths import EngineFiles  # noqa: E402
 
 
 def sha(path):
@@ -53,7 +53,7 @@ def prepare(args):
                                             game=game['tags'].get('BughouseDBGameNo'), ply=ply,
                                             pockets=pockets, legal=b.legal_moves.count()))
                 dual.push(board, move)
-        except Exception:
+        except (IllegalMove, ValueError, AssertionError, IndexError):
             rejected += 1
             continue
         if choices:
@@ -185,7 +185,7 @@ def run(args):
                 top = result.top
                 if top is None or (top.score_cp is None and top.mate is None):
                     raise RuntimeError(f'No evaluation: {case["id"]}, {budget}')
-                raw = math.copysign(1,top.mate) if top.mate is not None else math.atan(top.score_cp / 180) / 1.56
+                raw = math.copysign(1,top.mate) if top.mate is not None else math.atan((top.score_cp or 0) / 180) / 1.56
                 q = raw if top.mate is not None else max(-1,min(1,raw-offset))
                 best = result.best.half(0 if case['board']=='A' else 1) if result.best else None
                 row = dict(id=case['id'], group=case['group'], budget=budget, repeat=args.repeat,

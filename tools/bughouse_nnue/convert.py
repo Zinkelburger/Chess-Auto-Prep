@@ -17,7 +17,7 @@ import json
 import random
 import time
 from pathlib import Path
-from typing import Iterable, Iterator
+from typing import Iterator
 
 from . import records
 from .engine import Engine

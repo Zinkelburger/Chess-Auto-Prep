@@ -51,8 +51,11 @@ class JointMove:
         parts = text[1:-1].split(",")
         if len(parts) != 2:
             return None  # "(none)" — the engine had nothing to say.
-        half = lambda t: None if t.strip() in (PASS, "none", "(none)", "") else t.strip()
-        return cls(half(parts[0]), half(parts[1]))
+
+        def side(t: str) -> str | None:
+            return None if t.strip() in (PASS, "none", "(none)", "") else t.strip()
+
+        return cls(side(parts[0]), side(parts[1]))
 
     def half(self, which: int) -> str | None:
         return self.a if which == 0 else self.b
@@ -182,6 +185,7 @@ class HivemindEngine:
     # ── Process plumbing ──────────────────────────────────────────────────
 
     def _pump(self) -> None:
+        assert self._proc.stdout is not None  # opened with PIPE
         try:
             for line in self._proc.stdout:
                 self._lines.put(line.rstrip("\n"))
@@ -190,6 +194,7 @@ class HivemindEngine:
         self._lines.put(None)  # type: ignore[arg-type]
 
     def _pump_stderr(self) -> None:
+        assert self._proc.stderr is not None  # opened with PIPE
         try:
             for line in self._proc.stderr:
                 self._stderr.append(line.rstrip("\n"))
@@ -200,6 +205,7 @@ class HivemindEngine:
     def send(self, command: str) -> None:
         if self._proc.poll() is not None:
             raise EngineError(f"Engine exited ({self._proc.returncode}). {self.why()}")
+        assert self._proc.stdin is not None  # opened with PIPE
         self._proc.stdin.write(command + "\n")
         self._proc.stdin.flush()
 
@@ -325,7 +331,7 @@ class HivemindEngine:
     def _parse_info(text: str) -> Line | None:
         line = Line()
         for key, value in _INFO.findall(text):
-            setattr(line, {"time": "time_ms"}.get(key, key), int(value))
+            setattr(line, "time_ms" if key == "time" else key, int(value))
         score = _SCORE.search(text)
         if score:
             if score.group(1) == "cp":
@@ -346,7 +352,7 @@ class HivemindEngine:
                 self.send("stop")
                 self.send("quit")
                 self._proc.wait(timeout=5)
-            except Exception:
+            except (EngineError, OSError, ValueError, subprocess.TimeoutExpired):
                 self._proc.kill()
                 self._proc.wait(timeout=5)
         self._reader.join(timeout=2)
@@ -354,7 +360,7 @@ class HivemindEngine:
             try:
                 if pipe is not None:
                     pipe.close()
-            except Exception:
+            except (OSError, ValueError):
                 pass
 
     def __enter__(self) -> "HivemindEngine":

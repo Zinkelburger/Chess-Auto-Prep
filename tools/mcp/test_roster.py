@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# A None here fails the test on its own, so pyright's None checks add nothing.
+# pyright: reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportOptionalIterable=false, reportOptionalOperand=false
 """Tests for tournament-roster prep: `chess_prep.roster` and
 `chess_prep.opponents`.
 
@@ -417,6 +419,7 @@ class IdentityColumns(unittest.TestCase):
 
     def test_lichess_alone_works_the_same_way(self):
         (entry,) = parse("Name,lichess\nAlice,ali_li\n").entries
+        assert entry.identity is not None
         self.assertEqual(entry.identity["lichess_username"], "ali_li")
         self.assertNotIn("chesscom_username", entry.identity)
         self.assertTrue(entry.is_actionable)
