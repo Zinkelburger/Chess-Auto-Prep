@@ -290,6 +290,21 @@ void main() {
     });
   });
 
+  test('a board from the start holds no game until it has moves, then the '
+      'moves', () {
+    expect(analysisBoard(side: Side.white).lines, isEmpty);
+    final played = analysisBoard(side: Side.white, sans: const ['e4', 'e5']);
+    expect([for (final n in played.tree.mainLine) n.san], ['e4', 'e5']);
+  });
+
+  test('a paste of several games takes the first', () {
+    final pasted = pastedBoard(
+      '[Event "One"]\n\n1. e4 *\n\n[Event "Two"]\n\n1. d4 *',
+      side: Side.white,
+    );
+    expect((pasted as PastedBoard).chapter.tree.children.single.san, 'e4');
+  });
+
   test('a board from a position with no moves takes its first move', () {
     final board = analysisBoard(side: Side.white, root: const Fen(_sicilian));
     expect(board.tree.rootFen, const Fen(_sicilian));
