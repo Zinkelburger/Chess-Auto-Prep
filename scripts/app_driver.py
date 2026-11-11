@@ -294,7 +294,7 @@ class Daemon:
         if cmd == "stop":
             try:
                 self.send("app.stop", {"appId": self.app_id}, timeout=15)
-            except Exception:  # noqa: BLE001
+            except (TimeoutError, RuntimeError, OSError, ValueError, AssertionError):
                 pass
             if self.proc and self.proc.poll() is None:
                 try:

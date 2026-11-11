@@ -109,7 +109,7 @@ def play(engines: tuple[Engine, Engine], settings: Settings, rng: random.Random,
     `outcome["team_one"]` is +1 if team one won, -1 if it lost, 0 for a
     draw, and None when the game hit `max_plies` and was abandoned.
     """
-    from bughouse.board import DualBoard  # noqa: PLC0415 -- worker-local import
+    from bughouse.board import DualBoard, IllegalMove  # noqa: PLC0415 -- worker-local import
 
     for engine in set(engines):
         engine.new_game()
@@ -120,7 +120,7 @@ def play(engines: tuple[Engine, Engine], settings: Settings, rng: random.Random,
     for letter, san in opening or []:
         try:
             dual.push(letter, san)
-        except Exception:  # noqa: BLE001 -- a bad opening just ends early
+        except (IllegalMove, ValueError, AssertionError, IndexError):  # a bad opening just ends early
             break
         plies[letter] += 1
     for step in range(2 * settings.max_plies):
