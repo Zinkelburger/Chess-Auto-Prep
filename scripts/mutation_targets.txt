@@ -61,6 +61,9 @@
 #     found by its key either way.
 #   lib/chess/pgn/repertoire_import.dart:274, :462 `.first` -> `.last`: a
 #     line's positions each have one move.
+#   lib/chess/pgn/rewrite_gate.dart:118-119 (headers) and :182-183 (NAGs):
+#     no header or NAG the writer writes comes back different without the
+#     reader first reporting an issue, which the gate refuses on already.
 # Listed with one equivalent mutant a --max 30 sample can draw:
 #   lib/chess/game_filter.dart:168 `> 32` -> `>= 32`: when the pattern cache
 #     is emptied, which no result shows.
