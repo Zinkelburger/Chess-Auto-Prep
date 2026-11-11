@@ -1,31 +1,31 @@
-import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_auto_prep/app/exit_guard.dart';
-import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
-import 'package:chess_auto_prep/chess/training/training_line.dart';
+import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/training/records.dart';
 import 'package:chess_auto_prep/chess/training/schedule.dart';
+import 'package:chess_auto_prep/chess/training/training_line.dart';
 import 'package:chess_auto_prep/features/trainer/progress.dart';
-import 'package:chess_auto_prep/storage/training_store.dart';
-import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:chess_auto_prep/storage/book_file.dart';
-import 'package:chess_auto_prep/storage/book_snapshot.dart';
-import 'package:chess_auto_prep/storage/recovery_gate.dart';
 import 'package:chess_auto_prep/storage/book_list.dart';
+import 'package:chess_auto_prep/storage/book_snapshot.dart';
+import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
+import 'package:chess_auto_prep/storage/recovery_gate.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
+import 'package:chess_auto_prep/storage/training_progress.dart';
+import 'package:chess_auto_prep/storage/training_store.dart';
 import 'package:chess_auto_prep/workspace/book/books.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../support/fixtures.dart';
+import '../support/scripted_progress.dart';
 import '../support/session_fixture.dart';
 import '../support/window_fixture.dart';
-import '../support/scripted_progress.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

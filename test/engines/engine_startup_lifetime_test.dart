@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/engines/engine.dart';
+import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/engines/hivemind_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;

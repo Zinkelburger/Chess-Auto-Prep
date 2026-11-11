@@ -1,5 +1,5 @@
-import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
+import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/action_layout.dart';
 import 'package:chess_auto_prep/workspace/action_panes.dart';
 import 'package:chess_auto_prep/workspace/workspace_tabs.dart';

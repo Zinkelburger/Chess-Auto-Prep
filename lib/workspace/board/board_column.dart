@@ -7,15 +7,15 @@ import '../../chess/fen.dart';
 import '../../storage/settings_store.dart';
 import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
-import 'board_claim.dart';
-import 'board_view.dart';
-import '../document/document_session.dart';
 import '../analysis/engine_analysis.dart';
 import '../analysis/engine_pane.dart';
-import 'game_counter.dart';
+import '../document/document_session.dart';
 import '../document/game_ordering.dart';
-import 'move_field.dart';
 import '../reading/move_note.dart';
+import 'board_claim.dart';
+import 'board_view.dart';
+import 'game_counter.dart';
+import 'move_field.dart';
 import 'move_shapes.dart';
 
 /// The largest square board that fits above the engine's lines and the

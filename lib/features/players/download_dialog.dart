@@ -5,9 +5,9 @@ import '../../chess/players/player.dart';
 import '../../ui/field_row.dart';
 import '../../ui/form_dialog.dart';
 import '../../ui/number_field.dart';
+import '../../ui/segments.dart';
 import '../../ui/theme.dart';
 import '../../ui/toggle_chip.dart';
-import '../../ui/segments.dart';
 
 Future<PlayerDownloadRange?> downloadRange(
   BuildContext context,

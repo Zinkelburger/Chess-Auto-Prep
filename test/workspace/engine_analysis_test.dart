@@ -6,9 +6,9 @@ import 'package:chess_auto_prep/engines/engine.dart';
 import 'package:chess_auto_prep/engines/engine_line.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document/document_session.dart';
-import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -48,7 +48,7 @@ void main() {
       running(async);
       expect(analysis.state, isA<EngineRunning>());
       expect(engine.current.fen, session.cursor.fen);
-      engine.current.emit(line(multiPv: 1, score: const Centipawns(30)));
+      engine.current.emit(line(score: const Centipawns(30)));
       engine.current.emit(line(multiPv: 2, score: const Centipawns(10)));
       async.flushMicrotasks();
       expect(analysis.snapshot, isNull, reason: 'not before the tick');
@@ -59,7 +59,7 @@ void main() {
       expect(lines.map((l) => l.multiPv), [1, 2]);
       // Black to move: the engine's +0.30 is -0.30 for White.
       expect(lines.first.score, const Centipawns(-30));
-      engine.current.emit(line(multiPv: 1, depth: 12));
+      engine.current.emit(line(depth: 12));
       async.flushMicrotasks();
       expect(analysis.snapshot!.best!.depth, 10, reason: 'still the old tick');
       async.elapse(tick);

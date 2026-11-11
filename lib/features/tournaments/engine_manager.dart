@@ -4,16 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../chess/tournament/config.dart';
-import '../../ui/confirm_dialog.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/attempting.dart';
+import '../../ui/confirm_dialog.dart';
+import '../../ui/field_row.dart';
 import '../../ui/form_dialog.dart';
 import '../../ui/number_field.dart';
 import '../../ui/theme.dart';
+import '../../ui/tool_button.dart';
 import 'engine_check.dart';
 import 'tournament_run.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/tool_button.dart';
-import '../../ui/field_row.dart';
 
 Future<void> manageTournamentEngines(
   BuildContext context,

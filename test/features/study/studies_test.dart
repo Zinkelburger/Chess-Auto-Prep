@@ -1,36 +1,37 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/study.dart';
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart' show lineTree;
-import 'package:chess_auto_prep/workspace/document/document_saver.dart';
-import 'package:chess_auto_prep/workspace/document/session_results.dart';
-import 'package:chess_auto_prep/workspace/document/study_choice.dart';
-import 'package:dartchess/dartchess.dart' show Side;
-import 'package:chess_auto_prep/storage/pgn_export.dart';
-import 'package:chess_auto_prep/storage/pgn_file_import.dart';
-import 'package:chess_auto_prep/storage/pending_writes.dart';
-import 'package:chess_auto_prep/storage/player_files.dart';
 import 'package:chess_auto_prep/chess/players/player.dart';
-import '../../support/viewer_fixture.dart';
-import '../../support/scripted_store.dart';
 import 'package:chess_auto_prep/features/study/studies.dart';
 import 'package:chess_auto_prep/features/study/studies_state.dart';
 import 'package:chess_auto_prep/features/study/study_import_source.dart';
 import 'package:chess_auto_prep/net/lichess_studies.dart';
-import 'package:chess_auto_prep/storage/document_ref.dart';
-import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/storage/study_files.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/file_relocation.dart';
+import 'package:chess_auto_prep/storage/pending_writes.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/storage/pgn_export.dart';
+import 'package:chess_auto_prep/storage/pgn_file_import.dart';
 import 'package:chess_auto_prep/storage/pgn_file_store.dart';
+import 'package:chess_auto_prep/storage/player_files.dart';
+import 'package:chess_auto_prep/storage/study_files.dart';
+import 'package:chess_auto_prep/workspace/document/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document/document_session.dart';
+import 'package:chess_auto_prep/workspace/document/session_results.dart';
+import 'package:chess_auto_prep/workspace/document/study_choice.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 import '../../storage/store_fixture.dart';
+import '../../support/scripted_store.dart';
 import '../../support/study_fixture.dart';
-import 'package:path/path.dart' as p;
+import '../../support/viewer_fixture.dart';
 
 void main() {
   test(

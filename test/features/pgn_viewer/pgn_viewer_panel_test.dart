@@ -2,13 +2,13 @@ import 'package:chess_auto_prep/chess/game_filter.dart';
 import 'package:chess_auto_prep/chess/pgn/collection_player.dart';
 import 'package:chess_auto_prep/chess/pgn/game_order.dart';
 import 'package:chess_auto_prep/chess/pgn/reading_place.dart';
-import 'package:chess_auto_prep/storage/viewer_places.dart';
-import 'package:dartchess/dartchess.dart' show Side;
 import 'package:chess_auto_prep/features/pgn_viewer/pgn_viewer_panel.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/recent_pgn_files.dart';
+import 'package:chess_auto_prep/storage/viewer_places.dart';
 import 'package:chess_auto_prep/ui/search_field.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

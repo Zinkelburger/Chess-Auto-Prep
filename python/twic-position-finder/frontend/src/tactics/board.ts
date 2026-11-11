@@ -10,10 +10,10 @@
  * else puts the pawn back.
  */
 import { Chess, type Square } from 'chess.js';
-import { Chessground } from 'chessground';
-import type { Api } from 'chessground/api';
-import type { Key } from 'chessground/types';
-import type { DrawShape } from 'chessground/draw';
+import { Chessground } from '@lichess-org/chessground';
+import type { Api } from '@lichess-org/chessground/api';
+import type { Key } from '@lichess-org/chessground/types';
+import type { DrawShape } from '@lichess-org/chessground/draw';
 
 export type PromotionPiece = 'q' | 'r' | 'b' | 'n';
 

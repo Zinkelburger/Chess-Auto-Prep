@@ -6,9 +6,9 @@ import 'package:flutter/foundation.dart';
 import '../../chess/book/book_check.dart';
 import '../../chess/book/played_game.dart';
 import '../../chess/pgn/chapter.dart';
-import 'books.dart';
 import '../document/document_session.dart';
 import '../latest.dart';
+import 'books.dart';
 import 'repertoire_shelf.dart';
 
 /// What the book in use says about the game on the board, for the side the

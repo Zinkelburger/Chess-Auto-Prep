@@ -6,17 +6,17 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-import '../../diagnostics/log.dart';
 import '../../chess/pgn/game_text.dart';
+import '../../chess/players/download_range.dart';
+import '../../chess/players/player.dart';
 import '../../chess/tactics/game_ids.dart';
+import '../../diagnostics/log.dart';
 import '../../net/recent_games.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/my_games_files.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/pgn_document_store.dart';
 import '../../ui/relative_time.dart';
-import '../../chess/players/player.dart';
-import '../../chess/players/download_range.dart';
 import '../../workspace/latest.dart';
 import 'player_games.dart';
 

@@ -8,12 +8,12 @@ import '../../chess/bughouse/table.dart';
 import '../../chess/bughouse/table_line.dart';
 import '../../ui/action_context_menu.dart';
 import '../../ui/app_action.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
-import 'bughouse_lab.dart';
-import '../../ui/app_icons.dart';
 import '../../ui/tool_button.dart';
+import 'bughouse_lab.dart';
 
 /// A board's moves read like the workspace's move list: its main line as
 /// running text, each variation an indented block right after the move it

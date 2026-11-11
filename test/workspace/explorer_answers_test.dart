@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_explorer.dart';
 
-const empty = ExplorerAnswer(moves: [], games: []);
+const empty = ExplorerAnswer(moves: []);
 
 /// A position [ply] plies deep; only the counters matter here.
 Fen deep(int ply) {

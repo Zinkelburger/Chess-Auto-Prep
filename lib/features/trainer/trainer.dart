@@ -1,33 +1,33 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:dartchess/dartchess.dart' show Side;
-import '../../chess/pgn/study_training.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/study.dart';
+import '../../chess/pgn/study_training.dart';
 import '../../chess/training/line_order.dart';
 import '../../chess/training/schedule.dart';
 import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
 import '../../chess/training/training_options.dart';
-import '../../storage/settings_store.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/document_repository.dart';
-import '../../storage/training_store.dart';
-import '../../storage/training_progress.dart';
 import '../../storage/pending_writes.dart';
+import '../../storage/settings_store.dart';
+import '../../storage/training_progress.dart';
+import '../../storage/training_store.dart';
+import '../../workspace/analysis/engine_analysis.dart';
 import '../../workspace/board/board_claim.dart';
 import '../../workspace/book/books.dart';
 import '../../workspace/book/repertoire_catalog.dart';
 import '../../workspace/document/document_session.dart';
-import '../../workspace/analysis/engine_analysis.dart';
 import '../../workspace/latest.dart';
 import 'lesson.dart';
 import 'progress.dart';
-import 'training_scope.dart';
 import 'trainer_state.dart';
+import 'training_scope.dart';
 import 'training_selection.dart';
 
 /// How many new lines one Learn sitting takes: enough to learn in one go,

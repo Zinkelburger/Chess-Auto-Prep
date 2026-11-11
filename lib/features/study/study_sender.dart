@@ -7,8 +7,8 @@ import '../../chess/pgn/study.dart';
 import '../../chess/pgn/study_cleanup.dart';
 import '../../chess/pgn/study_lichess.dart';
 import '../../net/lichess_studies.dart';
-import '../../storage/chapter_files.dart' show ChapterRef;
 import '../../net/lichess_study_writes.dart';
+import '../../storage/chapter_files.dart' show ChapterRef;
 import '../../workspace/document/document_session.dart';
 import 'study_commands.dart' show studyNameOf;
 

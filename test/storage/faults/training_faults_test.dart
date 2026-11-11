@@ -15,8 +15,8 @@ library;
 
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/training/records.dart';
-import 'package:chess_auto_prep/storage/training_store.dart';
 import 'package:chess_auto_prep/storage/training_progress.dart';
+import 'package:chess_auto_prep/storage/training_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/faulty_disk/contracts.dart';

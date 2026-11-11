@@ -4,8 +4,8 @@ import '../chess/fen.dart';
 import '../diagnostics/log.dart';
 import 'engine.dart';
 import 'engine_line.dart';
-import 'uci_process.dart';
 import 'playing_engine.dart';
+import 'uci_process.dart';
 
 /// The UCI conversation with one engine process.
 ///

@@ -19,7 +19,6 @@
  */
 import type { DrawShape } from '@lichess-org/chessground/draw';
 import type { Key } from '@lichess-org/chessground/types';
-import { makePockets, parseFen } from 'chessops/fen';
 import { Material } from 'chessops/setup';
 import type { Color, Role, SquareName } from 'chessops/types';
 import { CrazyBoard, ROLE_LETTER, type Brush } from './board';
@@ -40,35 +39,15 @@ import {
   HAND_ROLES, START_FEN, Tree, boardDests, capturedBy, castlingPossible, dropSquares, enPassantOptions, fenOf, handEdit, lichessFen, outcomeOf, playLine,
   positionOf, readFen, readMove, sanLine, threatFen, type CastlingRight, type SavedTree, type TreeNode,
 } from './tree';
-import { makeSquare, makeUci } from 'chessops/util';
+import { makeUci } from 'chessops/util';
+import { draftOf, fenOfDraft, readDraftFen, type Draft } from './editor-draft';
+import { BOARDS_KEY, TREE_KEY, keepBoards, linkBoards, loadSaved, openBoard, type BoardState, type SavedBoards } from './saved-boards';
 
 const HELP_NOTES = [
   'In the board editor, F flips the board, right-click with a piece in hand takes the other colour, and Shift-click marks a piece promoted (a dot in its top-left corner): taken, it goes back as a pawn.',
 ];
 
-/** Both boards' trees, kept in this browser so a reload comes back to them (Lichess keeps its tree too). */
-const BOARDS_KEY = 'bughouse-analysis-boards-v1';
-/** The single tree kept before there were two boards: read as board 1 when nothing newer is kept. */
-const TREE_KEY = 'bughouse-analysis-tree-v1';
-
-interface SavedBoards { boards: [SavedTree, SavedTree]; active: 0 | 1 }
-
-/** One board's moves and the move it is at. */
-interface BoardState { tree: Tree; current: TreeNode }
-
 const BOARD_NAMES = ['board 1', 'board 2'] as const;
-
-interface Draft {
-  turn: Color;
-  castling: { K: boolean; Q: boolean; k: boolean; q: boolean };
-  /** The en passant square asked for; it counts only while the board allows it. */
-  ep: string | null;
-  /** After Clear board, castling follows the board (a king and rook put home tick it) until a box is touched. */
-  guessCastling: boolean;
-  hands: Material;
-  fullmoves: number;
-  brush: Brush;
-}
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -80,21 +59,6 @@ function squaresOf(uci: string): Key[] {
 function arrowUci(node: TreeNode): string {
   if (!node.san.startsWith('O-O')) return node.uci;
   return node.uci.slice(0, 2) + (node.san.startsWith('O-O-O') ? 'c' : 'g') + node.uci[1];
-}
-
-function loadSaved<T>(key: string): T | null {
-  try { return JSON.parse(localStorage.getItem(key) ?? 'null') as T | null; } catch { return null; }
-}
-
-/** A board's tree from the link, or the kept tree when it is at that position (or no position was linked). */
-function openBoard(saved: SavedTree | null | undefined, fen: string | null, flash: (text: string) => void): BoardState {
-  const read = fen ? readFen(fen) : null;
-  const target = read?.ok ? fenOf(read.pos) : START_FEN;
-  const restored = saved ? Tree.restore(saved) : null;
-  if (read && !read.ok) flash(`Could not open the linked position: ${read.error}`);
-  if (restored && (!fen || (read?.ok && restored.current.fen === target))) return { tree: restored.tree, current: restored.current };
-  const tree = new Tree(target);
-  return { tree, current: tree.root };
 }
 
 const opposite = (c: Color): Color => (c === 'white' ? 'black' : 'white');
@@ -183,6 +147,8 @@ export class BughouseApp {
       },
     }, { promotedPieces: true });
 
+    // The host's getters read the app's current fields; a getter cannot be an arrow.
+    // oxlint-disable-next-line typescript/no-this-alias
     const app = this;
     this.moves = new MoveList($('ch-moves'), $('ch-fork'), {
       get tree() { return app.tree; },
@@ -665,6 +631,8 @@ export class BughouseApp {
     this.closeActionMenu();
     if (on) {
       this.threat = false;
+      // The host's getters read the app's current fields; a getter cannot be an arrow.
+      // oxlint-disable-next-line typescript/no-this-alias
       const app = this;
       this.practice = new Practice({
         get tree() { return app.tree; },
@@ -829,17 +797,7 @@ export class BughouseApp {
     if (this.practice) this.togglePractice(false);
     this.stopAutoplay();
     this.closeActionMenu();
-    const pos = positionOf(this.current.fen);
-    const castling = this.current.fen.split(' ')[2] ?? '-';
-    this.draft = {
-      turn: pos.turn,
-      castling: { K: castling.includes('K'), Q: castling.includes('Q'), k: castling.includes('k'), q: castling.includes('q') },
-      ep: pos.epSquare === undefined ? null : makeSquare(pos.epSquare),
-      guessCastling: false,
-      hands: pos.pockets ? pos.pockets.clone() : Material.empty(),
-      fullmoves: pos.fullmoves,
-      brush: 'pointer',
-    };
+    this.draft = draftOf(this.current.fen);
     this.mode = 'editor';
     this.dropping = null;
     this.threat = false;
@@ -869,20 +827,20 @@ export class BughouseApp {
     this.updateUrl();
   }
 
+  /** What stands on a square of the board being edited. */
+  private readonly pieceAt = (square: SquareName) => this.board.cg.state.pieces.get(square);
+
   private draftFen(): string {
-    const d = this.draft!;
-    const castling = (['K', 'Q', 'k', 'q'] as const).filter((right) => d.castling[right] && this.draftCanCastle(right)).join('') || '-';
-    const ep = d.ep && this.draftEpOptions().includes(d.ep as SquareName) ? d.ep : '-';
-    return `${this.board.boardFen()}[${makePockets(d.hands)}] ${d.turn === 'white' ? 'w' : 'b'} ${castling} ${ep} 0 ${d.fullmoves}`;
+    return fenOfDraft(this.draft!, this.board.boardFen(), this.pieceAt);
   }
 
   /** A ticked right counts only while its king and rook stand on their starting squares. */
   private draftCanCastle(right: CastlingRight): boolean {
-    return castlingPossible(right, (square) => this.board.cg.state.pieces.get(square));
+    return castlingPossible(right, this.pieceAt);
   }
 
   private draftEpOptions(): SquareName[] {
-    return enPassantOptions(this.draft!.turn, (square) => this.board.cg.state.pieces.get(square));
+    return enPassantOptions(this.draft!.turn, this.pieceAt);
   }
 
   private draftPieceCount(): number {
@@ -904,27 +862,9 @@ export class BughouseApp {
   }
 
   private setDraftFen(fen: string): string | null {
-    const setupFen = fen.trim();
-    // The editor takes positions the analysis board would refuse too; only the FEN itself must parse.
-    if (parseFen(setupFen).isErr) return 'That is not a FEN.';
-    const parts = setupFen.split(/\s+/);
-    const d = this.draft!;
-    // The hand is in brackets or, as Lichess writes it, a ninth rank.
-    const ranks = parts[0].replace(/\[.*$/, '').split('/');
-    const board = ranks.slice(0, 8).join('/');
-    const hand = /\[([^\]]*)\]/.exec(parts[0])?.[1] ?? ranks[8] ?? '';
-    d.hands = Material.empty();
-    for (const ch of hand) {
-      const role = (({ p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen' }) as Record<string, Role>)[ch.toLowerCase()];
-      if (role) d.hands[ch === ch.toUpperCase() ? 'white' : 'black'][role]++;
-    }
-    d.turn = parts[1] === 'b' ? 'black' : 'white';
-    const castling = parts[2] ?? '-';
-    d.castling = { K: castling.includes('K'), Q: castling.includes('Q'), k: castling.includes('k'), q: castling.includes('q') };
-    d.ep = /^[a-h][36]$/.test(parts[3] ?? '') ? parts[3] : null;
-    d.guessCastling = false;
-    d.fullmoves = Math.max(1, Number(parts[5]) || 1);
-    this.board.cg.set({ fen: board });
+    const read = readDraftFen(this.draft!, fen);
+    if ('error' in read) return read.error;
+    this.board.cg.set({ fen: read.board });
     this.draftChanged();
     return null;
   }
@@ -1024,19 +964,12 @@ export class BughouseApp {
   }
 
   private updateUrl() {
-    const url = new URL(location.href);
-    const [one, two] = this.boards.map((b) => b.current.fen);
-    if (one === START_FEN && !this.twoBoards) url.searchParams.delete('fen'); else url.searchParams.set('fen', lichessFen(one));
-    if (this.twoBoards) url.searchParams.set('fen2', lichessFen(two)); else url.searchParams.delete('fen2');
-    history.replaceState(null, '', url);
+    linkBoards(this.boards, this.twoBoards);
   }
 
   private scheduleSave() {
     clearTimeout(this.saveTimer);
-    this.saveTimer = window.setTimeout(() => {
-      const kept: SavedBoards = { boards: [this.boards[0].tree.save(this.boards[0].current.id), this.boards[1].tree.save(this.boards[1].current.id)], active: this.active };
-      try { localStorage.setItem(BOARDS_KEY, JSON.stringify(kept)); } catch { /* Kept for this visit only. */ }
-    }, 300);
+    this.saveTimer = window.setTimeout(() => keepBoards(this.boards, this.active), 300);
   }
 
   private flash(text: string) {

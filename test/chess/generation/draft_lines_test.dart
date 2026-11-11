@@ -76,7 +76,7 @@ String ruyLopezDraft({
     rootMoves: const [],
     prefix: const [],
     plan: plan,
-    created: DateTime(2026, 9, 22, 12, 0, 0),
+    created: DateTime(2026, 9, 22, 12),
     openings: openings,
   );
 }

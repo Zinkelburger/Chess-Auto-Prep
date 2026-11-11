@@ -1,16 +1,16 @@
 import 'dart:io';
 
 import 'package:chess_auto_prep/chess/pgn/games_written.dart';
-import 'package:chess_auto_prep/storage/compound_write.dart';
 import 'package:chess_auto_prep/storage/compound_commit.dart';
+import 'package:chess_auto_prep/storage/compound_write.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
-import 'package:chess_auto_prep/storage/training_rows.dart';
-import 'package:path/path.dart' as p;
 import 'package:chess_auto_prep/storage/document_repository.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/pgn_file_store.dart';
+import 'package:chess_auto_prep/storage/training_rows.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 import 'store_fixture.dart';
 
@@ -434,6 +434,91 @@ void main() {
     );
     expect(await File(source.ref.path).readAsString(), before);
     expect(disk.keptTexts(source.ref), isEmpty);
+  });
+
+  test('a pair refuses an edit outside the documents folder or one that '
+      'undoes another pair, before touching either file', () async {
+    final outside = File(p.join(disk.root.path, 'outside', 'Main.pgn'));
+    await outside.parent.create(recursive: true);
+    await outside.writeAsString(before);
+    final stray = DocumentEdit(
+      ref: DocumentRef(outside.path),
+      text: after,
+      expected: await disk.revisionOf(DocumentRef(outside.path)),
+      scope: target.scope,
+    );
+    final saved =
+        await disk.store.savePair(source, target, operationId: 'undone')
+            as Saved;
+    final undoing = DocumentEdit(
+      ref: source.ref,
+      text: saved.receipt.before,
+      expected: saved.receipt.committed,
+      scope: RestoredVersion(inverse: saved.receipt.compound),
+    );
+    for (final (name, edits) in [
+      ('outside', (source, stray)),
+      ('undo', (undoing, target)),
+    ]) {
+      final result = await disk.store.savePair(
+        edits.$1,
+        edits.$2,
+        operationId: 'refused-$name',
+      );
+      expect(result, isA<SaveRefused>(), reason: name);
+      expect(
+        (result as SaveRefused).detail,
+        'The pair must name two managed PGN edits.',
+      );
+    }
+    expect(await outside.readAsString(), before);
+    for (final edit in [source, target]) {
+      expect(await File(edit.ref.path).readAsString(), after);
+    }
+  });
+
+  test('a pair naming a file by a path with .. in it is refused', () async {
+    final roundabout = DocumentEdit(
+      ref: DocumentRef(
+        p.join(p.dirname(source.ref.path), '..', 'Source', 'Main.pgn'),
+      ),
+      text: source.text,
+      expected: source.expected,
+      scope: source.scope,
+    );
+    expect(
+      await disk.store.savePair(roundabout, target, operationId: 'dots'),
+      isA<IoFailure>(),
+    );
+    for (final edit in [source, target]) {
+      expect(await File(edit.ref.path).readAsString(), before);
+    }
+  });
+
+  test('through a configured root alias, line history spelled by the real '
+      'folder follows the move', () async {
+    final alias = Directory('${disk.root.path}/alias');
+    await Link(alias.path).create(disk.documents.path);
+    final store = PgnFileStore(documents: alias, support: disk.support);
+    DocumentEdit aliased(DocumentEdit edit) => DocumentEdit(
+      ref: DocumentRef(
+        edit.ref.path.replaceFirst(disk.documents.path, alias.path),
+      ),
+      text: edit.text,
+      expected: edit.expected,
+      scope: edit.scope,
+      movedLines: edit.movedLines,
+    );
+    await progress().writeAsString(rows(source.ref.path, 'old'));
+    expect(
+      await store.savePair(
+        aliased(moving()),
+        aliased(target),
+        operationId: 'alias-history',
+      ),
+      isA<Saved>(),
+    );
+    expect(await progress().readAsString(), rows(target.ref.path, 'new'));
   });
 
   test(

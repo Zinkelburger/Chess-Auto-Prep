@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 import '../../chess/book/book_check.dart';
 import '../../chess/book/played_game.dart';
 import '../../chess/pgn/move_label.dart' show continuation;
+import '../../ui/app_icons.dart';
+import '../../ui/list_message.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
-import '../../ui/list_message.dart';
-import '../../ui/app_icons.dart';
 
 /// What the user's book says about one game, in words and as a panel: the
 /// same wherever a game is checked — My games' list and Book tab, the

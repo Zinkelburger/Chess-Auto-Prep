@@ -20,7 +20,7 @@ void main() {
     () async {
       final score = await practicalScore(
         start: Fen.initial,
-        candidate: line(score: const Centipawns(0), pv: ['e2e4']),
+        candidate: line(pv: ['e2e4']),
         model: Policy(const MaiaPolicy({'e7e5': .5, 'd7d5': .5})),
         rating: 1800,
         evaluate: (fen) async =>

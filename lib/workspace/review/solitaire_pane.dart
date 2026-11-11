@@ -2,13 +2,13 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../ui/app_icons.dart';
+import '../../ui/app_keys.dart';
+import '../../ui/move_notation.dart';
+import '../../ui/segments.dart';
 import '../../ui/status_bar.dart';
 import '../../ui/theme.dart';
 import 'solitaire.dart';
-import '../../ui/app_keys.dart';
-import '../../ui/move_notation.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/segments.dart';
 
 /// The Solitaire tab: the setup before a start, the guess being made while
 /// one runs, and what was missed once the game is through.

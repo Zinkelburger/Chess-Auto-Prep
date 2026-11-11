@@ -7,13 +7,13 @@ import 'package:chess_auto_prep/features/library/outline_panel.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/recent_pgn_files.dart';
-import 'package:chess_auto_prep/workspace/board/board_view.dart';
-import 'package:chess_auto_prep/workspace/search/search_pane.dart';
-import 'package:chess_auto_prep/workspace/document/document_saver.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
+import 'package:chess_auto_prep/workspace/board/board_view.dart';
+import 'package:chess_auto_prep/workspace/document/document_saver.dart';
+import 'package:chess_auto_prep/workspace/search/search_pane.dart';
 import 'package:dartchess/dartchess.dart' show Side;
-import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 

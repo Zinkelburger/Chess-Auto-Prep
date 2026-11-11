@@ -3,11 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../storage/book_list.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/choice_dialog.dart';
 import '../../ui/theme.dart';
-import 'books.dart';
-import '../../ui/app_icons.dart';
 import '../../ui/tool_button.dart';
+import 'books.dart';
 
 /// The one control wherever the book is read: the active book's name
 /// (`All repertoires` while none is chosen), which switches to another book,

@@ -1,14 +1,15 @@
 import 'dart:convert';
+
 import 'package:crypto/crypto.dart';
 
-import '../game_filter.dart';
 import '../fen.dart';
-import 'tree_edit.dart' show nullMoveSan, positionOf;
+import '../game_filter.dart';
 import 'chapter_line.dart';
 import 'collection_player.dart';
 import 'game_order.dart';
 import 'game_text.dart';
 import 'game_tree.dart';
+import 'tree_edit.dart' show nullMoveSan, positionOf;
 
 /// Where a file is being read. `gameIndex`, `gameKey`, `ply` and `sort` are
 /// the keys reading places already saved carry; the `v2…` keys add a

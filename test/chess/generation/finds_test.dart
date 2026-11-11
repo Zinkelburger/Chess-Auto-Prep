@@ -136,7 +136,7 @@ void main() {
       ('Nd5', leaf('engine best', 50)),
       (
         'h4',
-        theirs('after h4', cp: 0, [
+        theirs('after h4', [
           ('g6', 0.5, leaf('g6', 300)),
           ('Nf6', 0.5, leaf('nf6', 300)),
         ]),

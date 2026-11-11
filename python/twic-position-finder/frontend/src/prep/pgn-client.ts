@@ -4,7 +4,10 @@ export function parsePgnAsync(text: string): Promise<Game[]> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./pgn.worker.ts', import.meta.url), { type: 'module' });
     const timeout = setTimeout(() => { worker.terminate(); reject(new Error('This PGN took too long to read. Try a smaller file.')); }, 30000);
-    worker.onmessage = event => { clearTimeout(timeout); worker.terminate(); event.data.error ? reject(new Error(event.data.error)) : resolve(event.data.games); };
+    worker.onmessage = event => {
+      clearTimeout(timeout); worker.terminate();
+      if (event.data.error) reject(new Error(event.data.error)); else resolve(event.data.games);
+    };
     worker.onerror = () => { clearTimeout(timeout); worker.terminate(); reject(new Error('Could not read this PGN. Reload and retry.')); };
     worker.postMessage({ text });
   });

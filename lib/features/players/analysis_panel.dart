@@ -5,11 +5,18 @@ import 'package:flutter/material.dart';
 
 import '../../chess/players/download_range.dart';
 import '../../chess/players/player.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/choice_dialog.dart';
+import '../../ui/list_message.dart';
+import '../../ui/listening_state.dart';
+import '../../ui/pane_header.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/progress_line.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
-import '../../ui/listening_state.dart';
+import '../../ui/segments.dart';
 import '../../ui/theme.dart';
+import '../../ui/tool_button.dart';
 import 'analysis_filters.dart';
 import 'analysis_rows.dart';
 import 'download_dialog.dart';
@@ -20,13 +27,6 @@ import 'player_games.dart';
 import 'player_hunt.dart';
 import 'player_picker.dart';
 import 'players.dart';
-import '../../ui/list_message.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/problem_line.dart';
-import '../../ui/progress_line.dart';
-import '../../ui/segments.dart';
-import '../../ui/tool_button.dart';
-import '../../ui/pane_header.dart';
 
 /// The Player analysis column: who is being prepared for and where their
 /// games stand, the colour they are looked at from, then the search and the

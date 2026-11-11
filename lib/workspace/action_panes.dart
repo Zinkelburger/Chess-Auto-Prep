@@ -5,13 +5,13 @@ import 'package:flutter/material.dart';
 
 import '../ui/action_context_menu.dart';
 import '../ui/app_action.dart';
+import '../ui/app_icons.dart';
 import '../ui/menu_entry.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
+import '../ui/tool_button.dart';
 import 'action_layout.dart';
 import 'workspace_tabs.dart';
-import '../ui/app_icons.dart';
-import '../ui/tool_button.dart';
 
 /// Docking affordances appear during a drag, leaving the reading area quiet.
 class ActionPanes extends StatefulWidget {
@@ -595,7 +595,6 @@ class _Docking extends StatelessWidget {
         ),
         if (canSplit)
           Expanded(
-            flex: 1,
             child: _DockTarget(
               panes: panes,
               index: index,

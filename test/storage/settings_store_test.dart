@@ -1,10 +1,10 @@
-import 'package:chess_auto_prep/chess/training/training_options.dart';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/chess/generation/evaluation_source.dart';
 import 'package:chess_auto_prep/chess/generation/expectimax_options.dart';
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
+import 'package:chess_auto_prep/chess/training/training_options.dart';
 import 'package:chess_auto_prep/storage/atomic_write.dart';
 import 'package:chess_auto_prep/storage/saved_place.dart';
 import 'package:chess_auto_prep/storage/settings.dart';

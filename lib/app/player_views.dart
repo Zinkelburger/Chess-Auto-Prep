@@ -1,18 +1,19 @@
-import '../chess/fen.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../chess/fen.dart';
+import '../chess/pgn/game_tree.dart';
 import '../features/players/analysis_panel.dart';
+import '../features/players/player_analysis.dart';
 import '../features/players/player_book_pane.dart';
 import '../features/players/player_dialogs.dart';
 import '../features/players/player_games.dart';
-import '../features/players/player_analysis.dart';
 import '../features/players/player_tree_pane.dart';
 import '../features/players/players_screen.dart';
 import '../storage/chapter_files.dart';
-import '../chess/pgn/game_tree.dart';
 import '../ui/app_action.dart';
+import '../ui/app_icons.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/screen_keys.dart';
 import '../workspace/book/book_verdict_view.dart' show leftBookMoment;
@@ -21,7 +22,6 @@ import '../workspace/workspace_tabs.dart';
 import 'mode_view.dart';
 import 'player_wiring.dart';
 import 'workspace_requests.dart';
-import '../ui/app_icons.dart';
 
 final class PlayerAnalysisView extends ModeView {
   PlayerAnalysisView(Workspace workspace, this.requests, this.players)

@@ -1,13 +1,13 @@
 // The outline is the chapters of the repertoire on the board and the lines
 // of the chapter on it. What it answers has to follow the document and the
 // library rather than a copy of either.
-import 'package:chess_auto_prep/features/library/chapter_outline.dart';
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
+import 'package:chess_auto_prep/features/library/chapter_outline.dart';
+import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/library_fixture.dart';
 import '../support/scripted_files.dart';
-import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
 
 const twoLines = '''
 // Book

@@ -1,8 +1,8 @@
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/chapter_sections.dart';
 import '../../chess/pgn/game_tree.dart';
-import '../../storage/edit_scope.dart';
 import '../../storage/document_ref.dart';
+import '../../storage/edit_scope.dart';
 import 'document_projection.dart';
 
 typedef ShownDocument = ({Chapter chapter, SectionView? view});

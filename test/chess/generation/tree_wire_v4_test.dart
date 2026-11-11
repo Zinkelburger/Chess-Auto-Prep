@@ -134,11 +134,7 @@ void main() {
   });
 
   test('an unfinished tree keeps its unexpanded leaves', () async {
-    const config = SearchConfig(
-      side: Side.white,
-      horizonPlies: 4,
-      nodeBudget: 8,
-    );
+    const config = SearchConfig(side: Side.white, nodeBudget: 8);
     final tree = await _treeFrom(_kingAndPawn, config: config);
 
     final decoded = decodedTree(encodeTreeV4(tree, config, complete: false));

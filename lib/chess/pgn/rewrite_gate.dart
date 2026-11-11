@@ -85,8 +85,8 @@ LineRewrite rewritten(ChapterLine line, GameTree tree) {
     return (tags: tags, separator: line.separator);
   }
   final ended = switch (last) {
-    PgnTag() => PgnTag(last.key, last.value, raw: last.raw, trailer: '\n'),
-    UnparsedHeader() => UnparsedHeader(last.text, trailer: '\n'),
+    PgnTag() => PgnTag(last.key, last.value, raw: last.raw),
+    UnparsedHeader() => UnparsedHeader(last.text),
   };
   return (tags: [...tags.take(tags.length - 1), ended], separator: '\n');
 }

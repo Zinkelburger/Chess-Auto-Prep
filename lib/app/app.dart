@@ -7,25 +7,25 @@ import 'package:flutter/services.dart';
 
 import '../diagnostics/log.dart';
 import '../engines/analysis_launch.dart';
-import '../features/settings/lichess_login_dialog.dart';
 import '../features/databases/twic_download_dialog.dart';
+import '../features/settings/lichess_login_dialog.dart';
 import '../features/settings/setting_rows.dart';
 import '../features/settings/update_prompt.dart';
+import '../storage/chapter_files.dart';
+import '../storage/diagnostic_report.dart';
 import '../ui/move_notation.dart';
 import '../ui/theme.dart';
-import '../workspace/document/save_copy.dart';
 import '../workspace/document/document_session.dart';
+import '../workspace/document/save_copy.dart';
 import '../workspace/document/session_results.dart';
 import 'app_parts.dart';
 import 'environment.dart';
-import 'native_desktop.dart';
 import 'exit_guard.dart';
+import 'native_desktop.dart';
+import 'native_file_requests.dart';
 import 'shell.dart';
 import 'window_close.dart';
 import 'window_input.dart';
-import 'native_file_requests.dart';
-import '../storage/chapter_files.dart';
-import '../storage/diagnostic_report.dart';
 
 /// The app on this machine: [AppParts] over the native environment, the
 /// window's dialogs, and the way out.

@@ -3,7 +3,7 @@
  * over one puzzle session. Analysis keeps running in the background once the
  * first puzzles are in, so training can start before every game is done.
  */
-import type { Key } from 'chessground/types';
+import type { Key } from '@lichess-org/chessground/types';
 import { HoverBoard } from '../lib/board-preview';
 import { TrainerBoard } from './board';
 import { EnginePool } from './engine/engine-pool';

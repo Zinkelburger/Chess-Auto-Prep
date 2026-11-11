@@ -1,7 +1,7 @@
-import 'dart:io';
 import 'dart:convert';
-import 'package:chess_auto_prep/chess/fen.dart';
+import 'dart:io';
 
+import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/storage/atomic_write.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/generation_trees.dart';

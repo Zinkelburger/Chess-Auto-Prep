@@ -156,6 +156,8 @@ Future<Phase> _onDisk(
   Future<(String, Answers)> Function() body,
 ) async {
   final run = await runZoned(
+    // A phase's own limit, which only happens to equal the default today.
+    // ignore: avoid_redundant_argument_values
     () => FaultyDisk(Directory(profile.root)).run(plan, body, limit: _limit),
     zoneSpecification: ZoneSpecification(print: (_, _, _, _) {}),
   );

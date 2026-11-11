@@ -3,21 +3,21 @@ import 'dart:async';
 import 'package:dartchess/dartchess.dart' show Move, Side;
 import 'package:flutter/foundation.dart';
 
-import '../../chess/pgn/chapter_edits.dart' show playedAlready;
-import '../../chess/pgn/game_tree.dart';
 import '../../chess/fen.dart';
+import '../../chess/pgn/chapter_edits.dart' show playedAlready;
 import '../../chess/pgn/game_text.dart';
+import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/solitaire_record.dart';
 import '../../chess/pgn/study.dart';
 import '../../chess/pgn/tree_edit.dart';
 import '../../chess/pv_text.dart';
 import '../../engines/engine_supervisor.dart';
 import '../../engines/solitaire_evaluator.dart';
-import '../document/document_session.dart';
 import '../analysis/engine_analysis.dart';
 import '../analysis/engine_jobs.dart';
-import '../latest.dart';
+import '../document/document_session.dart';
 import '../document/study_drafts.dart';
+import '../latest.dart';
 
 /// One guess the user had to be helped with or got wrong, for the summary.
 typedef SolitaireMiss = ({NodePath at, String played, List<String> tried});

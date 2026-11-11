@@ -11,8 +11,8 @@ import '../../storage/chapter_files.dart';
 import '../../storage/pgn_document_store.dart';
 import '../../storage/settings_store.dart';
 import '../document/document_session.dart';
-import 'gap_walk.dart';
 import '../latest.dart';
+import 'gap_walk.dart';
 import 'replies.dart';
 
 /// What a reply row says when the position after it is answered by another

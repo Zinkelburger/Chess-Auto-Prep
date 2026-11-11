@@ -7,12 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-import 'debug/agent_driver.dart';
-import 'debug/desktop_self_test.dart';
 import 'app/app.dart';
 import 'app/bundled_licences.dart';
 import 'app/error_log.dart';
 import 'app/self_test.dart';
+import 'debug/agent_driver.dart';
+import 'debug/desktop_self_test.dart';
 import 'diagnostics/log.dart';
 import 'storage/log_file.dart';
 

@@ -1,19 +1,18 @@
-import 'package:flutter/services.dart';
-import '../features/players/prep_sheet.dart';
 import 'dart:async';
-import 'package:path/path.dart' as p;
+
 import 'package:dartchess/dartchess.dart' show Side;
+import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+
 import '../chess/pgn/chapter.dart';
 import '../chess/pgn/study.dart';
-import '../storage/pgn_document_store.dart';
-import '../ui/file_names.dart';
-
-import '../chess/players/player.dart';
 import '../chess/players/download_range.dart';
+import '../chess/players/player.dart';
 import '../features/players/player_analysis.dart';
-import '../features/players/player_hunt.dart';
 import '../features/players/player_book.dart';
+import '../features/players/player_hunt.dart';
 import '../features/players/players.dart';
+import '../features/players/prep_sheet.dart';
 import '../features/players/saved_games.dart';
 import '../features/study/studies.dart';
 import '../features/study/studies_state.dart';
@@ -21,9 +20,11 @@ import '../features/trainer/trainer.dart';
 import '../features/trainer/trainer_state.dart';
 import '../storage/chapter_files.dart';
 import '../storage/my_games_files.dart';
+import '../storage/pgn_document_store.dart';
 import '../storage/pgn_file_import.dart';
-import '../workspace/document/study_drafts.dart';
+import '../ui/file_names.dart';
 import '../workspace/document/study_choice.dart';
+import '../workspace/document/study_drafts.dart';
 import '../workspace/workspace.dart';
 import 'environment.dart';
 import 'mode.dart';

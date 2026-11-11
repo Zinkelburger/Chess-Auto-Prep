@@ -2,10 +2,10 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 
 import '../../chess/game_filter.dart';
+import '../../ui/segments.dart';
 import '../../ui/theme.dart';
 import '../../workspace/explorer/file_filter.dart';
 import 'pgn_viewer.dart';
-import '../../ui/segments.dart';
 
 /// Under the explorer's `This file`: the followed player's games with
 /// either colour, with White or with Black, each with how many there are.
@@ -100,7 +100,6 @@ GameFilter keepingSide(GameFilter filter, String player, Side? side) =>
         if (side != null)
           HeaderRule(
             field: side == Side.white ? 'White' : 'Black',
-            rule: FilterRule.contains,
             value: player,
           ),
       ],

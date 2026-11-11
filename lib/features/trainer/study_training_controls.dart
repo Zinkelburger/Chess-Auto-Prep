@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/study.dart';
 import '../../ui/form_dialog.dart';
+import '../../ui/segments.dart';
 import '../../ui/status_bar.dart';
 import '../../ui/theme.dart';
 import 'trainer.dart';
 import 'trainer_state.dart';
-import '../../ui/segments.dart';
 
 /// Study scope and practice identity remain available before training is ready.
 class StudyTrainingControls extends StatelessWidget {

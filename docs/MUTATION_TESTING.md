@@ -93,6 +93,13 @@ Anything the wider suite kills is reported as killed and counted that way, with
 a line saying the paired file missed it. Without this the score is a lower
 bound — treat any number produced without a confirm set as one.
 
+Before confirming, the harness runs the confirm set once on the unmutated file.
+A set that fails there leaves the survivors unconfirmed, and the run's time sets
+the confirm timeout (six times it, unless `--timeout` is given). A timeout
+counts as a kill, so a slow set timed against the paired file's baseline would
+"kill" every survivor. Keep confirm sets to the tests that reach the file: all
+of `test/storage` takes several minutes per run.
+
 ## Adding a target
 
 Append `lib file|test file|confirm tests` to `scripts/mutation_targets.txt`

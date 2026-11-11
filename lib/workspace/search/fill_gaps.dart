@@ -18,18 +18,17 @@ import '../../chess/pgn/tree_edit.dart' show positionOf;
 import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/generation_trees.dart';
-import '../../storage/pending_writes.dart';
 import '../../storage/operation_id.dart';
+import '../../storage/pending_writes.dart';
 import '../../storage/pgn_document_store.dart' as store;
-import '../document/document_session.dart';
 import '../analysis/engine_jobs.dart';
-import 'finds.dart';
-import '../latest.dart';
-import '../explorer/opening_names.dart';
+import '../document/document_session.dart';
 import '../document/generated_draft.dart';
-
+import '../explorer/opening_names.dart';
+import '../latest.dart';
 import 'fill_lines.dart';
 import 'fill_states.dart';
+import 'finds.dart';
 import 'search_opponents.dart';
 
 /// The expectimax search from the board: the Search tab.

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../ui/theme.dart';
-import 'engine_pane.dart';
 import '../workspace.dart';
+import 'engine_pane.dart';
 
 /// The shared engine controls as a resizable tab alongside training.
 class TrainingAnalysisPane extends StatefulWidget {

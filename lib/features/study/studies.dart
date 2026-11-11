@@ -1,7 +1,3 @@
-import '../../storage/player_files.dart';
-import '../../storage/pgn_file_picker.dart';
-import '../../storage/pgn_file_import.dart';
-import '../../storage/pgn_export.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
@@ -9,26 +5,30 @@ import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/chapter_edit.dart';
 import '../../chess/pgn/study.dart';
 import '../../chess/pgn/study_edits.dart' as pgn show addChapters;
-import '../../storage/edit_scope.dart' show GamesRearranged;
-import '../../workspace/document/study_choice.dart';
-import 'study_commands.dart' show studyNameOf;
-import 'study_file_changes.dart';
-import 'study_import_source.dart';
-import 'studies_state.dart';
 import '../../diagnostics/log.dart';
 import '../../net/lichess_studies.dart';
 import '../../net/lichess_study_writes.dart';
-import 'study_sender.dart';
-import '../../storage/pending_writes.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/deleted_chapters.dart';
 import '../../storage/document_ref.dart';
+import '../../storage/edit_scope.dart' show GamesRearranged;
+import '../../storage/pending_writes.dart';
 import '../../storage/pgn_document_store.dart' as store;
+import '../../storage/pgn_export.dart';
+import '../../storage/pgn_file_import.dart';
+import '../../storage/pgn_file_picker.dart';
+import '../../storage/player_files.dart';
 import '../../storage/study_files.dart';
 import '../../ui/file_names.dart';
 import '../../workspace/document/document_saver.dart';
 import '../../workspace/document/document_session.dart';
+import '../../workspace/document/study_choice.dart';
 import '../../workspace/latest.dart';
+import 'studies_state.dart';
+import 'study_commands.dart' show studyNameOf;
+import 'study_file_changes.dart';
+import 'study_import_source.dart';
+import 'study_sender.dart';
 
 /// The user's studies: the list of files under `Documents/studies/`, the
 /// search over it, and the operations that make, import, export and remove

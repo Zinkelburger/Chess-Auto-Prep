@@ -7,10 +7,10 @@ import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart' show positionOf;
 import 'package:chess_auto_prep/storage/finds_store.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
-import 'package:path/path.dart' as p;
 import 'package:chess_auto_prep/workspace/search/finds.dart';
 import 'package:dartchess/dartchess.dart' show Move, Side;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 Fen board(String name) => Fen('$name w - - 0 1');
 
@@ -77,7 +77,7 @@ void main() {
     });
 
     test('the same place found again replaces the older find', () {
-      keep([find('a', worth: 1)]);
+      keep([find('a')]);
       keep([find('a', worth: 5)], day: 2);
 
       final kept = store.all().single;
@@ -279,7 +279,7 @@ void main() {
     test('orders, filters and steps through what it shows', () {
       store.keep(
         [
-          find('small', worth: 1),
+          find('small'),
           find('big', worth: 9),
           find('only', worth: 5, kind: FindKind.onlyMove),
         ],

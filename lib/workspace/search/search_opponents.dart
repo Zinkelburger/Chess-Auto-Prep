@@ -143,10 +143,7 @@ OpponentPolicy opponentFor(
   final model = MaiaOpponent(maia, elo: request.elo);
   final played = switch (request.replies) {
     ReplySource.maia => null,
-    ReplySource.masters => lichessPlayed(
-      explorer,
-      const ExplorerChoice(source: ExplorerSource.masters),
-    ),
+    ReplySource.masters => lichessPlayed(explorer, const ExplorerChoice()),
     ReplySource.lichess => lichessPlayed(explorer, request.lichess),
     ReplySource.twic => twicPlayed(book),
   };

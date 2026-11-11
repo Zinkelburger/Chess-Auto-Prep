@@ -2,12 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chess_auto_prep/storage/book_file.dart';
 import 'package:chess_auto_prep/storage/atomic_write.dart';
-import 'package:chess_auto_prep/workspace/book/books.dart';
+import 'package:chess_auto_prep/storage/book_file.dart';
 import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/document_probe.dart';
 import 'package:chess_auto_prep/storage/recovery_gate.dart';
+import 'package:chess_auto_prep/workspace/book/books.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

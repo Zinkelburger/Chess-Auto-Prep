@@ -9,8 +9,9 @@ import 'package:chess_auto_prep/workspace/book/gap_walk.dart';
 import 'package:chess_auto_prep/workspace/book/replies.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
-import '../support/session_fixture.dart';
+
 import '../support/replies_fixture.dart';
+import '../support/session_fixture.dart';
 
 String pgn(String moves) => '[Event "Probe"]\n[Result "*"]\n\n$moves *\n';
 

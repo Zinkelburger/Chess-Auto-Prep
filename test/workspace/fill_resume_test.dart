@@ -132,7 +132,6 @@ void main() {
         elo: 1800,
         depthPlies: 3,
         rootMoves: 2,
-        candidateMoves: 1,
         replyFloor: 0.02,
       );
       await fill.start(custom);

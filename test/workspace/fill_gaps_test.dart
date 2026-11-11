@@ -1,23 +1,23 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
+import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/generation/eval.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/chess/generation/sources.dart';
+import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
-import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/storage/pending_writes.dart';
-import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
-import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
 import 'package:chess_auto_prep/storage/finds_store.dart';
 import 'package:chess_auto_prep/storage/generation_trees.dart';
+import 'package:chess_auto_prep/storage/pending_writes.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
 import 'package:chess_auto_prep/workspace/search/fill_gaps.dart';
 import 'package:chess_auto_prep/workspace/search/fill_states.dart';
 import 'package:chess_auto_prep/workspace/search/finds.dart';
-import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:dartchess/dartchess.dart' show Position, Side;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -714,6 +714,72 @@ void main() {
     expect(seen.last.depth, 3);
     expect(seen.last.nodes, greaterThan(1));
   });
+
+  test('back two roots still finds the first one', () async {
+    final fill = fillWith(ScriptedEvaluator());
+    const shallow = FillRequest(elo: 2200, depthPlies: 1);
+    await fill.start(shallow);
+    final original = fill.found!.tree;
+    fixture.session.playMove('e2e4');
+    await fill.start(shallow);
+    fixture.session.playMove('e8d8');
+    await fill.start(shallow);
+    fixture.session.cursor.back();
+    fixture.session.cursor.back();
+    expect(fill.nodeAtBoard(), same(original));
+  });
+
+  test(
+    'the result history keeps the 32 searches before the current one',
+    () async {
+      final fill = fillWith(ScriptedEvaluator());
+      FillRequest at(int elo) => FillRequest(elo: elo, depthPlies: 1);
+      for (var elo = 1800; elo < 1834; elo++) {
+        await fill.start(at(elo));
+      }
+      expect(fill.nodeAtBoard(request: at(1801)), isNotNull);
+      expect(fill.nodeAtBoard(request: at(1800)), isNull, reason: 'the oldest');
+    },
+  );
+
+  test('a failed tree save is told, and so is giving it up', () async {
+    final pending = PendingWrites();
+    final fill = fillWith(
+      ScriptedEvaluator(scores: e4Best()),
+      pending: pending,
+      keepTree: (ref, text, {required runId}) async =>
+          throw StateError('disk full'),
+    );
+    String? told;
+    var notified = 0;
+    fill.addListener(() {
+      told = fill.treeSaveProblem;
+      notified++;
+    });
+    await fill.start(request);
+    expect(told, isNotNull);
+    notified = 0;
+    fill.discardTreeSave();
+    expect(notified, 1);
+    expect(told, isNull);
+    expect(fill.canRetryTree, isFalse);
+  });
+
+  test(
+    'the root is a level of one, reported before anything is expanded',
+    () async {
+      final fill = fillWith(ScriptedEvaluator());
+      final seen = <FillRunning>[];
+      fill.addListener(() {
+        if (fill.state case final FillRunning running) seen.add(running);
+      });
+      await fill.start(request);
+      expect(
+        seen.where((r) => r.depth == 0).map((r) => r.levelShare),
+        contains(0.0),
+      );
+    },
+  );
 
   test('the search starts from the board, not the chapter root', () async {
     fixture.session.cursor.forward();

@@ -5,10 +5,10 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/chess/pgn/chapter_sections.dart';
 import 'package:chess_auto_prep/features/library/library_state.dart';
-import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/chapter_directory.dart';
-import 'package:chess_auto_prep/storage/recovery_gate.dart';
+import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/storage/recovery_gate.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart'
     as saver;
 import 'package:flutter_test/flutter_test.dart';

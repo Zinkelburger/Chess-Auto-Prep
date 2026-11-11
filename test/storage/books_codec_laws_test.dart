@@ -129,7 +129,9 @@ bool _repeats(Map<String, Object?> book) {
   final folders = book['repertoires'] as List<Object?>? ?? const [];
   final chapters = [
     for (final c in book['chapters'] as List<Object?>? ?? const [])
-      jsonEncode([(c! as Map)['path'], c['section']]),
+      jsonEncode([
+        for (final key in ['path', 'section']) (c! as Map)[key],
+      ]),
   ];
   return folders.toSet().length != folders.length ||
       chapters.toSet().length != chapters.length;

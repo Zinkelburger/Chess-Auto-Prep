@@ -3,6 +3,7 @@ import 'package:path/path.dart' as p;
 
 import '../../chess/players/player.dart';
 import '../../chess/tactics/game_ids.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/check_row.dart';
 import '../../ui/relative_time.dart';
 import '../../ui/row_actions.dart';
@@ -11,7 +12,6 @@ import 'player_dialogs.dart';
 import 'player_lookup.dart';
 import 'players.dart';
 import 'saved_games.dart';
-import '../../ui/app_icons.dart';
 
 /// One person in the directory or in a group: who they are and where their
 /// games come from, how many games are saved, and the two things done with

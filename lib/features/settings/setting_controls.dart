@@ -6,11 +6,11 @@ import 'package:flutter/services.dart';
 import '../../ui/attempting.dart';
 import '../../ui/choice_field.dart';
 import '../../ui/listening_state.dart';
-import '../../ui/theme.dart';
 import '../../ui/number_field.dart';
+import '../../ui/segments.dart';
+import '../../ui/theme.dart';
 import 'lichess_account.dart';
 import 'setting_rows.dart';
-import '../../ui/segments.dart';
 
 /// One row: the label, its hint under it when there is one, and the
 /// control on the right. The same height whatever the control, so a

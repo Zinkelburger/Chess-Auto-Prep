@@ -348,7 +348,7 @@ try {
   // Two boards name the score the team's, with the board's own share when the line gives it.
   const info = await page.$eval('#ch-engine-info', (el) => el.textContent);
   console.log('two-board score:', await page.$eval('#ch-pearl', (el) => el.textContent), info);
-  assert.match(info, /^Team( · board [+\-]?\d+\.\d)? · Depth \d+/);
+  assert.match(info, /^Team( · board [+-]?\d+\.\d)? · Depth \d+/);
   assert.match(await text(page, '#ch-partner-eval'), /^Team [+\-#]?\d/);
   await page.screenshot({ path: path.join(output, 'two-boards.png') });
   // Working on board 2 makes it the large board.

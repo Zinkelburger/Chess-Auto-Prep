@@ -6,8 +6,8 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
 import '../../diagnostics/log.dart';
-import '../../storage/pending_writes.dart';
 import '../../storage/master_games_import.dart';
+import '../../storage/pending_writes.dart';
 
 /// A resumable series of weekly imports into the master games database at
 /// [path]. Issues already in it are skipped, so a later run brings it up to

@@ -1,4 +1,3 @@
-import '../../chess/pgn/study_cleanup.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 
 import '../../chess/fen.dart';
@@ -6,6 +5,7 @@ import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/chapter_edit.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/study.dart';
+import '../../chess/pgn/study_cleanup.dart';
 import '../../chess/pgn/study_edits.dart';
 import '../../workspace/document/document_session.dart';
 

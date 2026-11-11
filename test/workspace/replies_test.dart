@@ -1,10 +1,10 @@
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart' show NodePath;
 import 'package:chess_auto_prep/engines/maia/move_policy.dart';
-import 'package:chess_auto_prep/storage/settings.dart';
-import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/storage/settings.dart';
+import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/workspace/book/gap_hunt.dart';
 import 'package:chess_auto_prep/workspace/book/gap_walk.dart';
 import 'package:chess_auto_prep/workspace/book/replies.dart';

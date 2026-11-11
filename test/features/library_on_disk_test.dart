@@ -2,9 +2,9 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/features/library/library.dart';
 import 'package:chess_auto_prep/features/library/library_state.dart';
+import 'package:chess_auto_prep/storage/chapter_directory.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/deleted_chapters.dart';
-import 'package:chess_auto_prep/storage/chapter_directory.dart';
 import 'package:chess_auto_prep/storage/pgn_file_store.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document/document_session.dart';

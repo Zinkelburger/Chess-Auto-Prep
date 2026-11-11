@@ -3,13 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:chess_auto_prep/net/lichess_http.dart';
 import 'package:chess_auto_prep/diagnostics/log.dart';
+import 'package:chess_auto_prep/net/lichess_http.dart';
 import 'package:chess_auto_prep/net/lichess_login.dart';
 import 'package:crypto/crypto.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:flutter_test/flutter_test.dart';
 
 /// The real flow against a real loopback server: this test is the
 /// browser, coming back to the page the app opened.

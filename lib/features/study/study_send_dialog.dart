@@ -3,11 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../chess/pgn/chapter.dart';
+import '../../ui/form_dialog.dart';
 import '../../ui/listening_state.dart';
+import '../../ui/segments.dart';
 import '../../ui/theme.dart';
 import 'study_sender.dart';
-import '../../ui/form_dialog.dart';
-import '../../ui/segments.dart';
 
 /// Asks where on Lichess the open study goes, sends it, and says what
 /// Lichess now holds. One question: a new study, or one already there.

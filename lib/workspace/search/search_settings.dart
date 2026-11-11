@@ -9,8 +9,8 @@ import '../../chess/generation/expectimax_options.dart';
 import '../../storage/settings.dart';
 import '../../storage/settings_store.dart';
 import '../../ui/listening_state.dart';
-import '../../ui/theme.dart';
 import '../../ui/segments.dart';
+import '../../ui/theme.dart';
 
 /// What each Expectimax setting is called and the one line under it, said
 /// the same way behind the tab's gear and in Settings ▸ Expectimax.

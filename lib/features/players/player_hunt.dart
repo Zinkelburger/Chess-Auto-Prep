@@ -1,23 +1,23 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:crypto/crypto.dart';
-import '../../storage/player_reports.dart';
-
-import 'package:flutter/foundation.dart';
 import 'package:dartchess/dartchess.dart' show Side;
+import 'package:flutter/foundation.dart';
 
-import '../../chess/pv_text.dart';
 import '../../chess/fen.dart';
 import '../../chess/generation/eval.dart';
-import '../../engines/maia/move_policy.dart';
-import 'practical_probe.dart';
+import '../../chess/pv_text.dart';
 import '../../engines/engine.dart';
 import '../../engines/engine_line.dart';
 import '../../engines/engine_supervisor.dart';
 import '../../engines/fixed_depth.dart';
+import '../../engines/maia/move_policy.dart';
+import '../../storage/player_reports.dart';
 import '../../workspace/latest.dart';
 import 'player_analysis.dart';
 import 'player_games.dart';
+import 'practical_probe.dart';
 
 final class PlayerWeakness {
   const PlayerWeakness(

@@ -2,8 +2,8 @@ import '../../chess/pgn/comment_text.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/study.dart';
 import '../../ui/app_action.dart';
-import '../../workspace/document/document_session.dart';
 import '../../ui/app_icons.dart';
+import '../../workspace/document/document_session.dart';
 
 /// What a right-click on a move offers in a study: where training starts
 /// asking, and where it stops.

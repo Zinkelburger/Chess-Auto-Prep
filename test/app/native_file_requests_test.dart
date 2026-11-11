@@ -1,15 +1,15 @@
 import 'dart:async';
 
-import 'package:chess_auto_prep/app/native_file_requests.dart';
 import 'package:chess_auto_prep/app/exit_guard.dart';
+import 'package:chess_auto_prep/app/native_file_requests.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../support/window_fixture.dart';
-import '../support/scripted_store.dart';
 import '../support/fixtures.dart';
-import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import '../support/scripted_store.dart';
+import '../support/window_fixture.dart';
 
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();

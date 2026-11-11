@@ -374,13 +374,30 @@ def main() -> int:
     # someone to write a test that already exists. Only survivors pay this
     # cost, and survivors are few.
     survivors = [m for m in mutants if m.status == "SURVIVED"]
+    confirm_timeout = timeout
+    if args.confirm_tests and survivors:
+        # The confirm set gets its own baseline. A set that already fails, or
+        # that takes longer than the cheap pass's timeout, would otherwise
+        # "kill" every survivor, since a timeout counts as a kill.
+        print(f"\n── confirm baseline: {' '.join(args.confirm_tests)}")
+        t0 = time.time()
+        verdict, out = run_tests(args.confirm_tests, timeout=1800)
+        confirm_baseline = time.time() - t0
+        if verdict != "pass":
+            print(f"mutation_test: confirm set is not green ({verdict}); "
+                  "survivors are left unconfirmed.\n")
+            print(out[-4000:])
+            survivors = []
+        else:
+            print(f"   confirm baseline green in {confirm_baseline:.0f}s")
+        confirm_timeout = args.timeout or max(60, int(confirm_baseline * 6))
     if args.confirm_tests and survivors:
         print(f"\n── confirming {len(survivors)} survivor(s) against "
               f"{' '.join(args.confirm_tests)}")
         try:
             for m in survivors:
                 target.write_text(apply_mutant(text, m))
-                verdict, _ = run_tests(args.confirm_tests, timeout)
+                verdict, _ = run_tests(args.confirm_tests, confirm_timeout)
                 if verdict in ("fail", "timeout"):
                     m.status = "KILLED"
                     m.killed_by_wider = True

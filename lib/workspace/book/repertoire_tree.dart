@@ -6,12 +6,12 @@ import 'package:flutter/foundation.dart';
 import '../../chess/fen.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/move_label.dart' show continuation;
-import '../../chess/repertoire_index.dart';
 import '../../chess/pgn/tree_edit.dart' show moveNode;
+import '../../chess/repertoire_index.dart';
 import '../../storage/chapter_files.dart';
 import '../board/board_claim.dart';
-import 'books.dart';
 import '../document/document_session.dart';
+import 'books.dart';
 import 'gap_walk.dart' show indexOfReply;
 import 'repertoire_shelf.dart';
 

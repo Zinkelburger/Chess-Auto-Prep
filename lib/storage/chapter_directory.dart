@@ -4,20 +4,20 @@ import 'dart:isolate';
 
 import 'package:path/path.dart' as p;
 
-import 'directory_entries.dart';
+import '../chess/pgn/chapter.dart' show readOffThreadFrom;
+import '../chess/pgn/chapter_heading.dart';
+import '../chess/pgn/chapter_sections.dart';
+import '../diagnostics/log.dart';
 import 'book_snapshot.dart';
 import 'chapter_files.dart';
 import 'deleted_chapters.dart';
+import 'directory_entries.dart';
+import 'document_probe.dart';
+import 'document_ref.dart';
+import 'recovery_files.dart';
+import 'recovery_gate.dart';
 import 'training_rows.dart';
 import 'training_snapshot.dart';
-import 'recovery_files.dart';
-import '../chess/pgn/chapter_heading.dart';
-import '../chess/pgn/chapter.dart' show readOffThreadFrom;
-import 'document_probe.dart';
-import '../chess/pgn/chapter_sections.dart';
-import '../diagnostics/log.dart';
-import 'document_ref.dart';
-import 'recovery_gate.dart';
 
 /// One folder per repertoire, one `.pgn` per chapter, plus index files and
 /// sidecars the app ignores.

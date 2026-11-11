@@ -1,25 +1,24 @@
-import '../features/tournaments/tournament_run.dart';
-import 'tournament_view.dart';
-
 import 'package:flutter/material.dart';
 
+import '../features/databases/database_library.dart';
+import '../features/tournaments/tournament_run.dart';
 import '../ui/app_action.dart';
 import '../ui/pane_tabs.dart';
+import '../workspace/action_layout.dart';
 import '../workspace/document/document_actions.dart';
-import '../workspace/explorer/explorer.dart';
 import '../workspace/document/game_ordering.dart';
+import '../workspace/explorer/explorer.dart';
 import '../workspace/reading/move_tree_view.dart' show MoveMenu;
 import '../workspace/workspace.dart';
-import '../workspace/action_layout.dart';
 import '../workspace/workspace_tabs.dart';
 import 'books_view.dart';
 import 'bughouse_view.dart';
+import 'database_view.dart';
 import 'document_views.dart';
 import 'mode.dart';
-import 'database_view.dart';
-import '../features/databases/database_library.dart';
-import 'player_wiring.dart';
 import 'player_views.dart';
+import 'player_wiring.dart';
+import 'tournament_view.dart';
 import 'training_views.dart';
 import 'workspace_requests.dart';
 

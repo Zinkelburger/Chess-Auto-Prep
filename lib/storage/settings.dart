@@ -5,9 +5,9 @@ import 'package:flutter/foundation.dart' show setEquals, mapEquals;
 
 import '../chess/explorer_choice.dart';
 import '../chess/generation/expectimax_options.dart';
-import '../chess/training/training_options.dart';
 import '../chess/tactics/game_ids.dart' show GameSpeed;
 import '../chess/tactics/puzzle_queue.dart';
+import '../chess/training/training_options.dart';
 import 'saved_place.dart';
 import 'update_choices.dart';
 

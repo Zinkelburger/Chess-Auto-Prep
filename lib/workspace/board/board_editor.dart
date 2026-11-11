@@ -6,14 +6,14 @@ import 'package:flutter/services.dart';
 
 import '../../chess/fen.dart';
 import '../../chess/position_setup.dart';
-import '../../ui/theme.dart';
-import 'board_view.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/form_dialog.dart';
 import '../../ui/problem_line.dart';
 import '../../ui/segments.dart';
+import '../../ui/theme.dart';
 import '../../ui/toggle_chip.dart';
 import '../../ui/tool_button.dart';
+import 'board_view.dart';
 
 /// What a press on the editor's board does.
 sealed class EditorTool {

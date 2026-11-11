@@ -107,7 +107,7 @@ void main() {
     // mate is +10000 to us and a two-pawn window keeps nothing else.
     final result = await searchFrom(
       '7k/5Q2/6K1/8/8/8/8/8 w - - 0 1',
-      config: const SearchConfig(side: Side.white, horizonPlies: 4),
+      config: const SearchConfig(side: Side.white),
     );
     final tree = treeOf(result) as OurNode;
     expect(
@@ -131,7 +131,7 @@ void main() {
     // is the only move the two-pawn window keeps.
     final result = await searchFrom(
       '7k/8/2N3K1/8/8/p7/P7/8 w - - 0 1',
-      config: const SearchConfig(side: Side.white, horizonPlies: 4),
+      config: const SearchConfig(side: Side.white),
       evaluator: ScriptedEvaluator(fallback: 500),
     );
     final tree = treeOf(result) as OurNode;

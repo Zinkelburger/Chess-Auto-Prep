@@ -14,17 +14,17 @@ import '../../chess/pgn/move_text.dart';
 import '../../chess/pgn/study.dart';
 import '../../ui/action_context_menu.dart';
 import '../../ui/app_action.dart';
-import '../../ui/listening_state.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/app_keys.dart';
+import '../../ui/listening_state.dart';
+import '../../ui/move_notation.dart';
 import '../../ui/selection.dart';
 import '../../ui/theme.dart';
+import '../board/line_preview.dart';
 import '../document/chapter_commands.dart';
-import 'comment_blocks.dart';
 import '../document/document_session.dart';
 import '../review/game_review_pane.dart' show markColor;
-import '../board/line_preview.dart';
-import '../../ui/move_notation.dart';
-import '../../ui/app_icons.dart';
+import 'comment_blocks.dart';
 
 /// The move list, read like a book: the main line as running text, each
 /// comment as a paragraph of its own under the move it is on, each

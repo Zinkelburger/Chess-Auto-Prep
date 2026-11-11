@@ -1,12 +1,13 @@
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
+
 import '../../chess/pgn/study.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/list_message.dart';
 import '../../ui/list_row.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
-import '../../ui/app_icons.dart';
 
 typedef ChapterActions = ({
   VoidCallback rename,

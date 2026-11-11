@@ -5,15 +5,15 @@ import 'package:flutter/material.dart';
 
 import '../../chess/tactics/puzzle.dart';
 import '../../chess/tactics/puzzle_run.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/app_keys.dart';
 import '../../ui/check_row.dart';
 import '../../ui/list_message.dart';
+import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
+import '../../ui/tool_button.dart';
 import 'puzzle_state.dart';
 import 'puzzle_trainer.dart';
-import '../../ui/app_keys.dart';
-import '../../ui/move_notation.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/tool_button.dart';
 
 /// The Puzzle tab of the reading card: whose move it is and what went wrong
 /// in the game, what the last move came to, the three buttons in fixed

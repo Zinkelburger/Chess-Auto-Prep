@@ -347,7 +347,6 @@ final class BoardTheme extends ThemeExtension<BoardTheme> {
   ChessboardSettings settings({required bool coordinates}) =>
       ChessboardSettings(
         colorScheme: _colors,
-        pieceAssets: PieceSet.cburnettAssets,
         animationDuration: animation,
         // BoardView paints full-square hints behind the pieces.
         showValidMoves: false,
@@ -362,7 +361,6 @@ final class BoardTheme extends ThemeExtension<BoardTheme> {
   /// colours and pieces, no animation because it shows one position.
   StaticChessboardSettings get previewSettings => StaticChessboardSettings(
     colorScheme: _colors,
-    pieceAssets: PieceSet.cburnettAssets,
     animationDuration: Duration.zero,
   );
 

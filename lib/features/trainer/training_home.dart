@@ -3,20 +3,20 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../chess/pgn/move_label.dart';
-import '../../chess/training/sitting.dart';
 import '../../chess/training/records.dart';
+import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/check_row.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/problem_line.dart';
 import '../../ui/relative_time.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
+import '../../ui/toggle_chip.dart';
+import '../../ui/tool_button.dart';
 import 'trainer.dart';
 import 'trainer_state.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/problem_line.dart';
-import '../../ui/tool_button.dart';
-import '../../ui/toggle_chip.dart';
 
 /// The selected scope's training desk, inside the shared Train pane.
 class TrainingHome extends StatefulWidget {

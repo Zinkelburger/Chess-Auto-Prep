@@ -7,16 +7,16 @@ import 'package:flutter/material.dart';
 import '../../chess/fen.dart';
 import '../../chess/position_setup.dart';
 import '../../chess/tournament/config.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/check_row.dart';
 import '../../ui/choice_field.dart';
+import '../../ui/field_row.dart';
+import '../../ui/form_dialog.dart';
 import '../../ui/number_field.dart';
 import '../../ui/theme.dart';
-import '../../workspace/board/board_editor.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/form_dialog.dart';
-import '../../ui/tool_button.dart';
 import '../../ui/toggle_chip.dart';
-import '../../ui/check_row.dart';
-import '../../ui/field_row.dart';
+import '../../ui/tool_button.dart';
+import '../../workspace/board/board_editor.dart';
 
 Future<TournamentConfig?> tournamentSetup(
   BuildContext context, {

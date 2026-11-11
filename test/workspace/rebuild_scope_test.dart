@@ -206,7 +206,7 @@ void main() {
     tester,
   ) async {
     const games = 120;
-    final text = bigChapter(games: games);
+    final text = bigChapter();
     expect(
       text.length,
       lessThan(64 * 1024),

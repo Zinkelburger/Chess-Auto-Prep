@@ -107,6 +107,27 @@ void main() {
     expect(fill.nodeAtBoard(side: Side.black), isA<OurNode>());
   });
 
+  test('back to an earlier root finds both of its sides', () async {
+    final fill = fillWith(
+      ScriptedEvaluator(
+        scores: {afterUci(positionOf(kingAndPawn), 'e2e4').fen: -100},
+      ),
+    );
+    await fill.start(request);
+    final root = fill.found!.tree.fen;
+    fixture.session.cursor.forward();
+    await fill.start(request);
+    fixture.session.cursor.back();
+    expect(
+      fill.nodeAtBoard(),
+      isA<OurNode>().having((n) => n.fen, 'fen', root),
+    );
+    expect(
+      fill.nodeAtBoard(side: Side.black),
+      isA<OpponentNode>().having((n) => n.fen, 'fen', root),
+    );
+  });
+
   test('a position both sides reach is scored once', () async {
     final evaluator = ScriptedEvaluator();
     final fill = fillWith(evaluator);

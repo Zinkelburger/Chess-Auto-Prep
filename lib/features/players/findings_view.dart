@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../../ui/app_icons.dart';
 import '../../ui/check_row.dart';
 import '../../ui/field_row.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/number_field.dart';
-import '../../ui/theme.dart';
-import 'player_analysis.dart';
-import 'player_hunt.dart';
-import '../../ui/app_icons.dart';
 import '../../ui/problem_line.dart';
 import '../../ui/progress_line.dart';
+import '../../ui/theme.dart';
 import '../../ui/tool_button.dart';
+import 'player_analysis.dart';
+import 'player_hunt.dart';
 
 /// The top of the Findings list: the button that runs the engine over the
 /// player's most played positions, its settings folded beside it, how far

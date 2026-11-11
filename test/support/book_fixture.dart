@@ -7,13 +7,13 @@ import 'package:chess_auto_prep/storage/my_accounts.dart';
 import 'package:chess_auto_prep/storage/my_games_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
-import 'package:flutter/foundation.dart';
 import 'package:chess_auto_prep/workspace/book/repertoire_shelf.dart';
+import 'package:flutter/foundation.dart';
 
+import 'books_fixture.dart';
 import 'my_games_fixture.dart';
 import 'scripted_files.dart';
 import 'scripted_store.dart';
-import 'books_fixture.dart';
 
 /// A White repertoire against the Sicilian: 2.Nf3 and 3.d4.
 const whiteSicilian = '''

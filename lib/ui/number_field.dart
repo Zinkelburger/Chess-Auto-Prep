@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'theme.dart';
 import 'app_icons.dart';
 import 'listening_state.dart';
+import 'theme.dart';
 
 /// A number typed into a box, or stepped with − and +. Enter or leaving
 /// the box takes what was typed, kept inside the row's range.

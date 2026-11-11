@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../ui/app_icons.dart';
+import '../../ui/list_message.dart';
 import '../../ui/theme.dart';
 import '../../workspace/board/move_field.dart';
 import 'lesson_view.dart';
@@ -8,8 +10,6 @@ import 'trainer.dart';
 import 'trainer_state.dart';
 import 'trainer_words.dart';
 import 'training_home.dart';
-import '../../ui/list_message.dart';
-import '../../ui/app_icons.dart';
 
 /// The Train tab of the reading card: the lines of the chapter, or of its
 /// repertoire, with where each stands and the two ways in — Review what is

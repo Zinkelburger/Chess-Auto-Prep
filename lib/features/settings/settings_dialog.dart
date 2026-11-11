@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../storage/settings_store.dart';
-import '../../ui/problem_line.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/app_keys.dart';
+import '../../ui/problem_line.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
+import '../../ui/tool_button.dart';
 import 'setting_controls.dart';
 import 'setting_rows.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/tool_button.dart';
 
 /// Opens the settings over the workspace. Every change has already
 /// happened by the time it closes; the close button, Esc or outside click dismisses it.

@@ -1,6 +1,6 @@
 import '../ui/app_action.dart';
-import '../ui/pane_tabs.dart';
 import '../ui/app_keys.dart';
+import '../ui/pane_tabs.dart';
 import 'action_layout.dart';
 
 /// The tabs of the reading card: the moves, the

@@ -21,13 +21,13 @@ import '../../storage/audit_store.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/eval_cache.dart';
 import '../../storage/settings_store.dart';
-import '../document/document_session.dart';
 import '../analysis/engine_jobs.dart';
-import '../search/fill_states.dart' show fillEvalDepth;
 import '../book/gap_hunt.dart';
 import '../book/gap_walk.dart';
-import '../latest.dart';
 import '../book/replies.dart';
+import '../document/document_session.dart';
+import '../latest.dart';
+import '../search/fill_states.dart' show fillEvalDepth;
 
 sealed class AuditState {
   const AuditState();

@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../ui/app_keys.dart';
+import '../../ui/screen_keys.dart';
 import '../../ui/theme.dart';
 import 'bughouse_lab.dart';
 import 'lab_engine.dart';
 import 'lab_panel.dart';
 import 'table_boards.dart';
-import '../../ui/screen_keys.dart';
 
 /// The Bughouse mode: board 1 alone or both boards on the left, the engine
 /// and the move lists on the right. The boards take what the window leaves.

@@ -5,8 +5,8 @@ import '../../chess/pgn/line_id_pins.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/edit_scope.dart';
-import '../../storage/reference_change.dart';
 import '../../storage/pgn_document_store.dart' as store;
+import '../../storage/reference_change.dart';
 import 'parsed_files.dart';
 
 /// What reading a document for the workspace came to: the chapter to show,

@@ -8,17 +8,17 @@ import '../../chess/book/played_game.dart';
 import '../../chess/pgn/chapter.dart' show readOffThreadFrom;
 import '../../chess/tactics/game_ids.dart';
 import '../../chess/tactics/mistake_counts.dart';
-import '../../storage/chapter_files.dart';
-import '../../storage/document_repository.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/book_list.dart' show Book;
+import '../../storage/chapter_files.dart';
+import '../../storage/document_repository.dart';
 import '../../storage/my_accounts.dart';
 import '../../storage/my_games_files.dart';
 import '../../storage/settings_store.dart';
 import '../../workspace/book/book_verdict_view.dart' show bookMoment;
 import '../../workspace/book/books.dart';
-import '../../workspace/latest.dart';
 import '../../workspace/book/repertoire_shelf.dart';
+import '../../workspace/latest.dart';
 import 'book_words.dart' show matchesSearch;
 
 /// One of the user's games and what their books say about it.

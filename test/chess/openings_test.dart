@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/openings.dart';
-import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
+import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:dartchess/dartchess.dart' show Chess, Position;
 import 'package:flutter_test/flutter_test.dart';
 

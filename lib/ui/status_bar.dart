@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../diagnostics/log.dart';
-import 'theme.dart';
 import 'app_icons.dart';
+import 'theme.dart';
 
 /// A button beside the sentence in the [StatusBar]: the way out the sentence
 /// names, such as Reload.

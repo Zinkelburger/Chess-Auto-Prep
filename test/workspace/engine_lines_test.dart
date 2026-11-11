@@ -16,7 +16,6 @@ void main() {
       final analysis = EngineAnalysis(
         fixture.session,
         () async => Started(engine),
-        multiPv: 3,
       );
       addTearDown(analysis.dispose);
       await analysis.enable();

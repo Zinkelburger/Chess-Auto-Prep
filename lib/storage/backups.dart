@@ -4,10 +4,10 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
-import 'directory_entries.dart';
 import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'backup_relocation.dart';
+import 'directory_entries.dart';
 import 'recovery_files.dart';
 
 /// Every version the store replaces, kept where a mistake in Documents cannot

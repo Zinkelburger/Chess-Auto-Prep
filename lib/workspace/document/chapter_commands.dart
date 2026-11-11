@@ -1,8 +1,8 @@
 import 'package:dartchess/dartchess.dart' show Side;
 
 import '../../chess/pgn/branch_edits.dart' as edits;
-import '../../chess/pgn/line_edits.dart' as edits;
 import '../../chess/pgn/game_tree.dart';
+import '../../chess/pgn/line_edits.dart' as edits;
 import 'document_session.dart';
 
 /// The edits that move, remove or rewrite whole games of the open chapter.

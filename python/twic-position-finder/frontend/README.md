@@ -22,7 +22,8 @@ an unlisted booking page. `public/_redirects` sends `/crazyhouse`,
 ```sh
 npm install
 npm run dev        # http://localhost:4321 — set PUBLIC_API_URL to point at a local server.py
-npm run build      # → dist/ (runs the unit tests and astro check first)
+npm run build      # → dist/ (runs the linter, the unit tests and astro check first)
+npm run lint       # oxlint over src/, scripts/, tests/ and functions/; warnings fail it
 npx astro check    # type-check .ts and .astro
 npm run test:analysis  # the bughouse board's tree, hands, rules and judgements
 npm run test:puzzles   # bughouse puzzles and the puzzle set
@@ -78,7 +79,10 @@ checksum-verified chunks. Every file fits Cloudflare Pages' 25 MiB asset limit.
   - for `/bughouse` only: `tree.ts` (a board's move tree by bughouse rules,
     and hand edits), `engine.ts` (HypeBeast), `partner.ts` (the partner
     panel), `hand.ts` (a hand with + and −), `practice.ts` (Practice with
-    computer) and `app.ts` (the page, both boards).
+    computer), `editor-draft.ts` (the editor's side to move, castling, en
+    passant, hands and move number), `saved-boards.ts` (both trees kept in
+    this browser and the positions in the link) and `app.ts` (the page,
+    both boards).
 - `src/prep/` — the PGN and Expectimax tabs (below). `pgn.ts`,
   `pgn-client.ts`/`pgn.worker.ts` and `storage.ts` (IndexedDB
   `cap-preparation`) are also used by the Tactics Trainer.
