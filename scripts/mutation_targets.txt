@@ -73,3 +73,4 @@ lib/chess/opening_index.dart|test/chess/opening_index_test.dart|test/workspace/i
 lib/chess/openings.dart|test/chess/openings_test.dart|test/chess/generation/draft_lines_test.dart
 lib/chess/pgn/analysis_board.dart|test/workspace/analysis_board_test.dart|test/app/trap_training_test.dart test/workspace/chapter_audit_test.dart test/workspace/file_filter_test.dart test/workspace/file_tree_test.dart test/workspace/fill_gaps_test.dart test/workspace/search_opponents_test.dart test/workspace/search_pane_test.dart
 lib/chess/pgn/board_shapes.dart|test/chess/pgn/board_shapes_test.dart|test/chess/pgn/comment_edits_test.dart test/workspace/board_view_test.dart test/workspace/move_shapes_test.dart test/workspace/workspace_view_test.dart
+lib/chess/pgn/branch_edits.dart|test/chess/pgn/branch_edits_test.dart|test/chess/pgn/one_game_edits_test.dart
