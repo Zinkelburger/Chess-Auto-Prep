@@ -23,7 +23,6 @@
     "@lichess-org/chessground": "10.2.0",
     "astro": "^6.1.0",
     "chess.js": "^1.4.0",
-    "chessground": "^9.2.1",
     "chessops": "0.15.1",
     "onnxruntime-web": "1.22.0"
   },
