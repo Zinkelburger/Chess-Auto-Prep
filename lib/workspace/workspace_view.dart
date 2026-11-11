@@ -81,8 +81,11 @@ class WorkspaceView extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: layout ?? tabs,
-      builder: (context, _) =>
-          BoardAndCard(board: _board, card: _column, layout: layout),
+      builder: (context, _) => BoardAndCard(
+        board: (_) => _BoardSide(view: this),
+        card: (_) => _ReadingCard(view: this),
+        layout: layout,
+      ),
     );
   }
 
@@ -99,105 +102,129 @@ class WorkspaceView extends StatelessWidget {
                 layout.pane(i).selected == WorkspaceTab.notes,
           );
   }
+}
 
-  Widget _board(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(Space.l),
-    child: ValueListenableBuilder<BoardClaim?>(
-      valueListenable: hooks.boardClaim ?? const _NoClaim(),
-      builder: (context, claim, _) => claim == null
-          ? BoardAndCounter(
-              session: workspace.session,
-              noteEditable: hooks.builder && !_notesUp,
-              reserveNote: hooks.builder || hooks.noteEditing,
-              editing: hooks.noteEditing && !_notesUp ? editing : null,
-              quiet: hooks.quietBoard,
-              engineInBoard: !hooks.trainingTools,
-              settings: workspace.settings,
-              analysis: workspace.analysis,
-              onMove: hooks.onBoardMove ?? workspace.session.playMove,
-              counter: hooks.gameCounter,
-              ordering: hooks.gameOrdering,
-              moves: moves,
-              // While part of the game is hidden — a puzzle's answer — the
-              // engine would read it out, so it is not shown until the
-              // answer is found or shown.
-              engine: (settingsOpen) => _UnlessHidden(
+/// The board, or whatever has claimed it, with the view's margin.
+class _BoardSide extends StatelessWidget {
+  const _BoardSide({required this.view});
+
+  final WorkspaceView view;
+
+  @override
+  Widget build(BuildContext context) {
+    final WorkspaceView(:workspace, :hooks, :editing, :moves) = view;
+    return Padding(
+      padding: const EdgeInsets.all(Space.l),
+      child: ValueListenableBuilder<BoardClaim?>(
+        valueListenable: hooks.boardClaim ?? const _NoClaim(),
+        builder: (context, claim, _) => claim == null
+            ? BoardAndCounter(
                 session: workspace.session,
-                child: EnginePane(
+                noteEditable: hooks.builder && !view._notesUp,
+                reserveNote: hooks.builder || hooks.noteEditing,
+                editing: hooks.noteEditing && !view._notesUp ? editing : null,
+                quiet: hooks.quietBoard,
+                engineInBoard: !hooks.trainingTools,
+                settings: workspace.settings,
+                analysis: workspace.analysis,
+                onMove: hooks.onBoardMove ?? workspace.session.playMove,
+                counter: hooks.gameCounter,
+                ordering: hooks.gameOrdering,
+                moves: moves,
+                // While part of the game is hidden — a puzzle's answer — the
+                // engine would read it out, so it is not shown until the
+                // answer is found or shown.
+                engine: (settingsOpen) => _UnlessHidden(
                   session: workspace.session,
-                  analysis: workspace.analysis,
-                  settings: workspace.settings,
-                  settingsOpen: settingsOpen,
-                  coresAvailable: workspace.coresAvailable,
-                  onMove: hooks.onEngineMove,
+                  child: EnginePane(
+                    session: workspace.session,
+                    analysis: workspace.analysis,
+                    settings: workspace.settings,
+                    settingsOpen: settingsOpen,
+                    coresAvailable: workspace.coresAvailable,
+                    onMove: hooks.onEngineMove,
+                  ),
                 ),
+              )
+            : ClaimedBoard(
+                claim: claim,
+                settings: workspace.settings,
+                moves: moves,
               ),
-            )
-          : ClaimedBoard(
-              claim: claim,
-              settings: workspace.settings,
-              moves: moves,
-            ),
-    ),
-  );
-
-  /// The reading column is a card: darker than the window around it, its
-  /// corners rounded, the board's margin kept on three sides and the
-  /// divider's on the fourth. The words sit in from its edge.
-  Widget _column(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(0, Space.l, Space.l, Space.l),
-    child: Material(
-      color: Theme.of(context).colorScheme.surfaceContainerLowest,
-      borderRadius: BorderRadius.circular(readingCardRadius),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: _Tabbed(
-              workspace: workspace,
-              tabs: tabs,
-              hooks: hooks,
-              layout: layout,
-            ),
-          ),
-          EditStrip(
-            session: workspace.session,
-            saver: workspace.saver,
-            editing: editing,
-            onSave: hooks.onSaveHeld,
-            commentInNote: hooks.noteEditing || _notesUp,
-            studyTools: hooks.studyTools,
-            done: !hooks.editSwitch,
-          ),
-          // While part of the game is hidden the arrows would walk into it.
-          _UnlessHidden(
-            session: workspace.session,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Divider(height: 1),
-                NavRow(
-                  session: workspace.session,
-                  book: layout?.book,
-                  leading: hooks.editSwitch
-                      ? EditSwitch(session: workspace.session, editing: editing)
-                      : null,
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
-    ),
-  );
+    );
+  }
+}
+
+/// The reading column is a card: darker than the window around it, its
+/// corners rounded, the board's margin kept on three sides and the
+/// divider's on the fourth. The words sit in from its edge.
+class _ReadingCard extends StatelessWidget {
+  const _ReadingCard({required this.view});
+
+  final WorkspaceView view;
+
+  @override
+  Widget build(BuildContext context) {
+    final WorkspaceView(:workspace, :tabs, :layout, :editing, :hooks) = view;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, Space.l, Space.l, Space.l),
+      child: Material(
+        color: Theme.of(context).colorScheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(readingCardRadius),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _Tabbed(
+                workspace: workspace,
+                tabs: tabs,
+                hooks: hooks,
+                layout: layout,
+              ),
+            ),
+            EditStrip(
+              session: workspace.session,
+              saver: workspace.saver,
+              editing: editing,
+              onSave: hooks.onSaveHeld,
+              commentInNote: hooks.noteEditing || view._notesUp,
+              studyTools: hooks.studyTools,
+              done: !hooks.editSwitch,
+            ),
+            // While part of the game is hidden the arrows would walk into it.
+            _UnlessHidden(
+              session: workspace.session,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Divider(height: 1),
+                  NavRow(
+                    session: workspace.session,
+                    book: layout?.book,
+                    leading: hooks.editSwitch
+                        ? EditSwitch(
+                            session: workspace.session,
+                            editing: editing,
+                          )
+                        : null,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// The moves, the opponent's replies, the explorer or the search, under
 /// the strip that says which. The tabs are the window's: the shell owns
 /// them, the keys walk them and the Actions menu opens and closes them, so
 /// this only draws what is up. A new thing the card can show is one more
-/// arm of [_body]; a control it owns sits in its own body.
+/// arm of [_TabBody]; a control it owns sits in its own body.
 class _Tabbed extends StatelessWidget {
   const _Tabbed({
     required this.workspace,
@@ -211,61 +238,212 @@ class _Tabbed extends StatelessWidget {
   final ActionLayout? layout;
   final WorkspaceHooks hooks;
 
-  Widget _body(
-    BuildContext context,
-    WorkspaceTab tab, {
-    Explorer? explorer,
-    ValueNotifier<bool>? book,
-  }) => switch (tab) {
-    WorkspaceTab.moves when book != null => ValueListenableBuilder<bool>(
-      valueListenable: book,
-      builder: (context, open, _) => open
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+  @override
+  Widget build(BuildContext context) {
+    final layout = this.layout;
+    return layout != null
+        ? ActionPanes(
+            layout: layout,
+            actions: hooks.paneActions,
+            body: (context, index, tab) => _VisibleBody(
+              workspace: workspace,
+              hooks: hooks,
+              tab: tab,
+              explorer:
+                  tab == WorkspaceTab.explorer || tab == WorkspaceTab.moves
+                  ? layout.explorer(index)
+                  : null,
+              book: layout.book,
+            ),
+          )
+        : ListenableBuilder(
+            listenable: tabs,
+            builder: (context, _) => Column(
               children: [
-                Expanded(flex: 2, child: _moves()),
+                PaneTabStrip(tabs: tabs, connected: true),
                 const Divider(height: 1),
-                Expanded(flex: 3, child: _explorer(explorer)),
+                Expanded(
+                  child: _VisibleBody(
+                    workspace: workspace,
+                    hooks: hooks,
+                    tab: tabs.selected,
+                  ),
+                ),
               ],
-            )
-          : _moves(),
-    ),
-    WorkspaceTab.analysis when hooks.trainingTools => TrainingAnalysisPane(
-      workspace: workspace,
-      onMove: hooks.onEngineMove,
-    ),
-    WorkspaceTab.moves || WorkspaceTab.analysis => _moves(),
-    WorkspaceTab.notes => NotesPane(session: workspace.session),
-    WorkspaceTab.review =>
-      workspace.review == null
-          ? const SizedBox.shrink()
-          : GameReviewPane(review: workspace.review!),
-    WorkspaceTab.train => _supplied(context, tab),
-    WorkspaceTab.replies => RepliesPane(
-      session: workspace.session,
-      replies: workspace.replies,
-      gaps: workspace.gaps,
-    ),
-    WorkspaceTab.explorer => _explorer(explorer),
-    WorkspaceTab.search => SearchPane(
-      fill: workspace.fill,
-      session: workspace.session,
-      settings: workspace.settings,
-      onOpenChapter: hooks.onOpenChapter,
-      onShowPositions: hooks.onShowPositions,
-      onTogglePositions: hooks.onTogglePositions,
-    ),
-    WorkspaceTab.audit =>
-      workspace.audit == null
-          ? const SizedBox.shrink()
-          : AuditPane(audit: workspace.audit!, session: workspace.session),
-    WorkspaceTab.puzzle || WorkspaceTab.source => _supplied(context, tab),
-    WorkspaceTab.book || WorkspaceTab.solitaire => _supplied(context, tab),
-    WorkspaceTab.filter => _supplied(context, tab),
-    WorkspaceTab.player || WorkspaceTab.playerBook => _supplied(context, tab),
+            ),
+          );
+  }
+}
+
+/// [tab]'s body, or a word in its place while a lesson hides the answers.
+class _VisibleBody extends StatelessWidget {
+  const _VisibleBody({
+    required this.workspace,
+    required this.hooks,
+    required this.tab,
+    this.explorer,
+    this.book,
+  });
+
+  final Workspace workspace;
+  final WorkspaceHooks hooks;
+  final WorkspaceTab tab;
+  final Explorer? explorer;
+  final ValueNotifier<bool>? book;
+
+  /// The tabs that show the document's moves or what follows them.
+  static bool _tellsAnswers(WorkspaceTab tab) => switch (tab) {
+    WorkspaceTab.moves ||
+    WorkspaceTab.notes ||
+    WorkspaceTab.analysis ||
+    WorkspaceTab.review ||
+    WorkspaceTab.replies ||
+    WorkspaceTab.explorer ||
+    WorkspaceTab.search ||
+    WorkspaceTab.audit ||
+    WorkspaceTab.player ||
+    WorkspaceTab.playerBook => true,
+    WorkspaceTab.train ||
+    WorkspaceTab.puzzle ||
+    WorkspaceTab.source ||
+    WorkspaceTab.book ||
+    WorkspaceTab.filter ||
+    WorkspaceTab.solitaire => false,
   };
 
-  Widget _moves() {
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<BoardClaim?>(
+    valueListenable: hooks.lesson ?? const _NoClaim(),
+    builder: (context, lesson, _) => lesson != null && _tellsAnswers(tab)
+        ? Padding(
+            padding: const EdgeInsets.all(readingCardInset),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Hidden while training',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                if (hooks.onStudyLesson != null) ...[
+                  const SizedBox(height: Space.s),
+                  OutlinedButton(
+                    onPressed: hooks.onStudyLesson,
+                    child: const Text('Reveal help and study'),
+                  ),
+                  const SizedBox(height: Space.s),
+                  const Text('Your lesson stays ready to resume.'),
+                ],
+              ],
+            ),
+          )
+        : _TabBody(
+            workspace: workspace,
+            hooks: hooks,
+            tab: tab,
+            explorer: explorer,
+            book: book,
+          ),
+  );
+}
+
+/// What [tab] shows.
+class _TabBody extends StatelessWidget {
+  const _TabBody({
+    required this.workspace,
+    required this.hooks,
+    required this.tab,
+    this.explorer,
+    this.book,
+  });
+
+  final Workspace workspace;
+  final WorkspaceHooks hooks;
+  final WorkspaceTab tab;
+  final Explorer? explorer;
+  final ValueNotifier<bool>? book;
+
+  @override
+  Widget build(BuildContext context) {
+    final book = this.book;
+    final moves = _MovesTab(workspace: workspace, hooks: hooks);
+    final explorerTab = _ExplorerTab(
+      workspace: workspace,
+      hooks: hooks,
+      explorer: explorer,
+    );
+    final supplied = _Supplied(hooks: hooks, tab: tab);
+    return switch (tab) {
+      WorkspaceTab.moves when book != null => ValueListenableBuilder<bool>(
+        valueListenable: book,
+        builder: (context, open, _) => open
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(flex: 2, child: moves),
+                  const Divider(height: 1),
+                  Expanded(flex: 3, child: explorerTab),
+                ],
+              )
+            : moves,
+      ),
+      WorkspaceTab.analysis when hooks.trainingTools => TrainingAnalysisPane(
+        workspace: workspace,
+        onMove: hooks.onEngineMove,
+      ),
+      WorkspaceTab.moves || WorkspaceTab.analysis => moves,
+      WorkspaceTab.notes => NotesPane(session: workspace.session),
+      WorkspaceTab.review =>
+        workspace.review == null
+            ? const SizedBox.shrink()
+            : GameReviewPane(review: workspace.review!),
+      WorkspaceTab.train => supplied,
+      WorkspaceTab.replies => RepliesPane(
+        session: workspace.session,
+        replies: workspace.replies,
+        gaps: workspace.gaps,
+      ),
+      WorkspaceTab.explorer => explorerTab,
+      WorkspaceTab.search => SearchPane(
+        fill: workspace.fill,
+        session: workspace.session,
+        settings: workspace.settings,
+        onOpenChapter: hooks.onOpenChapter,
+        onShowPositions: hooks.onShowPositions,
+        onTogglePositions: hooks.onTogglePositions,
+      ),
+      WorkspaceTab.audit =>
+        workspace.audit == null
+            ? const SizedBox.shrink()
+            : AuditPane(audit: workspace.audit!, session: workspace.session),
+      WorkspaceTab.puzzle || WorkspaceTab.source => supplied,
+      WorkspaceTab.book || WorkspaceTab.solitaire => supplied,
+      WorkspaceTab.filter => supplied,
+      WorkspaceTab.player || WorkspaceTab.playerBook => supplied,
+    };
+  }
+}
+
+/// What the mode on screen puts in [tab]; nothing if it has no such tab.
+class _Supplied extends StatelessWidget {
+  const _Supplied({required this.hooks, required this.tab});
+
+  final WorkspaceHooks hooks;
+  final WorkspaceTab tab;
+
+  @override
+  Widget build(BuildContext context) =>
+      hooks.tabBody?.call(context, tab) ?? const SizedBox.shrink();
+}
+
+/// The moves, headed as a book heads a game.
+class _MovesTab extends StatelessWidget {
+  const _MovesTab({required this.workspace, required this.hooks});
+
+  final Workspace workspace;
+  final WorkspaceHooks hooks;
+
+  @override
+  Widget build(BuildContext context) {
     final solitaire = workspace.solitaire;
     // A click on a move while a note is being typed goes there at once: in
     // the note's tap region the press does not take its focus first, which
@@ -282,7 +460,9 @@ class _Tabbed extends StatelessWidget {
             }, icon: AppIcons.comment),
           ...?hooks.moveMenu?.call(path),
         ],
-        heading: hooks.header ? _heading() : null,
+        heading: hooks.header
+            ? _Heading(workspace: workspace, hooks: hooks)
+            : null,
         preview: solitaire?.active == true && solitaire?.record != null
             ? (tree: solitaire!.record!, onRead: solitaire.inspect)
             : null,
@@ -295,11 +475,24 @@ class _Tabbed extends StatelessWidget {
             builder: (context, _) => reader(),
           );
   }
+}
 
-  // At a puzzle the table would tick the answer, or list it as the only
-  // move with This file, so it goes while the answer is hidden, as the
-  // engine pane does.
-  Widget _explorer(Explorer? explorer) => _UnlessHidden(
+/// At a puzzle the table would tick the answer, or list it as the only
+/// move with This file, so it goes while the answer is hidden, as the
+/// engine pane does.
+class _ExplorerTab extends StatelessWidget {
+  const _ExplorerTab({
+    required this.workspace,
+    required this.hooks,
+    this.explorer,
+  });
+
+  final Workspace workspace;
+  final WorkspaceHooks hooks;
+  final Explorer? explorer;
+
+  @override
+  Widget build(BuildContext context) => _UnlessHidden(
     session: workspace.session,
     child: LayoutBuilder(
       builder: (context, size) => SingleChildScrollView(
@@ -328,9 +521,17 @@ class _Tabbed extends StatelessWidget {
       ),
     ),
   );
+}
 
-  /// What is open and, under it, what the mode says about it.
-  Widget _heading() => Column(
+/// What is open and, under it, what the mode says about it.
+class _Heading extends StatelessWidget {
+  const _Heading({required this.workspace, required this.hooks});
+
+  final Workspace workspace;
+  final WorkspaceHooks hooks;
+
+  @override
+  Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     mainAxisSize: MainAxisSize.min,
     children: [
@@ -338,90 +539,6 @@ class _Tabbed extends StatelessWidget {
       ?hooks.underHeading,
     ],
   );
-
-  /// The tabs that show the document's moves or what follows them.
-  static bool _tellsAnswers(WorkspaceTab tab) => switch (tab) {
-    WorkspaceTab.moves ||
-    WorkspaceTab.notes ||
-    WorkspaceTab.analysis ||
-    WorkspaceTab.review ||
-    WorkspaceTab.replies ||
-    WorkspaceTab.explorer ||
-    WorkspaceTab.search ||
-    WorkspaceTab.audit ||
-    WorkspaceTab.player ||
-    WorkspaceTab.playerBook => true,
-    WorkspaceTab.train ||
-    WorkspaceTab.puzzle ||
-    WorkspaceTab.source ||
-    WorkspaceTab.book ||
-    WorkspaceTab.filter ||
-    WorkspaceTab.solitaire => false,
-  };
-
-  Widget _supplied(BuildContext context, WorkspaceTab tab) =>
-      hooks.tabBody?.call(context, tab) ?? const SizedBox.shrink();
-
-  Widget _visibleBody(
-    BuildContext context,
-    WorkspaceTab tab, {
-    Explorer? explorer,
-    ValueNotifier<bool>? book,
-  }) => ValueListenableBuilder<BoardClaim?>(
-    valueListenable: hooks.lesson ?? const _NoClaim(),
-    builder: (context, lesson, _) => lesson != null && _tellsAnswers(tab)
-        ? Padding(
-            padding: const EdgeInsets.all(readingCardInset),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Hidden while training',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                if (hooks.onStudyLesson != null) ...[
-                  const SizedBox(height: Space.s),
-                  OutlinedButton(
-                    onPressed: hooks.onStudyLesson,
-                    child: const Text('Reveal help and study'),
-                  ),
-                  const SizedBox(height: Space.s),
-                  const Text('Your lesson stays ready to resume.'),
-                ],
-              ],
-            ),
-          )
-        : _body(context, tab, explorer: explorer, book: book),
-  );
-
-  @override
-  Widget build(BuildContext context) {
-    final layout = this.layout;
-    return layout != null
-        ? ActionPanes(
-            layout: layout,
-            actions: hooks.paneActions,
-            body: (context, index, tab) => _visibleBody(
-              context,
-              tab,
-              explorer:
-                  tab == WorkspaceTab.explorer || tab == WorkspaceTab.moves
-                  ? layout.explorer(index)
-                  : null,
-              book: layout.book,
-            ),
-          )
-        : ListenableBuilder(
-            listenable: tabs,
-            builder: (context, _) => Column(
-              children: [
-                PaneTabStrip(tabs: tabs, connected: true),
-                const Divider(height: 1),
-                Expanded(child: _visibleBody(context, tabs.selected)),
-              ],
-            ),
-          );
-  }
 }
 
 /// [child] while the whole game is on view, nothing while the session

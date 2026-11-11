@@ -202,6 +202,28 @@ final class ExternalDocumentEdits {
     }
   }
 
+  /// Puts what [command] landed on screen, the cursor on the same move.
+  void _showLanding(PreparedDocumentEdit command) {
+    final session = _session;
+    session._shown = (
+      chapter: command.landing.chapter,
+      view: command.landing.view,
+    );
+    // Lines moved with another file: no game is taken to be where
+    // it was.
+    session._arrangement++;
+    session._follow(command.landing.view);
+    session._clearRefusal();
+    session.cursor._place(
+      samePathIn(
+        command._shown.chapter.tree,
+        command.landing.chapter.tree,
+        session.cursor.value,
+      ),
+    );
+    session.notifyListeners();
+  }
+
   Future<store.SaveResult> _commit(
     PreparedDocumentEdit command,
     Future<store.SaveResult> Function(store.DocumentEdit) publish,
@@ -239,26 +261,12 @@ final class ExternalDocumentEdits {
           _matches(command) &&
           await _currentAfter(command, result.receipt);
       if (result is store.Saved && _matches(command) && currentAfter) {
-        saver.adoptExternal(command, result.receipt, command.primary.scope, () {
-          final session = _session;
-          session._shown = (
-            chapter: command.landing.chapter,
-            view: command.landing.view,
-          );
-          // Lines moved with another file: no game is taken to be where
-          // it was.
-          session._arrangement++;
-          session._follow(command.landing.view);
-          session._clearRefusal();
-          session.cursor._place(
-            samePathIn(
-              command._shown.chapter.tree,
-              command.landing.chapter.tree,
-              session.cursor.value,
-            ),
-          );
-          session.notifyListeners();
-        });
+        saver.adoptExternal(
+          command,
+          result.receipt,
+          command.primary.scope,
+          () => _showLanding(command),
+        );
       } else if (result case store.Unfinished(:final detail)) {
         saver.releaseExternal(command, detail);
       } else {

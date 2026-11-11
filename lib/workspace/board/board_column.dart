@@ -128,9 +128,6 @@ class _BoardAndCounterState extends State<BoardAndCounter>
 
   @override
   Widget build(BuildContext context) {
-    final session = widget.session;
-    final settings = widget.settings;
-    final onMove = widget.onMove;
     return LayoutBuilder(
       builder: (context, constraints) {
         final room = navRowHeight + moveFeedbackHeight + Space.m + _engineRoom;
@@ -152,37 +149,12 @@ class _BoardAndCounterState extends State<BoardAndCounter>
             width: side,
             child: Column(
               children: [
-                ListenableBuilder(
-                  listenable: Listenable.merge([
-                    session.anyChange,
-                    settings,
-                    widget.analysis.threat,
-                    ?widget.editing,
-                  ]),
-                  // A comment's line on the board is read, not played on.
-                  builder: (context, _) {
-                    final keeps = drawsIntoComment(
-                      session,
-                      editing: widget.editing?.value ?? false,
-                    );
-                    return BoardView(
-                      fen: session.cursor.boardFen,
-                      orientation: session.orientation,
-                      lastMove: session.cursor.boardLastMove,
-                      onMove: onMove,
-                      movable: session.cursor.commentLine.value == null,
-                      coordinates: settings.value.boardCoordinates,
-                      shapes: shapesOnBoard(session),
-                      threat: threatOnBoard(
-                        session,
-                        widget.analysis.threat.value,
-                      ),
-                      onDraw: keeps
-                          ? (shape) => drawIntoComment(session, shape)
-                          : null,
-                      onClear: keeps ? () => clearCommentShapes(session) : null,
-                    );
-                  },
+                _ColumnBoard(
+                  session: widget.session,
+                  settings: widget.settings,
+                  analysis: widget.analysis,
+                  editing: widget.editing,
+                  onMove: widget.onMove,
                 ),
                 // Room for the field's name on its border.
                 const SizedBox(height: Space.m),
@@ -238,6 +210,49 @@ class _BoardAndCounterState extends State<BoardAndCounter>
         ),
       ],
     ),
+  );
+}
+
+/// The board of the column, showing the session at its cursor.
+class _ColumnBoard extends StatelessWidget {
+  const _ColumnBoard({
+    required this.session,
+    required this.settings,
+    required this.analysis,
+    required this.editing,
+    required this.onMove,
+  });
+
+  final DocumentSession session;
+  final SettingsStore settings;
+  final EngineAnalysis analysis;
+  final ValueNotifier<bool>? editing;
+  final ValueChanged<String> onMove;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([
+      session.anyChange,
+      settings,
+      analysis.threat,
+      ?editing,
+    ]),
+    // A comment's line on the board is read, not played on.
+    builder: (context, _) {
+      final keeps = drawsIntoComment(session, editing: editing?.value ?? false);
+      return BoardView(
+        fen: session.cursor.boardFen,
+        orientation: session.orientation,
+        lastMove: session.cursor.boardLastMove,
+        onMove: onMove,
+        movable: session.cursor.commentLine.value == null,
+        coordinates: settings.value.boardCoordinates,
+        shapes: shapesOnBoard(session),
+        threat: threatOnBoard(session, analysis.threat.value),
+        onDraw: keeps ? (shape) => drawIntoComment(session, shape) : null,
+        onClear: keeps ? () => clearCommentShapes(session) : null,
+      );
+    },
   );
 }
 

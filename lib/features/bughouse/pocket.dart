@@ -342,7 +342,7 @@ class _ReservePieceState extends State<_ReservePiece> {
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: Space.xs,
-                  vertical: 3,
+                  vertical: tightInset,
                 ),
                 decoration: BoxDecoration(
                   color: labPocketCount,

@@ -12,6 +12,10 @@ abstract final class Space {
   static const xl = 24.0;
 }
 
+/// The room around the smallest labels: a move in an engine line, `sit`, a
+/// pocket's count. One step under [Space.xs], which would part them too far.
+const tightInset = 3.0;
+
 /// How wide a mode's list starts out: room for a game's two players or a
 /// chapter's name on one row. The divider takes it down to [paneMinWidth].
 const listColumnWidth = 260.0;
@@ -736,6 +740,9 @@ const labColumnGap = 16.0;
 /// then the pocket, its pieces as large as the board's squares, and the
 /// room around them.
 const labSeatPadding = 8.0;
+
+/// Half of [labSeatPadding]: a seat's hands take it above and below.
+const labSeatInset = labSeatPadding / 2;
 const labTurnDot = 11.0;
 
 /// A seat's clock, at the end of its hand's row under the player's name:

@@ -217,7 +217,7 @@ class _LineRow extends StatelessWidget {
             child: Center(
               widthFactor: 1,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 3),
+                padding: const EdgeInsets.symmetric(horizontal: tightInset),
                 child: Text(
                   'sit',
                   style: monoText.copyWith(

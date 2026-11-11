@@ -133,6 +133,24 @@ final class LineTransfers {
     return _finished(move, await entry.run());
   }
 
+  /// What each arriving line's id became in [chapter].
+  Map<String, String> _arrivingIds(
+    Chapter chapter,
+    GamesArranged games,
+    List<String?> sourceIds,
+  ) {
+    final mapping = <String, String>{};
+    final targetIds = trainedIdsOf(chapter);
+    var arriving = 0;
+    for (final (place, from) in games.order.indexed) {
+      if (from != null) continue;
+      final source = sourceIds[arriving++];
+      final target = targetIds[place];
+      if (source != null && target != null) mapping[source] = target;
+    }
+    return mapping;
+  }
+
   /// Prepares the destination without writing either participant.
   Future<_TargetLines> _targetLines(
     ChapterRef to,
@@ -187,17 +205,9 @@ final class LineTransfers {
     // Headers may not name the ids training is keyed by. Follow the arriving
     // games through the complete file arrangement, after collision handling
     // and pinning, rather than mapping their raw LineID tags.
-    final mapping = <String, String>{};
-    if (host == null) {
-      final targetIds = trainedIdsOf(pinned.chapter);
-      var arriving = 0;
-      for (final (place, from) in pinned.games.order.indexed) {
-        if (from != null) continue;
-        final source = sourceIds[arriving++];
-        final target = targetIds[place];
-        if (source != null && target != null) mapping[source] = target;
-      }
-    }
+    final mapping = host == null
+        ? _arrivingIds(pinned.chapter, pinned.games, sourceIds)
+        : <String, String>{};
     return _TargetPrepared(
       store.DocumentEdit(
         ref: to,

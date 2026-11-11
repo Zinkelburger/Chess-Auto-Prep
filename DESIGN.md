@@ -199,7 +199,8 @@ colour only when the action could not be done; it never pushes the page down. Th
 Moves on the left, Expectimax on the right; the book opens under the moves
 from its button.
 
-Spacing is a five-step scale (4, 8, 12, 16, 24); every gap is one of them.
+Spacing is a five-step scale (4, 8, 12, 16, 24); every gap is one of them,
+except `tightInset` (3), the room around the smallest labels.
 The list column starts 260px wide (300px in Player analysis) and the outline
 220px. Below 1480px, scaled with text size, the repertoire list and chapter
 outline share one 260px column with Repertoires/Chapters tabs; both remain

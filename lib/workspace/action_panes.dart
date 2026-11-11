@@ -34,7 +34,6 @@ class ActionPanes extends StatefulWidget {
 
 class _ActionPanesState extends State<ActionPanes> {
   PaneTabDrag<WorkspaceTab>? _drag;
-  ActionLayout get layout => widget.layout;
 
   void _dragChanged(PaneTabDrag<WorkspaceTab>? drag) {
     if (!mounted) return;
@@ -43,23 +42,84 @@ class _ActionPanesState extends State<ActionPanes> {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: layout,
-    builder: (context, _) => _grid(layout.root),
+    listenable: widget.layout,
+    builder: (context, _) => _Grid(
+      panes: _Panes(
+        layout: widget.layout,
+        drag: _drag,
+        onDrag: _dragChanged,
+        body: widget.body,
+        actions: widget.actions,
+      ),
+      node: widget.layout.root,
+    ),
   );
+}
 
-  Widget _grid(ActionPaneNode node) => switch (node) {
-    ActionPaneLeaf() => _pane(context, node.index),
-    ActionPaneSplit() => _split(node),
+/// What every part of the panes draws from: the layout, the tab being
+/// dragged and what the mode supplies.
+class _Panes {
+  const _Panes({
+    required this.layout,
+    required this.drag,
+    required this.onDrag,
+    required this.body,
+    required this.actions,
+  });
+
+  final ActionLayout layout;
+  final PaneTabDrag<WorkspaceTab>? drag;
+  final ValueChanged<PaneTabDrag<WorkspaceTab>?> onDrag;
+  final Widget Function(BuildContext, int, WorkspaceTab) body;
+  final List<AppAction> Function()? actions;
+
+  /// Moves alone on the card is the page of a book: no strip and no frame,
+  /// the `+` in its corner.
+  bool get page =>
+      layout.count == 1 &&
+      layout.openIn(0).length == 1 &&
+      layout.openIn(0).single == WorkspaceTab.moves;
+}
+
+/// The width under which [tab] scrolls sideways: the moves wrap and
+/// the Expectimax pane folds its bar, so both go narrower than the rest.
+double _leastWidth(WorkspaceTab tab) => switch (tab) {
+  WorkspaceTab.moves || WorkspaceTab.analysis => paneMinWidth,
+  WorkspaceTab.search => searchPaneMinWidth,
+  _ => actionPaneMinWidth,
+};
+
+class _Grid extends StatelessWidget {
+  const _Grid({required this.panes, required this.node});
+
+  final _Panes panes;
+  final ActionPaneNode node;
+
+  @override
+  Widget build(BuildContext context) => switch (node) {
+    final ActionPaneLeaf leaf => _Pane(panes: panes, index: leaf.index),
+    final ActionPaneSplit split => _Split(panes: panes, node: split),
   };
+}
 
-  /// Two panes at the split's share, with the gap between them as the
-  /// divider: dragged, it moves the share, which the layout keeps.
-  Widget _split(ActionPaneSplit node) {
+/// Two panes at the split's share, with the gap between them as the
+/// divider: dragged, it moves the share, which the layout keeps.
+class _Split extends StatelessWidget {
+  const _Split({required this.panes, required this.node});
+
+  final _Panes panes;
+  final ActionPaneSplit node;
+
+  ActionLayout get layout => panes.layout;
+
+  @override
+  Widget build(BuildContext context) {
     final across = node.direction == PaneSplitDirection.right;
+    final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
     return LayoutBuilder(
       builder: (context, room) {
         final total = across ? room.maxWidth : room.maxHeight;
-        final (minimum, maximum) = _bounds(node, total, across);
+        final (minimum, maximum) = _bounds(node, total, across, scale);
         final first = (total * node.share).clamp(minimum, maximum);
         return Stack(
           children: [
@@ -70,9 +130,11 @@ class _ActionPanesState extends State<ActionPanes> {
                 SizedBox(
                   width: across ? first : null,
                   height: across ? null : first,
-                  child: _grid(node.first),
+                  child: _Grid(panes: panes, node: node.first),
                 ),
-                Expanded(child: _grid(node.second)),
+                Expanded(
+                  child: _Grid(panes: panes, node: node.second),
+                ),
               ],
             ),
             Positioned(
@@ -91,11 +153,11 @@ class _ActionPanesState extends State<ActionPanes> {
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onHorizontalDragUpdate: across
-                      ? (drag) => _resize(node, drag.delta.dx, total, across)
+                      ? (drag) => _resize(drag.delta.dx, total, across, scale)
                       : null,
                   onVerticalDragUpdate: across
                       ? null
-                      : (drag) => _resize(node, drag.delta.dy, total, across),
+                      : (drag) => _resize(drag.delta.dy, total, across, scale),
                 ),
               ),
             ),
@@ -109,9 +171,14 @@ class _ActionPanesState extends State<ActionPanes> {
   /// at least a narrow pane's width.
   // Render constraints do not change the saved proportions. Widening the
   // window restores the user's allocation, including nested splits.
-  (double, double) _bounds(ActionPaneSplit node, double total, bool across) {
-    final first = _minimum(node.first, across);
-    final second = _minimum(node.second, across);
+  (double, double) _bounds(
+    ActionPaneSplit node,
+    double total,
+    bool across,
+    double scale,
+  ) {
+    final first = _minimum(node.first, across, scale);
+    final second = _minimum(node.second, across, scale);
     if (total < first + second) {
       final fit = total * first / (first + second);
       return (fit, fit);
@@ -119,10 +186,10 @@ class _ActionPanesState extends State<ActionPanes> {
     return (first, total - second);
   }
 
-  double _minimum(ActionPaneNode node, bool across) {
+  double _minimum(ActionPaneNode node, bool across, double scale) {
     if (node is ActionPaneSplit) {
-      final first = _minimum(node.first, across);
-      final second = _minimum(node.second, across);
+      final first = _minimum(node.first, across, scale);
+      final second = _minimum(node.second, across, scale);
       return (node.direction == PaneSplitDirection.right) == across
           ? first + second
           : math.max(first, second);
@@ -132,14 +199,13 @@ class _ActionPanesState extends State<ActionPanes> {
     final width = tab == WorkspaceTab.moves
         ? movesPaneComfortWidth
         : _leastWidth(tab);
-    final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
     return width * scale + 2 * Space.xs;
   }
 
-  void _resize(ActionPaneSplit node, double by, double total, bool across) {
+  void _resize(double by, double total, bool across, double scale) {
     if (total <= 0) return;
-    final now = _current(node);
-    final (minimum, maximum) = _bounds(now, total, across);
+    final now = _current();
+    final (minimum, maximum) = _bounds(now, total, across, scale);
     if (minimum == maximum) return;
     final first = (total * now.share).clamp(minimum, maximum);
     layout.resize(now, (first + by).clamp(minimum, maximum) / total);
@@ -147,7 +213,7 @@ class _ActionPanesState extends State<ActionPanes> {
 
   /// The split now in the layout that [node] was drawn from: a drag's
   /// updates each rebuild the tree.
-  ActionPaneSplit _current(ActionPaneSplit node) {
+  ActionPaneSplit _current() {
     ActionPaneSplit? find(ActionPaneNode at) => switch (at) {
       ActionPaneLeaf() => null,
       ActionPaneSplit()
@@ -159,28 +225,30 @@ class _ActionPanesState extends State<ActionPanes> {
     };
     return find(layout.root) ?? node;
   }
+}
 
-  /// Moves alone on the card is the page of a book: no strip and no frame,
-  /// the `+` in its corner.
-  bool get _page =>
-      layout.count == 1 &&
-      layout.openIn(0).length == 1 &&
-      layout.openIn(0).single == WorkspaceTab.moves;
+class _Pane extends StatelessWidget {
+  const _Pane({required this.panes, required this.index});
 
-  Widget _pane(BuildContext context, int index) {
+  final _Panes panes;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    final layout = panes.layout;
     final tabs = layout.pane(index);
     final scheme = Theme.of(context).colorScheme;
-    final drag = _drag;
-    if (_page) {
+    final drag = panes.drag;
+    if (panes.page) {
       return Stack(
         key: ValueKey('action-pane-$index'),
         fit: StackFit.expand,
         children: [
-          _body(context, index, tabs.selected),
+          _PaneBody(panes: panes, index: index, tab: tabs.selected),
           Positioned(
             top: Space.xs,
             right: Space.xs,
-            child: _paneMenu(index, labeled: true),
+            child: _PaneMenu(panes: panes, index: index, labeled: true),
           ),
         ],
       );
@@ -189,7 +257,7 @@ class _ActionPanesState extends State<ActionPanes> {
       onPointerDown: (_) => layout.select(index),
       child: Focus(
         onFocusChange: (focused) {
-          if (mounted && focused) layout.select(index);
+          if (context.mounted && focused) layout.select(index);
         },
         // A Material, not a decorated box: list rows in the tabs paint
         // their hover and ink on the nearest Material, which must be this
@@ -210,16 +278,20 @@ class _ActionPanesState extends State<ActionPanes> {
             clipBehavior: Clip.antiAlias,
             child: Column(
               children: [
-                _paneHeader(context, index),
+                _PaneHeader(panes: panes, index: index),
                 const Divider(height: 1),
                 Expanded(
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
                       if (!layout.isEmpty(index))
-                        _body(context, index, tabs.selected),
+                        _PaneBody(
+                          panes: panes,
+                          index: index,
+                          tab: tabs.selected,
+                        ),
                       if (drag != null && layout.sourceOf(drag.source) != null)
-                        _docking(index, drag),
+                        _Docking(panes: panes, index: index, drag: drag),
                     ],
                   ),
                 ),
@@ -230,112 +302,168 @@ class _ActionPanesState extends State<ActionPanes> {
       ),
     );
   }
+}
 
-  Widget _body(BuildContext context, int index, WorkspaceTab tab) =>
-      LayoutBuilder(
-        builder: (context, size) => SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SizedBox(
-            width: math.max(_leastWidth(tab), size.maxWidth),
-            height: size.maxHeight,
-            child: widget.body(context, index, tab),
-          ),
-        ),
-      );
+class _PaneBody extends StatelessWidget {
+  const _PaneBody({
+    required this.panes,
+    required this.index,
+    required this.tab,
+  });
 
-  /// The width under which [tab] scrolls sideways: the moves wrap and
-  /// the Expectimax pane folds its bar, so both go narrower than the rest.
-  static double _leastWidth(WorkspaceTab tab) => switch (tab) {
-    WorkspaceTab.moves || WorkspaceTab.analysis => paneMinWidth,
-    WorkspaceTab.search => searchPaneMinWidth,
-    _ => actionPaneMinWidth,
-  };
+  final _Panes panes;
+  final int index;
+  final WorkspaceTab tab;
 
-  List<AppAction> _tabActions(int index, WorkspaceTab tab) => [
-    if (!layout.pane(index).tabOf(tab).pinned)
-      ...layout.destinations(tab, from: index),
-    AppAction(
-      'Close tab',
-      layout.canClose(index, tab) ? () => layout.closeTab(index, tab) : null,
-      shortcut: 'Middle click',
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, size) => SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: SizedBox(
+        width: math.max(_leastWidth(tab), size.maxWidth),
+        height: size.maxHeight,
+        child: panes.body(context, index, tab),
+      ),
     ),
-    if (index != 0) AppAction('Close pane', () => layout.closePane(index)),
-    if (layout.count > 1) AppAction('Join all panes', layout.joinAll),
-  ];
+  );
+}
 
-  Widget _paneHeader(BuildContext context, int index) {
+class _PaneHeader extends StatelessWidget {
+  const _PaneHeader({required this.panes, required this.index});
+
+  final _Panes panes;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return ColoredBox(
       color: scheme.surfaceContainerLow,
       child: Row(
         children: [
           Expanded(
-            child: _stripTarget(
-              index,
-              layout.isEmpty(index)
+            child: _StripTarget(
+              panes: panes,
+              index: index,
+              strip: panes.layout.isEmpty(index)
                   ? const SizedBox(height: paneTabHeight)
-                  : _strip(index),
+                  : _Strip(panes: panes, index: index),
             ),
           ),
-          _paneMenu(index),
+          _PaneMenu(panes: panes, index: index),
         ],
       ),
     );
   }
+}
 
-  /// A tab dropped on a pane's tab row, but not on one of its tabs, goes to
-  /// the end of that row.
-  Widget _stripTarget(int index, Widget strip) =>
-      DragTarget<PaneTabDrag<WorkspaceTab>>(
-        key: ValueKey('tab-row-$index'),
-        onWillAcceptWithDetails: (details) {
-          final source = layout.sourceOf(details.data.source);
-          return source != null &&
-              source != index &&
-              layout.canPlace(details.data.id, index);
-        },
-        onAcceptWithDetails: (details) {
-          final source = layout.sourceOf(details.data.source);
-          _dragChanged(null);
-          if (source != null) layout.move(source, index, details.data.id);
-        },
-        builder: (context, candidates, _) => DecoratedBox(
-          decoration: BoxDecoration(
-            color: candidates.isEmpty
-                ? null
-                : Theme.of(context).colorScheme.surfaceContainerHigh,
-          ),
-          child: strip,
+/// A tab dropped on a pane's tab row, but not on one of its tabs, goes to
+/// the end of that row.
+class _StripTarget extends StatelessWidget {
+  const _StripTarget({
+    required this.panes,
+    required this.index,
+    required this.strip,
+  });
+
+  final _Panes panes;
+  final int index;
+  final Widget strip;
+
+  @override
+  Widget build(BuildContext context) {
+    final layout = panes.layout;
+    return DragTarget<PaneTabDrag<WorkspaceTab>>(
+      key: ValueKey('tab-row-$index'),
+      onWillAcceptWithDetails: (details) {
+        final source = layout.sourceOf(details.data.source);
+        return source != null &&
+            source != index &&
+            layout.canPlace(details.data.id, index);
+      },
+      onAcceptWithDetails: (details) {
+        final source = layout.sourceOf(details.data.source);
+        panes.onDrag(null);
+        if (source != null) layout.move(source, index, details.data.id);
+      },
+      builder: (context, candidates, _) => DecoratedBox(
+        decoration: BoxDecoration(
+          color: candidates.isEmpty
+              ? null
+              : Theme.of(context).colorScheme.surfaceContainerHigh,
         ),
-      );
+        child: strip,
+      ),
+    );
+  }
+}
 
-  Widget _strip(int index) => PaneTabStrip(
-    tabs: layout.pane(index),
-    connected: true,
-    showAdd: false,
-    closeButtons: false,
-    onClose: (tab) => layout.closeTab(index, tab),
-    onSelect: (tab) => layout.show(index, tab),
-    onContextMenu: (tab, position) {
-      final actions = _tabActions(index, tab);
-      if (actions.isNotEmpty) {
-        unawaited(showActionContextMenu(context, position, actions));
-      }
-    },
-    onDragStarted: _dragChanged,
-    onDragEnd: () => _dragChanged(null),
-    onDrop: (drag, before) {
-      final source = layout.sourceOf(drag.source);
-      _dragChanged(null);
-      if (source != null) {
-        layout.move(source, index, drag.id, before: before);
-      }
-    },
-  );
+class _Strip extends StatelessWidget {
+  const _Strip({required this.panes, required this.index});
 
-  /// The pane's `+`: every tab the mode has, opened as the layout opens a
-  /// picked tab, then an empty pane and the ways to have fewer.
-  Widget _paneMenu(int index, {bool labeled = false}) {
+  final _Panes panes;
+  final int index;
+
+  List<AppAction> _tabActions(WorkspaceTab tab) {
+    final layout = panes.layout;
+    return [
+      if (!layout.pane(index).tabOf(tab).pinned)
+        ...layout.destinations(tab, from: index),
+      AppAction(
+        'Close tab',
+        layout.canClose(index, tab) ? () => layout.closeTab(index, tab) : null,
+        shortcut: 'Middle click',
+      ),
+      if (index != 0) AppAction('Close pane', () => layout.closePane(index)),
+      if (layout.count > 1) AppAction('Join all panes', layout.joinAll),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final layout = panes.layout;
+    return PaneTabStrip(
+      tabs: layout.pane(index),
+      connected: true,
+      showAdd: false,
+      closeButtons: false,
+      onClose: (tab) => layout.closeTab(index, tab),
+      onSelect: (tab) => layout.show(index, tab),
+      onContextMenu: (tab, position) {
+        final actions = _tabActions(tab);
+        if (actions.isNotEmpty) {
+          unawaited(showActionContextMenu(context, position, actions));
+        }
+      },
+      onDragStarted: panes.onDrag,
+      onDragEnd: () => panes.onDrag(null),
+      onDrop: (drag, before) {
+        final source = layout.sourceOf(drag.source);
+        panes.onDrag(null);
+        if (source != null) {
+          layout.move(source, index, drag.id, before: before);
+        }
+      },
+    );
+  }
+}
+
+/// The pane's `+`: every tab the mode has, opened as the layout opens a
+/// picked tab, then an empty pane and the ways to have fewer.
+class _PaneMenu extends StatelessWidget {
+  const _PaneMenu({
+    required this.panes,
+    required this.index,
+    this.labeled = false,
+  });
+
+  final _Panes panes;
+  final int index;
+  final bool labeled;
+
+  @override
+  Widget build(BuildContext context) {
+    final layout = panes.layout;
     final tabs = layout.pane(index);
     return MenuAnchor(
       menuChildren: alignMenu([
@@ -345,7 +473,7 @@ class _ActionPanesState extends State<ActionPanes> {
             () => layout.open(index, tab.id),
             alternatives: layout.destinations(tab.id),
           ),
-        if (widget.actions?.call() case final actions?
+        if (panes.actions?.call() case final actions?
             when actions.isNotEmpty) ...[
           const Divider(height: 1),
           for (final action in actions) MenuEntry.action(action),
@@ -363,11 +491,31 @@ class _ActionPanesState extends State<ActionPanes> {
         if (index != 0) MenuEntry('Close pane', () => layout.closePane(index)),
         if (layout.count > 1) MenuEntry('Join all panes', layout.joinAll),
       ]),
-      builder: (context, menu, _) => _menuButton(menu, index, labeled),
+      builder: (context, menu, _) => _MenuButton(
+        layout: layout,
+        menu: menu,
+        index: index,
+        labeled: labeled,
+      ),
     );
   }
+}
 
-  Widget _menuButton(MenuController menu, int index, bool labeled) {
+class _MenuButton extends StatelessWidget {
+  const _MenuButton({
+    required this.layout,
+    required this.menu,
+    required this.index,
+    required this.labeled,
+  });
+
+  final ActionLayout layout;
+  final MenuController menu;
+  final int index;
+  final bool labeled;
+
+  @override
+  Widget build(BuildContext context) {
     void toggle() {
       layout.select(index);
       menu.isOpen ? menu.close() : menu.open();
@@ -390,8 +538,22 @@ class _ActionPanesState extends State<ActionPanes> {
             onPressed: toggle,
           );
   }
+}
 
-  Widget _docking(int index, PaneTabDrag<WorkspaceTab> drag) {
+class _Docking extends StatelessWidget {
+  const _Docking({
+    required this.panes,
+    required this.index,
+    required this.drag,
+  });
+
+  final _Panes panes;
+  final int index;
+  final PaneTabDrag<WorkspaceTab> drag;
+
+  @override
+  Widget build(BuildContext context) {
+    final layout = panes.layout;
     final source = layout.sourceOf(drag.source)!;
     final canSplit = layout.canSplit(drag.id);
     return Column(
@@ -404,10 +566,11 @@ class _ActionPanesState extends State<ActionPanes> {
             children: [
               Expanded(
                 flex: 3,
-                child: _target(
-                  index,
-                  'Move here',
-                  source != index && layout.canPlace(drag.id, index)
+                child: _DockTarget(
+                  panes: panes,
+                  index: index,
+                  label: 'Move here',
+                  accept: source != index && layout.canPlace(drag.id, index)
                       ? () => layout.move(source, index, drag.id)
                       : null,
                 ),
@@ -415,10 +578,11 @@ class _ActionPanesState extends State<ActionPanes> {
               if (canSplit)
                 Expanded(
                   flex: 2,
-                  child: _target(
-                    index,
-                    'Split right',
-                    () => layout.split(
+                  child: _DockTarget(
+                    panes: panes,
+                    index: index,
+                    label: 'Split right',
+                    accept: () => layout.split(
                       index,
                       drag.id,
                       PaneSplitDirection.right,
@@ -432,10 +596,11 @@ class _ActionPanesState extends State<ActionPanes> {
         if (canSplit)
           Expanded(
             flex: 1,
-            child: _target(
-              index,
-              'Split below',
-              () => layout.split(
+            child: _DockTarget(
+              panes: panes,
+              index: index,
+              label: 'Split below',
+              accept: () => layout.split(
                 index,
                 drag.id,
                 PaneSplitDirection.below,
@@ -446,18 +611,34 @@ class _ActionPanesState extends State<ActionPanes> {
       ],
     );
   }
+}
 
-  Widget _target(int index, String label, VoidCallback? accept) {
+class _DockTarget extends StatelessWidget {
+  const _DockTarget({
+    required this.panes,
+    required this.index,
+    required this.label,
+    required this.accept,
+  });
+
+  final _Panes panes;
+  final int index;
+  final String label;
+  final VoidCallback? accept;
+
+  @override
+  Widget build(BuildContext context) {
+    final accept = this.accept;
     if (accept == null) return const SizedBox.expand();
     final scheme = Theme.of(context).colorScheme;
     return DragTarget<PaneTabDrag<WorkspaceTab>>(
       key: ValueKey('dock-$index-$label'),
       onWillAcceptWithDetails: (details) =>
-          identical(details.data, _drag) ||
-          (details.data.source == _drag?.source &&
-              details.data.id == _drag?.id),
+          identical(details.data, panes.drag) ||
+          (details.data.source == panes.drag?.source &&
+              details.data.id == panes.drag?.id),
       onAcceptWithDetails: (_) {
-        _dragChanged(null);
+        panes.onDrag(null);
         accept();
       },
       builder: (context, candidates, _) => Container(

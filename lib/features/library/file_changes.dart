@@ -205,17 +205,10 @@ final class FileChanges {
         .whenComplete(() => _following = null);
   }
 
-  Future<bool> _follow() async {
-    final owed = _owed!;
-    final open = _session.source?.path;
-    // The workspace is on another document: nothing of it to follow now,
-    // and the user may come back to it before the gate is done.
-    if (open == null || !owed.holds(open)) return false;
-    if (await _store.open(ChapterRef.at(open)) is! store.Absent) return false;
-    final to = owed.change == _Change.folder
-        ? p.join(owed.to, p.relative(open, from: owed.from))
-        : owed.to;
-    final landed = switch (owed.change) {
+  /// Finishes [owed] on disk and says where its file ended up; [to] is
+  /// where the open document would be if it landed.
+  Future<_Landed> _carryOut(_Owed owed, String to) async {
+    return switch (owed.change) {
       _Change.move => switch (await _referencesFollow(
         () => _store.move(
           ChapterRef.at(owed.from),
@@ -255,6 +248,19 @@ final class FileChanges {
         store.IoFailure() => _Landed.onItsWay,
       },
     };
+  }
+
+  Future<bool> _follow() async {
+    final owed = _owed!;
+    final open = _session.source?.path;
+    // The workspace is on another document: nothing of it to follow now,
+    // and the user may come back to it before the gate is done.
+    if (open == null || !owed.holds(open)) return false;
+    if (await _store.open(ChapterRef.at(open)) is! store.Absent) return false;
+    final to = owed.change == _Change.folder
+        ? p.join(owed.to, p.relative(open, from: owed.from))
+        : owed.to;
+    final landed = await _carryOut(owed, to);
     if (_session.source?.path != open) {
       if (landed == _Landed.elsewhere) _settle(owed);
       return false;

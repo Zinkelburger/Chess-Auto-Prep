@@ -58,6 +58,11 @@ IMPORT = re.compile(r"^import\s+'([^']+)'")
 # A size written on one line of an `Icon(...)` is caught; one spread over
 # several lines is not, which is the limit of a line-by-line check.
 LITERAL_STYLE = re.compile(r"Color\(0x|fontSize:|fontFamily:\s*'|Icon\([^)]*\bsize:\s*[\d.]")
+# Room is a named value too: Space or a token beside it. Zero needs no name.
+THEME_FILE = "ui/theme.dart"
+EDGE_INSETS = re.compile(r"\bEdgeInsets(?:Directional)?\.\w+\(")
+NUMBER = re.compile(r"(?<![\w.])\.?\d[\w.]*")
+ZERO = re.compile(r"0*\.?0*")
 WIDGET_IMPORT = re.compile(r"^import 'package:flutter/(?:material|widgets|cupertino)\.dart'")
 WRITE_CALL = re.compile(r"\b(writeAsString|writeAsBytes|openWrite|\.create\(|\.delete\(|rename\()")
 # A file that builds a `File(` is one that could write outside the store; a
@@ -458,6 +463,22 @@ def check_controls(relative: str, lines: list[str], findings: list[str]) -> None
                 findings.append(f"lib/{relative}:{n}: `{found}` outside ui/ (use the shared control)")
 
 
+def check_insets(relative: str, source: str, findings: list[str]) -> None:
+    """No number in an `EdgeInsets` outside the theme, however many lines
+    the call is spread over."""
+    if relative == THEME_FILE:
+        return
+    clean = blank_literals(source)
+    for match in EDGE_INSETS.finditer(clean):
+        depth, end = 1, match.end()
+        while depth and end < len(clean):
+            depth += {"(": 1, ")": -1}.get(clean[end], 0)
+            end += 1
+        if any(not ZERO.fullmatch(n) for n in NUMBER.findall(clean[match.end():end])):
+            line = clean.count("\n", 0, match.start()) + 1
+            findings.append(f"lib/{relative}:{line}: number in EdgeInsets (use Space or a token in ui/theme.dart)")
+
+
 def check_file(path: Path, findings: list[str]) -> None:
     lines = path.read_text().splitlines()
     where = path.relative_to(REPO)
@@ -480,6 +501,7 @@ def check_file(path: Path, findings: list[str]) -> None:
     if is_lib:
         check_icons(path.relative_to(LIB).as_posix(), lines, findings)
         check_controls(path.relative_to(LIB).as_posix(), lines, findings)
+        check_insets(path.relative_to(LIB).as_posix(), "\n".join(lines), findings)
         check_imports(path, lines, findings)
         check_classes(str(where), "\n".join(lines), findings)
         check_members(str(where), "\n".join(lines), findings)
