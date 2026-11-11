@@ -128,3 +128,4 @@ lib/chess/pgn/move_label.dart|test/chess/pgn/move_label_test.dart|test/chess/pgn
 lib/chess/pgn/move_text.dart|test/chess/pgn/move_text_test.dart|test/chess/pgn/branch_edits_test.dart test/chess/pgn/chapter_edits_test.dart test/chess/pgn/comment_edits_test.dart test/workspace/game_review_test.dart test/workspace/solitaire_engine_test.dart
 lib/chess/pgn/solitaire_record.dart|test/chess/pgn/solitaire_record_test.dart|test/workspace/solitaire_engine_test.dart
 lib/chess/pgn/study.dart|test/chess/pgn/study_test.dart|test/app/study_training_workflow_test.dart test/app/workspace_requests_test.dart test/chess/pgn/one_game_edits_test.dart test/chess/pgn/study_cleanup_test.dart test/chess/pgn/study_training_test.dart test/features/study/studies_test.dart test/features/study/study_additions_test.dart test/features/study/study_chapters_test.dart
+lib/chess/pgn/study_cleanup.dart|test/chess/pgn/study_cleanup_test.dart|test/chess/pgn/study_lichess_test.dart
