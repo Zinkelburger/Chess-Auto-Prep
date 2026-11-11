@@ -65,12 +65,15 @@ class EngineError(RuntimeError):
 
 
 def bundled_hivemind():
-    """The shipped engine's files, or EngineNotInstalled naming the fix."""
+    """The shipped engine's files, or EngineError naming the fix."""
     mcp = Path(__file__).resolve().parents[1] / "mcp"
     if str(mcp) not in sys.path:
         sys.path.insert(0, str(mcp))
-    from bughouse.paths import locate
-    return locate()
+    from bughouse.paths import EngineNotInstalled, locate
+    try:
+        return locate()
+    except EngineNotInstalled as error:
+        raise EngineError(str(error)) from error
 
 
 def hypebeast_home() -> Path:
@@ -210,6 +213,7 @@ class EngineSpec:
         if not spec.name:
             budget = f"n{spec.nodes}" if spec.nodes else f"t{spec.movetime_ms}"
             if kind == "hivemind":
+                assert spec.model is not None  # a Hivemind spec always has one
                 spec.name = f"{spec.model.stem}-{budget}"
             elif kind == "hypebeast":
                 mode = "coord" if spec.options["Coordination"] == "true" else "nocoord"

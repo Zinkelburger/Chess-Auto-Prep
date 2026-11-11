@@ -97,7 +97,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         contender = PlayerFactory(args.contender, args.engine, ort_threads, None)
         baseline = PlayerFactory(args.baseline, args.engine, ort_threads, None)
-    except Exception as error:  # bad spec, or no engine installed
+    except (ValueError, OSError, RuntimeError) as error:  # bad spec, or no engine installed
         print(f"bughouse_arena: {error}", file=sys.stderr)
         return 1
     contender.search_timeout = baseline.search_timeout = args.search_timeout

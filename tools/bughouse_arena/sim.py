@@ -74,7 +74,7 @@ class SeatView:
     color: chess.Color
     team: chess.Color
     time_advantage: bool
-    clocks_ms: tuple[int, int, int, int]
+    clocks_ms: tuple[int, ...]
     now_ms: int
     sitting: bool
 
@@ -276,7 +276,7 @@ def play_game(game: Bughouse,
                         tuple(clocks), now, sitting[board])
         try:
             uci = players[seat].decide(view)
-        except Exception as error:  # engine crash: no result, not a loss
+        except (RuntimeError, OSError, ValueError) as error:  # engine crash: no result, not a loss
             result.error = f"{SEAT_NAMES[seat]}: {error}"
             return finish(None, "error")
         # The engine's own score for this decision, as it reported it (for
