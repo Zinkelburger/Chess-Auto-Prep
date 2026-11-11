@@ -71,7 +71,7 @@ class LineMoveToken extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final text = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 3),
+      padding: const EdgeInsets.symmetric(horizontal: tightInset),
       // As wide as its text, or the row's loose width would be taken.
       child: Center(
         widthFactor: 1,
