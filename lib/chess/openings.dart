@@ -53,7 +53,8 @@ final class Openings {
     for (final volume in volumes) {
       for (final row in volume.split('\n')) {
         final columns = row.trimRight().split('\t');
-        if (columns.length < 3 || columns[0] == 'eco') continue;
+        // The header row's `pgn` replays to nothing, as a broken row does.
+        if (columns.length < 3) continue;
         final end = _replay(columns[2]);
         if (end == null) continue;
         byPosition.putIfAbsent(
