@@ -1,5 +1,7 @@
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/generation/mainline_book.dart';
+import 'package:chess_auto_prep/chess/generation/search.dart'
+    show SearchProgress;
 import 'package:chess_auto_prep/chess/generation/search_config.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/chess/generation/search_result.dart';
@@ -47,19 +49,37 @@ void main() {
   Future<SearchResult> build({
     int linePlies = 4,
     int branchPlies = 8,
+    int maxReplies = 4,
+    double coverage = 0.8,
     Future<BookAnswer> Function(Fen)? movesAt,
+    Map<String, List<PlayedMove>>? played,
     SearchNode? seed,
+    List<SearchProgress>? progress,
+    List<SearchNode>? snapshots,
   }) => buildMainlineBook(
     root: positionOf(Fen.initial)!,
     config: MainlineConfig(
       side: Side.white,
       linePlies: linePlies,
       branchPlies: branchPlies,
+      maxReplies: maxReplies,
+      coverage: coverage,
     ),
     movesAt: movesAt ?? (fen) async => known(fen),
-    practiceAt: (fen) async => masters()[fen.position] ?? const [],
+    practiceAt: (fen) async => (played ?? masters())[fen.position] ?? const [],
     seed: seed,
+    onProgress: progress?.add,
+    onSnapshot: snapshots?.add,
   );
+
+  /// The book stopped after ChessDB's first [answers] answers.
+  Future<SearchNode> stoppedAfter(int answers) async {
+    var asked = 0;
+    final stopped = await build(
+      movesAt: (fen) async => ++asked > answers ? const BookLost() : known(fen),
+    );
+    return (stopped as SearchIncomplete).tree;
+  }
 
   test('our move is ChessDB\'s best; theirs are the masters\' replies, '
       'weighted by their games, until most of them are covered', () async {
@@ -171,6 +191,93 @@ void main() {
     final sicilian =
         (whole.chosen.child as OpponentNode).replies.first.child as OurNode;
     expect(sicilian.chosen.move.san, 'd4');
+  });
+
+  test(
+    'a resume goes on level by level from the shallowest position left',
+    () async {
+      // Stopped after the root, 1.e4 and 1...c5: 2.d4 (three plies in) and
+      // 1...e5 (two) are left to do.
+      final partial = await stoppedAfter(3);
+      final asked = <String>[];
+      await build(
+        seed: partial,
+        movesAt: (fen) async {
+          asked.add(fen.position);
+          return asked.length > 1 ? const BookLost() : known(fen);
+        },
+      );
+      expect(asked.first, at('e2e4 e7e5'));
+    },
+  );
+
+  test('a resume shows the tree each time it starts a deeper level, and '
+      'counts what the seed already holds', () async {
+    final progress = <SearchProgress>[];
+    final snapshots = <SearchNode>[];
+    await build(
+      seed: await stoppedAfter(3),
+      progress: progress,
+      snapshots: snapshots,
+    );
+    // The seed holds the root, e4, c5, e5 and d4; 1...e5 adds 2.Nf3.
+    expect(progress.first, (nodes: 6, depth: 3));
+    expect(snapshots, hasLength(2), reason: 'levels three and four');
+  });
+
+  test('a fresh book counts the root and what it adds, a level down', () async {
+    final progress = <SearchProgress>[];
+    await build(progress: progress);
+    expect(progress.first, (nodes: 2, depth: 1));
+  });
+
+  group('the masters\' replies followed', () {
+    Future<List<String>> followed(
+      List<PlayedMove> replies, {
+      int maxReplies = 4,
+      double coverage = 0.8,
+    }) async {
+      final result = await build(
+        linePlies: 2,
+        maxReplies: maxReplies,
+        coverage: coverage,
+        played: {at('e2e4'): replies},
+      );
+      final tree = (result as SearchComplete).tree as OurNode;
+      return [
+        for (final r in (tree.chosen.child as OpponentNode).replies) r.move.uci,
+      ];
+    }
+
+    test('stop once they cover exactly the share asked for', () async {
+      expect(
+        await followed([(uci: 'c7c5', games: 80), (uci: 'e7e5', games: 20)]),
+        ['c7c5'],
+      );
+    });
+
+    test('are at most the number asked for', () async {
+      expect(
+        await followed(coverage: 1, [
+          (uci: 'c7c5', games: 100),
+          (uci: 'e7e5', games: 100),
+          (uci: 'e7e6', games: 100),
+          (uci: 'c7c6', games: 100),
+          (uci: 'd7d6', games: 100),
+        ]),
+        ['c7c5', 'e7e5', 'e7e6', 'c7c6'],
+      );
+    });
+
+    test('leave out a reply played in fewer than ten games', () async {
+      expect(
+        await followed(coverage: 1, [
+          (uci: 'c7c5', games: 100),
+          (uci: 'e7e5', games: 9),
+        ]),
+        ['c7c5'],
+      );
+    });
   });
 
   test('ChessDB out of reach from the start is a failure, not an empty '

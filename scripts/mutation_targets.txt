@@ -27,6 +27,9 @@
 #     a gain of exactly 0.02 cannot be built from expected scores.
 #   lib/chess/generation/legal_moves.dart:61 `>` -> `>=`: a move never
 #     lands where it started.
+#   lib/chess/generation/mainline_book.dart:131 the `0` level of an empty
+#     queue (nothing runs), :397 the share given our adopted candidates
+#     (only replies' shares are read).
 # Listed with one equivalent mutant a --max 30 sample can draw:
 #   lib/chess/game_filter.dart:168 `> 32` -> `>= 32`: when the pattern cache
 #     is emptied, which no result shows.
@@ -50,3 +53,5 @@ lib/chess/bughouse/table_game.dart|test/chess/bughouse/table_game_test.dart test
 lib/chess/bughouse/table_setup.dart|test/chess/bughouse/table_setup_test.dart|test/chess/bughouse/crazyhouse_pgn_test.dart test/chess/bughouse/table_test.dart
 lib/chess/explorer_choice.dart|test/chess/explorer_answer_test.dart test/workspace/explorer_databases_test.dart|test/net/lichess_explorer_test.dart test/workspace
 lib/chess/generation/draft_chapter.dart|test/chess/generation/draft_chapter_test.dart|test/chess/generation/draft_lines_test.dart
+lib/chess/generation/played_policy.dart|test/workspace/search_opponents_test.dart|
+lib/chess/generation/search_config.dart|test/chess/generation/search_config_test.dart|test/chess/generation/resume_test.dart test/chess/generation/reply_cut_test.dart

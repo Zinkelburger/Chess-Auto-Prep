@@ -123,7 +123,10 @@ Future<SearchResult> buildMainlineBook({
 }) async {
   final start = SearchPath.root(root);
   final top = seed == null ? _Node(start, null) : _adopt(seed, start);
+  // A seed's positions left to do come depth first; shallowest first keeps
+  // the build level by level from where it stopped.
   final queue = <_Node>[...top.unexpanded()];
+  mergeSort(queue, compare: (a, b) => a.ply.compareTo(b.ply));
   var shown = DateTime.now();
   var level = queue.isEmpty ? 0 : queue.first.ply;
   var nodes = top.count();
