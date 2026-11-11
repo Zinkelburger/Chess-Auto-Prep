@@ -397,6 +397,78 @@ void main() {
     expect(inferredRepertoireSide(blackBook), Side.black);
   });
 
+  group('the side read off the shape, at its edges', () {
+    // Every line ends on Black's move, so the last-move rule says Black; a
+    // result of White shows the branching rule decided.
+    List<GameTree> lines(List<String> moves) => [
+      for (final m in moves) line(m),
+    ];
+
+    test('eight lines are enough to read the branching', () {
+      expect(
+        inferredRepertoireSide(
+          lines([
+            '1. e4 c5 2. Nf3 d6',
+            '1. e4 c5 2. Nf3 Nc6',
+            '1. e4 e5 2. Nf3 Nc6',
+            '1. e4 e5 2. Nf3 Nf6',
+            '1. e4 e6 2. d4 d5',
+            '1. e4 e6 2. d4 c5',
+            '1. e4 c6 2. d4 d5',
+            '1. e4 c6 2. d4 d5',
+          ]),
+        ),
+        Side.white,
+        reason: 'four places where Black branches, none where White does',
+      );
+    });
+
+    test('three of the opponent\'s branchings to one of ours still read', () {
+      expect(
+        inferredRepertoireSide(
+          lines([
+            '1. e4 c5 2. Nf3 d6',
+            '1. e4 c5 2. c3 d5',
+            '1. e4 e5 2. Nf3 Nc6',
+            '1. e4 e5 2. Nf3 Nf6',
+            '1. e4 e6 2. d4 d5',
+            '1. e4 e6 2. d4 c5',
+            '1. e4 e6 2. d4 d5',
+            '1. e4 e5 2. Nf3 Nc6',
+          ]),
+        ),
+        Side.white,
+      );
+    });
+
+    test('lines ending three in five on one side say nothing', () {
+      expect(
+        inferredRepertoireSide(
+          lines(['1. e4 e5', '1. d4 d5', '1. c4 c5', '1. Nf3', '1. g3']),
+        ),
+        isNull,
+      );
+    });
+  });
+
+  test(
+    'a sideline from a position with Black to move is named by its number',
+    () {
+      const afterE4 =
+          'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+      final read = imported('''
+[Event "Open"]
+[SetUp "1"]
+[FEN "$afterE4"]
+[Result "*"]
+
+1... e5 (1... c5 2. Nf3) 2. Nf3 *
+''');
+      final chapter = chapterOf(read.chapters.single);
+      expect(chapter.lines[1].text, contains('[Event "Open — 1...c5"]'));
+    },
+  );
+
   test('too few lines to branch are read by the move they end on', () {
     final endsOnWhite = [
       for (final reply in ['e5', 'c5', 'e6', 'c6']) line('1. e4 $reply 2. Nf3'),
