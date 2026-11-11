@@ -102,6 +102,8 @@ export class UciWorker {
 
   private onLine(line: string): void {
     if (line.startsWith('info ') && line.includes(' pv ')) this.parseInfo(line);
+    // The copy keeps a waiter added while these run out of this pass.
+    // oxlint-disable-next-line unicorn/no-useless-spread
     for (const w of [...this.waiters]) {
       if (w.test(line)) {
         clearTimeout(w.timer);

@@ -22,7 +22,8 @@ an unlisted booking page. `public/_redirects` sends `/crazyhouse`,
 ```sh
 npm install
 npm run dev        # http://localhost:4321 — set PUBLIC_API_URL to point at a local server.py
-npm run build      # → dist/ (runs the unit tests and astro check first)
+npm run build      # → dist/ (runs the linter, the unit tests and astro check first)
+npm run lint       # oxlint over src/, scripts/, tests/ and functions/; warnings fail it
 npx astro check    # type-check .ts and .astro
 npm run test:analysis  # the bughouse board's tree, hands, rules and judgements
 npm run test:puzzles   # bughouse puzzles and the puzzle set

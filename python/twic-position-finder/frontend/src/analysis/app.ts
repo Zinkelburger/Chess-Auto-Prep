@@ -183,6 +183,8 @@ export class BughouseApp {
       },
     }, { promotedPieces: true });
 
+    // The host's getters read the app's current fields; a getter cannot be an arrow.
+    // oxlint-disable-next-line typescript/no-this-alias
     const app = this;
     this.moves = new MoveList($('ch-moves'), $('ch-fork'), {
       get tree() { return app.tree; },
@@ -665,6 +667,8 @@ export class BughouseApp {
     this.closeActionMenu();
     if (on) {
       this.threat = false;
+      // The host's getters read the app's current fields; a getter cannot be an arrow.
+      // oxlint-disable-next-line typescript/no-this-alias
       const app = this;
       this.practice = new Practice({
         get tree() { return app.tree; },
