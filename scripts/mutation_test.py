@@ -36,6 +36,7 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass, asdict
+from collections.abc import Callable
 from pathlib import Path
 
 FLUTTER = os.environ.get("FLUTTER") or (
@@ -106,7 +107,7 @@ def code_mask(text: str) -> list[bool]:
 
 # (name, regex, replacement-builder). Regexes are applied to the raw text but
 # every match is checked against the code mask before it is accepted.
-OPERATORS: list[tuple[str, str, object]] = [
+OPERATORS: list[tuple[str, str, Callable[[re.Match[str]], str]]] = [
     ("relational >= -> >", r">=", lambda m: ">"),
     ("relational <= -> <", r"<=", lambda m: "<"),
     ("relational > -> >=", r"(?<![>=!<])>(?![>=])", lambda m: ">="),
@@ -406,7 +407,7 @@ def main() -> int:
               f"not by {args.tests[0]}")
     print(f"   invalid (did not compile): {len(mutants) - len(valid)}")
     if survived:
-        print(f"\n   SURVIVORS — executed but not defended:")
+        print("\n   SURVIVORS — executed but not defended:")
         for m in survived:
             print(f"     {target}:{m.line}  {m.operator}")
             print(f"        {m.snippet}")

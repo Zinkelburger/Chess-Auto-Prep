@@ -26,7 +26,6 @@ import fcntl
 import json
 import os
 import shlex
-import shutil
 import socket
 import signal
 import subprocess
@@ -38,6 +37,7 @@ import collections
 
 import agent_job
 from pathlib import Path
+from typing import Any
 
 REPO = Path(__file__).resolve().parent.parent
 STATE_DIR = Path(os.environ.get("CHESS_PREP_DRIVER_DIR", str(agent_job.driver_dir(REPO))))
@@ -143,11 +143,11 @@ class Daemon:
         self.log.write(f"[{time.strftime('%H:%M:%S')}] {s.rstrip()}\n")
 
     # -- flutter daemon protocol -------------------------------------------
-    def send(self, method: str, params: dict | None = None, timeout: float = 60) -> dict:
+    def send(self, method: str, params: dict | None = None, timeout: float = 60) -> Any:
         with self.lock:
             rid = self.next_id
             self.next_id += 1
-            slot = {"event": threading.Event()}
+            slot: dict[str, Any] = {"event": threading.Event()}
             self.pending[rid] = slot
             msg = json.dumps([{"id": rid, "method": method, "params": params or {}}])
             assert self.proc and self.proc.stdin
