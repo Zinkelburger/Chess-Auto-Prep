@@ -21,10 +21,10 @@ import argparse
 import json
 import os
 import re
-import sys
 import zipfile
 from html import unescape
 from pathlib import Path
+from typing import Any
 
 import chess
 import chess.pgn
@@ -76,7 +76,6 @@ def load_pgn_databases(paths: list[str]) -> dict:
         if not os.path.exists(p):
             continue
         if p.endswith('.zip'):
-            import tempfile
             with zipfile.ZipFile(p) as z:
                 for member in z.namelist():
                     if member.endswith('.pgn'):
@@ -209,7 +208,7 @@ ANNOTATION_CHARS = set('!?')
 
 # Characters that are NEVER part of a chess-font piece glyph and signal
 # we've left the move token.
-COMMENTARY_STARTERS = {',', ';', '(', ')', '"', "'", '"', '"', '—', '–'}
+COMMENTARY_STARTERS = {',', ';', '(', ')', '"', "'", '—', '–'}
 
 
 def parse_game_moves(game_text: str, verbose: bool = False) -> tuple[list[str], list[str], list[dict]]:
@@ -257,8 +256,8 @@ def parse_game_moves(game_text: str, verbose: bool = False) -> tuple[list[str], 
                 mn = mn2
                 # Simulate group(2) being present for Black continuation
                 class _FakeMatch:
-                    def group(self, n):
-                        if n == 1: return mn2.group(1)
+                    def group(self, n, _mn2=mn2) -> Any:
+                        if n == 1: return _mn2.group(1)
                         if n == 2: return '..'
                 mn = _FakeMatch()
 
@@ -522,7 +521,7 @@ def _resolve_with_dest(clean: str, dest_match: re.Match,
     if pawn_capture_prefix:
         from_file = ord(pawn_capture_prefix.group(1)) - ord('a')
         pawn_caps = [(m, s) for m, s in pool
-                     if board.piece_at(m.from_square).piece_type == chess.PAWN
+                     if board.piece_type_at(m.from_square) == chess.PAWN
                      and chess.square_file(m.from_square) == from_file]
         if len(pawn_caps) == 1:
             return pawn_caps[0][1], None
@@ -530,7 +529,7 @@ def _resolve_with_dest(clean: str, dest_match: re.Match,
     # Prefix has non-chess chars → garbled piece symbol → prefer piece moves
     if has_prefix and not pawn_capture_prefix:
         piece_moves = [(m, s) for m, s in pool
-                       if board.piece_at(m.from_square).piece_type != chess.PAWN]
+                       if board.piece_type_at(m.from_square) != chess.PAWN]
         if len(piece_moves) == 1:
             return piece_moves[0][1], None
         if piece_moves:
@@ -567,7 +566,7 @@ def _resolve_incomplete_file(file_char: str, board: chess.Board) -> tuple[str, d
 
     # Prefer piece moves (the piece symbol was stripped, leaving just the file)
     piece_moves = [(m, s) for m, s in candidates
-                   if board.piece_at(m.from_square).piece_type != chess.PAWN]
+                   if board.piece_type_at(m.from_square) != chess.PAWN]
     if len(piece_moves) == 1:
         return piece_moves[0][1], _make_issue(
             'inferred_incomplete', file_char, board,
@@ -646,7 +645,6 @@ def extract_commentary_for_db_game(game_text: str, moves: list[str]) -> list[str
     segments = _split_into_move_segments(game_text)
 
     # Match segments to moves using move numbers
-    move_idx = 0
     for seg in segments:
         seg_num = seg.get('move_num')
         seg_text = seg.get('commentary', '').strip()
@@ -670,7 +668,6 @@ def extract_commentary_for_db_game(game_text: str, moves: list[str]) -> list[str
 
             if 0 <= target < len(moves):
                 commentary[target] = _clean_commentary(seg_text)
-                move_idx = target + 1
 
     return commentary
 
@@ -781,15 +778,15 @@ def build_pgn_game(game_info: dict, moves: list[str],
     else:
         date = f'{year}.??.??' if year else '????.??.??'
         lines.append(f'[Event "{event}"]')
-        lines.append(f'[Site "?"]')
+        lines.append('[Site "?"]')
         lines.append(f'[Date "{date}"]')
-        lines.append(f'[Round "?"]')
+        lines.append('[Round "?"]')
         lines.append(f'[White "{white}"]')
         lines.append(f'[Black "{black}"]')
-        lines.append(f'[Result "*"]')
+        lines.append('[Result "*"]')
         lines.append(f'[ECO "{eco}"]')
 
-    lines.append(f'[Annotator "Wojo\'s Weapons Vol.3"]')
+    lines.append('[Annotator "Wojo\'s Weapons Vol.3"]')
     lines.append('')
 
     # Moves with annotations
@@ -876,17 +873,17 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Load PGN databases
-    print(f"Loading PGN databases...")
+    print("Loading PGN databases...")
     db_index = load_pgn_databases(args.pgn_db)
     print(f"  Indexed {len(db_index)} game entries")
 
     # Extract text from EPUB
-    print(f"Extracting text from EPUB...")
+    print("Extracting text from EPUB...")
     chapters = extract_epub_text(args.epub)
     print(f"  {len(chapters)} chapters extracted")
 
     # Segment into games
-    print(f"Segmenting games...")
+    print("Segmenting games...")
     games = segment_games(chapters)
     print(f"  {len(games)} games found")
 
@@ -919,7 +916,7 @@ def main():
         else:
             # Parse from EPUB text
             if args.verbose:
-                print(f"  No database match — parsing from text...")
+                print("  No database match — parsing from text...")
 
             moves, commentary, issues = parse_game_moves(
                 game['game_text'], verbose=args.verbose)
@@ -934,7 +931,7 @@ def main():
             else:
                 stats['failed'] += 1
                 if args.verbose:
-                    print(f"  FAILED to parse any moves")
+                    print("  FAILED to parse any moves")
 
             for iss in issues:
                 iss['game'] = label
@@ -955,7 +952,7 @@ def main():
     print(f"Wrote {len(all_issues)} issues to {errors_path}")
 
     print(f"\n{'='*60}")
-    print(f"Summary:")
+    print("Summary:")
     print(f"  Total games:        {len(games)}")
     print(f"  Matched from DB:    {stats['matched']}")
     print(f"  Parsed from text:   {stats['parsed']}")
