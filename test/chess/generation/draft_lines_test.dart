@@ -57,7 +57,10 @@ DraftLine fake(List<String> ucis, {double reach = 1}) => DraftLine(
 );
 
 /// The draft of a Ruy Lopez line with a d3 sideline folded into it.
-String ruyLopezDraft({Openings openings = Openings.none}) {
+String ruyLopezDraft({
+  Openings openings = Openings.none,
+  Side side = Side.white,
+}) {
   final kept = line('e4 e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6 O-O', reach: 0.6, value: 0.6);
   final aside = line(
     'e4 e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6 d3',
@@ -68,7 +71,7 @@ String ruyLopezDraft({Openings openings = Openings.none}) {
   expect(plan.entries.single.sidelines, hasLength(1));
   return draftChapterText(
     name: 'Main (draft)',
-    side: Side.white,
+    side: side,
     rootFen: Fen.initial,
     rootMoves: const [],
     prefix: const [],
@@ -93,6 +96,14 @@ DraftLine oneMove(String uci, {required String before}) => DraftLine(
 );
 
 void main() {
+  test('a draft names the user as the side it is for', () {
+    expect(ruyLopezDraft(), contains('[White "Me"]\n[Black "Training"]'));
+    expect(
+      ruyLopezDraft(side: Side.black),
+      contains('[White "Training"]\n[Black "Me"]'),
+    );
+  });
+
   group('lines of a searched tree', () {
     test('follow our chosen move and every answered reply, most reached '
         'first, ending on our move', () async {
