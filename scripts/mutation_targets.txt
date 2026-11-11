@@ -32,6 +32,9 @@
 #     (only replies' shares are read).
 #   lib/chess/generation/sources.dart:167 `covered >= mass - 1e-12` -> `>`:
 #     the tolerance already takes the equal case.
+#   lib/chess/generation/trap_scent.dart:48 the max's `>` -> `>=`.
+#   lib/chess/generation/traps.dart:306 `<` -> `<=` on the off-thread size:
+#     the same work either way.
 # Listed with one equivalent mutant a --max 30 sample can draw:
 #   lib/chess/game_filter.dart:168 `> 32` -> `>= 32`: when the pattern cache
 #     is emptied, which no result shows.
