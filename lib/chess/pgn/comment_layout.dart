@@ -258,14 +258,17 @@ final class _Layout {
     );
   }
 
-  /// Adds the position before each move of a new run and the one after its
-  /// last move, so a later line can branch from any point of it.
+  /// Adds the position after each move of a new run, so a later line can
+  /// branch from any point of it; the one before its first move is
+  /// [anchor], already there.
   void _remember(_Anchor anchor, List<PvMove> moves) {
     final chain = anchor.chain;
-    for (var k = 0; k <= moves.length; k++) {
-      final fen = k == 0 ? anchor.fen : moves[k - 1].after;
+    for (var k = 1; k <= moves.length; k++) {
       _anchors.add(
-        _Anchor(fen, chain == null ? null : [...chain, ...moves.take(k)]),
+        _Anchor(
+          moves[k - 1].after,
+          chain == null ? null : [...chain, ...moves.take(k)],
+        ),
       );
     }
   }

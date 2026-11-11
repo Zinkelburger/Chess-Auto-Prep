@@ -117,7 +117,7 @@ bool isGlyph(int nag) => nag >= 1 && nag <= 6;
 bool isPositionGlyph(int nag) =>
     const {10, 13, 14, 15, 16, 17, 18, 19}.contains(nag);
 
-MoveNode _glyphed(MoveNode node, int? nag, {bool position = false}) {
+MoveNode _glyphed(MoveNode node, int? nag, {required bool position}) {
   final inGroup = position ? isPositionGlyph : isGlyph;
   final kept = [
     for (final old in node.nags)
