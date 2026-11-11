@@ -21,6 +21,7 @@ boards 1 and 2 and takes a single ``Team`` option.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 import chess
 from chess.variant import CrazyhouseBoard
@@ -246,7 +247,7 @@ class DualBoard:
         return victim.piece_type
 
 
-def parse_move_list(moves: object) -> list[tuple[str, str]]:
+def parse_move_list(moves: Any) -> list[tuple[str, str]]:
     """Normalises the several shapes a caller may write a line in.
 
     Accepted, all meaning the same thing:
