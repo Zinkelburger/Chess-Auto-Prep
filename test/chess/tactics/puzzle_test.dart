@@ -80,6 +80,23 @@ void main() {
     expect(tried.stars, 2);
   });
 
+  test('a record starts at nothing, and a rating is held to five stars', () {
+    const fresh = PuzzleStats();
+    expect((fresh.reviews, fresh.successes, fresh.stars), (0, 0, 0));
+    expect(fresh.isNew, isTrue);
+    final rated = puzzlesOf(
+      parseChapter(
+        name: 'Default',
+        text: tacticsSet.replaceFirst(
+          '[FlawTags',
+          '[StarRating "9"]\n[FlawTags',
+        ),
+        game: 0,
+      ).lines,
+    ).first.stats;
+    expect(rated.stars, 5);
+  });
+
   test('search matches players, dates and the move, word by word', () {
     final mate = puzzles[0];
     expect(mate.matches('rival'), isTrue);
