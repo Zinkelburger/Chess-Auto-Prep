@@ -81,6 +81,10 @@
 #   lib/chess/training/line_order.dart:31 the `-1` of a line with no
 #     likelihood (every likelihood is at least 0), :54 the last band's 4.
 # Listed with equivalent mutants a --max 30 sample can draw:
+#   lib/storage/my_accounts.dart:221 `&&` -> `||`: when only one of the
+#     two writes lands, the held date and the stored one are the same.
+#   lib/storage/save_preparation.dart:17, :23, :35 the off-thread size
+#     threshold: the same work either side of it.
 #   lib/storage/master_games_import.dart:174 the Windows disk-full codes,
 #     which a Linux run never reads.
 #   lib/storage/master_games_import.dart:232 `.first` -> `.last`: a pragma
@@ -393,3 +397,8 @@ lib/storage/log_file.dart|test/storage/log_file_test.dart|
 lib/storage/line_progress.dart|test/storage/line_progress_test.dart test/storage/compound_mapping_property_test.dart|test/storage/compound_follow_process_test.dart
 lib/storage/master_book.dart|test/storage/master_book_test.dart|test/storage/master_corpus_test.dart test/storage/master_games_import_test.dart test/workspace/explorer_databases_test.dart test/workspace/explorer_pane_test.dart test/workspace/explorer_test.dart
 lib/storage/master_corpus.dart|test/storage/master_corpus_test.dart|test/features/database_library_test.dart test/features/database_storage_test.dart
+lib/storage/save_preparation.dart|test/storage/save_scope_test.dart test/storage/pgn_file_store_test.dart|test/storage/faults/save_faults_test.dart
+lib/storage/mutation_guards.dart|test/storage/mutation_guards_test.dart|test/storage/compound_pair_process_test.dart test/storage/pgn_file_store_test.dart
+lib/storage/training_payload.dart|test/storage/training_payload_test.dart|test/storage/training_store_test.dart test/storage/training_retry_test.dart test/storage/training_records_test.dart test/storage/training_codec_laws_test.dart
+lib/storage/my_accounts.dart|test/storage/my_accounts_test.dart|test/app/app_parts_test.dart test/app/corpus_invalidation_test.dart test/app/shell_my_games_test.dart test/app/shell_players_test.dart test/features/players/saved_games_test.dart test/features/tactics/account_persistence_test.dart test/features/tactics/my_games_test.dart test/features/tactics/source_games_test.dart test/workspace/explorer_pane_test.dart test/workspace/my_games_tree_test.dart
+lib/storage/my_games_files.dart|test/storage/my_games_files_test.dart test/storage/my_games_keep_test.dart|test/features/players/player_analysis_test.dart test/features/players/player_hunt_test.dart test/features/players/saved_games_test.dart test/features/tactics/account_persistence_test.dart test/features/tactics/my_games_test.dart test/workspace/explorer_pane_test.dart test/workspace/my_games_tree_test.dart
