@@ -191,3 +191,4 @@ lib/workspace/book/books.dart|test/workspace/books_test.dart|test/features/books
 lib/workspace/book/repertoire_catalog.dart|test/features/trainer/training_workspace_test.dart test/features/books_screen_test.dart test/storage/catalog_lifecycle_test.dart|test/storage/repertoire_snapshot_test.dart
 lib/workspace/book/repertoire_shelf.dart|test/workspace/repertoire_shelf_test.dart|test/features/my_games/game_book_test.dart test/storage/repertoire_snapshot_test.dart test/workspace/explorer_pane_test.dart test/workspace/repertoire_tree_test.dart test/workspace/tree_pane_test.dart test/workspace/workspace_view_test.dart
 lib/workspace/book/repertoire_tree.dart|test/workspace/repertoire_tree_test.dart|test/app/catalog_propagation_test.dart test/workspace/explorer_pane_test.dart test/workspace/tree_pane_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/book/board_book.dart|test/workspace/board_book_test.dart|test/app/viewer_books_test.dart
