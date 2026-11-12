@@ -235,6 +235,69 @@ void main() {
     });
   });
 
+  group('a mined puzzle written', () {
+    MinedPuzzle copied(
+      MinedPuzzle p, {
+      Fen? fen,
+      SourceGame? game,
+      List<String>? answer,
+    }) => MinedPuzzle(
+      fen: fen ?? p.fen,
+      played: p.played,
+      kind: p.kind,
+      answer: answer ?? p.answer,
+      engineLine: p.engineLine,
+      note: p.note,
+      refutation: p.refutation,
+      game: game ?? p.game,
+    );
+
+    test(
+      'names both players, unknown or not, and leaves out what is empty',
+      () {
+        final text = puzzleText(
+          copied(minedScholarsMate(), game: const SourceGame(id: 'g')),
+          event: 'Set #1',
+        );
+        expect(text, contains('[White ""]'));
+        expect(text, contains('[Black ""]'));
+        expect(text, isNot(contains('[Date ')));
+      },
+    );
+
+    test('a puzzle that would not read back whole is refused', () {
+      final set = parseChapter(name: 'Set', text: tacticsSet);
+      final broken = copied(minedScholarsMate(), answer: const ['Ke2']);
+      expect(
+        withMined(set, [broken], analyzed: {'g'}),
+        isA<ChapterEditRefused>(),
+      );
+    });
+
+    test('is numbered after every puzzle already in the set and before it', () {
+      const twoGames = '[Event "A"]\n\n1. e4 *\n[Event "B"]\n\n1. d4 *\n';
+      final set = parseChapter(name: 'Set', text: twoGames);
+      final first = minedScholarsMate();
+      // The same puzzle from a position one move later, so it is new.
+      final second = copied(
+        first,
+        fen: const Fen(
+          'r1bqkbnr/pppp1ppp/2n5/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 4 3',
+        ),
+      );
+      final edited =
+          (withMined(set, [first, second], analyzed: {'g'}) as ChapterEdited)
+              .chapter;
+      expect(edited.lines[2].text, contains('[Event "Set #3"]'));
+      expect(edited.lines[3].text, contains('[Event "Set #4"]'));
+      expect(
+        edited.lines.first.trailer,
+        '\n',
+        reason: 'the games before keep the space they had',
+      );
+    });
+  });
+
   group('adding to a set with little in it', () {
     final set = parseChapter(name: 'Default', text: tacticsSet);
     final puzzle = minedScholarsMate();
