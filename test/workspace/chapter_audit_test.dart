@@ -272,6 +272,68 @@ void main() {
     expect(analysis.paused, isFalse, reason: 'the board engine comes back');
   });
 
+  test('once the engine goes the run asks it nothing more, and counts from '
+      'none checked', () async {
+    engine.dieAfter = 2;
+    final audit = auditWith();
+    final running = <int>[];
+    audit.addListener(() {
+      if (audit.state case AuditRunning(:final checked)) running.add(checked);
+    });
+    await audit.start();
+    expect(running.first, 0);
+    expect(engine.asked, hasLength(3), reason: 'two answered, one it died on');
+    expect((audit.state as AuditDone).complete, isFalse);
+  });
+
+  test('a position the engine gives no lines for is passed over, not '
+      'checked', () async {
+    engine = TableEngine({...auditTable(), after('e2e4 e7e5').position: []});
+    final audit = auditWith();
+    await audit.start();
+    final done = audit.state as AuditDone;
+    expect(done.checked, done.of - 1);
+    expect(done.complete, isFalse);
+  });
+
+  test('a position with a move of ours the engine cannot score is passed '
+      'over, not checked', () async {
+    engine = TableEngine({
+      ...auditTable(),
+      after('e2e4 c7c5 b1c3').position: [],
+    });
+    final audit = auditWith();
+    await audit.start();
+    final done = audit.state as AuditDone;
+    expect(done.checked, done.of - 1);
+    expect(done.complete, isFalse);
+  });
+
+  test('a dismissal brought back where the store keeps it says nothing is '
+      'lost', () async {
+    final audit = auditWith();
+    await audit.start();
+    final reply = audit.findings.whereType<StrongReply>().single;
+    audit.dismiss(reply);
+    audit.restoreDismissed();
+    expect(audit.findings, contains(reply));
+    expect(audit.dismissalsNotKept, isFalse);
+  });
+
+  test(
+    'another chapter on the board before any audit changes nothing',
+    () async {
+      final audit = auditWith();
+      var heard = 0;
+      audit.addListener(() => heard++);
+      final other = chapterRef('KID', 'French');
+      fixture.store.documents[other] = Opened(french, scriptedRevision(french));
+      await fixture.session.open(other);
+      expect(heard, 0);
+      expect(audit.state, isA<AuditIdle>());
+    },
+  );
+
   test('auditing again after the engine died asks only what it was not '
       'told, and finishes', () async {
     engine.dieAfter = 2;

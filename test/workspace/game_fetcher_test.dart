@@ -104,4 +104,24 @@ void main() {
     );
     expect(gameFileName(game, ExplorerSource.twic), 'A_B_ _C_ - D_ (twic 7)');
   });
+
+  test('a name of a hundred characters is kept whole; a longer one is cut '
+      'and named by its game', () {
+    ExplorerGame named(int white) =>
+        ExplorerGame(id: '1', white: 'A' * white, black: 'B' * 40, result: '*');
+    final hundred = gameFileName(named(45), ExplorerSource.masters);
+    expect(hundred, '${'A' * 45} - ${'B' * 40} (masters 1)');
+    expect(hundred, hasLength(100));
+    final longer = gameFileName(named(46), ExplorerSource.masters);
+    expect(longer, startsWith('A' * 33));
+    expect(longer, isNot(contains('masters 1')));
+  });
+
+  test('a game that arrives after the fetcher went is not kept', () async {
+    final gone = gamesOver(store, lichess: lichess, book: book);
+    final keeping = gone.keep(game, source: ExplorerSource.masters, ply: 0);
+    gone.dispose();
+    expect(await keeping, isA<GameNotKept>());
+    expect(store.documents, isEmpty);
+  });
 }

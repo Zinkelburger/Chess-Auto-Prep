@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/game_filter.dart';
 import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
@@ -9,6 +10,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/big_chapter.dart';
 import '../support/scripted_store.dart';
 import '../support/viewer_fixture.dart';
 
@@ -249,5 +251,73 @@ void main() {
     );
     await settled(filter);
     expect(kept(filter), [1, 2]);
+  });
+
+  test('no game past the last is kept, and none is counted kept while the '
+      'games are still being filtered', () async {
+    fixture = await viewerOver(threeGameFile);
+    await fixture.open();
+    final filter = fixture.filter;
+    expect(filter.keeps(2), isTrue);
+    expect(filter.keeps(3), isFalse);
+    filter.apply(
+      const GameFilter(
+        rules: [HeaderRule(rule: FilterRule.regex, value: '^Carlsen')],
+      ),
+    );
+    expect(filter.busy, isTrue);
+    expect(filter.kept, 0);
+    await settled(filter);
+    expect(filter.kept, 1);
+  });
+
+  test('a position searched for keeps the games that reach it', () async {
+    fixture = await viewerOver(threeGameFile);
+    await fixture.open();
+    final filter = fixture.filter
+      ..reaching(
+        const Fen(
+          'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3',
+        ),
+      );
+    await settled(filter);
+    expect(filter.problem, isNull);
+    expect(kept(filter), [0]);
+  });
+
+  test('switching games leaves the selection as it was; the file read '
+      'again is filtered again', () async {
+    fixture = await viewerOver(threeGameFile);
+    await fixture.open();
+    final filter = fixture.filter..apply(byCarlsen);
+    final revision = filter.revision;
+    fixture.session.showGame(1);
+    expect(filter.revision, revision);
+    final carlsenAgain = threeGameFile.replaceFirst(
+      '[White "?"]',
+      '[White "Carlsen, Magnus"]',
+    );
+    fixture.store.documents[fixture.ref] = Opened(
+      carlsenAgain,
+      scriptedRevision(carlsenAgain),
+    );
+    await fixture.session.reloadFromDisk();
+    await settled(filter);
+    expect(kept(filter), [0, 2]);
+  });
+
+  test('a filter closed while the file\'s moves are still being read stays '
+      'quiet', () async {
+    fixture = await viewerOver(bigChapter(games: 1500));
+    await fixture.open();
+    final own = FileFilter(fixture.session, delay: Duration.zero)
+      ..apply(
+        const GameFilter(
+          rules: [HeaderRule(field: movesField, value: 'd4 … d5')],
+        ),
+      );
+    own.dispose();
+    await Future<void>.delayed(const Duration(seconds: 1));
+    await pumpEventQueue();
   });
 }

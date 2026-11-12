@@ -161,6 +161,46 @@ void main() {
     });
   });
 
+  test(
+    'a verdict that lands after the move was given up says nothing of it',
+    () {
+      run((async, f, solitaire, engine, jobs) {
+        solitaire.start();
+        async.flushMicrotasks();
+        solitaire.play('d2d4');
+        solitaire.reveal();
+        final shown = solitaire.feedback;
+        initialScores(async, engine);
+        async.flushMicrotasks();
+        expect(solitaire.problem, isNull);
+        expect(solitaire.feedback, shown);
+        expect(solitaire.checking, isFalse);
+      });
+    },
+  );
+
+  test('a verdict on a move given up right after it was played is not '
+      'recorded', () {
+    run((async, f, solitaire, engine, jobs) {
+      solitaire.start();
+      async.flushMicrotasks();
+      initialScores(async, engine);
+      solitaire.play('d2d4');
+      solitaire.reveal();
+      // The engine answers the check of 1. d4 after all.
+      for (final search in engine.searches.skip(1)) {
+        search.emit(
+          line(depth: 14, score: const Centipawns(-100), pv: const ['d7d5']),
+        );
+        search.end();
+      }
+      async.flushMicrotasks();
+      expect(solitaire.attempts.single.outcome, SolitaireOutcome.revealed);
+      expect(solitaire.crowns, 0);
+      expect(solitaire.guessed, 1);
+    });
+  });
+
   test('stop during check discards a late verdict and releases engine job', () {
     run((async, f, solitaire, engine, jobs) {
       solitaire.start();

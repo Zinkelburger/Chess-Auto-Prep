@@ -201,6 +201,50 @@ void main() {
     },
   );
 
+  test('at their move a reply at exactly the floor is a gap, one as common '
+      'as the rarest row is listed, a rarer one is not, and each is labelled '
+      'with its move number', () async {
+    final edges = RepliesFixture(
+      fixture.session,
+      policy: const _AfterE4({
+        'e7e5': 0.5,
+        'c7c5': 0.2,
+        'a7a6': Replies.shownFrom,
+        'h7h6': 0.009,
+      }),
+      settings: settings,
+      answers: answers,
+    );
+    addTearDown(edges.dispose);
+    await pumpEventQueue();
+    fixture.session.cursor.forward();
+    await pumpEventQueue();
+    final shown = edges.replies.table as RepliesShown;
+    final byMove = {for (final row in shown.rows) row.san: row};
+    expect(byMove.keys, ['e5', 'c5', 'a6']);
+    expect(byMove['c5']!.gap, isTrue, reason: 'once in five, the floor');
+    expect(byMove['a6']!.gap, isFalse);
+    expect(byMove['c5']!.label, '1...');
+  });
+
+  test('a reply rarer than any row is still listed, as a gap, when it comes '
+      'up exactly as often as the floor', () async {
+    await settings.update(settings.value.copyWith(coverOnceIn: 200));
+    final rare = RepliesFixture(
+      fixture.session,
+      policy: const _AfterE4({'e7e5': 0.995, 'h7h6': 0.005}),
+      settings: settings,
+      answers: answers,
+    );
+    addTearDown(rare.dispose);
+    await pumpEventQueue();
+    fixture.session.cursor.forward();
+    await pumpEventQueue();
+    final shown = rare.replies.table as RepliesShown;
+    final byMove = {for (final row in shown.rows) row.san: row};
+    expect(byMove['h6']?.gap, isTrue, reason: 'one game in 200, the floor');
+  });
+
   test('the model is asked once per position and rating', () async {
     await pumpEventQueue();
     fixture.session.cursor.forward();
@@ -252,4 +296,22 @@ void main() {
     await pumpEventQueue();
     expect(replies.table, isNot(same(before)));
   });
+}
+
+/// A model that answers after 1. e4 with [shares], and like [ScriptedPolicy]
+/// at the start.
+final class _AfterE4 implements MovePolicy {
+  const _AfterE4(this.shares);
+
+  final Map<String, double> shares;
+
+  @override
+  Future<MaiaAnswer> policy(Fen fen, int elo) async =>
+      switch (fen.value.split(' ').take(2).join(' ')) {
+        'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b' => MaiaPolicy(shares),
+        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w' => const MaiaPolicy({
+          'e2e4': 1,
+        }),
+        _ => const MaiaFailed('no opinion'),
+      };
 }

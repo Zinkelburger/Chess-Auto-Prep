@@ -345,6 +345,105 @@ void main() {
     expect(done.sourceLost, isFalse);
     expect(done.complete, isFalse);
   });
+
+  group('making lines', () {
+    late FillGaps fill;
+    late EngineJobs jobs;
+    late _FirstLegalLine continuations;
+    var toolsAsked = 0;
+
+    setUp(() {
+      toolsAsked = 0;
+      continuations = _FirstLegalLine();
+      jobs = EngineJobs(analysis);
+      fill = FillGaps(
+        session: fixture.session,
+        jobs: jobs,
+        documents: fixture.store,
+        tools: (_) async {
+          toolsAsked++;
+          return FillReady(
+            evaluator: ScriptedEvaluator(
+              scores: {afterUci(positionOf(kingAndPawn), 'e2e4').fen: -100},
+            ),
+            policy: const ScriptedPolicy({'e8d8': 1}),
+            continuations: continuations,
+            release: () async {},
+          );
+        },
+        clock: () => DateTime(2026, 9, 22, 12),
+      );
+      addTearDown(fill.dispose);
+    });
+
+    test('while another job holds the machine writes the lines as they are, '
+        'without the engine', () async {
+      await fill.start(const FillRequest(elo: 2200, depthPlies: 3));
+      final asked = toolsAsked;
+      final other = Object();
+      expect(jobs.take(other, 'Reviewing a game'), isTrue);
+      await fill.makeLines();
+      expect(fill.lines, isA<LinesWritten>());
+      expect(toolsAsked, asked, reason: 'the machine was not this job\'s');
+      expect(continuations.asked, isEmpty);
+      expect(jobs.heldByOther(fill), isTrue);
+    });
+
+    test('a draft whose save failed can be given up, once; a written one '
+        'cannot', () async {
+      await fill.start(const FillRequest(elo: 2200, depthPlies: 3));
+      fixture.store.creates.add(const IoFailure('disk full'));
+      await fill.makeLines();
+      expect(fill.lines, isA<LinesFailed>());
+      expect(fill.canDiscardDraft, isTrue);
+      fill.discardDraftSave();
+      expect(fill.canDiscardDraft, isFalse);
+      expect(
+        (fill.lines as LinesFailed).reason,
+        startsWith('Draft save abandoned'),
+      );
+      expect(fill.canStart, isTrue);
+
+      await fill.start(const FillRequest(elo: 2200, depthPlies: 3));
+      await fill.makeLines();
+      final written = fill.lines;
+      expect(written, isA<LinesWritten>());
+      fill.discardDraftSave();
+      expect(fill.lines, same(written));
+    });
+  });
+
+  test('a root the chapter\'s games do not start from is left out of the '
+      'draft', () async {
+    fixture.dispose();
+    fixture = await openSession('// Root: 1. e4\n$chapter');
+    analysis.dispose();
+    analysis = EngineAnalysis(
+      fixture.session,
+      () async => Started(ScriptedEngine()),
+    );
+    await analysis.enable();
+    final own = FillGaps(
+      session: fixture.session,
+      jobs: EngineJobs(analysis),
+      documents: fixture.store,
+      tools: (_) async => FillReady(
+        evaluator: ScriptedEvaluator(),
+        policy: const ScriptedPolicy({'e8d8': 1}),
+        release: () async {},
+      ),
+    );
+    addTearDown(own.dispose);
+    await own.start(const FillRequest(elo: 2200, depthPlies: 3));
+    await own.makeLines();
+    final written = own.lines as LinesWritten;
+    final text = switch (fixture.store.documents[written.draft]) {
+      Opened(:final text) => text,
+      _ => fail('the draft was not written'),
+    };
+    expect(text, isNot(contains('// Root:')));
+    expect(text, contains('// Draft'));
+  });
 }
 
 /// The mainline book's tools over a ChessDB that answers [movesAt] — null

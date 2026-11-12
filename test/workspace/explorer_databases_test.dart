@@ -85,4 +85,18 @@ void main() {
     expect(await databases.gamePgn(game, ExplorerSource.thisFile), isNull);
     expect(lichess.gamesAsked, isEmpty);
   });
+
+  test('a game is fetched from the database that listed it', () async {
+    const game = ExplorerGame(
+      id: 'abcd1234',
+      white: 'Carlsen, M',
+      black: 'Nakamura, H',
+      result: '1-0',
+    );
+    await databases.gamePgn(game, ExplorerSource.masters);
+    await databases.gamePgn(game, ExplorerSource.lichess);
+    expect(lichess.gamesAsked, [('abcd1234', true), ('abcd1234', false)]);
+    await databases.gamePgn(game, ExplorerSource.twic);
+    expect(book.gamesAsked, ['abcd1234']);
+  });
 }

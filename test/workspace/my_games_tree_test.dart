@@ -115,4 +115,27 @@ void main() {
       expect(movesOf(tree.answerAt(Fen.initial)), ['c2c4']);
     },
   );
+
+  test(
+    'reading counts from nothing: none of none, then none of the games',
+    () async {
+      accounts.accounts[GameSite.lichess] = const Account('Me');
+      saved(GameSite.lichess, 'Me', [older, newer]);
+      final reading = <(int, int)>[];
+      tree.addListener(() {
+        if (tree.state case TreeReading(:final done, :final total)) {
+          reading.add((done, total));
+        }
+      });
+      await built();
+      expect(reading.first, (0, 0));
+      expect(reading, contains((0, 2)));
+    },
+  );
+
+  test('a closed tree stays quiet when the games change', () {
+    final closed = MyGamesTree(accounts: accounts, cache: cache)..dispose();
+    closed.forget();
+    expect(closed.state, isA<TreeUnbuilt>());
+  });
 }

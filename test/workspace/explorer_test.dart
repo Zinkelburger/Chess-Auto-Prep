@@ -463,7 +463,8 @@ void main() {
     test('choosing one has it read its games, and says so meanwhile', () async {
       await choose(ExplorerSource.thisFile);
       expect(thisFile.wanted, greaterThan(0));
-      expect(explorer.state, isA<ExplorerReading>());
+      final unbuilt = explorer.state as ExplorerReading;
+      expect((unbuilt.done, unbuilt.total), (0, 0));
       thisFile.state = const TreeReading(200, 400);
       thisFile.changed();
       final reading = explorer.state as ExplorerReading;
@@ -489,6 +490,24 @@ void main() {
       expect(shown().rows.single.san, 'e5', reason: 'no rest');
       expect(lichess.asked, isEmpty);
       expect(book.asked, isEmpty);
+    });
+
+    test('a row is played only while the games still have its move', () async {
+      await choose(ExplorerSource.myGames);
+      myGames
+        ..state = const TreeBuilt()
+        ..answer = startAnswer;
+      myGames.changed();
+      final e4 = shown().rows.firstWhere((row) => row.san == 'e4');
+      expect(explorer.canPlay(e4), isTrue);
+      myGames.answer = const ExplorerAnswer(
+        moves: [
+          ExplorerMove(uci: 'd2d4', san: 'd4', white: 1, draws: 0, black: 0),
+        ],
+      );
+      expect(explorer.canPlay(e4), isFalse);
+      myGames.answer = null;
+      expect(explorer.canPlay(e4), isFalse);
     });
 
     test('a position the games never reached has nothing', () async {

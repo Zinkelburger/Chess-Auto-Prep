@@ -42,6 +42,17 @@ void main() {
     expect(shapesOnBoard(session), isEmpty);
   });
 
+  test('no shape is drawn while part of the game is hidden', () {
+    final session = fixture.session;
+    session.cursor.goTo(NodePath.of(const [0]));
+    drawIntoComment(session, _arrow);
+    expect(shapesOnBoard(session), [_arrow]);
+    session.showOnlyTo(NodePath.of(const [0]));
+    expect(shapesOnBoard(session), isEmpty);
+    session.showOnlyTo(null);
+    expect(shapesOnBoard(session), [_arrow]);
+  });
+
   test('clearing takes every shape out of the comment and keeps the words', () {
     final session = fixture.session;
     session.cursor.goTo(NodePath.of(const [0]));

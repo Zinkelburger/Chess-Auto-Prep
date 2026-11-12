@@ -148,6 +148,39 @@
 #     of one file share its path), :226 `<` -> `<=` on the off-thread size.
 #   lib/workspace/search/finds.dart:302 `<` -> `<=` in the node count:
 #     only which isolate reads the tree.
+#   lib/workspace/search/fill_states.dart:329, :330 FillDone's two `false`
+#     defaults (the one maker of a FillDone passes both).
+#   lib/workspace/analysis/engine_analysis.dart:182 the first `_replaced`
+#     (enable resets it before an engine can stop answering).
+#   lib/workspace/search/search_opponents.dart:75, :156 the `1` game a database
+#     falls back under when nothing is named (read only with a fallback,
+#     which always names its own).
+#   lib/workspace/search/fill_lines.dart:64 the first line count, :113, :131
+#     the `0` lines of a draft not written (the count is read only with a
+#     written draft).
+#   lib/workspace/review/game_review.dart:67 the main line compared from its
+#     second position (a game of the same file and number with another start
+#     reaches other positions after it).
+#   lib/workspace/book/gap_hunt.dart:51 the first `_walking`, :53, :107, :133 the
+#     Next index set to -1 (every finished walk sets it, and no Next is
+#     offered before one), :117 both `!=` (a session always has a chapter).
+#   lib/workspace/book/gap_walk.dart:168 a position reached below the floor
+#     (replies under it are never visited; only a floor above 1 reaches it),
+#     :191 `<` -> `<=` (the same value is kept either way).
+#   lib/workspace/explorer/explorer.dart:494 the first empty-answer count (the
+#     first empty answer sets it, there being no line before it to go on).
+#   lib/workspace/explorer/filter_run.dart:25 the 2 s limit, :36 the 4 ms turn and
+#     :84 its `>=`: timing only.
+#   lib/workspace/explorer/local_games.dart:342 `||` -> `&&` on a build's
+#     progress (a build is cancelled whenever it stops being the one, and a
+#     cancelled build reports nothing more).
+#   lib/workspace/explorer/file_filter.dart:189 the 15 s limit, :204 the size
+#     count's start and :208 the 64 KiB line: when and where a filter runs,
+#     not what it keeps.
+#   lib/workspace/explorer/index_build.dart:31, :66 the size count's start
+#     and :33, :67 `<` -> `<=` (where a build runs), :56 the 4 ms turn and
+#     :105 its clock's `<`: timing only.
+#   lib/workspace/latest.dart:9 the ticket counter's start (only compared).
 lib/chess/pgn/game_review.dart|test/workspace/game_review_test.dart|test/chess/pgn/edit_laws_test.dart test/app
 lib/chess/pgn/line_edits.dart|test/chess/pgn/line_edits_test.dart|test/chess/pgn test/workspace
 lib/chess/pgn/chapter_edits.dart|test/chess/pgn/chapter_edits_test.dart|test/chess/pgn test/workspace
@@ -243,6 +276,26 @@ lib/workspace/book/repertoire_shelf.dart|test/workspace/repertoire_shelf_test.da
 lib/workspace/book/repertoire_tree.dart|test/workspace/repertoire_tree_test.dart|test/app/catalog_propagation_test.dart test/workspace/explorer_pane_test.dart test/workspace/tree_pane_test.dart test/workspace/workspace_view_test.dart
 lib/workspace/book/board_book.dart|test/workspace/board_book_test.dart|test/app/viewer_books_test.dart
 lib/workspace/search/finds.dart|test/workspace/finds_test.dart|test/workspace/fill_gaps_test.dart test/workspace/fill_resume_test.dart test/workspace/fill_stops_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/search/fill_states.dart|test/workspace/fill_states_test.dart|test/workspace/fill_stops_test.dart test/workspace/fill_anchored_test.dart test/workspace/fill_gaps_test.dart test/workspace/fill_lines_test.dart test/workspace/fill_mirror_test.dart test/workspace/fill_resume_test.dart test/workspace/search_opponents_test.dart test/workspace/search_pane_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/analysis/engine_analysis.dart|test/workspace/engine_analysis_test.dart|test/app/app_parts_test.dart test/app/shell_tactics_test.dart test/features/trainer/lesson_fit_test.dart test/features/trainer/train_pane_test.dart test/features/trainer/trainer_scope_test.dart test/features/trainer/trainer_test.dart test/features/trainer/training_workspace_test.dart test/workspace/audit_pane_test.dart test/workspace/board_column_test.dart test/workspace/chapter_audit_test.dart test/workspace/document_actions_test.dart test/workspace/engine_jobs_test.dart test/workspace/engine_lines_test.dart test/workspace/engine_pane_test.dart test/workspace/fill_anchored_test.dart test/workspace/fill_gaps_test.dart test/workspace/fill_lines_test.dart test/workspace/fill_mirror_test.dart test/workspace/fill_resume_test.dart test/workspace/fill_stops_test.dart test/workspace/game_review_test.dart test/workspace/repertoire_tree_test.dart test/workspace/search_opponents_test.dart test/workspace/search_pane_test.dart test/workspace/solitaire_engine_test.dart test/workspace/solitaire_pane_test.dart test/workspace/solitaire_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/search/search_opponents.dart|test/workspace/search_opponents_test.dart|test/workspace/fill_resume_test.dart
+lib/workspace/search/fill_lines.dart|test/workspace/fill_lines_test.dart|test/workspace/fill_gaps_test.dart test/workspace/fill_anchored_test.dart test/workspace/fill_mirror_test.dart test/workspace/fill_resume_test.dart test/workspace/fill_stops_test.dart test/workspace/search_opponents_test.dart test/workspace/search_pane_test.dart
+lib/workspace/analysis/engine_jobs.dart|test/workspace/engine_jobs_test.dart|test/app/navigation_discovery_test.dart test/features/tournaments/tournament_run_test.dart test/workspace/audit_pane_test.dart test/workspace/chapter_audit_test.dart test/workspace/fill_anchored_test.dart test/workspace/fill_gaps_test.dart test/workspace/fill_lines_test.dart test/workspace/fill_mirror_test.dart test/workspace/fill_resume_test.dart test/workspace/fill_stops_test.dart test/workspace/game_review_test.dart test/workspace/search_opponents_test.dart test/workspace/search_pane_test.dart test/workspace/solitaire_engine_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/analysis/engine_status.dart|test/workspace/engine_status_test.dart|
+lib/workspace/review/chapter_audit.dart|test/workspace/chapter_audit_test.dart|test/workspace/audit_pane_test.dart test/workspace/engine_jobs_test.dart
+lib/workspace/review/game_review.dart|test/workspace/game_review_test.dart|test/workspace/engine_jobs_test.dart
+lib/workspace/book/replies.dart|test/workspace/replies_test.dart|test/app/cross_mode_native_test.dart test/app/gap_invalidation_test.dart test/workspace/audit_pane_test.dart test/workspace/builder_guidance_test.dart test/workspace/chapter_audit_test.dart test/workspace/engine_jobs_test.dart test/workspace/gap_hunt_test.dart test/workspace/reply_model_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/book/gap_hunt.dart|test/workspace/gap_hunt_test.dart|test/storage/scoped_repertoire_snapshot_test.dart test/workspace/audit_pane_test.dart test/workspace/chapter_audit_test.dart test/workspace/engine_jobs_test.dart test/workspace/repertoire_answers_test.dart test/workspace/replies_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/book/gap_walk.dart|test/workspace/gap_walk_test.dart|test/app/cross_mode_native_test.dart test/app/gap_invalidation_test.dart test/workspace/builder_guidance_test.dart test/workspace/gap_hunt_test.dart test/workspace/replies_test.dart
+lib/workspace/explorer/explorer.dart|test/workspace/explorer_test.dart|test/app/cross_mode_window_test.dart test/workspace/explorer_answers_test.dart test/workspace/explorer_databases_test.dart test/workspace/explorer_pane_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/explorer/filter_run.dart|test/workspace/filter_run_test.dart|
+lib/workspace/explorer/local_games.dart|test/app/corpus_invalidation_test.dart test/workspace/my_games_tree_test.dart test/workspace/file_tree_test.dart|test/workspace/explorer_pane_test.dart test/workspace/explorer_test.dart
+lib/workspace/explorer/file_filter.dart|test/workspace/file_filter_test.dart|test/workspace/explorer_pane_test.dart
+lib/workspace/explorer/index_build.dart|test/workspace/index_build_test.dart|
+lib/workspace/explorer/game_fetcher.dart|test/workspace/game_fetcher_test.dart|test/workspace/workspace_view_test.dart
+lib/workspace/explorer/opening_names.dart|test/workspace/opening_names_test.dart|test/workspace/reading_header_test.dart test/workspace/fill_lines_test.dart test/workspace/explorer_pane_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/board/move_shapes.dart|test/workspace/move_shapes_test.dart|
+lib/workspace/latest.dart|test/workspace/latest_test.dart|
 lib/storage/book_references.dart|test/storage/book_references_test.dart|test/storage/books_codec_laws_test.dart test/storage/compound_mapping_property_test.dart test/storage/record_codec_laws_test.dart
 lib/storage/chapter_directory.dart|test/storage/chapter_files_test.dart test/features/library_import_test.dart test/features/library_on_disk_test.dart|test/features/course_chapters_test.dart test/storage/profile_snapshot_test.dart test/features/library_import_recovery_test.dart test/storage/scoped_repertoire_snapshot_test.dart test/features/library_open_course_test.dart
 lib/storage/chapter_files.dart|test/storage/chapter_files_test.dart|test/app/catalog_propagation_test.dart test/app/cross_mode_native_test.dart test/app/gap_invalidation_test.dart test/app/native_training_test.dart test/app/read_edit_test.dart test/app/shell_books_test.dart test/app/shell_players_test.dart test/app/shell_tactics_test.dart test/app/shell_test.dart test/app/shell_trainer_navigation_test.dart test/app/trap_training_test.dart test/app/workspace_requests_test.dart test/features/books_screen_test.dart test/features/closed_rename_navigation_test.dart test/features/compound_rename_test.dart test/features/course_chapters_test.dart test/features/library_changes_test.dart test/features/library_follows_test.dart test/features/library_import_test.dart test/features/library_lines_test.dart test/features/library_on_disk_test.dart test/features/library_open_course_test.dart test/features/library_panel_test.dart test/features/library_test.dart test/features/library_unfinished_move_test.dart test/features/my_games/game_book_test.dart test/features/outline_panel_test.dart test/features/pgn_drop_region_test.dart test/features/pgn_viewer/pgn_viewer_panel_test.dart test/features/pgn_viewer/pgn_viewer_test.dart test/features/study/studies_test.dart test/features/study/study_panel_test.dart test/features/study/study_recovery_test.dart test/features/tactics/mining_native_checkpoint_test.dart test/features/trainer/trainer_scope_test.dart test/features/trainer/trainer_test.dart test/features/trainer/training_workspace_test.dart test/storage/catalog_lifecycle_test.dart test/storage/faults/books_faults_test.dart test/storage/faults/derived_faults_test.dart
@@ -254,3 +307,4 @@ lib/storage/deleted_chapters.dart|test/storage/deleted_chapters_test.dart|test/f
 lib/storage/directory_entries.dart|test/storage/directory_entries_test.dart|test/storage/deleted_chapters_test.dart test/storage/chapter_files_test.dart
 lib/storage/csv_records.dart|test/storage/csv_records_test.dart|test/storage/record_codec_laws_test.dart test/storage/training_codec_laws_test.dart
 lib/storage/document_probe.dart|test/storage/document_probe_test.dart|test/storage/book_snapshot_test.dart test/storage/faults/contracts_self_test.dart test/storage/file_relocation_recovery_test.dart test/storage/operation_journal_test.dart
+lib/workspace/workspace_tabs.dart|test/workspace/workspace_tabs_test.dart|test/app/viewer_books_test.dart test/app/layout_memory_test.dart test/app/shell_doors_test.dart test/workspace/action_panes_test.dart test/workspace/workspace_view_test.dart
