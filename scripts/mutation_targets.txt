@@ -89,6 +89,8 @@
 #     which exist; :123 `$1` -> `$2`: admission refuses the same changes.
 #   lib/chess/training/records.dart:53 `_capped`'s `>` -> `>=`: a streak
 #     of three is capped to three.
+#   lib/chess/training/training_line.dart:84 the `yourMoves` loop's
+#     `<` -> `<=`: `isYours` refuses the ply at the quiz end itself.
 #   lib/chess/generation/search.dart:241 `> _deepest` -> `>=`, :400 the
 #     snapshot interval's `>` -> `>=`, :638 the 16 ms yield: timing only.
 #   lib/workspace/search/fill_gaps.dart:165 (read only while a run is
@@ -169,3 +171,4 @@ lib/chess/tournament/result.dart|test/chess/tournament/result_test.dart|test/che
 lib/chess/training/drill.dart|test/chess/training/drill_test.dart|test/features/trainer/trainer_test.dart
 lib/chess/training/records.dart|test/chess/training/records_test.dart|test/chess/training/drill_test.dart
 lib/chess/training/schedule.dart|test/chess/training/schedule_test.dart|test/app/cross_mode_native_test.dart test/app/native_training_test.dart test/chess/training/line_order_test.dart test/chess/training/sitting_test.dart test/features/trainer/lesson_fit_test.dart test/features/trainer/train_pane_test.dart test/features/trainer/trainer_test.dart test/storage/compound_mapping_property_test.dart test/storage/persistence_lifecycle_test.dart test/storage/recovery_matrix_test.dart test/storage/training_codec_laws_test.dart test/storage/training_retry_test.dart test/storage/training_source_test.dart test/storage/training_store_test.dart test/storage/unlocked_recovery_test.dart test/workspace/faults/rating_owner_faults_test.dart
+lib/chess/training/training_line.dart|test/chess/training/training_line_test.dart|test/chess/pgn/chapter_sections_test.dart test/chess/pgn/study_training_test.dart test/chess/training/drill_test.dart test/chess/training/line_order_test.dart test/chess/training/sitting_test.dart test/features/trainer/trainer_test.dart test/storage/persistence_lifecycle_test.dart test/storage/training_retry_test.dart test/workspace/faults/rating_owner_faults_test.dart
