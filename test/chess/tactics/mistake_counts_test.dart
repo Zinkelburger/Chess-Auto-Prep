@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:chess_auto_prep/chess/tactics/analyzed_games.dart';
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/chess/tactics/mistake_counts.dart';
@@ -5,6 +7,60 @@ import 'package:chess_auto_prep/chess/tactics/puzzle.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  String stored(Object counts) =>
+      '$mistakeCountsPrefix${base64Url.encode(utf8.encode(jsonEncode(counts)))}';
+
+  test('one mistake is counted and written as one', () {
+    final one = const MistakeCounts().plus(MistakeKind.mistake);
+    expect(one.mistakes, 1);
+    expect(one.glyphs, '1?');
+  });
+
+  test('a stored entry of the wrong shape is passed over, the rest read', () {
+    final read = mistakesIn(
+      stored({
+        'good': [1, 2, 3],
+        'short': [1, 2],
+        'negative': [1, -2, 3],
+        'words': ['a', 'b', 'c'],
+        'number': 7,
+      }),
+    );
+    expect(read.keys, ['good']);
+    expect(
+      read['good'],
+      const MistakeCounts(blunders: 1, mistakes: 2, inaccuracies: 3),
+    );
+  });
+
+  test('the counts line is rewritten where it stands, or put after the '
+      'analysed-games line', () {
+    const counts = {'g': MistakeCounts(blunders: 1)};
+    final first = withMistakes(
+      stored({
+        'old': [0, 0, 1],
+      }),
+      counts,
+    );
+    expect(
+      first.split('\n').where((l) => l.startsWith(mistakeCountsPrefix)),
+      hasLength(1),
+    );
+    expect(mistakesIn(first).keys, containsAll(['old', 'g']));
+    final afterAnalyzed = withMistakes(
+      '${analyzedGamesPrefix}x\n// note',
+      counts,
+    ).split('\n');
+    expect(afterAnalyzed[0], startsWith(analyzedGamesPrefix));
+    expect(afterAnalyzed[1], startsWith(mistakeCountsPrefix));
+    expect(afterAnalyzed[2], '// note');
+    expect(
+      withMistakes('// note', counts).split('\n').first,
+      startsWith(mistakeCountsPrefix),
+      reason: 'with no analysed-games line it goes first',
+    );
+  });
+
   const one = MistakeCounts(blunders: 1, mistakes: 2);
 
   test('counts go in the line after the analysed games and read back', () {
