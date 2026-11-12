@@ -20,6 +20,12 @@ void main() {
     expect(timeClassOf('60+0'), TimeClass.bullet);
     expect(timeClassOf('0+1'), TimeClass.bullet, reason: '40 seconds');
     expect(timeClassOf('180+2'), TimeClass.blitz);
+    expect(
+      timeClassOf('300+5'),
+      TimeClass.blitz,
+      reason: '500 seconds: blitz unless the game is Lichess\'s',
+    );
+    expect(timeClassOf('300+5', lichess: true), TimeClass.rapid);
     expect(timeClassOf('600'), TimeClass.rapid);
     expect(timeClassOf('1800+30'), TimeClass.classical);
     expect(timeClassOf('1/259200'), TimeClass.correspondence);
