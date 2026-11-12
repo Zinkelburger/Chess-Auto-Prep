@@ -81,6 +81,8 @@
 #   lib/chess/training/line_order.dart:31 the `-1` of a line with no
 #     likelihood (every likelihood is at least 0), :54 the last band's 4.
 # Listed with equivalent mutants a --max 30 sample can draw:
+#   lib/storage/book_references.dart:239 `||` -> `&&`: planning the move
+#     again from what it planned from, or wrote, gives what it wrote.
 #   lib/storage/backup_relocation.dart:275 the two-second retry window.
 #   lib/storage/backups.dart:242 following a link where the index should
 #     be: it only decides whether the folder's parents are flushed again.
@@ -225,3 +227,4 @@ lib/workspace/book/repertoire_shelf.dart|test/workspace/repertoire_shelf_test.da
 lib/workspace/book/repertoire_tree.dart|test/workspace/repertoire_tree_test.dart|test/app/catalog_propagation_test.dart test/workspace/explorer_pane_test.dart test/workspace/tree_pane_test.dart test/workspace/workspace_view_test.dart
 lib/workspace/book/board_book.dart|test/workspace/board_book_test.dart|test/app/viewer_books_test.dart
 lib/workspace/search/finds.dart|test/workspace/finds_test.dart|test/workspace/fill_gaps_test.dart test/workspace/fill_resume_test.dart test/workspace/fill_stops_test.dart test/workspace/workspace_view_test.dart
+lib/storage/book_references.dart|test/storage/book_references_test.dart|test/storage/books_codec_laws_test.dart test/storage/compound_mapping_property_test.dart test/storage/record_codec_laws_test.dart
