@@ -107,6 +107,32 @@ void main() {
     );
   });
 
+  test(
+    'a header the game lacks goes before the stored ones that follow it',
+    () {
+      final timed = set(
+        tacticsSet.replaceFirst('[FlawTags', '[TimeToSolve "5"]\n[FlawTags'),
+      );
+      final text = gameText(
+        edited(
+          recordAttempt(
+            timed,
+            index: 0,
+            fen: fenOf(timed, 0),
+            solved: true,
+            seconds: 3,
+            now: DateTime(2026, 9, 22),
+          ),
+        ).chapter,
+        0,
+      );
+      expect(
+        text.indexOf('[LastReviewed '),
+        lessThan(text.indexOf('[TimeToSolve ')),
+      );
+    },
+  );
+
   test('a rating is written, changed and taken away', () {
     final rated = edited(
       ratePuzzle(set(), index: 0, fen: fenOf(set(), 0), stars: 4),
@@ -127,6 +153,11 @@ void main() {
     expect(
       ratePuzzle(set(), index: 9, fen: fenOf(set(), 0), stars: 3),
       isA<ChapterEditRefused>(),
+    );
+    expect(
+      ratePuzzle(set(), index: 5, fen: fenOf(set(), 0), stars: 3),
+      isA<ChapterEditRefused>(),
+      reason: 'one past the last',
     );
     expect(
       recordAttempt(
@@ -211,6 +242,21 @@ void main() {
       );
       expect(own.chapter.game, 2);
       expect(puzzleOf(own.chapter.lines[2], 2)!.fen, fenOf(showingThird, 3));
+      Chapter showing(int game) =>
+          parseChapter(name: 'Default', text: tacticsSet, game: game);
+      final first = showing(0);
+      expect(
+        edited(
+          deletePuzzle(first, index: 0, fen: fenOf(first, 0)),
+        ).chapter.game,
+        0,
+      );
+      final last = showing(4);
+      expect(
+        edited(deletePuzzle(last, index: 4, fen: fenOf(last, 4))).chapter.game,
+        3,
+        reason: 'the last one goes: the one before it shows',
+      );
     });
   });
 }
