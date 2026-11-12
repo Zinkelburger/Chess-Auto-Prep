@@ -140,6 +140,29 @@ void main() {
     await File(p.join(support.path, 'books.json')).readAsString(),
   );
 
+  test('a books file another program deleted since it was read is a '
+      'conflict, not written over', () async {
+    await store.write(books);
+    final reader = fileStore();
+    await reader.snapshot();
+    File(p.join(support.path, 'books.json')).deleteSync();
+    await expectLater(
+      reader.write(BookList(books: books.books, active: 'a')),
+      throwsA(isA<BookConflict>()),
+    );
+    expect(File(p.join(support.path, 'books.json')).existsSync(), isFalse);
+  });
+
+  test('a Support folder not made yet is made, parents and all', () async {
+    final nested = Directory(p.join(root.path, 'a', 'Support'));
+    final fresh = BookFile(
+      nested,
+      recovery: RecoveryGate(documents: documents, support: nested),
+    );
+    await fresh.write(books);
+    expect(File(p.join(nested.path, 'books.json')).existsSync(), isTrue);
+  });
+
   test('a book edit rebases over another instance\'s write', () async {
     final other = fileStore();
     await other.write(books);

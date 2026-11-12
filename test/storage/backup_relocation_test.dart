@@ -136,6 +136,11 @@ void main() {
       final listing = await listDeleted(documents) as DeletedChapters;
       final chapter = listing.chapters.single;
       expect(chapter.name, 'New');
+      expect(
+        p.basename(chapter.path),
+        matches(RegExp(r'^\d+-[0-9a-f]{8}-New\.pgn$')),
+        reason: 'named by the newest version\'s time and hash',
+      );
       expect(await File(chapter.path).readAsString(), 'someone else');
       final displaced = backupId(
         p.relative(chapter.path, from: documents.path),
@@ -198,6 +203,31 @@ void main() {
     expect(archive.folderFor(from).existsSync(), isFalse);
     expect(await texts(to), ['one']);
     expect((await readIndex(to))['path'], destination);
+  });
+
+  test('access denied and a lock violation are waited out too', () async {
+    for (final code in [5, 33]) {
+      final id = idOf('Course/Old $code.pgn');
+      await keep(id, 'one');
+      var attempts = 0;
+      final relocation = BackupRelocation(
+        archive.root,
+        documents: documents,
+        windows: true,
+        move: (source, target) async {
+          if (attempts++ < 1) throw refused(target, code);
+          await Directory(source).rename(target);
+        },
+      );
+      final plan = archive.planMove(
+        fromId: id,
+        toId: idOf('Course/New $code.pgn'),
+        documentPath: p.join(documents.path, 'Course', 'New $code.pgn'),
+        operationId: operation,
+      );
+      expect(await relocation.applyMove(plan), isTrue, reason: '$code');
+      expect(attempts, 2, reason: '$code');
+    }
   });
 
   test('a lasting failure is reported and leaves the history whole', () async {
@@ -303,6 +333,23 @@ void main() {
     expect(plan.toId, to);
   });
 
+  test('a journal is written in the current format', () {
+    expect(planned().toJson()['version'], 2);
+  });
+
+  test('a plan with a relative root is refused', () {
+    expect(
+      () => BackupMove(
+        operationId: operation,
+        rootPath: 'backups',
+        fromId: from,
+        toId: to,
+        documentPath: destination,
+      ),
+      throwsA(isA<RecoveryRequired>()),
+    );
+  });
+
   test('a plan with invalid ids is refused', () {
     expect(
       () => archive.planMove(
@@ -313,5 +360,92 @@ void main() {
       ),
       throwsA(isA<RecoveryRequired>()),
     );
+  });
+
+  group('kept versions following a move', () {
+    OwedHistories owed() =>
+        OwedHistories(support: temporary, documents: documents);
+    KeptVersions kept({bool? following}) => following == null
+        ? KeptVersions(
+            [planned()],
+            root: archive.root,
+            documents: documents,
+            owed: owed(),
+          )
+        : KeptVersions(
+            [planned()],
+            root: archive.root,
+            documents: documents,
+            owed: owed(),
+            following: following,
+          );
+
+    test('carry the history unless the move already handed it over', () async {
+      await keep(from, 'one');
+      await kept(following: true).follow();
+      expect(await texts(from), ['one']);
+      await kept().follow();
+      expect(archive.folderFor(from).existsSync(), isFalse);
+      expect(await texts(to), ['one']);
+    });
+
+    test('a history that cannot be written down says so', () async {
+      File(p.join(temporary.path, 'backup-moves')).writeAsStringSync('x');
+      expect(await owed().owe(planned()), isFalse);
+    });
+
+    Future<void> oweUnder(String name, BackupMove move) async {
+      expect(await owed().owe(move), isTrue);
+      final folder = p.join(temporary.path, 'backup-moves');
+      final written = File(p.join(folder, '${move.fromId}-${move.toId}.json'));
+      if (p.basename(written.path) != name) {
+        written.renameSync(p.join(folder, name));
+      }
+    }
+
+    test(
+      'an owed history is moved once its document is where it went',
+      () async {
+        await keep(from, 'one');
+        File(destination).writeAsStringSync('document');
+        await oweUnder('$from-$to.json', planned());
+        await owed().moveAll();
+        expect(await texts(to), ['one']);
+      },
+    );
+
+    test('a record whose name disagrees with its ids is not obeyed', () async {
+      await keep(from, 'one');
+      File(destination).writeAsStringSync('document');
+      await oweUnder('$to-$from.json', planned());
+      await owed().moveAll();
+      expect(await texts(from), ['one']);
+      expect(archive.folderFor(to).existsSync(), isFalse);
+    });
+
+    test('a record naming another backups folder is not obeyed', () async {
+      final elsewhere = Directory(p.join(temporary.path, 'elsewhere'));
+      final archived = BackupArchive(elsewhere);
+      final bytes = utf8.encode('one');
+      await archived.record(
+        id: from,
+        documentPath: '/old/$from.pgn',
+        bytes: bytes,
+        hash: sha256.convert(bytes).toString(),
+      );
+      File(destination).writeAsStringSync('document');
+      await oweUnder(
+        '$from-$to.json',
+        archived.planMove(
+          fromId: from,
+          toId: to,
+          documentPath: destination,
+          operationId: operation,
+        ),
+      );
+      await owed().moveAll();
+      expect(archived.folderFor(from).existsSync(), isTrue);
+      expect(archived.folderFor(to).existsSync(), isFalse);
+    });
   });
 }
