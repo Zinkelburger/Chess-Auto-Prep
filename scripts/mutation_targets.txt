@@ -76,6 +76,8 @@
 #   lib/chess/tournament/standings.dart:107 the top clamp of the low bound
 #     (mean less a band never reaches 1), :117 the 9 cut-off and `>` -> `>=`
 #     (the quadrature gives the same 0 or 1 there, and z is never 0).
+#   lib/chess/training/line_order.dart:31 the `-1` of a line with no
+#     likelihood (every likelihood is at least 0), :54 the last band's 4.
 # Listed with one equivalent mutant a --max 30 sample can draw:
 #   lib/chess/game_filter.dart:168 `> 32` -> `>= 32`: when the pattern cache
 #     is emptied, which no result shows.

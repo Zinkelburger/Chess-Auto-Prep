@@ -85,6 +85,41 @@ void main() {
     ]);
   });
 
+  test('training order puts learned before set aside, and set aside before '
+      'games, whatever the file order', () {
+    final mixed = trainingLines(
+      parseChapter(
+        name: 'Mixed',
+        text:
+            '// Color: White\n\n'
+            '[Event "A game"]\n[Result "1-0"]\n\n1. e4 d5 2. exd5 1-0\n\n'
+            '[Event "Set aside"]\n\n1. e4 e5 2. Nf3 *\n\n'
+            '[Event "Learned"]\n\n1. e4 c5 2. Nf3 *\n',
+      ),
+      source: '/r/Mixed.pgn',
+    );
+    Review reviewOf(int index, {bool excluded = false}) => Review(
+      key: mixed[index].key,
+      lineName: mixed[index].name,
+      intervalDays: 3,
+      due: now.add(const Duration(days: 3)),
+      lastRating: 'good',
+      lastReviewed: now,
+      passes: 1,
+      excluded: excluded,
+    );
+    final order = ordered(
+      mixed,
+      LineOrder.training,
+      reviews: {
+        mixed[1].key: reviewOf(1, excluded: true),
+        mixed[2].key: reviewOf(2),
+      },
+      now: now,
+    );
+    expect([for (final l in order) l.name], ['Learned', 'Set aside', 'A game']);
+  });
+
   test('the likeliest first, lines that do not say last in file order', () {
     expect(names(LineOrder.likely), [
       'New',
