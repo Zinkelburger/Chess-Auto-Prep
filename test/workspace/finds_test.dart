@@ -7,10 +7,10 @@ import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart' show positionOf;
 import 'package:chess_auto_prep/storage/finds_store.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
-import 'package:path/path.dart' as p;
 import 'package:chess_auto_prep/workspace/search/finds.dart';
 import 'package:dartchess/dartchess.dart' show Move, Side;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 Fen board(String name) => Fen('$name w - - 0 1');
 
@@ -77,7 +77,7 @@ void main() {
     });
 
     test('the same place found again replaces the older find', () {
-      keep([find('a', worth: 1)]);
+      keep([find('a')]);
       keep([find('a', worth: 5)], day: 2);
 
       final kept = store.all().single;
@@ -276,10 +276,87 @@ void main() {
       },
     );
 
+    test('is loaded once the store has been read', () {
+      expect(finds.loaded, isFalse);
+      finds.load();
+      expect(finds.loaded, isTrue);
+    });
+
+    test('narrowed to fewer positions shows fewer; the same positions again '
+        'change nothing', () {
+      Find opening(List<String> sans, int keyPly) => Find(
+        kind: FindKind.trap,
+        sans: sans,
+        ply: 2,
+        keyPly: keyPly,
+        fen: board(sans.join()),
+        evalCp: 100,
+        lossCp: 200,
+        share: 0.3,
+        reach: 0.5,
+        worth: 1,
+      );
+      store.keep(
+        [
+          opening(['e4', 'e5'], 1),
+          opening(['d4', 'd5'], 0),
+        ],
+        side: Side.white,
+        rootFen: Fen.initial,
+        elo: 1800,
+        at: DateTime(2026, 9),
+      );
+      finds.load();
+      final afterE4 = Fen(
+        positionOf(Fen.initial)!.play(Move.parse('e2e4')!).fen,
+      ).position;
+      finds.within({Fen.initial.position, afterE4});
+      expect(finds.shown, hasLength(2));
+      var heard = 0;
+      finds.addListener(() => heard++);
+      finds.within({afterE4, Fen.initial.position});
+      expect(heard, 0);
+      finds.within({afterE4});
+      expect(heard, 1);
+      expect(finds.shown.single.find.sans, ['e4', 'e5']);
+    });
+
+    test('every change to what it shows is told to its listeners', () {
+      var heard = 0;
+      finds.addListener(() => heard++);
+      finds.sortBy(FindOrder.newest);
+      finds.show(FindKind.onlyMove);
+      finds.load();
+      expect(heard, 3);
+    });
+
+    test('a record a newer one overtook is not reported as the last', () async {
+      finds.load();
+      final first = finds.record(
+        onlyMoveAt('first', 300),
+        rootFen: Fen.initial,
+        prefix: const ['e4'],
+        side: Side.white,
+        elo: 1800,
+      );
+      final second = finds.record(
+        onlyMoveAt('second', 300),
+        rootFen: Fen.initial,
+        prefix: const ['d4'],
+        side: Side.white,
+        elo: 1800,
+      );
+      await first;
+      expect(finds.recorded, isA<FindsReading>());
+      await second;
+      expect(finds.recorded, isA<FindsKept>());
+      expect(finds.all, hasLength(2));
+    });
+
     test('orders, filters and steps through what it shows', () {
       store.keep(
         [
-          find('small', worth: 1),
+          find('small'),
           find('big', worth: 9),
           find('only', worth: 5, kind: FindKind.onlyMove),
         ],

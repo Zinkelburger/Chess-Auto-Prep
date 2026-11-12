@@ -3,12 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../ui/listening_state.dart';
+import '../../ui/problem_line.dart';
+import '../../ui/progress_line.dart';
 import '../../ui/theme.dart';
 import 'app_updates.dart';
 import 'update_offer.dart';
 import 'update_rows.dart';
-import '../../ui/problem_line.dart';
-import '../../ui/progress_line.dart';
 
 /// Puts the "is available" question over the app when a check the app made
 /// by itself finds a new version: Update now, When I close the app (or

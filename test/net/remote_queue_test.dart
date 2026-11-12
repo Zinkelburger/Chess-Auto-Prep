@@ -98,6 +98,78 @@ void main() {
       expect(run.dropped, isFalse);
     });
   });
+
+  test('a run asks at most its limit, a thousand unless told', () async {
+    var sent = 0;
+    final run = RemoteQueue(
+      MockClient((_) async {
+        sent++;
+        return http.Response('ok', 200);
+      }),
+    ).run();
+    for (var i = 0; i < 1000; i++) {
+      expect(await run.get(Uri.https('example.com', '/$i')), 'ok');
+    }
+    expect(run.spent, isTrue);
+    expect(await run.get(Uri.https('example.com', '/more')), isNull);
+    expect(sent, 1000);
+  });
+
+  test('a closed run asks nothing more', () async {
+    var sent = 0;
+    final run = RemoteQueue(
+      MockClient((_) async {
+        sent++;
+        return http.Response('ok', 200);
+      }),
+    ).run()..close();
+    expect(await run.get(Uri.https('example.com', '/a')), isNull);
+    expect(sent, 0);
+  });
+
+  test('an answer forgives the misses before it; three in a row after it '
+      'stop the run', () async {
+    final run = RemoteQueue(
+      MockClient((request) async {
+        if (request.url.path == '/ok') return http.Response('ok', 200);
+        throw http.ClientException('offline');
+      }),
+    ).run();
+    Future<void> ask(String path) => run.get(Uri.https('example.com', path));
+    await ask('/miss');
+    await ask('/miss');
+    await ask('/ok');
+    await ask('/miss');
+    await ask('/miss');
+    expect(run.dropped, isFalse);
+    await ask('/miss');
+    expect(run.dropped, isTrue);
+  });
+
+  test('a 500 stops the run; a 499 does not', () async {
+    Future<bool> droppedBy(int status) async {
+      final run = RemoteQueue(
+        MockClient((_) async => http.Response('', status)),
+      ).run();
+      await run.get(Uri.https('example.com', '/a'));
+      return run.dropped;
+    }
+
+    expect(await droppedBy(500), isTrue);
+    expect(await droppedBy(499), isFalse);
+  });
+
+  test('a run closed while its request is out is not called dropped by the '
+      'answer', () async {
+    final answer = Completer<http.Response>();
+    final run = RemoteQueue(MockClient((_) => answer.future)).run();
+    final asking = run.get(Uri.https('example.com', '/a'));
+    await pumpEventQueue();
+    run.close();
+    answer.complete(http.Response('', 429));
+    await asking;
+    expect(run.dropped, isFalse);
+  });
 }
 
 /// Answers `/b` at once; every other request hangs until it is aborted.

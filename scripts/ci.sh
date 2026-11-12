@@ -48,6 +48,9 @@ run_step() {
       if ! python3 scripts/sync_agent_rules.py --check; then
         bad=1
       fi
+      if ! "${JOB[@]}" run -- python3 scripts/python_checks.py; then
+        bad=1
+      fi
       return $bad
       ;;
     analyze)

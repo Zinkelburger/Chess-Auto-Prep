@@ -193,38 +193,7 @@ String? relocateBookReferences(
       ? p.posix.join(after, p.posix.relative(path, from: before))
       : path;
 
-  // Entries this build refuses are never selectors under [before], so they
-  // stay exactly as they are while the others follow the move.
-  var changed = false;
-  for (final book in value['books']! as List<Object?>) {
-    if (book is! Map<String, Object?>) continue;
-    // Standalone course PGNs can also be selected as a whole repertoire.
-    final folders = book['repertoires'];
-    if (folders is List<Object?>) {
-      for (var i = 0; i < folders.length; i++) {
-        final path = folders[i];
-        if (!isBookSelector(path)) continue;
-        final next = moved(path! as String);
-        if (next != path) {
-          folders[i] = next;
-          changed = true;
-        }
-      }
-    }
-    final chapters = book['chapters'];
-    if (chapters is List<Object?>) {
-      for (final chapter in chapters) {
-        if (chapter is! Map<String, Object?>) continue;
-        final path = chapter['path'];
-        if (!isBookSelector(path)) continue;
-        final next = moved(path! as String);
-        if (next != path) {
-          chapter['path'] = next;
-          changed = true;
-        }
-      }
-    }
-  }
+  final changed = _moveSelectors(value, moved);
   return changed ? _encode(value, like: original) : original;
 }
 
@@ -404,6 +373,46 @@ String? moveBookSelectors(
   directory: directory,
   unreadable: (error) => log.w('leave the unreadable $path as it is', error),
 );
+
+/// Passes every selector in [value] through [moved]; whether any changed.
+bool _moveSelectors(
+  Map<String, Object?> value,
+  String Function(String path) moved,
+) {
+  // Entries this build refuses are never selectors under [before], so they
+  // stay exactly as they are while the others follow the move.
+  var changed = false;
+  for (final book in value['books']! as List<Object?>) {
+    if (book is! Map<String, Object?>) continue;
+    // Standalone course PGNs can also be selected as a whole repertoire.
+    final folders = book['repertoires'];
+    if (folders is List<Object?>) {
+      for (var i = 0; i < folders.length; i++) {
+        final path = folders[i];
+        if (!isBookSelector(path)) continue;
+        final next = moved(path! as String);
+        if (next != path) {
+          folders[i] = next;
+          changed = true;
+        }
+      }
+    }
+    final chapters = book['chapters'];
+    if (chapters is List<Object?>) {
+      for (final chapter in chapters) {
+        if (chapter is! Map<String, Object?>) continue;
+        final path = chapter['path'];
+        if (!isBookSelector(path)) continue;
+        final next = moved(path! as String);
+        if (next != path) {
+          chapter['path'] = next;
+          changed = true;
+        }
+      }
+    }
+  }
+  return changed;
+}
 
 /// The books [original] holds, read strictly unless [unreadable] is given:
 /// then a version 1 list with entries this build refuses is still read, and

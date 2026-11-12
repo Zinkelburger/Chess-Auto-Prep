@@ -2,11 +2,12 @@ import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/features/library/library_panel.dart';
 import 'package:chess_auto_prep/features/pgn_viewer/pgn_viewer_panel.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
-import 'package:chess_auto_prep/ui/pane_tabs.dart';
-import 'package:chess_auto_prep/workspace/workspace_tabs.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:flutter/services.dart';
+import 'package:chess_auto_prep/ui/pane_tabs.dart';
 import 'package:chess_auto_prep/workspace/explorer/explorer_pane.dart';
+import 'package:chess_auto_prep/workspace/workspace_tabs.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_explorer.dart';
@@ -135,6 +136,34 @@ void main() {
     expect(find.text('Save to repertoire…'), findsOneWidget);
     expect(find.text('Add game to study…'), findsNothing);
     expect(find.text('Paste PGN or FEN'), findsOneWidget);
+  });
+
+  testWidgets('Save to repertoire offers a new repertoire, which holds the '
+      'board\'s line and opens', (tester) async {
+    await pump(tester);
+    clipboardHolds(tester, pasted);
+    await pressCtrl(tester, LogicalKeyboardKey.keyV);
+    expect(w.session.isScratch, isTrue);
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Save to repertoire…'));
+    await tester.tap(find.text('Save to repertoire…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New repertoire…').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Repertoire name'),
+      'Italian',
+    );
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+    expect(w.session.isScratch, isFalse);
+    expect(w.session.source?.path, '/repertoires/Italian/Main.pgn');
+    expect(
+      w.session.chapter?.tree.children.first.san,
+      'e4',
+      reason: 'the line explored on the board came along',
+    );
   });
 
   testWidgets('Ctrl+N makes a new analysis board from the chapter line', (

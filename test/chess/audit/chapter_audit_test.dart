@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/chess/audit/chapter_audit.dart';
 import 'package:chess_auto_prep/chess/fen.dart';
+import 'package:chess_auto_prep/chess/generation/eval.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart' show pathOfSans;
@@ -276,5 +277,152 @@ void main() {
       fromChessDb: false,
     ).single;
     expect(reply.key, 'reply|${position.fen.position}|e7e6');
+  });
+
+  test('the thresholds are inclusive: a loss of exactly 40 is an inaccuracy '
+      'and 39 nothing, exactly 100 a mistake and 99 an inaccuracy', () {
+    final sicilian = at('e4 c5 Nf3 Nc6');
+    List<WeakMove> judged(int played) => weakMoves(
+      sicilian,
+      lines: [(uci: 'f1b5', cp: 60), (uci: 'd2d4', cp: played)],
+      scoreAfter: const {},
+      reach: null,
+      sanOf: (uci) => sanOf(sicilian.fen, uci),
+    );
+
+    expect(judged(21), isEmpty);
+    expect(judged(20).single.lossCp, 40);
+    expect(judged(-39).single.mistake, isFalse);
+    expect(judged(-40).single.mistake, isTrue);
+  });
+
+  test('where even the best move is mated, a faster mate is not a loss in '
+      'centipawns, however far apart the two are', () {
+    final sicilian = at('e4 c5 Nf3 Nc6');
+    expect(
+      weakMoves(
+        sicilian,
+        lines: const [(uci: 'f1b5', cp: -9100), (uci: 'd2d4', cp: -9950)],
+        scoreAfter: const {},
+        reach: null,
+        sanOf: (uci) => sanOf(sicilian.fen, uci),
+      ),
+      isEmpty,
+    );
+  });
+
+  test(
+    'the audit stops 30 half-moves from the start unless told otherwise',
+    () async {
+      final tree = (await readChapter(
+        name: 'Pawns',
+        text: '''
+// Color: White
+
+[Event "Pawns"]
+[Result "*"]
+
+1. a3 a6 2. a4 a5 3. b3 b6 4. b4 b5 5. c3 c6 6. c4 c5 7. d3 d6 8. d4 d5
+9. e3 e6 10. e4 e5 11. f3 f6 12. f4 f5 13. g3 g6 14. g4 g5 15. h3 h6
+16. h4 h5 *
+''',
+      )).tree;
+      expect(auditPositions(tree, Side.white).last.sans, hasLength(29));
+      expect(
+        auditPositions(tree, Side.white, maxPlies: 4).last.sans,
+        hasLength(3),
+      );
+    },
+  );
+
+  group('strong replies at the edges', () {
+    List<StrongReply> judged(AuditPosition position, List<ScoredMove> lines) =>
+        strongReplies(
+          position,
+          lines: lines,
+          shares: null,
+          answered: const {},
+          gaps: const {},
+          leadsInto: (uci) => pvMoves(position.fen, [uci]).firstOrNull?.after,
+          sanOf: (uci) => sanOf(position.fen, uci),
+          reach: null,
+          fromChessDb: false,
+        );
+
+    test('a reply exactly 50 behind the best is strong, 51 is not', () {
+      final lines = [
+        (uci: 'g8f6', cp: -30),
+        (uci: 'd7d6', cp: -80),
+        (uci: 'b8c6', cp: -81),
+      ];
+      expect(judged(at('e4'), lines).map((r) => r.san), ['Nf6', 'd6']);
+    });
+
+    test('a reply that gets mated is never strong, even a few centipawns '
+        'from a best that is merely losing', () {
+      final lines = [(uci: 'g8f6', cp: -8990), (uci: 'd7d6', cp: -9001)];
+      expect(judged(at('e4'), lines).map((r) => r.san), ['Nf6']);
+    });
+  });
+
+  group('findings are ordered', () {
+    WeakMove weak(
+      String uci, {
+      required int played,
+      double? reach,
+      List<String> sans = const ['e4'],
+    }) => WeakMove(
+      fen: at('e4').fen,
+      sans: sans,
+      san: uci,
+      uci: uci,
+      reach: reach,
+      best: const Eval(0),
+      played: Eval(played),
+      bestSan: 'best',
+    );
+    StrongReply reply(String uci, {double? reach}) => StrongReply(
+      fen: at('e4').fen,
+      sans: const ['e4'],
+      san: uci,
+      uci: uci,
+      reach: reach,
+      best: const Eval(0),
+      score: const Eval(0),
+      share: null,
+      fromChessDb: false,
+    );
+
+    test('mistakes, then strong replies, then inaccuracies', () {
+      final found = <AuditFinding>[
+        weak('inaccuracy', played: -50, reach: 0.9),
+        reply('reply', reach: 0.5),
+        weak('mistake', played: -200, reach: 0.1),
+      ]..sort(byReach);
+      expect(found.map((f) => f.uci), ['mistake', 'reply', 'inaccuracy']);
+    });
+
+    test('within a kind the most reached comes first, and one the walk did '
+        'not reach comes last', () {
+      final found = <AuditFinding>[
+        reply('never'),
+        reply('rare', reach: 0.1),
+        reply('common', reach: 0.8),
+      ]..sort(byReach);
+      expect(found.map((f) => f.uci), ['common', 'rare', 'never']);
+    });
+
+    test('two the walk did not reach are told apart by how early they are, '
+        'then by key, never as a tie', () {
+      final early = weak('z', played: -50);
+      final late = weak('a', played: -50, sans: const ['e4', 'e5']);
+      expect(byReach(early, late), isNegative);
+      expect(byReach(late, early), isPositive);
+      final a = weak('a', played: -50);
+      final b = weak('b', played: -50);
+      expect(byReach(a, b), isNegative);
+      expect(byReach(b, a), isPositive);
+      expect(byReach(a, a), 0);
+    });
   });
 }

@@ -49,6 +49,73 @@ void main() {
     expect(line.of(BoardNumber.one).length, 2);
   });
 
+  test('stepping on from a table leaves the table a replay would', () {
+    // A capture on board 1 whose piece board 2 drops, and a variation made
+    // later on board 1 and made its main line.
+    final game = playedLine('1e2e4 1d7d5 1e4d5 2e2e4 2P@d6 1g8f6');
+    final varied = playedLine('1b8c6', stepped(game, BoardNumber.one, 3));
+    final branched = varied
+        .mainLineThrough(varied.at(BoardNumber.one)!)
+        .atStart;
+    for (final start in [game.atStart, branched]) {
+      var line = start;
+      var position = positionOf(line);
+      var steps = 0;
+      for (
+        var step = line.stepOnFrom(position);
+        step != null;
+        step = line.stepOnFrom(position)
+      ) {
+        final (line: next, position: after) = step;
+        final way = line.stepsOn.firstWhere((w) => w.replay() is LineReplayed);
+        expect(
+          (next.at(BoardNumber.one), next.at(BoardNumber.two)),
+          (way.at(BoardNumber.one), way.at(BoardNumber.two)),
+        );
+        expect(after.dualFen, positionOf(next).dualFen);
+        (line, position) = (next, after);
+        steps++;
+      }
+      expect(steps, greaterThan(0));
+      expect(line.stepsOn.where((w) => w.replay() is LineReplayed), isEmpty);
+    }
+  });
+
+  group('a step on', () {
+    // A table no replay of these lines can reach, so a result built on it
+    // was played on what it was given.
+    final given = TablePosition.initial.withHand(
+      BoardNumber.two,
+      Side.white,
+      Role.knight,
+      1,
+    );
+
+    test('adding the newest node is played on the table given', () {
+      final step = playedLine('1e2e4').atStart.stepOnFrom(given)!;
+      expect(
+        step.position.dualFen,
+        given.play(BoardNumber.one, 'e2e4')!.after.dualFen,
+      );
+    });
+
+    test('adding a node older than one on the boards is replayed', () {
+      final line = stepped(playedLine('1e2e4 2d2d4'), BoardNumber.one, 0);
+      final step = line.stepOnFrom(given)!;
+      expect(step.position.dualFen, positionOf(step.line).dualFen);
+    });
+  });
+
+  test('what the moves copy as leaves each board at its end', () {
+    final shown = stepped(
+      playedLine('1e2e4 2d2d4 1e7e5 2d7d5'),
+      BoardNumber.one,
+      1,
+    ).shown;
+    expect(shown.current(BoardNumber.one)!.san, 'e5');
+    expect(shown.current(BoardNumber.two)!.san, 'd5');
+  });
+
   test('replaying the next move steps forward instead of branching', () {
     final back = stepped(playedLine('1e2e4 1e7e5'), BoardNumber.one, 1);
     final again = playedLine('1e7e5', back);

@@ -6,10 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../chess/fen.dart';
-import 'accessible_board.dart';
 import '../../chess/pgn/board_shapes.dart';
 import '../../chess/pgn/tree_edit.dart';
 import '../../ui/theme.dart';
+import 'accessible_board.dart';
 
 /// A board showing one position, and the way a move is played on it.
 ///

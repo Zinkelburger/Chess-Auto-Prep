@@ -6,16 +6,16 @@ import 'package:flutter/material.dart';
 import '../../chess/fen.dart';
 import '../../chess/pv_text.dart';
 import '../../storage/settings_store.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/engine_switch.dart';
 import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
+import '../board/line_preview.dart';
+import '../board/preview_target.dart';
 import '../document/document_session.dart';
 import 'engine_analysis.dart';
 import 'engine_settings.dart';
 import 'engine_status.dart';
-import '../board/line_preview.dart';
-import '../board/preview_target.dart';
-import '../../ui/app_icons.dart';
 
 /// The engine's lines for the position on the board, laid out as the old
 /// app's engine bar: a labelled sliding switch and the engine's status —
@@ -221,8 +221,7 @@ class _Header extends StatelessWidget {
               label: 'Engine',
               child: EngineSwitch(
                 value: analysis.enabled,
-                onChanged: (enabled) =>
-                    unawaited(enabled ? analysis.enable() : analysis.disable()),
+                onChanged: (enabled) => unawaited(analysis.turn(enabled)),
               ),
             ),
           ),

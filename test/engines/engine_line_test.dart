@@ -92,6 +92,13 @@ void main() {
     // White to move and mated: White is the side that was mated.
     expect(const MateIn(0).forWhite(whiteToMove: true), isNot(_mating));
   });
+
+  test('a line cut off after a word that wants a value is no line', () {
+    expect(parseInfoLine('info depth'), isNull);
+    expect(parseInfoLine('info depth 12 score'), isNull);
+    expect(parseInfoLine('info depth 12 score cp'), isNull);
+    expect(parseInfoLine('info depth 12 score cp 30 nodes')?.nodes, isNull);
+  });
 }
 
 /// A mate given by the side the score is about.

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:dartchess/dartchess.dart' show Role, Side;
 
 import 'table.dart';
@@ -18,12 +20,19 @@ final class LineMove extends LineEntry {
     required this.san,
     required this.side,
     required this.number,
+    this.clock,
   });
 
   final String uci;
   final String san;
   final Side side;
   final int number;
+
+  /// What the mover's clock read once the move was made, when the game it
+  /// is from noted it.
+  final Duration? clock;
+
+  Seat get seat => Seat.of(board, side);
 }
 
 /// The hands on [board] changed by [changes], as the website notes it after
@@ -58,13 +67,17 @@ final class LineNode {
 /// Both boards' moves and hand edits, each board a tree of lines as the
 /// workspace's move list has, with a cursor per board.
 ///
-/// The boards are two games, so each steps through its own tree: the
-/// position is the start plus the nodes from each board's start to its
-/// cursor, replayed in the order they were made. A capture crosses boards,
-/// so stepping one board elsewhere can take away the piece the other board
-/// dropped; [replay] then answers where the line breaks and the step is
-/// refused. A move or hand edit made where the board already goes on is a
-/// variation there; the board's first continuation is its main line.
+/// The boards are two games, each with its own tree: the position is the
+/// start plus the nodes from each board's start to its cursor, replayed in
+/// the order they were made. A capture crosses boards, so a drop plays only
+/// while the other board has made the capture it came from. Each node
+/// remembers where the other board was when it was made, so [asAt] shows
+/// any move with the table as it then stood, and [stepsOn] and
+/// [steppedBack] step both boards in the order made. A cursor moved alone
+/// with [goTo] can leave a drop without its piece; [replay] then answers
+/// where the line breaks. A move or hand edit made where the board already
+/// goes on is a variation there; the board's first continuation is its main
+/// line.
 final class TableLine {
   const TableLine(this.root)
     : nodes = const [],
@@ -151,6 +164,20 @@ final class TableLine {
     return null;
   }
 
+  /// What [seat]'s clock read after its last move on the boards now that
+  /// has one noted; null when it has made none.
+  Duration? clock(Seat seat) {
+    for (int? n = at(seat.board); n != null; n = nodes[n].parent) {
+      if (nodes[n].entry case LineMove(
+        :final clock?,
+        seat: final mover,
+      ) when mover == seat) {
+        return clock;
+      }
+    }
+    return null;
+  }
+
   /// Whether [node] is on its board's main line.
   bool isMain(int node) => pathTo(
     node,
@@ -163,6 +190,93 @@ final class TableLine {
     _children,
     board == BoardNumber.one ? (node, _at.$2) : (_at.$1, node),
   );
+
+  /// The table as it was when [node] was made: its board at it and the
+  /// other board where it was then, so every drop up to it has its piece.
+  TableLine asAt(int node) {
+    final partner = nodes[node].partner;
+    return TableLine._(
+      root,
+      nodes,
+      _children,
+      nodes[node].board == BoardNumber.one ? (node, partner) : (partner, node),
+    );
+  }
+
+  /// [board] at its start, with the other board where it was when [board]
+  /// made the first move of the line it is on.
+  TableLine beforeFirst(BoardNumber board) {
+    final path = pathTo(at(board));
+    if (path.isEmpty) return this;
+    return goTo(board.other, nodes[path.first].partner).goTo(board, null);
+  }
+
+  /// Both boards at their starts.
+  TableLine get atStart =>
+      TableLine._(root, nodes, _children, const (null, null));
+
+  /// Both boards at the ends of the lines they are on.
+  TableLine get atEnd {
+    final one = lineOf(BoardNumber.one);
+    final two = lineOf(BoardNumber.two);
+    return TableLine._(root, nodes, _children, (
+      one.isEmpty ? null : one.last,
+      two.isEmpty ? null : two.last,
+    ));
+  }
+
+  /// The ways one step on in the order the moves were made, the first that
+  /// replays being the step: of the two boards' next moves the one made
+  /// first, on its board alone, then the other, then the one made first
+  /// with the other board where it was then. Empty at the end of both lines.
+  Iterable<TableLine> get stepsOn sync* {
+    final next = [
+      for (final board in BoardNumber.values) ?mainChild(board, at(board)),
+    ]..sort();
+    for (final node in next) {
+      yield goTo(nodes[node].board, node);
+    }
+    if (next.isNotEmpty) yield asAt(next.first);
+  }
+
+  /// The step [stepsOn] takes, the first of its ways that replays, with the
+  /// table it leaves; [position] is the table here. A way that only adds a
+  /// node made after every node on the boards is played on [position]
+  /// alone, as a replay would end with it, so walking a game to its end
+  /// does not replay it at every step. Null when no way replays.
+  ({TableLine line, TablePosition position})? stepOnFrom(
+    TablePosition position,
+  ) {
+    final last = math.max(_at.$1 ?? -1, _at.$2 ?? -1);
+    for (final way in stepsOn) {
+      final moved = [
+        for (final board in BoardNumber.values)
+          if (way.at(board) != at(board)) board,
+      ];
+      final added = moved.length == 1 ? way.at(moved.single) : null;
+      final alone = added != null && added > last;
+      if (alone) {
+        if (_apply(position, nodes[added].entry) case final after?) {
+          return (line: way, position: after);
+        }
+        continue;
+      }
+      if (way.replay() case LineReplayed(:final position)) {
+        return (line: way, position: position);
+      }
+    }
+    return null;
+  }
+
+  /// One step back in the order made: the board whose move was made last
+  /// goes back a move, which always replays. Null with both at their starts.
+  TableLine? get steppedBack {
+    final last = switch (_at) {
+      (final one?, final two?) => one > two ? one : two,
+      (final one, final two) => one ?? two,
+    };
+    return last == null ? null : goTo(nodes[last].board, nodes[last].parent);
+  }
 
   /// [move] played at its board's cursor: the continuation already there
   /// when it is the same move, or a new one, which is a variation when the
@@ -334,18 +448,26 @@ final class TableLine {
   LineReplay replay() {
     var position = root;
     for (final n in _applied) {
-      switch (nodes[n].entry) {
-        case final LineMove move:
-          final played = position.play(move.board, move.uci);
-          if (played == null) return LineBroken(move);
-          position = played.after;
-        case HandEdit(:final board, :final changes):
-          for (final (:side, :role, :count) in changes) {
-            position = position.withHand(board, side, role, count);
-          }
-      }
+      final entry = nodes[n].entry;
+      final after = _apply(position, entry);
+      if (after == null) return LineBroken(entry as LineMove);
+      position = after;
     }
     return LineReplayed(position);
+  }
+}
+
+/// [entry] made on [position]; null for a move that does not play there.
+TablePosition? _apply(TablePosition position, LineEntry entry) {
+  switch (entry) {
+    case LineMove(:final board, :final uci):
+      return position.play(board, uci)?.after;
+    case HandEdit(:final board, :final changes):
+      var after = position;
+      for (final (:side, :role, :count) in changes) {
+        after = after.withHand(board, side, role, count);
+      }
+      return after;
   }
 }
 
@@ -399,8 +521,9 @@ final class LineBroken extends LineReplay {
 ({TablePosition after, LineMove move})? lineMove(
   TablePosition position,
   BoardNumber board,
-  String uci,
-) {
+  String uci, {
+  Duration? clock,
+}) {
   final played = position.play(board, uci);
   if (played == null) return null;
   final before = position.board(board);
@@ -412,6 +535,7 @@ final class LineBroken extends LineReplay {
       san: played.move.san,
       side: before.turn,
       number: before.fullmoves,
+      clock: clock,
     ),
   );
 }

@@ -2,10 +2,9 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chess_auto_prep/storage/document_ref.dart';
-
 import 'package:chess_auto_prep/storage/atomic_write.dart';
 import 'package:chess_auto_prep/storage/deleted_chapters.dart';
+import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;

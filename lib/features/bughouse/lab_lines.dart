@@ -8,13 +8,13 @@ import '../../chess/bughouse/pv_steps.dart';
 import '../../chess/bughouse/table.dart';
 import '../../ui/action_context_menu.dart';
 import '../../ui/app_action.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/theme.dart';
 import '../../workspace/board/line_preview.dart';
 import '../../workspace/board/preview_target.dart';
 import 'bughouse_lab.dart';
 import 'lab_engine.dart';
 import 'pocket.dart';
-import '../../ui/app_icons.dart';
 
 /// The board a hovered engine move floats: the board it was played on,
 /// after it, with its hands.
@@ -217,7 +217,7 @@ class _LineRow extends StatelessWidget {
             child: Center(
               widthFactor: 1,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 3),
+                padding: const EdgeInsets.symmetric(horizontal: tightInset),
                 child: Text(
                   'sit',
                   style: monoText.copyWith(

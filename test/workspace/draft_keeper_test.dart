@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
-import 'package:chess_auto_prep/storage/recovery_quarantine.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart' hide Saved;
+import 'package:chess_auto_prep/storage/recovery_quarantine.dart';
 import 'package:chess_auto_prep/storage/viewer_drafts.dart';
 import 'package:chess_auto_prep/ui/status_bar.dart' show StatusAction;
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
@@ -13,7 +13,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../storage/store_fixture.dart';
-
 import '../support/scripted_store.dart';
 import '../support/viewer_fixture.dart';
 
@@ -199,8 +198,9 @@ void main() {
     List<File> draftFiles() => _checkpoints(disk.support);
 
     /// The one checkpoint's text, or null while there is not exactly one. A
-    /// poll runs while the keeper sets a checkpoint aside: the file listed
-    /// may be gone by the time it is read.
+    /// poll runs while the keeper writes: a listing taken as a checkpoint is
+    /// renamed over can miss it (btrfs does), and one set aside may be gone
+    /// by the time it is read.
     String? checkpointText() {
       try {
         return draftFiles().singleOrNull?.readAsStringSync();
@@ -339,9 +339,7 @@ void main() {
       await app.session.open(games, game: 0);
       app.session.restoreDraft(parked);
       app.session.setComment(NodePath.of(const [0, 0]), 'More');
-      await until(
-        () => draftFiles().single.readAsStringSync().contains('More'),
-      );
+      await until(() => checkpointText()?.contains('More') ?? false);
       expect(quarantined(), isEmpty);
       app.kill();
     });

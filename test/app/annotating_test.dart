@@ -1,13 +1,12 @@
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/features/library/library_panel.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/storage/study_files.dart';
 import 'package:chess_auto_prep/workspace/reading/comment_field.dart';
 import 'package:chess_auto_prep/workspace/reading/move_tree_view.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/storage/study_files.dart';
 
 import '../support/scripted_store.dart';
 import '../support/study_fixture.dart';
@@ -72,7 +71,7 @@ void main() {
     );
     w.studyFiles.listing = StudiesListed([ref]);
     await w.pumpShell(tester);
-    await w.requests.openStudy(ref, chapter: 0);
+    await w.requests.openStudy(ref);
     await tester.pumpAndSettle();
     final e4 = NodePath.of([0]);
     w.session.cursor.goTo(e4);

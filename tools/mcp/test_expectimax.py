@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# A None here fails the test on its own, so pyright's None checks add nothing.
+# pyright: reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportOptionalIterable=false, reportOptionalOperand=false
 """Tests for the expectimax MCP tools.
 
 No engines and no builds: the chess and the search live in `tree_builder/`
@@ -31,7 +33,7 @@ LONDON = "1. d4 Nf6 2. Nf3 g6 3. Bf4 Bg7 4. e3 d6 5. h3"
 LONDON_FEN = "rnbqk2r/ppp1ppbp/3p1np1/8/3P1B2/4PN1P/PPP2PP1/RN1QKB1R b KQkq - 0 5"
 
 
-def _node(move: str, value: float, cp: int, kids: list | None = None) -> dict:
+def _node(move: str, value: float | None, cp: int, kids: list | None = None) -> dict:
     node = {
         "move_san": move,
         "move_uci": "",
@@ -177,7 +179,8 @@ class RootTableTest(unittest.TestCase):
 
 
 class ArgvTest(unittest.TestCase):
-    def _chain(self) -> dict:
+    @staticmethod
+    def _chain() -> dict:
         return {
             "builder": Path("/bin/tree_builder"),
             "stockfish": Path("/bin/stockfish"),
@@ -236,10 +239,10 @@ class ReplyCutTest(unittest.TestCase):
     """The opponent's replies are cut as the app's Expectimax cuts them."""
 
     def _chain(self) -> dict:
-        return ArgvTest._chain(self)
+        return ArgvTest._chain()
 
     def test_the_cut_matches_the_apps_constants(self):
-        dart = (ex.REPO_ROOT / "lib" / "workspace" / "fill_states.dart").read_text(
+        dart = (ex.REPO_ROOT / "lib" / "workspace" / "search" / "fill_states.dart").read_text(
             encoding="utf-8"
         )
         import re
@@ -620,6 +623,7 @@ class EngineShortlistTest(unittest.TestCase):
             d = Path(tmp)
             self._write(d, self.ROWS, self.FEN)
             rows = ex.root_engine_shortlist(d, self.FEN)
+        assert rows is not None
         self.assertEqual(len(rows), 3)
 
     def test_a_position_the_cache_never_saw(self):

@@ -6,23 +6,23 @@ import 'package:flutter/material.dart';
 import '../../chess/explorer_answer.dart';
 import '../../chess/explorer_choice.dart';
 import '../../chess/openings.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/list_message.dart';
 import '../../ui/listening_state.dart';
+import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
+import '../board/line_preview.dart';
+import '../board/preview_target.dart';
+import '../book/book_chip.dart';
+import '../book/books.dart';
+import '../book/repertoire_tree.dart';
+import '../book/tree_pane.dart';
 import '../document/document_session.dart';
 import 'explorer.dart';
 import 'explorer_filters.dart';
 import 'explorer_rows.dart';
 import 'game_fetcher.dart';
-import '../book/book_chip.dart';
-import '../book/books.dart';
-import '../board/line_preview.dart';
-import '../board/preview_target.dart';
 import 'opening_names.dart';
-import '../book/repertoire_tree.dart';
-import '../book/tree_pane.dart';
-import '../../ui/move_notation.dart';
-import '../../ui/app_icons.dart';
 
 /// The Explorer tab of the reading card, lila's opening explorer: what a
 /// database has seen played from the position on the board.

@@ -11,9 +11,10 @@ Future<String?> saveTextExport(String name, String text) async {
     mimeType: 'text/markdown',
     dialogTitle: 'Export prep sheet',
   );
-  return uri == null
-      ? null
-      : uri.scheme == 'file'
-      ? uri.toFilePath()
-      : '$uri';
+  return uri == null ? null : exportedPlace(uri);
 }
+
+/// Where a saved export went, for the message that says so: a file's path,
+/// or the address a platform gave it when it is not a file.
+String exportedPlace(Uri uri) =>
+    uri.scheme == 'file' ? uri.toFilePath() : '$uri';

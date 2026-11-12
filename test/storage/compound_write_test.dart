@@ -10,8 +10,8 @@ import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/operation_participants.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/pgn_file_store.dart';
-import 'package:chess_auto_prep/storage/reference_change.dart';
 import 'package:chess_auto_prep/storage/recovery_gate.dart';
+import 'package:chess_auto_prep/storage/reference_change.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

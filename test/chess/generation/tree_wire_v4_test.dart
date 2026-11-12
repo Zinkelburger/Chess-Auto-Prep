@@ -134,11 +134,7 @@ void main() {
   });
 
   test('an unfinished tree keeps its unexpanded leaves', () async {
-    const config = SearchConfig(
-      side: Side.white,
-      horizonPlies: 4,
-      nodeBudget: 8,
-    );
+    const config = SearchConfig(side: Side.white, nodeBudget: 8);
     final tree = await _treeFrom(_kingAndPawn, config: config);
 
     final decoded = decodedTree(encodeTreeV4(tree, config, complete: false));
@@ -218,6 +214,77 @@ void main() {
       'max_depth': 2,
       'max_eval_loss_cp': 200,
     });
+  });
+
+  test('the document numbers every node in order, flags the move we take '
+      'and carries the shares and depths the C builder reads', () async {
+    const config = SearchConfig(side: Side.white, horizonPlies: 2);
+    final tree = await _treeFrom(_kingAndPawn, config: config);
+    final document = _asJson(encodeTreeV4(tree, config, complete: true));
+    final root = document['tree']! as Map<String, Object?>;
+    final ids = <Object?>[];
+    void collect(Map<String, Object?> node) {
+      ids.add(node['id']);
+      for (final child in node['children'] as List? ?? const []) {
+        collect(child as Map<String, Object?>);
+      }
+    }
+
+    collect(root);
+    expect(ids, [for (var id = 1; id <= ids.length; id++) id]);
+    expect(document['total_nodes'], ids.length);
+    expect(root['move_probability'], 1);
+    expect(root['cumulative_probability'], 1);
+    final ours = (root['children']! as List).cast<Map<String, Object?>>();
+    expect(ours.first['is_repertoire_move'], isTrue);
+    expect(
+      ours.skip(1).where((move) => move.containsKey('is_repertoire_move')),
+      isEmpty,
+    );
+    for (final move in ours) {
+      expect(move['move_probability'], 1, reason: 'we choose our moves');
+      expect(move['depth'], 1);
+    }
+    final replies = (ours.first['children']! as List)
+        .cast<Map<String, Object?>>();
+    expect(replies.map((reply) => reply['depth']), everyElement(2));
+  });
+
+  test('a search with no horizon writes a depth no build reaches', () async {
+    const config = SearchConfig(side: Side.white, horizonPlies: 2);
+    final tree = await _treeFrom(_kingAndPawn, config: config);
+    final document = _asJson(
+      encodeTreeV4(
+        tree,
+        const SearchConfig(side: Side.white, horizonPlies: null),
+        complete: false,
+      ),
+    );
+    expect((document['config']! as Map)['max_depth'], 512);
+  });
+
+  test('the config says what the C builder must know: a shortlist is '
+      'algorithm 4, an exhaustive search 3, and keeping every move a loss '
+      'window wider than any mate', () async {
+    const config = SearchConfig(side: Side.white, horizonPlies: 2);
+    final tree = await _treeFrom(_kingAndPawn, config: config);
+    Map<String, Object?> configOf(SearchConfig config) =>
+        _asJson(encodeTreeV4(tree, config, complete: false))['config']!
+            as Map<String, Object?>;
+
+    expect(configOf(config)['algorithm_version'], 3);
+    expect(
+      configOf(
+        const SearchConfig(side: Side.white, maxOurMoves: 1, rootMoves: 4),
+      )['algorithm_version'],
+      4,
+    );
+    expect(
+      configOf(
+        const SearchConfig(side: Side.white, lossLimitCp: null),
+      )['max_eval_loss_cp'],
+      100000,
+    );
   });
 
   test('a node the build never evaluated is written without a score', () {

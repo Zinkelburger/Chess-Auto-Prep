@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# A None here fails the test on its own, so pyright's None checks add nothing.
+# pyright: reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportOptionalIterable=false, reportOptionalOperand=false
 """Exercise the shipped helpers with disposable fake bundles, never real installs."""
 import hashlib
 import json
@@ -51,7 +53,7 @@ class LinuxUpdateTest(unittest.TestCase):
                 info.external_attr = (stat.S_IFREG | 0o755) << 16
                 archive.writestr(info, content)
 
-    def launch(self, app_pid='2147483647', digest=None, env=None):
+    def launch(self, app_pid: int | str = '2147483647', digest=None, env=None):
         return subprocess.Popen([
             'bash', str(ROOT / 'assets/updater/install_linux.sh'), str(app_pid),
             str(self.archive), digest or hashlib.sha256(self.archive.read_bytes()).hexdigest(),

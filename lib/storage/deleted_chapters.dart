@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import 'directory_entries.dart';
 import '../diagnostics/log.dart';
+import 'directory_entries.dart';
 
 // The chapters the user deleted, which are still on disk: a delete moves a
 // chapter into the recovery folder beside it ([recoveryFolder]) under

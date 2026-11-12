@@ -8,14 +8,14 @@ import '../../chess/tactics/analyzed_games.dart' show isAnalyzed;
 import '../../chess/tactics/game_ids.dart';
 import '../../chess/tactics/mining.dart';
 import '../../chess/tactics/mistake_counts.dart';
-import '../../engines/engine.dart';
 import '../../diagnostics/log.dart';
+import '../../engines/engine.dart';
 import '../../engines/engine_line.dart';
 import '../../engines/engine_supervisor.dart';
 import '../../net/recent_games.dart';
-import '../../storage/pending_writes.dart';
 import '../../storage/my_accounts.dart';
 import '../../storage/my_games_files.dart';
+import '../../storage/pending_writes.dart';
 import '../../storage/settings_store.dart';
 import 'set_additions.dart';
 

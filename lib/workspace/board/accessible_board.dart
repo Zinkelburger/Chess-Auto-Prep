@@ -7,9 +7,9 @@ import 'package:flutter/services.dart';
 import '../../chess/fen.dart';
 import '../../chess/generation/legal_moves.dart';
 import '../../chess/pgn/tree_edit.dart';
-import '../../ui/theme.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/options_dialog.dart';
+import '../../ui/theme.dart';
 
 /// A single keyboard stop and a semantic square grid over the pointer board.
 /// Arrow keys follow the displayed orientation; Enter selects and plays.

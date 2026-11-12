@@ -115,6 +115,27 @@ void main() {
     expect(run.fromComment?.map((m) => m.uci), ['g1f3', 'b8c6']);
   });
 
+  test('a move number split from its move is read to the last word', () {
+    final spans =
+        (layoutComment('Best is 1. e4', at: Fen.initial).single as Paragraph)
+            .spans;
+    expect((spans.last as MoveRun).moves.single.san, 'e4');
+  });
+
+  test('a line that starts right after another is read too', () {
+    final spans =
+        (layoutComment('Play 1.e4. 1.d4 is also good', at: Fen.initial).single
+                as Paragraph)
+            .spans;
+    expect(
+      [
+        for (final span in spans)
+          if (span is MoveRun) span.moves.single.san,
+      ],
+      ['e4', 'd4'],
+    );
+  });
+
   test('machine tokens never reach the reader', () {
     final blocks = layoutComment('[%eval 0.3] Best.', at: Fen.initial);
     expect(blocks, hasLength(1));
@@ -182,6 +203,16 @@ void main() {
     );
   });
 
+  test(
+    'a comment is long, and breaks at double spaces, from 301 characters',
+    () {
+      const start = 'First.  Second.';
+      String sized(int length) => '$start ${'y' * (length - start.length - 1)}';
+      expect(layoutComment(sized(301), at: Fen.initial), hasLength(2));
+      expect(layoutComment(sized(300), at: Fen.initial), hasLength(1));
+    },
+  );
+
   test('headings, quotes, brackets and links', () {
     final blocks = layoutComment(
       '@@HeaderStart@@Plan@@HeaderEnd@@ text @@StartBracket@@see part '
@@ -212,6 +243,15 @@ void main() {
     final run = (blocks[2] as Paragraph).spans.first as MoveRun;
     expect(run.moves.single.uci, 'f2f4');
     expect(run.fromComment, isNull);
+  });
+
+  test('a FEN wrapped over four line breaks is still a diagram', () {
+    final blocks = layoutComment(
+      'îîStartFENîîrnbqk2r/ppp1ppbp/\n3p1np1/8/\n2PPP3/2N5/\n'
+      'PP3PPP/R1BQKBNR w KQkq\n- 0 5îîEndFENîî',
+      at: Fen.initial,
+    );
+    expect((blocks.single as Diagram).fen.value, fourPawnsFen);
   });
 
   test('a bare FEN in prose is a diagram too, and a broken one is not', () {

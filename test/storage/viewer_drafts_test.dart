@@ -48,6 +48,12 @@ void main() {
     },
   );
 
+  test('a Support folder not made yet is made, parents and all', () async {
+    final nested = Directory(p.join(support.path, 'a', 'b'));
+    await ViewerDraftFiles(nested).keep(draft);
+    expect((await ViewerDraftFiles(nested).find(draft.path))?.text, draft.text);
+  });
+
   test('a record of another version is set aside, not obeyed', () async {
     final drafts = ViewerDraftFiles(support);
     await drafts.keep(draft);

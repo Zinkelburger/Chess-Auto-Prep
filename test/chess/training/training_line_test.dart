@@ -129,6 +129,25 @@ void main() {
     expect([for (final l in linesOf(games)) l.modelGame], [true, true, false]);
   });
 
+  test('a line drills its main moves, not the variations beside them', () {
+    final line = linesOf(
+      '[Event "Line"]\n\n1. e4 (1. d4 d5) e5 (1... c5) 2. Nf3 *\n',
+    ).single;
+    expect([for (final move in line.moves) move.san], ['e4', 'e5', 'Nf3']);
+  });
+
+  test('a likelihood is read from 0 to 1 and nothing else', () {
+    double? likelihoodOf(String cumProb) => linesOf(
+      '[Event "Line"]\n[CumProb "$cumProb"]\n\n1. d4 *\n',
+    ).single.likelihood;
+    expect(likelihoodOf('0.1253'), 0.1253);
+    expect(likelihoodOf(' 1 '), 1.0);
+    expect(likelihoodOf('0'), 0.0);
+    expect(likelihoodOf('1.5'), isNull);
+    expect(likelihoodOf('-0.1'), isNull);
+    expect(likelihoodOf('high'), isNull);
+  });
+
   group('quiz markers', () {
     const marked = '''
 // Color: White
@@ -154,6 +173,27 @@ void main() {
             .replaceFirst('Pin it. [%tend]', '[%tstart]'),
       ).single;
       expect((line.quizStart, line.quizEnd), (4, line.moves.length));
+    });
+
+    test('a start and end on one move ask that move alone', () {
+      final line = linesOf(
+        marked
+            .replaceFirst('{ [%tstart] }', '{ [%tstart] [%tend] }')
+            .replaceFirst('Pin it. [%tend]', 'Pin it.'),
+      ).single;
+      expect((line.quizStart, line.quizEnd), (2, 3));
+      expect(line.yourMoves, 1);
+    });
+
+    test('nothing past an end on the opponent\'s move is asked', () {
+      final line = linesOf(
+        marked
+            .replaceFirst('Nc6', 'Nc6 { [%tend] }')
+            .replaceFirst('Pin it. [%tend]', 'Pin it.'),
+      ).single;
+      expect((line.quizStart, line.quizEnd), (2, 4));
+      expect(line.isYours(4), isFalse, reason: '3.Bb5 is after the end');
+      expect(line.yourMoves, 1);
     });
 
     test('a line without markers asks from the start to the end', () {

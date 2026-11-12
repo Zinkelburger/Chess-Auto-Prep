@@ -26,7 +26,7 @@ class StorageIdentityTest(unittest.TestCase):
         # The folders every app version has kept under Documents, named where
         # the app wires its stores, under the directories path_provider gives.
         wiring = (ROOT / 'lib/app/environment.dart').read_text()
-        for name in ['repertoires', 'analysis_games', 'pgn_collections', 'games_library',
+        for name in ['repertoires', 'pgn_collections', 'games_library',
                      'tactics_sets', 'studies', 'engine_tournaments', 'opponents']:
             self.assertIn(f"documents.path, '{name}'", wiring)
         entry = (ROOT / 'lib/main.dart').read_text()

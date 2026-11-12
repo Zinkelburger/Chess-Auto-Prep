@@ -101,7 +101,7 @@ class SearchRunBar extends StatelessWidget {
                   if (onShowPositions case final show?)
                     ToolButton(
                       icon: AppIcons.positions,
-                      tooltip: 'Show the positions the searches found',
+                      tooltip: 'Positions the searches found',
                       onPressed: show,
                     ),
                   ToolButton(

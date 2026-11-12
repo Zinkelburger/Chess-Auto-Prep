@@ -113,4 +113,32 @@ void main() {
     expect(reset.intervalDays, 0);
     expect((reset.ease, reset.passes, reset.excluded), (2.1, 1, true));
   });
+
+  test('a new row starts untrained, unscheduled and in the queues', () {
+    expect(fresh.excluded, isFalse);
+    expect((fresh.ease, fresh.intervalDays, fresh.due), (startEase, 0, null));
+    expect((fresh.passes, fresh.fails, fresh.lastReviewed), (0, 0, null));
+  });
+
+  test('rows are equal only when every column is', () {
+    final row = rate(fresh, Rating.good);
+    expect(row, rate(fresh, Rating.good));
+    expect(row.hashCode, rate(fresh, Rating.good).hashCode);
+    final changed = {
+      'lineName': row.copyWith(lineName: 'Other'),
+      'ease': row.copyWith(ease: 2.0),
+      'intervalDays': row.copyWith(intervalDays: 9),
+      'due': row.copyWith(due: now),
+      'lastRating': row.copyWith(lastRating: 'easy'),
+      'lastReviewed': row.copyWith(
+        lastReviewed: now.add(const Duration(hours: 1)),
+      ),
+      'passes': row.copyWith(passes: 7),
+      'fails': row.copyWith(fails: 7),
+      'excluded': row.copyWith(excluded: true),
+    };
+    for (final MapEntry(key: column, value: other) in changed.entries) {
+      expect(other == row, isFalse, reason: column);
+    }
+  });
 }

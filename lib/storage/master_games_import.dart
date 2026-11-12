@@ -22,7 +22,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:archive/archive.dart' show ZipDecoder;
+import 'package:archive/archive.dart' show ArchiveFile, ZipDecoder, ZipFile;
 import 'package:crypto/crypto.dart';
 import 'package:sqlite3/sqlite3.dart';
 
@@ -352,16 +352,27 @@ final class _Collect<T> implements Sink<T> {
 }
 
 List<String> _unzip(Uint8List zip) {
-  final archive = ZipDecoder().decodeBytes(zip, verify: true);
+  final archive = ZipDecoder().decodeBytes(zip);
   final texts = [
     for (final file in archive.files)
       if (file.isFile && file.name.toLowerCase().endsWith('.pgn'))
-        _decode(file.content),
+        _decode(_checked(file)),
   ];
   if (texts.isEmpty) {
     throw const FormatException('TWIC archive contains no PGN.');
   }
   return texts;
+}
+
+/// [file]'s bytes, once they match the checksum the archive gives them. The
+/// decoder's own `verify` flag checks nothing in this version of the archive
+/// package, so a damaged download would otherwise go into the book.
+List<int> _checked(ArchiveFile file) {
+  final zipped = file.rawContent;
+  if (zipped is ZipFile && !zipped.verifyCrc32()) {
+    throw FormatException('TWIC archive entry ${file.name} is damaged.');
+  }
+  return file.content;
 }
 
 /// Imports [games], each one game's text, unless [done] says they are in,

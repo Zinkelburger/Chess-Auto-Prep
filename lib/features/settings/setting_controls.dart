@@ -5,11 +5,12 @@ import 'package:flutter/services.dart';
 
 import '../../ui/attempting.dart';
 import '../../ui/choice_field.dart';
-import '../../ui/theme.dart';
+import '../../ui/listening_state.dart';
 import '../../ui/number_field.dart';
+import '../../ui/segments.dart';
+import '../../ui/theme.dart';
 import 'lichess_account.dart';
 import 'setting_rows.dart';
-import '../../ui/segments.dart';
 
 /// One row: the label, its hint under it when there is one, and the
 /// control on the right. The same height whatever the control, so a
@@ -167,7 +168,8 @@ class _Secret extends StatefulWidget {
   State<_Secret> createState() => _SecretState();
 }
 
-class _SecretState extends State<_Secret> with Attempting<_Secret> {
+class _SecretState extends State<_Secret>
+    with Attempting<_Secret>, ListeningState<_Secret> {
   final _box = TextEditingController();
   final _focus = FocusNode();
   String _given = '';
@@ -176,9 +178,11 @@ class _SecretState extends State<_Secret> with Attempting<_Secret> {
   @override
   void initState() {
     super.initState();
-    _focus.addListener(_onFocus);
     unawaited(_load());
   }
+
+  @override
+  Listenable listenableOf(_Secret widget) => _focus;
 
   Future<void> _load() async {
     final value = await widget.setting.load() ?? '';
@@ -191,13 +195,14 @@ class _SecretState extends State<_Secret> with Attempting<_Secret> {
 
   @override
   void dispose() {
-    _focus.removeListener(_onFocus);
+    stopListening();
     _focus.dispose();
     _box.dispose();
     super.dispose();
   }
 
-  void _onFocus() {
+  @override
+  void changed() {
     if (!_focus.hasFocus) unawaited(_save(_box.text));
   }
 

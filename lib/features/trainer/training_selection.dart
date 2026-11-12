@@ -12,7 +12,9 @@ import '../../workspace/book/repertoire_catalog.dart';
 /// The trainer's chosen repertoire and browsing scope, independent of the
 /// document on the board. Browsing never starts or replaces a lesson.
 final class TrainingSelection extends ChangeNotifier {
-  TrainingSelection(this.catalog, this.settings);
+  TrainingSelection(this.catalog, this.settings) {
+    catalog?.addListener(_adoptOnly);
+  }
 
   final RepertoireCatalog? catalog;
   final SettingsStore? settings;
@@ -49,6 +51,20 @@ final class TrainingSelection extends ChangeNotifier {
     picked.clear();
     if (root.isNotEmpty) update(options.copyWith(repertoirePath: root));
     notifyListeners();
+    _adoptOnly();
+  }
+
+  /// With nothing chosen and one repertoire to train, that one is the
+  /// choice: the list may be read after the trainer is entered.
+  void _adoptOnly() {
+    if (!active || root.isNotEmpty || repertoires.length != 1) return;
+    choose(repertoires.single);
+  }
+
+  @override
+  void dispose() {
+    catalog?.removeListener(_adoptOnly);
+    super.dispose();
   }
 
   void followDocument() {

@@ -6,8 +6,8 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
 import '../../diagnostics/log.dart';
-import '../../storage/pending_writes.dart';
 import '../../storage/master_games_import.dart';
+import '../../storage/pending_writes.dart';
 
 /// A resumable series of weekly imports into the master games database at
 /// [path]. Issues already in it are skipped, so a later run brings it up to
@@ -58,22 +58,7 @@ class TwicDownload extends ChangeNotifier {
     _notify();
     final client = _client();
     try {
-      final index = await client
-          .get(Uri.https('theweekinchess.com', '/twic'))
-          .timeout(const Duration(seconds: 30));
-      if (index.statusCode != 200) {
-        throw StateError('TWIC answered HTTP ${index.statusCode}.');
-      }
-      final issues =
-          RegExp(r'twic(\d+)g\.zip')
-              .allMatches(index.body)
-              .map((match) => int.parse(match[1]!))
-              .toList()
-            ..sort();
-      if (issues.isEmpty) {
-        throw const FormatException('Could not find TWIC downloads.');
-      }
-      final latest = issues.last;
+      final latest = await _latestIssue(client);
       final path = this.path;
       final database = await Isolate.run(() => masterGamesIssues(path));
       var kept = database.issues;
@@ -135,6 +120,25 @@ class TwicDownload extends ChangeNotifier {
         'downloading; it was set aside as $copies. '
         'Check the disk and try again.';
     status = 'Completed issues are saved. Try again to resume.';
+  }
+
+  /// The newest issue TWIC lists.
+  Future<int> _latestIssue(http.Client client) async {
+    final index = await client
+        .get(Uri.https('theweekinchess.com', '/twic'))
+        .timeout(const Duration(seconds: 30));
+    if (index.statusCode != 200) {
+      throw StateError('TWIC answered HTTP ${index.statusCode}.');
+    }
+    final issues =
+        RegExp(
+            r'twic(\d+)g\.zip',
+          ).allMatches(index.body).map((match) => int.parse(match[1]!)).toList()
+          ..sort();
+    if (issues.isEmpty) {
+      throw const FormatException('Could not find TWIC downloads.');
+    }
+    return issues.last;
   }
 
   /// Downloads and imports one issue: null when a stop arrived before the

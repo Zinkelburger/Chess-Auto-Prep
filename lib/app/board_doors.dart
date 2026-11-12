@@ -194,18 +194,52 @@ Future<void> _toRepertoire(
   WorkspaceRequests requests,
   Library library,
 ) async {
-  final into = await showChoiceDialog<RepertoireFolder>(
+  final into = await showChoiceDialog<_SaveInto>(
     context,
     title: 'Save to repertoire',
-    options: library.repertoires,
-    label: (folder) => folder.name,
+    // A new repertoire first: the one choice there always is.
+    options: [
+      const _NewRepertoire(),
+      for (final folder in library.repertoires) _Existing(folder),
+    ],
+    label: (target) => switch (target) {
+      _NewRepertoire() => 'New repertoire…',
+      _Existing(:final folder) => folder.name,
+    },
     hint: 'Type a repertoire',
-    empty: 'No repertoires yet',
+    empty: 'No repertoire by that name',
   );
   if (into == null || !context.mounted) return;
-  final name = await _chapterName(context, into.name);
-  if (name == null) return;
-  await requests.saveBoardToRepertoire(into, name);
+  switch (into) {
+    case _NewRepertoire():
+      final name = await showNameDialog(
+        context,
+        title: 'Create repertoire',
+        label: 'Repertoire name',
+        confirm: 'Create',
+      );
+      if (name == null) return;
+      await requests.saveBoardAsRepertoire(name);
+    case _Existing(:final folder):
+      final name = await _chapterName(context, folder.name);
+      if (name == null) return;
+      await requests.saveBoardToRepertoire(folder, name);
+  }
+}
+
+/// Where the analysis board is saved: a repertoire there is, or a new one.
+sealed class _SaveInto {
+  const _SaveInto();
+}
+
+final class _NewRepertoire extends _SaveInto {
+  const _NewRepertoire();
+}
+
+final class _Existing extends _SaveInto {
+  const _Existing(this.folder);
+
+  final RepertoireFolder folder;
 }
 
 Future<String?> _chapterName(BuildContext context, String into) async {

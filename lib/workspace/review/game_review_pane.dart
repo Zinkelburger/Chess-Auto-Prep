@@ -6,12 +6,12 @@ import 'package:flutter/material.dart';
 import '../../chess/pgn/game_review.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/move_label.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/check_row.dart';
+import '../../ui/move_notation.dart';
+import '../../ui/problem_line.dart';
 import '../../ui/theme.dart';
 import 'game_review.dart';
-import '../../ui/move_notation.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/problem_line.dart';
-import '../../ui/check_row.dart';
 
 /// The game's evaluation as a graph, the old viewer's way: White's
 /// advantage light above the middle, Black's dark below, each marked move a
@@ -254,34 +254,59 @@ class _EvalGraphState extends State<EvalGraph> {
             },
           ),
         ),
-        SizedBox(
-          height: engineRowHeight,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: hover == null
-                ? null
-                : Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(text: widget.label(hover)),
-                        if (mark != null)
-                          TextSpan(
-                            text: '${markGlyph(mark)}   ${mark.label}',
-                            style: TextStyle(
-                              color: markColor(mark),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        if (value != null) TextSpan(text: '   ${value.eval}'),
-                      ],
-                    ),
-                    style: monoText.copyWith(
-                      color: theme.colorScheme.onSurface,
-                    ),
-                  ),
-          ),
+        _GraphReadout(
+          label: hover == null ? null : widget.label(hover),
+          mark: mark,
+          value: value,
         ),
       ],
+    );
+  }
+}
+
+/// Under the graph: the move the pointer is over, its mark and its value.
+class _GraphReadout extends StatelessWidget {
+  const _GraphReadout({
+    required this.label,
+    required this.mark,
+    required this.value,
+  });
+
+  final String? label;
+  final ReviewMark? mark;
+  final ReviewValue? value;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = this.label;
+    final mark = this.mark;
+    final value = this.value;
+    return SizedBox(
+      height: engineRowHeight,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: label == null
+            ? null
+            : Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(text: label),
+                    if (mark != null)
+                      TextSpan(
+                        text: '${markGlyph(mark)}   ${mark.label}',
+                        style: TextStyle(
+                          color: markColor(mark),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    if (value != null) TextSpan(text: '   ${value.eval}'),
+                  ],
+                ),
+                style: monoText.copyWith(
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+      ),
     );
   }
 }

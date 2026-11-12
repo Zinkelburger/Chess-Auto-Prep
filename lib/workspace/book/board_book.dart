@@ -6,9 +6,9 @@ import 'package:flutter/foundation.dart';
 import '../../chess/book/book_check.dart';
 import '../../chess/book/played_game.dart';
 import '../../chess/pgn/chapter.dart';
-import 'books.dart';
 import '../document/document_session.dart';
 import '../latest.dart';
+import 'books.dart';
 import 'repertoire_shelf.dart';
 
 /// What the book in use says about the game on the board, for the side the
@@ -80,7 +80,6 @@ final class BoardBook extends ChangeNotifier {
   Future<void> _check(Chapter chapter, int game, Side side) async {
     final ticket = _checks.begin();
     final book = _books.active;
-    if (book == null) return _become(const BoardBookNotSet());
     final line = chapter.lines[game];
     final tree = line.tree;
     if (tree == null) return _become(const BoardBookIdle());
@@ -143,11 +142,6 @@ final class BoardBookReading extends BoardBookState {
 /// The repertoires could not be read; the log says why.
 final class BoardBookFailed extends BoardBookState {
   const BoardBookFailed();
-}
-
-/// No book is in use.
-final class BoardBookNotSet extends BoardBookState {
-  const BoardBookNotSet();
 }
 
 /// The game, read as the side the board is seen from, and what the book

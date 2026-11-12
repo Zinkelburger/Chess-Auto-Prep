@@ -18,7 +18,6 @@ HERE = Path(__file__).resolve().parent
 
 
 def _notebook(slug: str, name: str, args: str) -> dict[str, object]:
-    base = f"/kaggle/input/{slug}"
     # The dataset's slug is whatever Kaggle made of its title, so find the
     # folder by its contents rather than assume the name.  Kaggle's uploader
     # also drops subfolders, so the notebook writes the two variant files

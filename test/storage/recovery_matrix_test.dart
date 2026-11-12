@@ -23,9 +23,9 @@ import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/file_relocation.dart';
 import 'package:chess_auto_prep/storage/operation_participants.dart';
 import 'package:chess_auto_prep/storage/recovery_gate.dart';
+import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:chess_auto_prep/storage/training_rows.dart';
 import 'package:chess_auto_prep/storage/training_store.dart';
-import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:chess_auto_prep/storage/training_writes.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -409,7 +409,7 @@ Future<String> _answer(_Profile profile, String? stop) async {
   final loaded = await store.read({source});
   if (loaded is! ProgressLoaded) return '${loaded.runtimeType}';
   final key = (source: source, id: 'line2');
-  final at = DateTime.utc(2026, 9, 1);
+  final at = DateTime.utc(2026, 9);
   final result = await store.write(
     reviews: [
       (

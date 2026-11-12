@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'theme.dart';
 import 'app_icons.dart';
+import 'listening_state.dart';
+import 'theme.dart';
 
 /// A box to type a choice into, suggesting what fits as it is typed: the
 /// typeable choice field the app uses instead of a drop-down menu, which
@@ -58,9 +59,10 @@ class ChoiceField extends StatefulWidget {
   State<ChoiceField> createState() => _ChoiceFieldState();
 }
 
-class _ChoiceFieldState extends State<ChoiceField> {
+class _ChoiceFieldState extends State<ChoiceField>
+    with ListeningState<ChoiceField> {
   late final _controller = TextEditingController(text: widget.text);
-  late final _focus = FocusNode()..addListener(_focusChanged);
+  final _focus = FocusNode();
 
   /// Whether the last Enter picked a suggestion.
   bool _picked = false;
@@ -85,7 +87,11 @@ class _ChoiceFieldState extends State<ChoiceField> {
     if (!_picked) submitted?.call(text.trim());
   }
 
-  void _focusChanged() {
+  @override
+  Listenable listenableOf(ChoiceField widget) => _focus;
+
+  @override
+  void changed() {
     if (_focus.hasFocus) {
       _controller.selection = TextSelection(
         baseOffset: 0,
@@ -106,6 +112,7 @@ class _ChoiceFieldState extends State<ChoiceField> {
 
   @override
   void dispose() {
+    stopListening();
     _controller.dispose();
     _focus.dispose();
     super.dispose();

@@ -117,8 +117,8 @@ Bughouse mode is offered when its engine assets are present.
   define both the visible puzzle list and Play's counted queue.
   `PuzzleTrainer.continueSession` restores a parked run without clearing results. Alternative answers use
   a supervised finite engine job; unavailable checks do not invent grades.
-- My games reads saved games independently of the selected comparison book;
-  `BookChecked.hasBook` distinguishes browsing from opening comparison. Its
+- My games reads saved games against the book in use, which is every
+  repertoire (`Book.everything`) until a book is chosen. Its
   initial Game tab has Book and Game review beside it.
 - Players/prep owns identities, groups, downloads, findings, prepared flags and
   linked prep studies. Player analysis exposes My book beside Game, and Player
@@ -132,14 +132,16 @@ Bughouse mode is offered when its engine assets are present.
   Cleanup is limited to explicitly selected derived data.
 - Generation owns search trees and draft publication; Replies/gaps and Audit
   use the current workspace and chapter revision. A practical search from the
-  board (`workspace/search/fill_gaps.dart`) builds two trees in one run, the board's
-  side and the other; `FillGaps.nodeAtBoard(side:)` reads either, and
-  `workspace/search/search_table.dart` merges them into the Expectimax table's
-  White, Black and Engine columns. Saved-tree loading and automatic board-follow
-  restarts share one start generation: navigation, a newer accepted start/resume,
-  or any stop command invalidates earlier pending starts, including an away-and-back
-  navigation. Exact-root results take precedence while preserving newest-first
-  order. Engine depths and continuation lines share the same source/depth scope.
+  board (`workspace/search/fill_gaps.dart`) builds the board's side's tree,
+  with the chapter's own moves as pins (`chapterPins`), and, when asked, the
+  other side's beside it; `FillGaps.nodeAtBoard(side:)` reads either, and
+  `workspace/search/search_table.dart` turns them into the Expectimax table's
+  value and Engine columns, each row with the traps below it
+  (`chess/generation/trap_scent.dart`, kept by subtree). A run stays where it
+  was started while the board moves. Saved-tree loading shares one start
+  generation: navigation, a newer accepted start/resume, or any stop command
+  invalidates earlier pending starts, including an away-and-back navigation.
+  Exact-root results take precedence while preserving newest-first order. Engine depths and continuation lines share the same source/depth scope.
   Turning a finished run into a draft chapter, and retrying that draft's save,
   is `workspace/search/fill_lines.dart`'s.
 - `workspace/explorer/index_build.dart` owns each opening-index build. Incremental work
@@ -193,10 +195,13 @@ Bughouse mode is offered when its engine assets are present.
   orientation-aware arrow navigation, Enter/Space selection and keyboard promotion
   to the shared pointer board. Modified history shortcuts still pass through.
   Submitted notation errors use a stable feedback row below the board controls.
+- `PlaceMemory` keeps the mode and file on the board in Settings (`lastPlace`)
+  as they change; `WorkspaceRequests.resume` opens there at launch.
 - `LayoutMemory` stores deliberate tool/split/board-width choices in Settings,
   per mode and, for document views, per file. Auxiliary modes keep their layout
-  while browsing source games. Writes participate in exit settling. Actions offers
-  Reset workspace layout, board width and active pane sizing; tab context menus
+  while browsing source games. Writes participate in exit settling. Actions ▸
+  View holds Reset workspace layout, the splits, the tabs, Positions and Full
+  screen; board width and pane sizes are dragged; tab context menus
   also open with Shift+F10. Mode navigation is grouped and searchable through
   Find a mode and the Actions menu. The reading surface names its Tools menu.
 - Engine jobs publish a named kind through `EngineJobs`; the top bar's running

@@ -39,6 +39,37 @@ void main() {
     expect(game.mistake, 6);
   });
 
+  test('the move the puzzle is about is found at the first ply too, and '
+      'not past the game\'s last move', () {
+    final puzzle = _puzzles(withSource).first;
+    final fromIt = puzzleGame(
+      puzzle,
+      saved: '[SetUp "1"]\n[FEN "${puzzle.fen.value}"]\n\n4. Qe2 *',
+    )!;
+    expect(fromIt.mistake, 0);
+    final upToIt = puzzleGame(
+      puzzle,
+      saved: '[Result "*"]\n\n1. e4 e5 2. Bc4 Nc6 3. Qh5 Nf6 *',
+    )!;
+    expect(upToIt.mistake, isNull);
+  });
+
+  test('a study chapter from a game with no names is the first game, and '
+      'keeps a finished result', () {
+    final puzzle = _puzzles(withSource).first;
+    final unnamed = studyDraft(
+      puzzle,
+      puzzleGame(puzzle, saved: '[Result "0-1"]\n\n$sourceMoves 0-1'),
+    );
+    expect(unnamed.name, 'Game 1');
+    expect(unnamed.result, '0-1');
+    final going = studyDraft(
+      puzzle,
+      puzzleGame(puzzle, saved: '[Result "*"]\n\n$sourceMoves *'),
+    );
+    expect(going.result, isNull);
+  });
+
   test('a puzzle from no game has none', () {
     expect(puzzleGame(_puzzles(tacticsSet)[3]), isNull);
   });

@@ -32,6 +32,17 @@ void main() {
     expect(queued(fortnight.copyWith(days: () => null)), [1, 0, 4, 3]);
   });
 
+  test('a saved window of one day or more is kept; none, or nothing, is '
+      'every date or the default', () {
+    expect(PuzzleFilter.fromJson(const {'days': 1}).days, 1);
+    expect(
+      PuzzleFilter.fromJson(const {'days': 0}).days,
+      PuzzleFilter.defaults.days,
+    );
+    expect(PuzzleFilter.fromJson(const {'days': null}).days, isNull);
+    expect(PuzzleFilter.fromJson(const {}).days, PuzzleFilter.defaults.days);
+  });
+
   test('each mistake kind can be taken in or left out', () {
     final all = PuzzleFilter(days: 14, kinds: MistakeKind.values.toSet());
     expect(queued(all), [1, 0, 2, 3]);
@@ -173,7 +184,6 @@ $move. e4 *
       kinds: {MistakeKind.inaccuracy},
       unreviewedOnly: true,
       hideOneStar: false,
-      days: null,
     );
     expect(PuzzleFilter.fromJson(chosen.toJson()), chosen);
     expect(PuzzleFilter.fromJson(const {'order': 'random'}).days, isNull);

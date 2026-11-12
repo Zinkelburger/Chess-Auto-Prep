@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../chess/tournament/result.dart';
 import '../../chess/tournament/standings.dart';
-import '../../ui/list_message.dart';
 import '../../ui/check_row.dart';
+import '../../ui/list_message.dart';
 
 class TournamentStandingsTable extends StatefulWidget {
   const TournamentStandingsTable({super.key, required this.tournament});

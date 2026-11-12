@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/storage/directory_snapshot.dart';
 import 'package:chess_auto_prep/storage/recovery_files.dart';
 import 'package:crypto/crypto.dart';
+import 'package:document_file_io/document_file_io.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -210,6 +211,75 @@ void main() {
     );
   }
 
+  group('what the disk answers during a capture', () {
+    Future<void> captureWith(NativeCallRunner runner) =>
+        runWithNativeCalls(runner, () => DirectorySnapshot.capture(root.path));
+
+    test('a file seen without its hash is refused', () async {
+      await populate();
+      await expectLater(
+        captureWith(
+          <T>(call, paths, real) async => call == NativeCall.observeFile
+              ? NativeFileObservation(
+                      status: 0,
+                      error: 0,
+                      identity: 'id ${paths.single}',
+                    )
+                    as T
+              : await real(),
+        ),
+        throwsA(isA<RecoveryRequired>()),
+      );
+    });
+
+    // The root is looked at before its entries and again after them.
+    NativeCallRunner rootSecondLook(
+      ({int status, String? identity, int? volume}) Function(
+        ({int status, String? identity, int? volume}) first,
+      )
+      second,
+    ) {
+      ({int status, String? identity, int? volume})? first;
+      return <T>(call, paths, real) async {
+        if (call != NativeCall.observeDirectory || paths.single != root.path) {
+          return real();
+        }
+        final seen =
+            await real() as ({int status, String? identity, int? volume});
+        if (first == null) {
+          first = seen;
+          return seen as T;
+        }
+        return second(first!) as T;
+      };
+    }
+
+    test('a root replaced while its entries were read is refused', () async {
+      await populate();
+      await expectLater(
+        captureWith(
+          rootSecondLook(
+            (first) => (status: 0, identity: 'another', volume: first.volume),
+          ),
+        ),
+        throwsA(isA<RecoveryRequired>()),
+      );
+    });
+
+    test('a root gone by the end of the capture is refused', () async {
+      await populate();
+      await expectLater(
+        captureWith(
+          rootSecondLook(
+            (first) =>
+                (status: 1, identity: first.identity, volume: first.volume),
+          ),
+        ),
+        throwsA(isA<RecoveryRequired>()),
+      );
+    });
+  });
+
   test('missing or non-directory roots are refused', () async {
     await file('plain').writeAsString('bytes');
     for (final path in [p.join(root.path, 'missing'), file('plain').path]) {
@@ -272,6 +342,10 @@ void main() {
       {...plain, 'identity': ''},
     ],
     'duplicate path': [plain, plain],
+    'duplicate path, distinct identities': [
+      plain,
+      {...plain, 'identity': 'other-id'},
+    ],
     'unsorted': [plain, directory],
     'missing parent': [
       {...plain, 'path': p.join('folder', 'plain')},

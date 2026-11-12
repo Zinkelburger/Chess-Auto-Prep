@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import '../../chess/fen.dart';
 import '../../ui/file_names.dart';
 import '../../ui/form_dialog.dart';
+import '../../ui/segments.dart';
 import '../../ui/theme.dart';
 import '../../workspace/board/board_editor.dart';
-import '../../ui/segments.dart';
 
 /// What the user asked for: a name, where the chapter starts, and which way
 /// its board faces.

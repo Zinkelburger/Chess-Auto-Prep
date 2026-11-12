@@ -13,9 +13,9 @@ import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/my_accounts.dart';
 import '../../storage/my_games_files.dart';
+import '../latest.dart';
 import 'file_filter.dart';
 import 'index_build.dart';
-import '../latest.dart';
 
 /// The explorer's two sources on this machine — the open file's games and
 /// the user's own — each an [OpeningIndex] answered from at once when it is

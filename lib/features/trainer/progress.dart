@@ -8,11 +8,11 @@ import '../../chess/training/records.dart';
 import '../../chess/training/schedule.dart';
 import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
-import '../../storage/training_rows.dart' show asWritten;
-import '../../storage/training_store.dart';
-import '../../storage/training_progress.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/pending_writes.dart';
+import '../../storage/training_progress.dart';
+import '../../storage/training_rows.dart' show asWritten;
+import '../../storage/training_store.dart';
 
 /// The clock and the dice a trainer runs on, handed in so a test can fix
 /// both: the time now, and a number in −1..1 that spreads an interval.

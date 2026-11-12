@@ -1,10 +1,10 @@
 import 'dart:async';
 
+import 'package:chess_auto_prep/storage/book_snapshot.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/deleted_chapters.dart';
-import 'package:chess_auto_prep/storage/book_snapshot.dart';
-import 'package:chess_auto_prep/storage/training_snapshot.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
+import 'package:chess_auto_prep/storage/training_snapshot.dart';
 
 /// A repertoire listing the test writes, whose timing the test controls:
 /// every call waits until the test releases it.

@@ -1,7 +1,4 @@
 import 'dart:async';
-import 'package:chess_auto_prep/chess/training/training_options.dart';
-import 'package:chess_auto_prep/storage/settings.dart';
-import 'package:chess_auto_prep/storage/settings_store.dart';
 
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
@@ -11,18 +8,23 @@ import 'package:chess_auto_prep/chess/training/line_order.dart';
 import 'package:chess_auto_prep/chess/training/records.dart';
 import 'package:chess_auto_prep/chess/training/schedule.dart';
 import 'package:chess_auto_prep/chess/training/training_line.dart';
+import 'package:chess_auto_prep/chess/training/training_options.dart';
+import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/features/trainer/lesson.dart';
 import 'package:chess_auto_prep/features/trainer/progress.dart';
 import 'package:chess_auto_prep/features/trainer/trainer.dart';
 import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/features/trainer/training_scope.dart';
+import 'package:chess_auto_prep/storage/book_file.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/storage/settings.dart';
+import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
-import 'package:chess_auto_prep/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/workspace/book/books.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -30,8 +32,6 @@ import '../../support/scripted_files.dart';
 import '../../support/scripted_progress.dart';
 import '../../support/scripted_store.dart';
 import '../../support/session_fixture.dart';
-import 'package:chess_auto_prep/storage/book_file.dart';
-import 'package:chess_auto_prep/workspace/book/books.dart';
 
 /// Two lines for White: the Ruy Lopez and the Italian.
 const _chapter = '''

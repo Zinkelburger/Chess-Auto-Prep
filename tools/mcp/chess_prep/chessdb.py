@@ -72,8 +72,8 @@ def parse_queryall(body: str) -> list[dict[str, Any]]:
         if not uci:
             continue
         try:
-            score = int(entry.get("score"))
-        except (TypeError, ValueError):
+            score = int(entry["score"])
+        except (KeyError, TypeError, ValueError):
             continue
         move: dict[str, Any] = {
             "uci": uci,

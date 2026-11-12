@@ -12,6 +12,10 @@ abstract final class Space {
   static const xl = 24.0;
 }
 
+/// The room around the smallest labels: a move in an engine line, `sit`, a
+/// pocket's count. One step under [Space.xs], which would part them too far.
+const tightInset = 3.0;
+
 /// How wide a mode's list starts out: room for a game's two players or a
 /// chapter's name on one row. The divider takes it down to [paneMinWidth].
 const listColumnWidth = 260.0;
@@ -164,6 +168,10 @@ const readingCardInset = Space.xl;
 /// A diagram drawn in a comment: a position the author put there to be
 /// looked at, so bigger than a hover board and smaller than the board.
 const diagramSize = 160.0;
+
+/// Below this side the board is too small to play on: in a window that
+/// short it takes the room kept for the note under it.
+const boardCrampedSide = 300.0;
 
 /// The least room under the board worth showing the move's note in: its
 /// move row and two lines of prose.
@@ -339,7 +347,6 @@ final class BoardTheme extends ThemeExtension<BoardTheme> {
   ChessboardSettings settings({required bool coordinates}) =>
       ChessboardSettings(
         colorScheme: _colors,
-        pieceAssets: PieceSet.cburnettAssets,
         animationDuration: animation,
         // BoardView paints full-square hints behind the pieces.
         showValidMoves: false,
@@ -354,7 +361,6 @@ final class BoardTheme extends ThemeExtension<BoardTheme> {
   /// colours and pieces, no animation because it shows one position.
   StaticChessboardSettings get previewSettings => StaticChessboardSettings(
     colorScheme: _colors,
-    pieceAssets: PieceSet.cburnettAssets,
     animationDuration: Duration.zero,
   );
 
@@ -732,7 +738,26 @@ const labColumnGap = 16.0;
 /// then the pocket, its pieces as large as the board's squares, and the
 /// room around them.
 const labSeatPadding = 8.0;
+
+/// Half of [labSeatPadding]: a seat's hands take it above and below.
+const labSeatInset = labSeatPadding / 2;
 const labTurnDot = 11.0;
+
+/// A seat's clock, at the end of its hand's row under the player's name:
+/// mono at the reading size, as a clock is read at a glance. A hand shorter
+/// than [labSeatTwoLines] has the name beside the clock instead.
+const labClockText = TextStyle(
+  fontFamily: 'SourceCodePro',
+  fontSize: 16,
+  fontWeight: FontWeight.w600,
+  height: 1.2,
+);
+const labSeatTwoLines = 40.0;
+
+/// The row over the Bughouse moves that says which game they are, and the
+/// room its `‹ n of N ›` takes at the row's start.
+const labGameRowHeight = 36.0;
+const labGameStepperWidth = 168.0;
 
 /// The − and + in a pocket slot's upper corners while the pointer is over
 /// it: a dark chip with a white sign, about two fifths of the slot

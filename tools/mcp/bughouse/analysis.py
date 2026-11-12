@@ -102,7 +102,7 @@ def _named(dual: DualBoard, which: int, uci: str | None) -> str | None:
     try:
         board = dual.boards[which]
         return san(board, board.parse_uci(uci))
-    except Exception:
+    except (ValueError, AssertionError, IndexError):  # not a move on this board
         return uci
 
 

@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/openings.dart';
-import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
+import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:dartchess/dartchess.dart' show Chess, Position;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -116,5 +116,26 @@ void main() {
     );
     final merged = await read(plain);
     expect(openingLine(book, merged, const NodePath.root()), '');
+  });
+
+  test('a tag PGN marks unknown names nothing, and a game past the file '
+      'names nothing', () async {
+    final chapter = await readChapter(
+      name: 'Main',
+      game: 0,
+      text:
+          '[Event "E"]\n[ECO "?"]\n[Opening "Sicilian"]\n[Result "*"]\n\n'
+          '1. d4 d5 *\n',
+    );
+    expect(openingLine(book, chapter, const NodePath.root()), 'Sicilian');
+    final past = Chapter(
+      name: chapter.name,
+      side: chapter.side,
+      preamble: chapter.preamble,
+      lines: chapter.lines,
+      tree: chapter.tree,
+      game: chapter.lines.length,
+    );
+    expect(openingLine(book, past, const NodePath.root()), '');
   });
 }

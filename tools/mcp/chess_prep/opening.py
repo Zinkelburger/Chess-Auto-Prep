@@ -29,6 +29,10 @@ _CHESS_ERR = (
     "Opening-tree tools need python-chess. Install with: pip install python-chess"
 )
 
+#: What python-chess raises for a malformed game or a move the board rejects.
+#: san() and push() assert their move is legal; the parser raises ValueError.
+_CHESS_ERRORS = (ValueError, AssertionError, IndexError)
+
 _NULL_SANS = frozenset({"--", "Z0", "0000", "@@@@"})
 _NULL_TOKEN_RE = re.compile(r"\b(Z0|0000|@@@@)\b")
 _MOVE_NUM_RE = re.compile(r"^\d+\.+$")
@@ -237,7 +241,7 @@ class OpeningGraph:
         while True:
             try:
                 game = chess.pgn.read_game(handle)
-            except Exception:
+            except _CHESS_ERRORS:
                 self.skipped += 1
                 break
             if game is None:
@@ -249,7 +253,7 @@ class OpeningGraph:
             score = _score_from_result(game.headers.get("Result", "*"))
             try:
                 board = game.board()
-            except Exception:
+            except _CHESS_ERRORS:
                 self.skipped += 1
                 continue
             self.games += 1
@@ -290,7 +294,7 @@ class OpeningGraph:
             is_null = move == chess_mod.Move.null()
             try:
                 san = "--" if is_null else board.san(move)
-            except Exception:
+            except _CHESS_ERRORS:
                 continue
             comment = (child.comment or "").strip()
             nags = sorted(int(n) for n in child.nags)
@@ -298,7 +302,7 @@ class OpeningGraph:
                 self._pos(parent_key).add_visit(score, chapter, path)
             try:
                 board.push(move)
-            except Exception:
+            except _CHESS_ERRORS:
                 continue
             dest_key = fen4(board)
             dest_path = path if is_null else path + [san]
@@ -361,7 +365,7 @@ class OpeningGraph:
         for move in board.legal_moves:
             try:
                 san = board.san(move)
-            except Exception:
+            except _CHESS_ERRORS:
                 continue
             if san in played_sans:
                 continue
@@ -553,7 +557,7 @@ def _eval_board(board, depth: int, multipv: int) -> list[dict]:
             try:
                 sans.append(tmp.san(mv))
                 tmp.push(mv)
-            except Exception:
+            except _CHESS_ERRORS:
                 break
         lines.append(
             {

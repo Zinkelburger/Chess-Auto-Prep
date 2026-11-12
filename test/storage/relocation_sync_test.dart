@@ -82,7 +82,10 @@ void main() {
             p.join(fixture.support.path, 'relocation-writes', '$id.json'),
           );
           final committing = await note.readAsBytes();
-          expect(jsonDecode(utf8.decode(committing))['state'], 'committing');
+          expect(
+            (jsonDecode(utf8.decode(committing)) as Map)['state'],
+            'committing',
+          );
           expect(await File(from.path).exists(), isFalse);
           expect(await File(to.path).readAsString(), oneGame('1. d4'));
           expect(await getRows().readAsBytes(), before);

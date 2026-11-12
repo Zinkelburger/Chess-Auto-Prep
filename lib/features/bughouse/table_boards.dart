@@ -1,9 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../chess/bughouse/table.dart';
+import '../../chess/bughouse/table_game.dart';
 import '../../chess/pgn/board_shapes.dart';
 import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
@@ -323,7 +326,7 @@ class _SeatRow extends StatelessWidget {
     final toMove = position.turn(board) == side;
     final pockets = position.board(board).pockets!;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: labSeatPadding / 2),
+      padding: const EdgeInsets.symmetric(vertical: labSeatInset),
       child: Row(
         children: [
           TurnDot(side: side, shown: toMove),
@@ -352,7 +355,113 @@ class _SeatRow extends StatelessWidget {
             onPick: onPick,
             onStep: (role, by) => lab.adjustHand(board, side, role, by),
           ),
+          // As tall as the hand, which the board's size allows for.
+          Expanded(
+            child: SizedBox(
+              height: square,
+              child: _SeatPlayer(
+                name: lab.game?.name(seat),
+                rating: lab.game?.rating(seat),
+                clock: lab.timeLeft(seat),
+                toMove: toMove,
+              ),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// Who sits in a seat and what their clock reads with the boards as they
+/// are, at the end of the hand's row: the name over the clock, or beside it
+/// when the hand is too short for two lines, the clock of the player on move
+/// in full ink. Both from the game's BPGN; a line made here has neither,
+/// and the room stays empty. A name too long for the room is cut short and
+/// whole on hover; the clock is never cut, and in a room too narrow for it
+/// it is drawn smaller.
+class _SeatPlayer extends StatelessWidget {
+  const _SeatPlayer({
+    required this.name,
+    required this.rating,
+    required this.clock,
+    required this.toMove,
+  });
+
+  final String? name;
+  final String? rating;
+  final Duration? clock;
+  final bool toMove;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = this.name;
+    final clock = this.clock;
+    if (name == null && clock == null) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final who = [?name, ?rating].join(' ');
+    final player = name == null
+        ? null
+        : Tooltip(
+            message: who,
+            child: Text.rich(
+              TextSpan(
+                text: name,
+                children: [
+                  if (rating != null)
+                    TextSpan(
+                      text: ' $rating',
+                      style: TextStyle(color: muted),
+                    ),
+                ],
+              ),
+              style: bodySmallInk(theme),
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+            ),
+          );
+    Widget? time(double width) => clock == null
+        ? null
+        : ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: math.max(0, width)),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                clockText(clock),
+                style: labClockText.copyWith(
+                  color: toMove ? theme.colorScheme.onSurface : muted,
+                ),
+                maxLines: 1,
+                softWrap: false,
+                semanticsLabel: '${name ?? 'Clock'} ${clockText(clock)}',
+              ),
+            ),
+          );
+    return Padding(
+      padding: const EdgeInsets.only(left: Space.s),
+      child: LayoutBuilder(
+        builder: (context, room) => room.maxHeight < labSeatTwoLines
+            ? Row(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: player,
+                    ),
+                  ),
+                  if (player != null && clock != null)
+                    const SizedBox(width: Space.s),
+                  ?time(room.maxWidth - (player == null ? 0 : Space.s)),
+                ],
+              )
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [?player, ?time(room.maxWidth)],
+              ),
       ),
     );
   }

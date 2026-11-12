@@ -4,17 +4,18 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path/path.dart' as p;
 
+import '../chess/bughouse/bpgn_moves.dart' show BpgnGames;
 import '../features/bughouse/bughouse_screen.dart';
 import '../storage/pgn_file_import.dart';
 import '../storage/pgn_file_picker.dart';
 import '../ui/app_action.dart';
+import '../ui/app_icons.dart';
 import '../ui/app_keys.dart';
 import '../workspace/workspace.dart';
 import '../workspace/workspace_tabs.dart';
 import 'mode.dart';
 import 'mode_view.dart';
 import 'window_input.dart';
-import '../ui/app_icons.dart';
 
 /// The Bughouse mode: its own screen, one board or two and what Hivemind
 /// makes of them, with nothing of the workspace but the window around it.
@@ -120,18 +121,24 @@ final class BughouseView extends ModeView {
 
   /// The desktop's file dialog, then the chosen file's moves on the boards,
   /// as Paste moves would put them. The file is read where it is and not
-  /// kept.
+  /// kept; its games are found off the UI isolate. A file opened while an
+  /// earlier one was still being read is the one shown.
   Future<void> _open() async {
     final path = await _labs.picker.pickPgn(extensions: bpgnExtensions);
     if (path == null) return;
+    final opening = ++_opening;
     final name = p.basename(path);
     switch (await _labs.files.read(path)) {
       case PickedText(:final text):
-        _labs.lab.pasteMoves(text, file: name);
+        final games = await BpgnGames.index(text);
+        if (opening == _opening) _labs.lab.openGames(games, file: name);
       case PickedUnread():
-        _labs.lab.fileUnread(name);
+        if (opening == _opening) _labs.lab.fileUnread(name);
     }
   }
+
+  /// Counts the files opened, so only the latest is shown.
+  int _opening = 0;
 
   Future<void> _paste(void Function(String text) into) async {
     final text = await _input.clipboard();

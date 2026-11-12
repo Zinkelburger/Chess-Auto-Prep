@@ -8,8 +8,8 @@ import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
-import '../../support/scripted_tournaments.dart';
 import '../../support/engine_jobs_fixture.dart';
+import '../../support/scripted_tournaments.dart';
 
 /// A shell engine that answers the handshake as `Fake 1.0` and plays [move].
 String _engine(String move) =>

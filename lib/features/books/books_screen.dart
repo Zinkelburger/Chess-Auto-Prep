@@ -4,19 +4,19 @@ import 'package:flutter/material.dart';
 
 import '../../storage/book_list.dart';
 import '../../storage/chapter_files.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/confirm_dialog.dart';
-import '../../ui/status_bar.dart';
-import '../../ui/name_dialog.dart';
 import '../../ui/list_message.dart';
 import '../../ui/list_row.dart';
+import '../../ui/name_dialog.dart';
 import '../../ui/problem_line.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
+import '../../ui/status_bar.dart';
 import '../../ui/theme.dart';
+import '../../ui/tool_button.dart';
 import '../../workspace/book/books.dart';
 import '../../workspace/book/repertoire_catalog.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/tool_button.dart';
 
 /// The Books mode: the user's books on the left, the one picked on the
 /// right with every repertoire and its chapters to tick in or out. A book
@@ -249,7 +249,7 @@ class _BookList extends StatelessWidget {
                 Expanded(
                   child: Text(book.name, overflow: TextOverflow.ellipsis),
                 ),
-                if (book.id == books.active?.id) Text('In use', style: inUse),
+                if (book.id == books.chosen?.id) Text('In use', style: inUse),
               ],
             ),
           ),
@@ -418,7 +418,7 @@ class _BookEditorState extends State<_BookEditor> {
     final books = widget.books;
     final book = widget.book;
     final theme = Theme.of(context);
-    final inUse = books.active?.id == book.id;
+    final inUse = books.chosen?.id == book.id;
     return Padding(
       padding: const EdgeInsets.fromLTRB(Space.l, Space.m, Space.s, 0),
       child: Row(

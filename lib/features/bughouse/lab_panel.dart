@@ -2,23 +2,25 @@ import 'package:dartchess/dartchess.dart' show Setup;
 import 'package:flutter/material.dart';
 
 import '../../chess/bughouse/hivemind.dart';
-import '../../chess/fen.dart';
 import '../../chess/bughouse/table.dart';
+import '../../chess/fen.dart';
+import '../../ui/engine_switch.dart';
+import '../../ui/game_stepper.dart';
 import '../../ui/problem_line.dart';
 import '../../ui/progress_line.dart';
-import '../../ui/engine_switch.dart';
+import '../../ui/segments.dart';
 import '../../ui/theme.dart';
 import '../../workspace/board/board_editor.dart';
 import 'board_moves.dart';
 import 'bughouse_lab.dart';
 import 'lab_engine.dart';
 import 'lab_lines.dart';
-import '../../ui/segments.dart';
 
 /// The column beside the boards: how many boards, who may sit, the engine
 /// switch with its score, then the moves: with one board its best moves and
 /// its move list; with two, both boards' move lists side by side in the
-/// boards' order, each board's best moves staying under that board. Every
+/// boards' order, each board's best moves staying under that board. A game
+/// read from a BPGN has a row over the moves saying which it is. Every
 /// row keeps its height whether the engine is on or off.
 class LabPanel extends StatelessWidget {
   const LabPanel({super.key, required this.lab, required this.engine});
@@ -44,6 +46,7 @@ class LabPanel extends StatelessWidget {
               board: BoardNumber.one,
             ),
           _ProblemLine(lab: lab),
+          if (lab.game != null || lab.gameCount > 1) _GameRow(lab: lab),
           Expanded(
             child: lab.single
                 ? BoardMoves(lab: lab, board: BoardNumber.one)
@@ -109,6 +112,50 @@ class _BoardsSwitch extends StatelessWidget {
     );
     if (fen == null || !context.mounted) return;
     lab.editBoard(board, Setup.parseFen(fen.value));
+  }
+}
+
+/// Which game is on the boards, over its moves: `‹ [n] of N ›` when its
+/// file holds several, then what its tags say of it and how it ended, all
+/// of it on hover.
+class _GameRow extends StatelessWidget {
+  const _GameRow({required this.lab});
+
+  final BughouseLab lab;
+
+  @override
+  Widget build(BuildContext context) {
+    final heading = lab.game?.heading ?? '';
+    return SizedBox(
+      height: labGameRowHeight,
+      child: Row(
+        children: [
+          if (lab.gameCount > 1) ...[
+            SizedBox(
+              width: labGameStepperWidth,
+              child: GameStepper(
+                at: lab.gameAt,
+                total: lab.gameCount,
+                onShow: lab.showGame,
+                alignment: MainAxisAlignment.start,
+              ),
+            ),
+            const SizedBox(width: Space.s),
+          ],
+          Expanded(
+            child: Tooltip(
+              message: heading,
+              child: Text(
+                heading,
+                style: Theme.of(context).textTheme.bodySmall,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

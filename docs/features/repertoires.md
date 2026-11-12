@@ -64,8 +64,8 @@ for both, the list and the outline share one column as two pages.
   chapter introduction) and the action panes. The builder opens two panes:
   `Moves` on the left (45%), `Expectimax` on the right and selected; the book
   button under the moves opens the Explorer there, shut at first. Also
-  available from a pane's `+`: `Replies`, `Train`, `Audit`, `Analysis`,
-  `Game review`.
+  available from a pane's `+`: `Notes`, `Replies`, `Train`, `Audit`,
+  `Analysis`, `Game review`.
 - **Replies tab** — status line `Their replies · 2200 · 4 gaps · 87%
   covered` (`Our candidates` at our move), a `Next gap` button, then one row
   per move, most likely first: share (`<1%` below one), move, a tick when the

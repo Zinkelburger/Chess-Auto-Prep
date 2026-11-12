@@ -4,24 +4,24 @@ import 'dart:io' show FileSystemException;
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/players/player.dart';
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
-import 'package:chess_auto_prep/storage/my_accounts.dart';
+import 'package:chess_auto_prep/engines/engine_line.dart';
 import 'package:chess_auto_prep/features/players/player_analysis.dart';
 import 'package:chess_auto_prep/features/players/player_hunt.dart';
 import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
-import 'package:chess_auto_prep/engines/engine_line.dart';
-import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/document_ref.dart';
+import 'package:chess_auto_prep/storage/my_accounts.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/player_files.dart';
 import 'package:dartchess/dartchess.dart' show Side;
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
-import '../support/window_fixture.dart';
 import '../support/scripted_store.dart';
 import '../support/study_fixture.dart' show studiesRoot;
+import '../support/window_fixture.dart';
 
 const _games =
     '[Event "Club"]\n[White "Alex"]\n[Black "Bob"]\n[Date "2026.09.20"]\n[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 1-0\n\n[Event "Club"]\n[White "Bob"]\n[Black "Alex"]\n[Date "2026.09.21"]\n[Result "0-1"]\n\n1. d4 d5 0-1';

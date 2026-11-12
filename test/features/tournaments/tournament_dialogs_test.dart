@@ -9,8 +9,8 @@ import 'package:chess_auto_prep/ui/toggle_chip.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../support/scripted_tournaments.dart';
 import '../../support/engine_jobs_fixture.dart';
+import '../../support/scripted_tournaments.dart';
 
 Future<BuildContext> _host(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1400, 1200);

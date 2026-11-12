@@ -68,14 +68,26 @@ void main() {
     expect(find.byType(LibraryPanel), findsOneWidget);
   });
 
+  testWidgets('the Positions have their own way back to the list', (
+    tester,
+  ) async {
+    await w.pumpShell(tester);
+    await choosePanel(tester, 'Positions');
+    expect(find.byType(FindsPanel), findsOneWidget);
+    await tester.tap(find.byTooltip('Back to the list'));
+    await tester.pumpAndSettle();
+    expect(find.byType(FindsPanel), findsNothing);
+    expect(find.byType(LibraryPanel), findsOneWidget);
+  });
+
   testWidgets('Positions lives under Actions ▸ Panels', (tester) async {
     await w.pumpShell(tester);
     expect(find.text('Positions'), findsNothing);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.widgetWithText(SubmenuButton, 'Panels'));
+    await tester.ensureVisible(find.widgetWithText(SubmenuButton, 'View'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(SubmenuButton, 'Panels'));
+    await tester.tap(find.widgetWithText(SubmenuButton, 'View'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, 'Positions'));
     await tester.pumpAndSettle();
@@ -86,9 +98,9 @@ void main() {
     );
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.widgetWithText(SubmenuButton, 'Panels'));
+    await tester.ensureVisible(find.widgetWithText(SubmenuButton, 'View'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(SubmenuButton, 'Panels'));
+    await tester.tap(find.widgetWithText(SubmenuButton, 'View'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Back to the list'));
     await tester.pumpAndSettle();

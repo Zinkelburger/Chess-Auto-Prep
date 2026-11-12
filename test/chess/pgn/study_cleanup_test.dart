@@ -24,6 +24,45 @@ const annotated = '''[Event "Study: First"]
 1. Nf3 *
 ''';
 void main() {
+  test('a chapter no longer in the study is refused', () {
+    final study = parseChapter(name: 'Study', text: annotated, game: 0);
+    expect(
+      cleanStudyChapter(study, study.lines.length, annotations: true),
+      isA<ChapterEditRefused>(),
+    );
+  });
+
+  test('clearing annotations keeps every move of a long line', () {
+    final study = parseChapter(
+      name: 'Study',
+      text: '[Event "S: Long"]\n\n1. e4 {a} e5 {b} 2. Nf3 {c} Nc6 *\n',
+      game: 0,
+    );
+    final cleaned =
+        cleanStudyChapter(study, 0, annotations: true) as ChapterEdited;
+    final line = cleaned.chapter.lines.single;
+    expect(
+      [for (final n in line.tree!.mainLine) n.san],
+      ['e4', 'e5', 'Nf3', 'Nc6'],
+    );
+    expect(line.tree!.mainLine.map((n) => n.comment), everyElement(isNull));
+  });
+
+  test('a chapter\'s content counts its moves, notes and side lines', () {
+    final tree = parseChapter(
+      name: 'Study',
+      text:
+          '[Event "S: Count"]\n\n{Intro} 1. e4 {main} '
+          '({before} 1. d4 d5) e5 *\n',
+    ).lines.single.tree!;
+    expect(studyContentCount(tree), (moves: 4, comments: 3, sidelines: 2));
+    final plain = parseChapter(
+      name: 'Study',
+      text: '[Event "S: Plain"]\n\n1. e4 {only} e5 *\n',
+    ).lines.single.tree!;
+    expect(studyContentCount(plain), (moves: 2, comments: 1, sidelines: 0));
+  });
+
   test(
     'clear annotations keeps every move and unknown tag; second game is exact',
     () {

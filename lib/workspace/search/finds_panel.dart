@@ -8,19 +8,22 @@ import '../../chess/generation/finds.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/tree_edit.dart' show positionOf;
 import '../../storage/finds_store.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/choice_field.dart';
 import '../../ui/list_message.dart';
 import '../../ui/list_row.dart';
+import '../../ui/listening_state.dart';
+import '../../ui/move_notation.dart';
+import '../../ui/pane_header.dart';
 import '../../ui/problem_line.dart';
 import '../../ui/row_actions.dart';
+import '../../ui/segments.dart';
 import '../../ui/theme.dart';
 import '../../ui/toggle_chip.dart';
+import '../../ui/tool_button.dart';
+import '../board/line_preview.dart';
 import '../document/document_session.dart';
 import 'finds.dart';
-import '../board/line_preview.dart';
-import '../../ui/move_notation.dart';
-import '../../ui/segments.dart';
-import '../../ui/pane_header.dart';
 
 /// The Positions column: everything the searches have pointed out, one row
 /// a position, in the column a mode keeps its own list in.
@@ -32,7 +35,8 @@ import '../../ui/pane_header.dart';
 ///
 /// With a chapter open, `This chapter` narrows the list to the finds whose
 /// move is played from one of the chapter's positions: what comes up in it.
-/// An analysis board opened from a find keeps the chapter's list.
+/// An analysis board opened from a find keeps the chapter's list; any other
+/// board that is no chapter shows every find, with no `This chapter`.
 class FindsPanel extends StatefulWidget {
   const FindsPanel({
     super.key,
@@ -40,6 +44,7 @@ class FindsPanel extends StatefulWidget {
     required this.onOpen,
     this.session,
     this.onTrain,
+    this.onBack,
     this.trailing,
   });
 
@@ -54,6 +59,9 @@ class FindsPanel extends StatefulWidget {
   /// Trains a trap's line: offered on trap rows only.
   final ValueChanged<KeptFind>? onTrain;
 
+  /// Puts the mode's own list back where the Positions are.
+  final VoidCallback? onBack;
+
   /// What sits in the toolbar's corner: the host's switch and toggle.
   final Widget? trailing;
 
@@ -61,7 +69,8 @@ class FindsPanel extends StatefulWidget {
   State<FindsPanel> createState() => _FindsPanelState();
 }
 
-class _FindsPanelState extends State<FindsPanel> {
+class _FindsPanelState extends State<FindsPanel>
+    with ListeningState<FindsPanel> {
   final _preview = HoverPreview<LinePreview>();
   Side _previewSide = Side.white;
 
@@ -72,10 +81,21 @@ class _FindsPanelState extends State<FindsPanel> {
   GameTree? _readTree;
   Set<String>? _chapterPositions;
 
+  /// While the state moves to a rebuilt widget's session: that is mid-frame,
+  /// and [didUpdateWidget] narrows after it.
+  bool _following = false;
+
+  @override
+  Listenable? listenableOf(FindsPanel widget) => widget.session;
+
+  @override
+  void changed() {
+    if (!_following) _narrow();
+  }
+
   @override
   void initState() {
     super.initState();
-    widget.session?.addListener(_narrow);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _narrow();
@@ -85,11 +105,9 @@ class _FindsPanelState extends State<FindsPanel> {
 
   @override
   void didUpdateWidget(FindsPanel old) {
+    _following = true;
     super.didUpdateWidget(old);
-    if (old.session != widget.session) {
-      old.session?.removeListener(_narrow);
-      widget.session?.addListener(_narrow);
-    }
+    _following = false;
     if (old.finds != widget.finds) {
       final gone = old.finds;
       WidgetsBinding.instance.addPostFrameCallback((_) => gone.within(null));
@@ -106,7 +124,6 @@ class _FindsPanelState extends State<FindsPanel> {
 
   @override
   void dispose() {
-    widget.session?.removeListener(_narrow);
     final finds = widget.finds;
     WidgetsBinding.instance.addPostFrameCallback((_) => finds.within(null));
     _preview.dispose();
@@ -114,7 +131,9 @@ class _FindsPanelState extends State<FindsPanel> {
   }
 
   /// Follows the open chapter: a file's tree, never the analysis board a
-  /// find was opened on, which would narrow the list to that one line.
+  /// find was opened on, which would narrow the list to that one line. A
+  /// board that is neither a chapter nor a find's line has no chapter to
+  /// narrow to: what was searched there is in no chapter yet.
   void _narrow() {
     final session = widget.session;
     final tree = session?.tree;
@@ -122,8 +141,37 @@ class _FindsPanelState extends State<FindsPanel> {
       _readTree = tree;
       _chapterPositions = tree == null ? null : _positionsOf(tree);
     }
-    widget.finds.within(_thisChapter ? _chapterPositions : null);
+    final narrows = _narrows;
+    if (narrows != _narrowed && mounted) setState(() => _narrowed = narrows);
+    widget.finds.within(narrows && _thisChapter ? _chapterPositions : null);
   }
+
+  /// Whether `This chapter` applies to the board: a chapter was read, and
+  /// the board is it or the line of the find last opened from the list.
+  bool get _narrows {
+    if (_chapterPositions == null) return false;
+    final session = widget.session;
+    if (session?.source != null) return true;
+    final tree = session?.tree;
+    final selected = widget.finds.selected;
+    if (tree == null || selected == null) return false;
+    final opened = widget.finds.all
+        .where((kept) => kept.id == selected)
+        .firstOrNull;
+    if (opened == null) return false;
+    if (tree != _boardTree) {
+      _boardTree = tree;
+      _boardPositions = _positionsOf(tree);
+    }
+    return _boardPositions!.contains(opened.find.fen.position);
+  }
+
+  /// [_narrows] as last shown.
+  bool _narrowed = false;
+
+  /// The board's own tree, when it is no chapter, and its positions.
+  GameTree? _boardTree;
+  Set<String>? _boardPositions;
 
   void _showThisChapter(bool on) {
     setState(() => _thisChapter = on);
@@ -161,12 +209,24 @@ class _FindsPanelState extends State<FindsPanel> {
           children: [
             PaneHeader(
               'Positions',
+              leading: switch (widget.onBack) {
+                final back? => ToolButton(
+                  icon: AppIcons.back,
+                  tooltip: 'Back to the list',
+                  onPressed: back,
+                ),
+                null => null,
+              },
               actions: [
-                if (_chapterPositions != null)
-                  ToggleChip(
-                    label: 'This chapter',
-                    selected: _thisChapter,
-                    onSelected: _showThisChapter,
+                // Beside the way back the row is tight: the chip gives way
+                // before the row overflows.
+                if (_narrows)
+                  Flexible(
+                    child: ToggleChip(
+                      label: 'This chapter',
+                      selected: _thisChapter,
+                      onSelected: _showThisChapter,
+                    ),
                   ),
               ],
               trailing: widget.trailing,

@@ -2,8 +2,8 @@ import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
-import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:chess_auto_prep/workspace/document/document_session.dart';
+import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -288,6 +288,21 @@ void main() {
       await pumpEventQueue();
       expect(file.onDisk, before);
     });
+  });
+
+  test('a board from the start holds no game until it has moves, then the '
+      'moves', () {
+    expect(analysisBoard(side: Side.white).lines, isEmpty);
+    final played = analysisBoard(side: Side.white, sans: const ['e4', 'e5']);
+    expect([for (final n in played.tree.mainLine) n.san], ['e4', 'e5']);
+  });
+
+  test('a paste of several games takes the first', () {
+    final pasted = pastedBoard(
+      '[Event "One"]\n\n1. e4 *\n\n[Event "Two"]\n\n1. d4 *',
+      side: Side.white,
+    );
+    expect((pasted as PastedBoard).chapter.tree.children.single.san, 'e4');
   });
 
   test('a board from a position with no moves takes its first move', () {

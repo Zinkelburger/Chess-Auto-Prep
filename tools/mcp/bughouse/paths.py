@@ -20,6 +20,7 @@ import platform
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal, overload
 
 REPO = Path(__file__).resolve().parents[3]
 ASSETS = REPO / "assets" / "bughouse"
@@ -146,6 +147,10 @@ def _unpack_assets() -> EngineFiles | None:
     return _from_directory(OWN_SUPPORT, "unpacked from assets/bughouse")
 
 
+@overload
+def locate(required: Literal[True] = True) -> EngineFiles: ...
+@overload
+def locate(required: bool) -> EngineFiles | None: ...
 def locate(required: bool = True) -> EngineFiles | None:
     """The first engine that exists, or None (or a raised error) if there is
     no engine to find at all."""

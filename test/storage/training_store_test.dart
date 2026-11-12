@@ -7,11 +7,11 @@ import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/training/records.dart';
 import 'package:chess_auto_prep/chess/training/schedule.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
+import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:chess_auto_prep/storage/training_records.dart'
     show Repointed, TrainingRecords;
 import 'package:chess_auto_prep/storage/training_rows.dart';
 import 'package:chess_auto_prep/storage/training_store.dart';
-import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -171,6 +171,37 @@ void main() {
     );
     expect(written, isA<ProgressUnreadable>());
     expect(await file(reviewsFile).readAsBytes(), bytes);
+  });
+
+  // The line counts every line feed before the bad byte and none after it.
+  for (final (name, bytes, line) in [
+    ('a bad byte on the line after a blank first line', [0x0A, 0xC3, 0x28], 2),
+    ('a character cut short by the end of its line', [0x0A, 0xC3, 0x0A], 2),
+    ('a character cut short by the end of the file', [0x0A, 0x0A, 0xC3], 3),
+  ]) {
+    test('$name is unreadable at line $line', () async {
+      await file(reviewsFile).writeAsBytes(bytes);
+      final read = await store.read({kid});
+      expect(read, isA<ProgressUnreadable>());
+      expect((read as ProgressUnreadable).line, line);
+    });
+  }
+
+  test('a read first writes the answer accepted before it', () async {
+    final token = operation();
+    expect(
+      await store.enqueueAttempt(
+        _attempt(mainline, correct: false),
+        operation: token,
+      ),
+      isA<ProgressEnqueued>(),
+    );
+    expect(file(attemptsFile).existsSync(), isFalse);
+    expect((await read({kid})).mistakes, hasLength(1));
+    expect(file(attemptsFile).readAsLinesSync(), hasLength(1));
+    // Its commit finds it written and writes nothing more.
+    expect(await store.commit(token), isA<ProgressWritten>());
+    expect(file(attemptsFile).readAsLinesSync(), hasLength(1));
   });
 
   Review rated(Review? before) => asWritten(

@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:chess_auto_prep/features/books/books_screen.dart';
 import 'package:chess_auto_prep/storage/book_file.dart';
-import 'package:chess_auto_prep/storage/book_snapshot.dart';
 import 'package:chess_auto_prep/storage/book_list.dart';
+import 'package:chess_auto_prep/storage/book_snapshot.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
@@ -175,18 +175,18 @@ void main() {
     tester,
   ) async {
     await show(tester, chip: true);
-    await tester.tap(find.text('No opening book set'));
+    await tester.tap(find.text('All repertoires'));
     await tester.pumpAndSettle();
     final held = Completer<SaveResult>();
     final saving = books.saveReferences(() => held.future);
     await tester.pump();
     await tester.tap(find.text('Event'));
     await tester.pumpAndSettle();
-    expect(books.active, isNull);
+    expect(books.chosen, isNull);
     held.complete(saved);
     await saving;
     await tester.pumpAndSettle();
-    expect(books.active?.id, 'b');
+    expect(books.chosen?.id, 'b');
   });
 
   testWidgets('an already open delete confirmation waits before deleting', (

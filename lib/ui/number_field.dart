@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'theme.dart';
 import 'app_icons.dart';
+import 'listening_state.dart';
+import 'theme.dart';
 
 /// A number typed into a box, or stepped with − and +. Enter or leaving
 /// the box takes what was typed, kept inside the row's range.
@@ -31,15 +32,13 @@ class NumberField extends StatefulWidget {
   State<NumberField> createState() => _NumberFieldState();
 }
 
-class _NumberFieldState extends State<NumberField> {
+class _NumberFieldState extends State<NumberField>
+    with ListeningState<NumberField> {
   late final _box = TextEditingController(text: '${widget.value}');
   final _focus = FocusNode();
 
   @override
-  void initState() {
-    super.initState();
-    _focus.addListener(_onFocus);
-  }
+  Listenable listenableOf(NumberField widget) => _focus;
 
   @override
   void didUpdateWidget(NumberField old) {
@@ -51,13 +50,14 @@ class _NumberFieldState extends State<NumberField> {
 
   @override
   void dispose() {
-    _focus.removeListener(_onFocus);
+    stopListening();
     _focus.dispose();
     _box.dispose();
     super.dispose();
   }
 
-  void _onFocus() {
+  @override
+  void changed() {
     if (!_focus.hasFocus) _typed(_box.text);
   }
 

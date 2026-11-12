@@ -1,13 +1,13 @@
 import 'dart:isolate';
 
-import 'package:flutter/foundation.dart';
 import 'package:dartchess/dartchess.dart' show Side;
+import 'package:flutter/foundation.dart';
 
 import '../../chess/book/book_check.dart';
 import '../../chess/book/played_game.dart';
 import '../../workspace/book/books.dart';
-import '../../workspace/latest.dart';
 import '../../workspace/book/repertoire_shelf.dart';
+import '../../workspace/latest.dart';
 import 'player_analysis.dart';
 import 'player_games.dart';
 
@@ -74,7 +74,7 @@ final class PlayerBook extends ChangeNotifier {
               ),
       ];
       if (files.isEmpty) {
-        status = 'Choose a ${side.name} repertoire in Books, then check again.';
+        status = 'Your book has no ${side.name} repertoire to check against.';
         return;
       }
       final corpus = analysis.corpus!;

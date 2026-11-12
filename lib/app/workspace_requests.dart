@@ -3,34 +3,35 @@ import 'dart:async';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
 
+import '../chess/explorer_answer.dart' show ExplorerGame;
+import '../chess/explorer_choice.dart' show ExplorerSource;
 import '../chess/fen.dart';
 import '../chess/pgn/analysis_board.dart' as boards;
+import '../chess/pgn/chapter.dart';
 import '../chess/pgn/game_tree.dart' show NodePath;
+import '../chess/pgn/study.dart' show ChapterDraft;
 import '../chess/pgn/tree_edit.dart' show pathAlong;
 import '../features/library/library.dart';
 import '../features/library/library_messages.dart';
 import '../features/library/library_state.dart';
 import '../features/pgn_viewer/pgn_viewer.dart';
-import '../chess/pgn/study.dart' show ChapterDraft;
-import '../workspace/document/draft_keeper.dart';
 import '../features/study/studies.dart';
 import '../features/study/studies_state.dart';
 import '../storage/chapter_files.dart';
+import '../storage/saved_place.dart';
+import '../ui/status_bar.dart' show StatusAction;
 import '../workspace/book/books.dart';
 import '../workspace/document/chapter_commands.dart';
-import '../workspace/document/save_copy.dart';
-import '../workspace/document/document_session.dart';
-import '../workspace/latest.dart';
-import '../chess/explorer_answer.dart' show ExplorerGame;
-import '../chess/explorer_choice.dart' show ExplorerSource;
-import '../workspace/explorer/game_fetcher.dart';
-import '../workspace/document/session_results.dart';
-import '../ui/status_bar.dart' show StatusAction;
-import 'exit_guard.dart';
-import 'document_tabs.dart';
-import '../chess/pgn/chapter.dart';
 import '../workspace/document/document_actions.dart' show gameText;
 import '../workspace/document/document_history.dart' show KeptBoard;
+import '../workspace/document/document_session.dart';
+import '../workspace/document/draft_keeper.dart';
+import '../workspace/document/save_copy.dart';
+import '../workspace/document/session_results.dart';
+import '../workspace/explorer/game_fetcher.dart';
+import '../workspace/latest.dart';
+import 'document_tabs.dart';
+import 'exit_guard.dart';
 import 'mode.dart';
 import 'window_input.dart';
 
@@ -180,9 +181,52 @@ final class WorkspaceRequests extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Where the window is, as the settings keep it for the next launch.
+  SavedPlace get place {
+    final source = _mode.showsBoard && !_session.isScratch
+        ? _session.source
+        : null;
+    return SavedPlace(
+      mode: _mode.name,
+      path: source?.path,
+      section: source?.section,
+      game: source == null ? null : _session.game,
+    );
+  }
+
+  /// Opens where the last run was left: its mode at once, so the window
+  /// comes up on it, then its file. A file gone since leaves the mode on an
+  /// empty board with nothing said, and Back has nowhere to go.
+  Future<void> resume(SavedPlace? place) async {
+    if (_disposed || place == null) return;
+    final mode = Mode.values.where((m) => m.name == place.mode).firstOrNull;
+    if (mode == null) return;
+    if (mode != _mode) {
+      _mode = mode;
+      notifyListeners();
+    }
+    if (!mode.showsBoard) return;
+    final path = place.path;
+    if (path == null) return documents.entered(mode);
+    final ticket = _nextRequest();
+    final ref = ChapterRef.at(path, section: place.section);
+    // The empty board the window was made with, which the file replaces.
+    final blank = documents.tabs.selected;
+    final result = mode == Mode.pgnViewer
+        ? await _inViewer(ticket, ref)
+        : await _open(ticket, ref, game: place.game);
+    if (_disposed || ticket.overtaken) return;
+    if (result is RequestDone) {
+      documents.carry(mode);
+      return documents.close(blank);
+    }
+    if (result is RequestRefused) say(null);
+    documents.entered(mode);
+  }
+
   /// The Books mode, at the active book: where every "Edit books" goes.
   void editBooks() {
-    if (_books.active case final active?) _books.edit(active);
+    if (_books.chosen case final chosen?) _books.edit(chosen);
     switchTo(Mode.books);
   }
 
@@ -670,6 +714,27 @@ final class WorkspaceRequests extends ChangeNotifier {
     final sentence = libraryMessage(
       result,
       thing: 'chapter',
+      name: name,
+      failed: 'Could not save the analysis board.',
+    );
+    return sentence == null ? const RequestDropped() : _refused(sentence);
+  }
+
+  /// The analysis board as the first chapter of a new repertoire [name],
+  /// opened in the builder.
+  Future<RequestResult> saveBoardAsRepertoire(String name) async {
+    final ticket = _nextRequest();
+    final board = _session.chapter;
+    if (!_session.isScratch || board == null) return const RequestDropped();
+    final result = await _library.saveBoardAsRepertoire(name, board);
+    if (ticket.overtaken) return const RequestDropped();
+    if (result is LibraryAdded) {
+      _showMode(Mode.repertoires);
+      return _open(ticket, result.first);
+    }
+    final sentence = libraryMessage(
+      result,
+      thing: 'repertoire',
       name: name,
       failed: 'Could not save the analysis board.',
     );

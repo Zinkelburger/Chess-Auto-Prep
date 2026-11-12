@@ -68,6 +68,11 @@ enum Seat {
   };
 
   Team get team => this == a || this == b ? Team.ab : Team.cd;
+
+  BoardNumber get board =>
+      this == a || this == c ? BoardNumber.one : BoardNumber.two;
+
+  Side get side => this == a || this == d ? Side.white : Side.black;
 }
 
 /// Most of one piece a hand may hold, as on the website.

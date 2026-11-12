@@ -404,7 +404,7 @@ def _parse_csv(text: str, warnings: list[str]) -> list[RosterEntry] | None:
     entries: list[RosterEntry] = []
     for i, row in enumerate(rows[1:], start=2):
 
-        def cell(col: int) -> str:
+        def cell(col: int, row: list[str] = row) -> str:
             return row[col].strip() if 0 <= col < len(row) else ""
 
         raw_name = cell(name_col)

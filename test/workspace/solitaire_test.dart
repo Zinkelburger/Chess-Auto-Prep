@@ -21,11 +21,13 @@ const _game = '''
 
 void main() {
   void run(
-    void Function(FakeAsync async, SessionFixture f, Solitaire solitaire) body,
-  ) {
+    void Function(FakeAsync async, SessionFixture f, Solitaire solitaire)
+    body, {
+    String game = _game,
+  }) {
     fakeAsync((async) {
       late SessionFixture fixture;
-      unawaited(openSession(_game).then((opened) => fixture = opened));
+      unawaited(openSession(game).then((opened) => fixture = opened));
       async.flushMicrotasks();
       final analysis = EngineAnalysis(
         fixture.session,
@@ -112,5 +114,83 @@ void main() {
       f.session.showOnlyTo(null);
       expect(solitaire.active, isFalse);
     });
+  });
+
+  test('nothing is set up until offered, and an offer during a game changes '
+      'nothing', () {
+    run((async, f, solitaire) {
+      expect(solitaire.setting, isFalse);
+      solitaire.setSide(Side.black);
+      solitaire.start();
+      solitaire.offer();
+      expect(solitaire.setting, isFalse);
+      expect(solitaire.side, Side.black);
+    });
+  });
+
+  test('a run asks for the side\'s own main-line moves', () {
+    run((async, f, solitaire) {
+      solitaire.start();
+      expect(solitaire.total, 3);
+      solitaire.stop();
+      solitaire.setSide(Side.black);
+      solitaire.start();
+      expect(solitaire.total, 2);
+    });
+  });
+
+  test('no move is shown while the reply is coming', () {
+    run((async, f, solitaire) {
+      solitaire.start();
+      expect(solitaire.canReveal, isTrue);
+      solitaire.play('e2e4');
+      expect(solitaire.waitingForReply, isTrue);
+      expect(solitaire.canReveal, isFalse);
+      async.elapse(Solitaire.replyDelay);
+      expect(solitaire.canReveal, isTrue);
+    });
+  });
+
+  test('a game set up with Black to move numbers from its own move', () {
+    const fromFen = '''
+[Event "Endgame"]
+[Result "*"]
+[FEN "4k3/8/8/8/8/8/4P3/4K3 b - - 0 10"]
+[SetUp "1"]
+
+10... Kd7 11. e4 Ke6 *
+''';
+    run((async, f, solitaire) {
+      expect(solitaire.moveLabel(NodePath.of([0])), '10... Kd7');
+      expect(solitaire.moveLabel(NodePath.of([0, 0])), '11. e4');
+      expect(solitaire.moveLabel(NodePath.of([0, 0, 0])), '11... Ke6');
+    }, game: fromFen);
+  });
+
+  test('no move is shown while the user looks back at an earlier one', () {
+    run((async, f, solitaire) {
+      solitaire.start();
+      solitaire.play('e2e4');
+      async.elapse(Solitaire.replyDelay);
+      expect(solitaire.canReveal, isTrue);
+      f.session.cursor.back();
+      expect(solitaire.atCurrentMove, isFalse);
+      expect(solitaire.canReveal, isFalse);
+    });
+  });
+
+  test('a game set up from a FEN without move numbers starts at move one', () {
+    const short = '''
+[Event "Endgame"]
+[Result "*"]
+[FEN "4k3/8/8/8/8/8/4P3/4K3 b - -"]
+[SetUp "1"]
+
+1... Kd7 2. e4 *
+''';
+    run((async, f, solitaire) {
+      expect(solitaire.moveLabel(NodePath.of([0])), '1... Kd7');
+      expect(solitaire.moveLabel(NodePath.of([0, 0])), '2. e4');
+    }, game: short);
   });
 }

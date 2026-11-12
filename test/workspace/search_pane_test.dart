@@ -1,13 +1,14 @@
 import 'dart:async';
 
-import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/generation/evaluation_source.dart';
+import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
+import 'package:chess_auto_prep/workspace/board/preview_target.dart';
 import 'package:chess_auto_prep/workspace/search/fill_gaps.dart';
 import 'package:chess_auto_prep/workspace/search/fill_states.dart';
 import 'package:chess_auto_prep/workspace/search/search_pane.dart';
@@ -92,7 +93,7 @@ void main() {
   testWidgets('the bar shows the Positions beside the gear', (tester) async {
     var shown = 0;
     await pump(tester, onShowPositions: () => shown++);
-    await tester.tap(find.byTooltip('Show the positions the searches found'));
+    await tester.tap(find.byTooltip('Positions the searches found'));
     expect(shown, 1);
     expect(tester.takeException(), isNull);
   });
@@ -221,25 +222,32 @@ void main() {
       findsNWidgets(2),
       reason: 'the depth and where the replies are from',
     );
-    expect(find.text('Maia 2200 · best 4, then 4'), findsOne);
+    expect(find.text('Maia 2200 · best 4, then 1'), findsOne);
     await tester.tap(find.byTooltip('Expectimax settings'));
     await tester.pump();
-    for (final name in [
-      'Maia rating',
-      'First move',
-      'Later moves',
-      'Search replies met once in',
-      'Engine depth',
-      'Evaluation',
-    ]) {
-      expect(find.text(name), findsOneWidget);
-    }
     final rows = find
         .descendant(
           of: find.byType(SearchSettingsView),
           matching: find.byType(Scrollable),
         )
         .first;
+    for (final name in [
+      'Maia rating',
+      'First move',
+      'Later moves',
+      'Other side too',
+      'Search replies met once in',
+      'Engine depth',
+      'Evaluation',
+    ]) {
+      await tester.scrollUntilVisible(find.text(name), 100, scrollable: rows);
+      expect(find.text(name), findsOneWidget);
+    }
+    await tester.scrollUntilVisible(
+      find.text('Maia rating'),
+      -100,
+      scrollable: rows,
+    );
     await tester.enterText(box('Maia rating'), '1800');
     await tester.enterText(box('Later moves'), '2');
     await tester.enterText(box('Search replies met once in'), '50');
@@ -327,7 +335,7 @@ void main() {
     expect(settings.value.expectimax.replies, ReplySource.twic);
     expect(FillRequest.of(settings.value).replyKey, 'twic+maia<10');
     expect(
-      find.text('Maia 2200 under 10 games · best 4, then 4'),
+      find.text('Maia 2200 under 10 games · best 4, then 1'),
       findsOneWidget,
     );
     await tester.tap(find.byTooltip('Expectimax settings'));
@@ -337,13 +345,17 @@ void main() {
     await tester.enterText(box('Fall back to Maia under'), '25');
     await tester.pump();
     expect(FillRequest.of(settings.value).fallbackUnder, 25);
-    await tester.tap(find.byType(Checkbox));
+    await tester.tap(
+      find.byWidgetPredicate(
+        (w) => w is Checkbox && w.semanticLabel == 'Fall back to Maia',
+      ),
+    );
     await tester.pump();
     expect(settings.value.expectimax.maiaFallback, isFalse);
     expect(FillRequest.of(settings.value).fallbackUnder, isNull);
     expect(FillRequest.of(settings.value).replyKey, 'twic');
     expect(find.text('Maia rating'), findsNothing);
-    expect(find.text('best 4, then 4'), findsOneWidget);
+    expect(find.text('best 4, then 1'), findsOneWidget);
   });
 
   testWidgets('the bar fits a pane at its narrowest', (tester) async {
@@ -437,6 +449,60 @@ void main() {
     expect(find.byType(StaticChessboard), findsNothing);
   });
 
+  testWidgets('a clicked row floats no board over the rows that come up '
+      'under the still pointer; it floats once the pointer moves', (
+    tester,
+  ) async {
+    await searched(tester);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer();
+    addTearDown(mouse.removePointer);
+    final at = tester.getCenter(find.byType(PreviewTarget).first);
+    await mouse.moveTo(at);
+    await tester.pump(previewDelay);
+    expect(find.byType(StaticChessboard), findsOneWidget);
+    await mouse.down(at);
+    await mouse.up();
+    await tester.pump();
+    expect(find.text('Their reply'), findsOneWidget, reason: 'the move played');
+    await tester.pump(previewDelay);
+    expect(
+      find.byType(StaticChessboard),
+      findsNothing,
+      reason: 'the reply now under the pointer was not pointed at',
+    );
+    await mouse.moveTo(at + const Offset(3, 0));
+    await tester.pump(previewDelay);
+    expect(find.byType(StaticChessboard), findsOneWidget);
+  });
+
+  testWidgets('a board another search covered with other settings says so '
+      'rather than that nothing is saved', (tester) async {
+    await searched(tester);
+    await settings.update(settings.value.copyWith(opponentElo: 1500));
+    fixture.session.playMove('e2e4');
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.widgetWithText(FilledButton, 'Expectimax'));
+      while (!fill.running) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      while (fill.running) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    });
+    await tester.pumpAndSettle();
+    fixture.session.cursor.back();
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'The results here are from a search with other settings. '
+        'Expectimax searches again with these.',
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('the side\'s button turns the board, and the next search is '
       'for the side it then names', (tester) async {
     await pump(tester);
@@ -498,11 +564,11 @@ void main() {
     // Depth is on the Engine value's hover, not a column of its own.
     expect(find.byTooltip('Depth 22'), findsWidgets);
     expect(find.text('22'), findsNothing);
-    // A value for each side beside the engine's, under the side's button:
-    // the model here answers for Black alone, so only White's search has
-    // any.
-    expect(find.text('White'), findsNWidgets(2), reason: 'side and column');
-    expect(find.text('Black'), findsOneWidget, reason: 'the column');
+    // One side was searched, so one value column beside the engine's; the
+    // side is named on its button alone.
+    expect(find.text('Value'), findsOneWidget);
+    expect(find.text('White'), findsOneWidget, reason: 'the side\'s button');
+    expect(find.text('Black'), findsNothing);
     // The search covers the board to the depth asked for: going on would
     // add nothing, so the button offers one half-move more.
     expect(find.widgetWithText(FilledButton, 'Resume'), findsNothing);
@@ -524,9 +590,7 @@ void main() {
     expect(find.text('70%'), findsOneWidget);
     expect(find.text('30%'), findsOneWidget);
     // Off the search: another root.
-    await fixture.session.showAnalysisBoard(
-      analysisBoard(side: Side.white, root: Fen.initial),
-    );
+    await fixture.session.showAnalysisBoard(analysisBoard(side: Side.white));
     await tester.pumpAndSettle();
     expect(
       find.text('No saved results here yet. Start Expectimax from this board.'),

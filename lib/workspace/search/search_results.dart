@@ -50,16 +50,20 @@ class SearchResults extends StatelessWidget {
       );
     }
     final side = session.orientation;
+    final both = found.request.mirrored;
     final mine = fill.nodeAtBoard(request: found.request);
-    final other = fill.nodeAtBoard(request: found.request, side: side.opposite);
+    final other = both
+        ? fill.nodeAtBoard(request: found.request, side: side.opposite)
+        : null;
     final rows = searchRows(side: side, mine: mine, other: other);
     if (rows.isNotEmpty) {
       return SearchTable(
         rows: rows,
         ours: session.cursor.fen.whiteToMove == (side == Side.white),
-        sides: found.request.method == SearchMethod.mainline
-            ? [side]
-            : const [Side.white, Side.black],
+        sides: both ? const [Side.white, Side.black] : [side],
+        valueTip: found.request.method == SearchMethod.mainline
+            ? null
+            : searchValueTip(side),
         engineDepthAt: fill.engineDepthAt,
         shareTip: (from) => repliesFromTip(
           from,
@@ -86,6 +90,9 @@ class SearchResults extends StatelessWidget {
 
   Widget _offTree(BuildContext context, FillFound found) {
     final tree = session.tree;
+    // A search made with other settings covers the board: its values are
+    // not shown beside these settings', and the pane says why it is empty.
+    final otherSettings = fill.nodeAtBoard() != null;
     final start = found.target.cursor;
     final canGo =
         tree != null &&
@@ -99,7 +106,10 @@ class SearchResults extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'No saved results here yet. Start $_run from this board.',
+            otherSettings
+                ? 'The results here are from a search with other settings. '
+                      '$_run searches again with these.'
+                : 'No saved results here yet. Start $_run from this board.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           if (canGo) ...[

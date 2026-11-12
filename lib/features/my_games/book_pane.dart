@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../chess/book/book_check.dart';
+import '../../ui/list_message.dart';
+import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
 import '../../workspace/book/board_book_pane.dart' show showBookMoment;
 import '../../workspace/book/book_verdict_view.dart';
 import '../../workspace/document/document_session.dart';
 import 'book_words.dart';
 import 'game_book.dart';
-import '../../ui/move_notation.dart';
-import '../../ui/list_message.dart';
 
 /// The Book tab: what the user's book says about the game on the board.
 /// The verdict, the move that left the book beside what the book plays

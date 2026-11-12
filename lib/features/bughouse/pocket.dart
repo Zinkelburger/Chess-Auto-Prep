@@ -3,8 +3,8 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
 import '../../chess/bughouse/table.dart';
-import '../../ui/theme.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/theme.dart';
 
 /// A player's hand as lila's crazyhouse pocket: five slots, each [square]
 /// wide, in a grey well. Pieces held show in full with their count; empty
@@ -342,7 +342,7 @@ class _ReservePieceState extends State<_ReservePiece> {
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: Space.xs,
-                  vertical: 3,
+                  vertical: tightInset,
                 ),
                 decoration: BoxDecoration(
                   color: labPocketCount,

@@ -53,10 +53,7 @@ final class NativePgnFilePicker implements PgnFilePicker {
 /// dialog was closed or would not open.
 Future<String?> pickExecutableFile() async {
   try {
-    final file = await FilePicker.pickFile(
-      dialogTitle: 'Choose a UCI engine',
-      type: FileType.any,
-    );
+    final file = await FilePicker.pickFile(dialogTitle: 'Choose a UCI engine');
     return file?.path;
   } on Object catch (error) {
     log.w('open the file dialog', error);

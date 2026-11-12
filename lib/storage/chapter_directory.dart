@@ -4,20 +4,20 @@ import 'dart:isolate';
 
 import 'package:path/path.dart' as p;
 
-import 'directory_entries.dart';
+import '../chess/pgn/chapter.dart' show readOffThreadFrom;
+import '../chess/pgn/chapter_heading.dart';
+import '../chess/pgn/chapter_sections.dart';
+import '../diagnostics/log.dart';
 import 'book_snapshot.dart';
 import 'chapter_files.dart';
 import 'deleted_chapters.dart';
+import 'directory_entries.dart';
+import 'document_probe.dart';
+import 'document_ref.dart';
+import 'recovery_files.dart';
+import 'recovery_gate.dart';
 import 'training_rows.dart';
 import 'training_snapshot.dart';
-import 'recovery_files.dart';
-import '../chess/pgn/chapter_heading.dart';
-import '../chess/pgn/chapter.dart' show readOffThreadFrom;
-import 'document_probe.dart';
-import '../chess/pgn/chapter_sections.dart';
-import '../diagnostics/log.dart';
-import 'document_ref.dart';
-import 'recovery_gate.dart';
 
 /// One folder per repertoire, one `.pgn` per chapter, plus index files and
 /// sidecars the app ignores.
@@ -77,57 +77,10 @@ final class ChapterDirectory implements ChapterFiles {
     final related = Map<String, Revision?>.unmodifiable(additional);
     try {
       return await _recovery.run(() async {
-        if (snapshot != null) {
-          if (snapshot.boundaries?.any(
-                (path) => path != root.path && !p.isWithin(root.path, path),
-              ) ??
-              false) {
-            return const RepertoireValidationFailed(
-              'Snapshot boundaries must be managed repertoire paths.',
-            );
-          }
-          final inventory = await _inventory();
-          final unavailable = inventory.unreadable.where(
-            (entry) => snapshot.intersectsPath(entry.path),
-          );
-          if (unavailable.isNotEmpty) {
-            return RepertoireValidationFailed(unavailable.first.detail);
-          }
-          final paths = [
-            for (final folder in inventory.folders)
-              for (final file in folder.files)
-                if (snapshot.includesPath(file.path)) file,
-          ];
-          if (paths.length != snapshot.revisions.length ||
-              paths.any((file) => !snapshot.revisions.containsKey(file.path))) {
-            return const RepertoireChanged();
-          }
-          for (final entry in reads.entries) {
-            final captured = snapshot.revisions[entry.key];
-            if (captured == null ||
-                !sameChapterRevision(captured, entry.value)) {
-              return const RepertoireChanged();
-            }
-          }
-          for (final file in paths) {
-            switch (await probeDocument(file.path)) {
-              case FileFound(:final revision):
-                if (!sameChapterRevision(
-                  snapshot.revisions[file.path]!,
-                  revision,
-                )) {
-                  return const RepertoireChanged();
-                }
-              case FileMissing():
-                return const RepertoireChanged();
-              case FileUnreadable(:final detail):
-                return RepertoireValidationFailed('${file.path}: $detail');
-            }
-          }
-        } else {
-          final used = await _validateAdditional(reads);
-          if (used is! RepertoireCurrent) return used;
-        }
+        final used = snapshot != null
+            ? await _validateSnapshot(snapshot, reads)
+            : await _validateAdditional(reads);
+        if (used is! RepertoireCurrent) return used;
         final other = await _validateAdditional(related);
         if (other is! RepertoireCurrent) return other;
         return _validateProfile(book, training);
@@ -199,6 +152,57 @@ final class ChapterDirectory implements ChapterFiles {
       return false;
     }
     return true;
+  }
+
+  /// Whether the files [snapshot] covers are still the ones it recorded,
+  /// and [reads] the versions it holds.
+  Future<RepertoireValidation> _validateSnapshot(
+    Repertoires snapshot,
+    Map<String, Revision> reads,
+  ) async {
+    if (snapshot.boundaries?.any(
+          (path) => path != root.path && !p.isWithin(root.path, path),
+        ) ??
+        false) {
+      return const RepertoireValidationFailed(
+        'Snapshot boundaries must be managed repertoire paths.',
+      );
+    }
+    final inventory = await _inventory();
+    final unavailable = inventory.unreadable.where(
+      (entry) => snapshot.intersectsPath(entry.path),
+    );
+    if (unavailable.isNotEmpty) {
+      return RepertoireValidationFailed(unavailable.first.detail);
+    }
+    final paths = [
+      for (final folder in inventory.folders)
+        for (final file in folder.files)
+          if (snapshot.includesPath(file.path)) file,
+    ];
+    if (paths.length != snapshot.revisions.length ||
+        paths.any((file) => !snapshot.revisions.containsKey(file.path))) {
+      return const RepertoireChanged();
+    }
+    for (final entry in reads.entries) {
+      final captured = snapshot.revisions[entry.key];
+      if (captured == null || !sameChapterRevision(captured, entry.value)) {
+        return const RepertoireChanged();
+      }
+    }
+    for (final file in paths) {
+      switch (await probeDocument(file.path)) {
+        case FileFound(:final revision):
+          if (!sameChapterRevision(snapshot.revisions[file.path]!, revision)) {
+            return const RepertoireChanged();
+          }
+        case FileMissing():
+          return const RepertoireChanged();
+        case FileUnreadable(:final detail):
+          return RepertoireValidationFailed('${file.path}: $detail');
+      }
+    }
+    return const RepertoireCurrent();
   }
 
   Future<RepertoireValidation> _validateAdditional(

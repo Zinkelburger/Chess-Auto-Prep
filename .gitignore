@@ -160,4 +160,4 @@ packaging/windows/prerequisites/VC_redist.x64.exe
 
 # Generated browser Maia assets and the bughouse board's Fairy-Stockfish
 python/twic-position-finder/frontend/public/prep-engine/
-python/twic-position-finder/frontend/public/crazyhouse-engine/
+python/twic-position-finder/frontend/public/hypebeast-engine/net*

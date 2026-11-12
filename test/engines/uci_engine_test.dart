@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/engines/engine.dart';
-import 'package:chess_auto_prep/engines/playing_engine.dart';
 import 'package:chess_auto_prep/engines/engine_line.dart';
+import 'package:chess_auto_prep/engines/playing_engine.dart';
 import 'package:chess_auto_prep/engines/uci_engine.dart';
 import 'package:chess_auto_prep/engines/uci_process.dart';
 import 'package:fake_async/fake_async.dart';

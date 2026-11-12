@@ -1,18 +1,18 @@
 import 'package:chess_auto_prep/chess/book/book_check.dart';
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/chess/tactics/mistake_counts.dart';
-import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/features/my_games/book_words.dart';
 import 'package:chess_auto_prep/features/my_games/game_book.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/storage/settings.dart';
+import 'package:chess_auto_prep/workspace/book/repertoire_shelf.dart'
+    show BookFileRef;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/book_fixture.dart';
 import '../../support/scripted_files.dart';
 import '../../support/scripted_store.dart';
-import 'package:chess_auto_prep/workspace/book/repertoire_shelf.dart'
-    show BookFileRef;
 
 void main() {
   late BookFixture fixture;
@@ -213,23 +213,13 @@ void main() {
   });
 
   test(
-    'saved games stay browsable without a book and compare after selection',
+    'with no book chosen the games are read against every repertoire',
     () async {
-      final selected = fixture.books.active!;
       fixture.books.activate(null);
-      final unchecked = await watched();
-      expect(unchecked.hasBook, isFalse);
-      expect(unchecked.games, hasLength(5));
-      expect(unchecked.games.every((g) => g.verdict is NoBook), isTrue);
-      expect(fixture.files.listings, 0);
-      fixture.book.search('Rival');
-      expect(fixture.book.shown, hasLength(5));
-      fixture.books.activate(selected);
-      await pumpEventQueue();
-      final checked = fixture.book.state as BookChecked;
-      expect(checked.hasBook, isTrue);
+      final checked = await watched();
+      expect(checked.games, hasLength(5));
+      expect(checked.games.any((g) => g.verdict is! NoBook), isTrue);
       expect(checked.ways, isNotEmpty);
-      expect(fixture.book.shown, hasLength(5));
     },
   );
 

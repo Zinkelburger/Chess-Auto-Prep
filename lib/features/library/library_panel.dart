@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../storage/chapter_files.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/list_message.dart';
+import '../../ui/pane_header.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
+import '../../ui/tool_button.dart';
 import 'deleted_chapters_view.dart';
 import 'library.dart';
 import 'library_actions.dart';
 import 'library_state.dart';
 import 'repertoire_tile.dart';
-import '../../ui/list_message.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/tool_button.dart';
-import '../../ui/pane_header.dart';
 
 /// The repertoires, searchable, each opening to its chapters. Tapping a
 /// chapter asks the host to open it in the workspace.

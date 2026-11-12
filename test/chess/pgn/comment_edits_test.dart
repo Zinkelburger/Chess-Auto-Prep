@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/chess/pgn/chapter_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/comment_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/chess/pgn/games_written.dart';
 import 'package:chess_auto_prep/chess/pgn/move_text.dart';
 import 'package:dartchess/dartchess.dart' show Square;
 import 'package:flutter_test/flutter_test.dart';
@@ -51,6 +52,45 @@ void main() {
     final cleared =
         (setGlyph(changed, at: at, position: true) as CommentWritten).chapter;
     expect(cleared.tree.nodeAt(at)!.nags, [2]);
+  });
+
+  test('a drawish position is a position glyph', () {
+    expect(isPositionGlyph(10), isTrue);
+    expect(isPositionGlyph(1), isFalse);
+    expect(
+      [for (var nag = 0; nag <= 7; nag++) isGlyph(nag)],
+      [false, true, true, true, true, true, true, false],
+    );
+  });
+
+  test('a marker goes into the games that already have a note on the move', () {
+    final before = parseChapter(
+      name: 'Shared',
+      text:
+          '[Event "A"]\n[Result "*"]\n\n1. d4 d5 {first} 2. c4 *\n\n'
+          '[Event "B"]\n[Result "*"]\n\n1. d4 d5 2. Nf3 *\n',
+    );
+    final after =
+        (setMarker(before, at: NodePath.of([0, 0]), marker: '[%quiz]', on: true)
+                as CommentWritten)
+            .chapter;
+    expect(after.lines[0].text, contains('[%quiz]'));
+    expect(after.lines[1].text, before.lines[1].text);
+  });
+
+  test('a chapter showing a game past the end of its file writes nothing', () {
+    final file = white();
+    final past = Chapter(
+      name: file.name,
+      side: file.side,
+      preamble: file.preamble,
+      lines: file.lines,
+      tree: file.tree,
+      game: file.lines.length,
+    );
+    final result =
+        setComment(past, at: NodePath.of([0]), text: 'note') as CommentWritten;
+    expect(result.written, GamesWritten.nothing);
   });
 
   test('a comment on a shared move with no comment yet goes in one game', () {

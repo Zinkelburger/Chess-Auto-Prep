@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:chess_auto_prep/chess/bughouse/bpgn_moves.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/chess/bughouse/table_line.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_lab.dart';
@@ -53,20 +56,42 @@ void main() {
     expect(lab.problem, isNull);
   });
 
-  test('each board steps on its own; a step that breaks a drop is refused', () {
+  test('a board steps to its move with the other board where it was then', () {
     capture();
     lab.play(BoardNumber.two, 'e2e4');
     lab.play(BoardNumber.two, 'P@d5');
+    // Board 1 had made its three moves before board 2 moved.
     go(BoardNumber.two, 1);
     expect(lab.line.upto(BoardNumber.one), 3);
     go(BoardNumber.two, 2);
+    // Board 1 back before its capture: board 2 had not moved yet, so its
+    // drop goes with it rather than standing without a pawn.
     go(BoardNumber.one, 2);
-    expect((lab.problem as StepRefused).move.san, 'P@d5');
-    expect(lab.line.upto(BoardNumber.one), 3);
+    expect(lab.problem, isNull);
+    expect(lab.line.upto(BoardNumber.one), 2);
+    expect(lab.line.upto(BoardNumber.two), 0);
     expect(lab.focus, BoardNumber.one);
+    // The drop brings the capture it came from.
+    go(BoardNumber.two, 2);
+    expect(lab.problem, isNull);
+    expect(lab.line.upto(BoardNumber.one), 3);
+    expect(lab.position.two.pockets!.of(Side.black, Role.pawn), 0);
   });
 
-  test('the arrow keys step the focused board and stop at its ends', () {
+  test('a step is refused only when its drop has lost its capture', () {
+    capture();
+    lab.play(BoardNumber.two, 'e2e4');
+    lab.play(BoardNumber.two, 'P@d5');
+    go(BoardNumber.two, 0);
+    // Board 1's capture taken out of the line: nothing gives the pawn now.
+    lab.deleteFrom(lab.line.at(BoardNumber.one)!);
+    expect(lab.problem, isNull);
+    lab.goTo(BoardNumber.two, lab.line.lineOf(BoardNumber.two).last);
+    expect((lab.problem as StepRefused).move.san, 'P@d5');
+    expect(lab.line.upto(BoardNumber.two), 0);
+  });
+
+  test('with one board the arrow keys step board 1 and stop at its ends', () {
     capture();
     lab.step(-1);
     expect(lab.line.upto(BoardNumber.one), 2);
@@ -75,6 +100,120 @@ void main() {
     expect(lab.line.upto(BoardNumber.one), 0);
     lab.toEnd();
     expect(lab.line.upto(BoardNumber.one), 3);
+  });
+
+  group('a game on both boards', () {
+    final game = File(
+      'test/support/bughouse/hypebeast_v4_vs_hivemind.bpgn',
+    ).readAsStringSync();
+
+    /// How many moves each board has on it.
+    (int, int) at() =>
+        (lab.line.upto(BoardNumber.one), lab.line.upto(BoardNumber.two));
+
+    setUp(() => lab.pasteMoves(game, file: 'game1.bpgn'));
+
+    test('opens at its first move, on both boards', () {
+      expect(lab.problem, isNull);
+      expect(lab.single, isFalse);
+      expect(at(), (0, 0));
+      expect(lab.position.dualFen, TablePosition.initial.dualFen);
+      expect(lab.line.of(BoardNumber.one), hasLength(48));
+      expect(lab.line.of(BoardNumber.two), hasLength(52));
+    });
+
+    test('the arrow keys play it through in the order played and back', () {
+      // 1A. Nf3 1a. Nf6 1B. d4 2A. g3 1b. e6
+      final seen = <(int, int)>[];
+      for (var i = 0; i < 5; i++) {
+        lab.step(1);
+        seen.add(at());
+      }
+      expect(seen, [(1, 0), (2, 0), (2, 1), (3, 1), (3, 2)]);
+      expect(lab.focus, BoardNumber.two);
+      var steps = 5;
+      for (; at() != (48, 52); steps++) {
+        lab.step(1);
+        expect(lab.problem, isNull, reason: 'after $steps steps');
+      }
+      expect(steps, 100);
+      lab.step(1);
+      expect(at(), (48, 52));
+      for (; steps > 3; steps--) {
+        lab.step(-1);
+        expect(lab.problem, isNull, reason: 'back to $steps');
+      }
+      expect(at(), (2, 1));
+      lab.toEnd();
+      expect(at(), (48, 52));
+      lab.toStart();
+      expect(at(), (0, 0));
+      lab.step(-1);
+      expect((at(), lab.problem), ((0, 0), null));
+    });
+
+    test('any move of either board shows the table as it was then', () {
+      for (final board in BoardNumber.values) {
+        for (final node in lab.line.lineOf(board)) {
+          lab.goTo(board, node);
+          expect(lab.problem, isNull);
+          expect(lab.line.at(board), node);
+          expect(
+            lab.position.dualFen,
+            lab.positionAfter(node)!.dualFen,
+            reason: (lab.line.entry(node) as LineMove).san,
+          );
+        }
+      }
+      // 7a. N@d4 drops the knight 7B. Qxd2 took; board 2 had gone on to
+      // 8B. Bb5+ by then.
+      go(BoardNumber.one, 14);
+      expect(lab.line.current(BoardNumber.one)!.san, 'N@d4');
+      expect(lab.line.current(BoardNumber.two)!.san, 'Bb5+');
+      expect(lab.line.applied.map((m) => m.san), contains('Qxd2'));
+    });
+
+    test('a board steps from either end without a refusal', () {
+      lab.toEnd();
+      lab.goTo(BoardNumber.two, null);
+      // Board 1 is where it was when board 2 first moved: 1A. Nf3 1a. Nf6.
+      expect((at(), lab.problem), ((2, 0), null));
+      lab.toEnd();
+      for (var i = 0; i < 52; i++) {
+        lab.stepOn(BoardNumber.two, -1);
+        expect(lab.problem, isNull);
+      }
+      expect(at(), (2, 0));
+      for (var i = 0; i < 48; i++) {
+        lab.stepOn(BoardNumber.one, 1);
+        expect(lab.problem, isNull);
+      }
+      expect(lab.line.upto(BoardNumber.one), 48);
+    });
+
+    test('pasted rather than opened, it is at its end', () {
+      lab
+        ..newGame()
+        ..showBoards(LabBoards.one)
+        ..pasteMoves(game);
+      expect(at(), (48, 52));
+      expect(lab.single, isFalse);
+    });
+
+    test('the keys go on along a variation, then with the other board', () {
+      for (var i = 0; i < 3; i++) {
+        lab.step(1);
+      }
+      // 2A. g3 was played; a different move there is a variation.
+      lab.play(BoardNumber.one, 'e2e4');
+      lab.step(1);
+      // Nothing follows e4 on board 1, so board 2 goes on: 1b. e6.
+      expect(lab.line.current(BoardNumber.one)!.san, 'e4');
+      expect(lab.line.current(BoardNumber.two)!.san, 'e6');
+      lab.step(-1);
+      lab.step(-1);
+      expect(at(), (2, 1));
+    });
   });
 
   test('a new game or a pasted position starts a new line', () {
@@ -219,9 +358,151 @@ void main() {
     lab.newGame();
     lab.pasteMoves('[Event "FICS"]\n$copied {a comment} 1-0');
     expect(lab.problem, isNull);
-    expect(lab.movesText, copied);
+    expect(bpgnMovetext(lab.line), copied);
     expect(lab.line.upto(BoardNumber.two), 2);
     expect(lab.position.two.pockets!.of(Side.black, Role.pawn), 0);
+  });
+
+  test('a game the bughouse arena wrote opens, comments and all', () {
+    // tools/bughouse_arena/match.py write_bpgn: tags, then every move with
+    // its clock, the engine's score and the game time in a comment.
+    lab.pasteMoves(
+      '[Event "Hivemind Arena"]\n[Round "1"]\n'
+      '[WhiteA "hb-v4"]\n[BlackA "hm-n1500"]\n'
+      '[WhiteB "hm-n1500"]\n[BlackB "hb-v4"]\n'
+      '[TimeControl "120"]\n[Opening "1e2e4 1d7d5"]\n'
+      '[Result "1-0"]\n[Termination "checkmate"]\n\n'
+      '1A. e4 1a. d5 2A. exd5 {[%clk 0:01:58.1] [%eval 3.19] 1.9s} '
+      '1B. Nf3 {[%clk 0:01:58.0] 2.0s}\n'
+      '{A-black sits @3.0s} 1b. P@e4 {[%clk 0:01:58.0] [%eval #-2] 4.0s} '
+      '{A-black illegal e2e5 @4.1s} 1-0\n',
+      file: 'games.bpgn',
+    );
+    expect(lab.problem, isNull);
+    expect(lab.line.moves.map((m) => m.san), [
+      'e4',
+      'd5',
+      'exd5',
+      'Nf3',
+      'P@e4',
+    ]);
+    // Its players and clocks are kept, and copied with the moves.
+    expect(lab.game!.name(Seat.a), 'hb-v4');
+    expect(lab.game!.name(Seat.c), 'hm-n1500');
+    expect(
+      lab.movesText,
+      '[Event "Hivemind Arena"]\n[Round "1"]\n'
+      '[WhiteA "hb-v4"]\n[BlackA "hm-n1500"]\n'
+      '[WhiteB "hm-n1500"]\n[BlackB "hb-v4"]\n'
+      '[TimeControl "120"]\n[Opening "1e2e4 1d7d5"]\n'
+      '[Result "1-0"]\n[Termination "checkmate"]\n\n'
+      '1A. e4 1a. d5 2A. exd5 {118.100} 1B. Nf3 {118.000} 1b. P@e4 {118.000} '
+      '1-0',
+    );
+    // A different line from the same game no longer reached its result.
+    lab.toEnd();
+    lab.step(-1);
+    lab.play(BoardNumber.two, 'e7e5');
+    expect(lab.movesText, contains('[Result "*"]'));
+    expect(lab.movesText, isNot(contains('Termination')));
+    expect(lab.movesText, endsWith('1b. e5 *'));
+    // Back on the game's own line, it is the game again.
+    lab.stepOn(BoardNumber.two, -1);
+    lab.stepOn(BoardNumber.two, 1);
+    expect(lab.movesText, endsWith('{118.000} 1-0'));
+    // An engine line goes without the file's clocks.
+    expect(lab.linePgnWith(const []), isNot(contains(RegExp('[{}]'))));
+  });
+
+  group('a file of several games', () {
+    String game(int round, String moves, {String white = 'ann'}) =>
+        '[Event "Club night"]\n[Round "$round"]\n'
+        '[WhiteA "$white"]\n[BlackA "cat"]\n'
+        '[WhiteB "dan"]\n[BlackB "bob"]\n'
+        '[TimeControl "180+0"]\n[Result "1-0"]\n\n$moves 1-0\n\n';
+
+    final file =
+        game(
+          1,
+          '1A. e4 {179.0} 1a. d5 {178.5} 1B. d4 {177.0} 2A. exd5 {170.2}',
+        ) +
+        game(2, '1A. e4 1a. Ke7', white: 'eve') +
+        game(3, '1B. c4 {179.9} 1b. e5 {9.4}');
+
+    setUp(() => lab.pasteMoves(file, file: 'night.bpgn'));
+
+    test('opens on the first, at its start, with its players', () {
+      expect((lab.gameCount, lab.gameAt), (3, 0));
+      expect(lab.problem, isNull);
+      expect(lab.single, isFalse);
+      expect(lab.line.applied, isEmpty);
+      expect(lab.line.moves, hasLength(4));
+      expect(lab.game!.name(Seat.a), 'ann');
+      expect(lab.game!.name(Seat.b), 'bob');
+      expect(lab.game!.heading, 'A + B won · Club night · Round 1');
+    });
+
+    test('each seat\'s clock follows the boards', () {
+      for (final seat in Seat.values) {
+        expect(lab.timeLeft(seat), const Duration(minutes: 3));
+      }
+      lab.toEnd();
+      expect(lab.timeLeft(Seat.a), const Duration(milliseconds: 170200));
+      expect(lab.timeLeft(Seat.c), const Duration(milliseconds: 178500));
+      expect(lab.timeLeft(Seat.d), const Duration(seconds: 177));
+      expect(lab.timeLeft(Seat.b), const Duration(minutes: 3));
+      lab.step(-1);
+      expect(lab.timeLeft(Seat.a), const Duration(seconds: 179));
+    });
+
+    test('steps to another game and stops at the ends', () {
+      lab.showGame(2);
+      expect(lab.gameAt, 2);
+      expect(lab.problem, isNull);
+      expect(lab.line.moves.map((m) => m.san), ['c4', 'e5']);
+      expect(lab.game!.tags['Round'], '3');
+      lab.showGame(3);
+      lab.showGame(-1);
+      expect(lab.gameAt, 2);
+    });
+
+    test('a game that does not play is shown without moves, and named', () {
+      lab.toEnd();
+      lab.showGame(1);
+      expect(lab.gameAt, 1);
+      expect(lab.problem, isA<MovesRefused>());
+      expect((lab.problem! as MovesRefused).token, '1a. Ke7');
+      expect((lab.problem! as MovesRefused).file, 'night.bpgn');
+      expect(lab.line.isEmpty, isTrue);
+      expect(lab.position.dualFen, TablePosition.initial.dualFen);
+      expect(lab.game!.name(Seat.a), 'eve');
+      // The games after it are still a step away.
+      lab.showGame(2);
+      expect(lab.problem, isNull);
+      expect(lab.line.moves, hasLength(2));
+    });
+
+    test('pasted, a first game that does not play takes nothing', () {
+      lab.newGame();
+      lab.play(BoardNumber.one, 'd2d4');
+      lab.pasteMoves(game(2, '1A. e4 1a. Ke7') + game(3, '1B. c4 1b. e5'));
+      expect((lab.problem as MovesRefused).token, '1a. Ke7');
+      expect((lab.problem as MovesRefused).file, isNull);
+      expect(lab.movesText, '1A. d4');
+      expect(lab.gameCount, 0);
+    });
+
+    test('a new game is no game of the file', () {
+      lab.newGame();
+      expect((lab.gameCount, lab.game), (0, null));
+      expect(lab.timeLeft(Seat.a), isNull);
+    });
+
+    test('one game pasted over it takes the file\'s place', () {
+      lab.pasteMoves('1A. d4 1a. d5');
+      expect((lab.gameCount, lab.game), (0, null));
+      expect(lab.movesText, '1A. d4 1a. d5');
+    });
   });
 
   test('pasted moves that do not play change nothing and say which', () {

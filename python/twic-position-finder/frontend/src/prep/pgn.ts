@@ -8,7 +8,7 @@ const results = new Set(['1-0', '0-1', '1/2-1/2', '*']);
 /** A bounded, variation-aware reader. Rejects a damaged import atomically. */
 export function readPgn(text: string): Game[] {
   if (text.length > MAX_PGN_BYTES) throw new Error('Open a PGN smaller than 10 MB.');
-  const tokens = text.replace(/^\uFEFF/, '').match(/\[(?:[^"\]]|"(?:\\.|[^"\\])*")*\]|\{[^}]*\}|;[^\r\n]*|\(|\)|\$\d+|[^\s(){};\[\]]+/g) ?? [];
+  const tokens = text.replace(/^\uFEFF/, '').match(/\[(?:[^"\]]|"(?:\\.|[^"\\])*")*\]|\{[^}]*\}|;[^\r\n]*|\(|\)|\$\d+|[^\s(){};[\]]+/g) ?? [];
   const games: Game[] = [];
   let game: Game | null = null;
   let headers: Record<string, string> = Object.create(null);

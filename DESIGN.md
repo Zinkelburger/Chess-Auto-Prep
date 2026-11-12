@@ -199,7 +199,8 @@ colour only when the action could not be done; it never pushes the page down. Th
 Moves on the left, Expectimax on the right; the book opens under the moves
 from its button.
 
-Spacing is a five-step scale (4, 8, 12, 16, 24); every gap is one of them.
+Spacing is a five-step scale (4, 8, 12, 16, 24); every gap is one of them,
+except `tightInset` (3), the room around the smallest labels.
 The list column starts 260px wide (300px in Player analysis) and the outline
 220px. Below 1480px, scaled with text size, the repertoire list and chapter
 outline share one 260px column with Repertoires/Chapters tabs; both remain
@@ -297,7 +298,7 @@ One name and one symbol per action, everywhere it appears. `lib/ui/app_icons.dar
 - **Style:** Graphite Panel, 1px outline, 8px radius, 32px rows with the body-small label. Every menu row is a `menu_entry` (the top bar's Actions and mode menus, a row's `⋯`, a pane's `+`) or a `showActionContextMenu` row (right-click menus), and they look the same.
 - **Opening:** at once, with no fade, grow or slide; a right-click menu, a move's included, appears under the pointer on the release.
 - **Symbols:** an entry's symbol sits in muted ink in a 16px slot before the label, the verb table's symbol where it has one: copy for Copy line PGN / Copy FEN, a bin for Delete from here, an up arrow for Promote variation, a tick for Make main line, a speech mark for Comment this move, the move list's play and stop marks for the quiz markers. In every menu, once one row has a symbol, rows without one keep the slot empty so the labels line up.
-- **Actions menu:** each mode's own create, import and run buttons are there too, with the button's label, symbol and enabled state; an entry with nothing to act on (Train this chapter on the analysis board) is shown off.
+- **Actions menu:** named sections for the work, then two submenus: `Copy`, and `View` for everything about the window itself (splits, tabs, Positions, full screen, Reset workspace layout). Each mode's own create, import and run buttons are there too, with the button's label, symbol and enabled state; an entry with nothing to act on (Train this chapter on the analysis board) is shown off.
 
 ### Inputs / Fields
 - Empty fields contain no example text or typing prompts. Keep names on labels, search purposes in accessible names and hover help, and required formats in labels. New names start blank; saved values and functional settings remain visible.
@@ -317,8 +318,8 @@ One name and one symbol per action, everywhere it appears. `lib/ui/app_icons.dar
 
 ### Tool panes (Expectimax is the pattern)
 - **Bar:** a fixed-height row that never reflows: the pane's one action (a button that keeps its place and width whatever it says: Expectimax, Pause, Resume, Deeper — Resume only where there is something left to go on with), the one or two values changed on every use, an icon for the list the pane's results feed (Positions) and a gear at the end.
-- **Status:** one fixed-height line under the bar: what will run, then progress, then the outcome or the problem, in as few words as fit (`Depth 3 · 95 positions`). A secondary action for the running state, or the way to the outcome's results (`4 found`), sits at its end. A fact that frames the whole pane sits at its start as a text button that names it and changes it (Expectimax: the side prepared, which turns the board).
-- **Value table:** a fixed header and 32px rows; the move takes the room left by fixed mono gutters (48px share, 56px values). A pane too narrow drops the least needed column whole (Played) rather than squeezing any. A value the search does not hold reads a muted `–`, never a blank cell. A mark such as the trap's `?` says what it means on hover, and the column header explains it.
+- **Status:** one fixed-height line under the bar: what will run, then progress, then the outcome or the problem, in as few words as fit (`Depth 3 (40%) · 95 positions`, then `Finished depth 8 · 412 positions`). A secondary action for the running state, or the way to the outcome's results (`4 found`), sits at its end. A fact that frames the whole pane sits at its start as a text button that names it and changes it (Expectimax: the side prepared, which turns the board).
+- **Value table:** a fixed header and 32px rows; the move takes the room left by fixed mono gutters (48px share, 56px values). A pane too narrow drops the least needed column whole (Played) rather than squeezing any. A value the search does not hold reads a muted `–`, never a blank cell. A mark such as the trap's `?` says what it means on hover, and the column header explains it. What lies below a row is said in the label style beside the move (`2 traps`), with the rest on hover; it gives way first when the move's column is tight.
 - **Gear:** swaps the pane's content in place for the remaining settings, one named row each with a one-line explanation on screen, and back. The same rows appear as a Settings group and write the same saved values. While the action runs they are shown but locked, with one line saying why.
 
 ### Engine lines
@@ -330,6 +331,7 @@ One name and one symbol per action, everywhere it appears. `lib/ui/app_icons.dar
 ### Bughouse reserve (lila's pocket)
 - **Style:** lila's crazyhouse pocket, kept on purpose over the flat rules: five square-sized slots (pawn to queen) in a #888 grey well with lila's inset top shade, 4px radius, beside the seat's letter. A held piece shows in full with its count in white bold on lila's orange (#D64F00) in the slot's lower right; an empty slot keeps its place with the piece at 10% opacity. On the player's turn a slot brightens to #AAA under the pointer, a picked piece takes the board's selection green, and its drop squares are ringed on the board.
 - **Add and take away:** while the pointer is over a slot (or one of its controls has focus), that slot shows a − in its upper left corner and a + in its upper right: a dark chip (`labHandStep`, 4px radius) with a white sign, two fifths of the slot within 16–24px. Hidden, they take no room, so the hands are only a square tall and the board gets the height; a − with nothing to take and a + at 16 are left out.
+- **Player and clock:** a game read from a file has, at the right end of each hand's row, the player's name (Body Small, full ink; rating muted) over the seat's clock in 16px mono, 600; the clock of the player on move in full ink, the other muted. Under 40px of height the name sits beside the clock. The name is cut short before the clock ever is.
 
 ### Reading card (signature)
 - **Style:** Reading Black card, 8px radius, 24px inset; movetext in 16px mono at 1.7, comments in 16px prose at a 640px measure. Mistakes are marked and clickable; no per-move evaluations in the movetext.
@@ -339,7 +341,7 @@ One name and one symbol per action, everywhere it appears. `lib/ui/app_icons.dar
 
 ### Do:
 - **Do** keep every gap on the 4 / 8 / 12 / 16 / 24 scale and every size in `lib/ui/theme.dart`.
-- **Do** reuse the controls in `lib/ui/` (search_field, choice_field, number_field, field_row, check_row, toggle_chip, segments, tool_button, pane_header, list_row, list_message, problem_line, progress_line, form_dialog, name_dialog, confirm_dialog, options_dialog, choice_dialog, menu_entry, row_actions, action_context_menu, pane_tabs, selection, app_action). A stepper or choice sits in a `field_row` that names it; a set of on/off choices is `toggle_chip`s, which never grow a tick.
+- **Do** reuse the controls in `lib/ui/` (search_field, choice_field, number_field, field_row, check_row, toggle_chip, segments, tool_button, game_stepper, pane_header, list_row, list_message, problem_line, progress_line, form_dialog, name_dialog, confirm_dialog, options_dialog, choice_dialog, menu_entry, row_actions, action_context_menu, pane_tabs, selection, app_action). A stepper or choice sits in a `field_row` that names it; a set of on/off choices is `toggle_chip`s, which never grow a tick.
 - **Do** write labels and tooltips behaviour-first: the first sentence says what the control does; the binding comes from `ui/app_keys.dart`.
 - **Do** follow Lichess conventions for the board, arrows, explorer and engine lines.
 - **Do** give feedback lines, rows and panes fixed heights so nothing jumps.

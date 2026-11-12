@@ -5,8 +5,8 @@ import 'package:chess_auto_prep/chess/pgn/branch_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_edit.dart';
 import 'package:chess_auto_prep/chess/pgn/game_text.dart';
-import 'package:chess_auto_prep/chess/pgn/line_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/chess/pgn/line_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/move_text.dart';
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -106,6 +106,38 @@ void main() {
     expect(movesOf(after.chapter), '1. d4 d5 (1... Nf6) *');
     expect(after.games.order, [0, 1, 2]);
     expect(after.games.rewritten, {0, 2});
+  });
+
+  test('deleting a variation inside a game takes that variation, not the '
+      'main line beside it', () {
+    final before = parseChapter(
+      name: 'Book',
+      text:
+          '// Book\n// Color: White\n\n'
+          '[Event "A"]\n[Result "*"]\n\n1. d4 d5 2. c4 (2. Nf3 Nf6) e6 *\n\n'
+          '[Event "B"]\n[Result "*"]\n\n1. e4 *\n',
+    );
+
+    final after = edited(
+      movesDeleted(before, at: at(before, ['d4', 'd5', 'Nf3'])),
+    );
+
+    expect(after.chapter.lines.first.text, contains('1. d4 d5 2. c4 e6 *'));
+    expect(after.chapter.lines.first.text, isNot(contains('Nf3')));
+  });
+
+  test('a chapter showing a game past the end of its file changes nothing', () {
+    final merged = book();
+    final past = Chapter(
+      name: merged.name,
+      side: merged.side,
+      preamble: merged.preamble,
+      lines: merged.lines,
+      tree: merged.tree,
+      game: merged.lines.length,
+    );
+
+    expect(movesDeleted(past, at: at(merged, ['d4'])), isA<ChapterUnchanged>());
   });
 
   test('a game that still has a move is cut short rather than removed', () {

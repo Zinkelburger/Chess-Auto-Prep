@@ -97,6 +97,7 @@ final class EngineAnalysis extends ChangeNotifier {
     this._launch, {
     this._multiPv = 3,
     this._elsewhere,
+    this._switched,
   }) {
     _session.anyChange.addListener(_follow);
     _elsewhere?.addListener(_follow);
@@ -105,6 +106,9 @@ final class EngineAnalysis extends ChangeNotifier {
   final DocumentSession _session;
   final ValueListenable<BoardClaim?>? _elsewhere;
   final Future<EngineStart> Function() _launch;
+
+  /// Told when the user flips the switch, so the choice outlives the run.
+  final void Function(bool on)? _switched;
   int _multiPv;
 
   /// How many lines each search asks for and the pane shows.
@@ -216,6 +220,13 @@ final class EngineAnalysis extends ChangeNotifier {
     if (_pauses.remove(holder) == null) return;
     _follow();
     _notify();
+  }
+
+  /// The user's own switch: on or off, and the choice is kept for the next
+  /// launch. What a mode turns off for itself ([disable]) is not a choice.
+  Future<void> turn(bool on) {
+    _switched?.call(on);
+    return on ? enable() : disable();
   }
 
   Future<void> enable() async {

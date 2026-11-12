@@ -38,6 +38,13 @@ export interface BoardHooks {
   wheel: (forward: boolean) => void;
   /** The editor's pieces changed. */
   edited: () => void;
+  /** A right-click in the editor with a piece in hand: the same piece in the other colour. */
+  swapBrushColor?: () => void;
+}
+
+export interface BoardOptions {
+  /** Crazyhouse: Shift-click in the editor marks a piece promoted (it goes back as a pawn when taken). */
+  promotedPieces?: boolean;
 }
 
 const SQUARE_ROLES: Role[] = ['queen', 'knight', 'rook', 'bishop'];
@@ -49,6 +56,31 @@ export const ROLE_LETTER: Record<Role, string> = { pawn: 'P', knight: 'N', bisho
 /** A piece's cburnett image under /piece/. */
 export const pieceSrc = (color: Color, role: Role) => `/piece/${color === 'white' ? 'w' : 'b'}${ROLE_LETTER[role]}.svg`;
 
+/** The bin as a cursor: white strokes over a dark outline, readable on both square colours. */
+const TRASH_PATH = 'M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2';
+const TRASH_CURSOR = svgCursor(`<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="-2 -2 28 28" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="${TRASH_PATH}" stroke="#000" stroke-width="4.5"/><path d="${TRASH_PATH}" stroke="#fff" stroke-width="2"/></svg>`, 14);
+/** Piece cursors, made once per piece from the board's own piece images. */
+const pieceCursors = new Map<string, Promise<string | null>>();
+
+function svgCursor(svg: string, hotspot: number): string {
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${hotspot} ${hotspot}, crosshair`;
+}
+
+/** The piece as a cursor, as lila's editor shows it; null when the image cannot be read. */
+function pieceCursor(piece: Piece): Promise<string | null> {
+  const src = pieceSrc(piece.color, piece.role);
+  let cursor = pieceCursors.get(src);
+  if (!cursor) {
+    // A cursor image needs its own size and cannot load other files, so the SVG is inlined with one.
+    cursor = fetch(src)
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+      .then((svg) => svgCursor(svg.replace('<svg ', '<svg width="44" height="44" '), 22))
+      .catch(() => null);
+    pieceCursors.set(src, cursor);
+  }
+  return cursor;
+}
+
 export class CrazyBoard {
   readonly cg: Api;
   private mode: 'analysis' | 'editor' = 'analysis';
@@ -56,7 +88,12 @@ export class CrazyBoard {
   private painting: { last: Key | null; erase: boolean } | null = null;
   private promotion: HTMLElement | null = null;
 
-  constructor(private readonly wrap: HTMLElement, el: HTMLElement, private readonly hooks: BoardHooks) {
+  constructor(
+    private readonly wrap: HTMLElement,
+    el: HTMLElement,
+    private readonly hooks: BoardHooks,
+    private readonly options: BoardOptions = {},
+  ) {
     this.cg = Chessground(el, {
       coordinates: true,
       autoCastle: true,
@@ -76,7 +113,7 @@ export class CrazyBoard {
       },
       events: {
         select: (key) => { if (this.mode === 'analysis') hooks.clickSquare(key); },
-        change: () => { if (this.mode === 'editor') hooks.edited(); },
+        change: () => { if (this.mode === 'editor') { this.markPromoted(); hooks.edited(); } },
       },
     });
     // A board with no size (a window shrunk to nothing) has no coordinates for arrows: wait for one.
@@ -91,6 +128,15 @@ export class CrazyBoard {
       wrap.addEventListener(type, (e) => this.pressed(e), { capture: true, passive: false });
     for (const type of ['mousemove', 'touchmove'] as const)
       document.addEventListener(type, (e) => this.dragged(e), { passive: false });
+    // As on lila: with a piece in hand, right-click takes the other colour (shapes need the hand).
+    const swapBrushColor = hooks.swapBrushColor;
+    if (swapBrushColor)
+      wrap.addEventListener('contextmenu', (e) => {
+        if (this.mode !== 'editor' || typeof this.brush === 'string') return;
+        e.preventDefault();
+        this.cg.cancelMove();
+        swapBrushColor();
+      });
     for (const type of ['mouseup', 'touchend', 'touchcancel'] as const)
       document.addEventListener(type, () => { this.painting = null; });
   }
@@ -104,10 +150,12 @@ export class CrazyBoard {
       lastMove: view.lastMove,
       check: view.check ? view.turn : false,
       movable: { free: false, color: view.turn, dests: view.dests, showDests: true },
-      draggable: { deleteOnDropOff: false },
+      // The editor's brush turns these off; analysis always has them.
+      draggable: { enabled: true, deleteOnDropOff: false },
       selectable: { enabled: true },
-      highlight: { custom: new Map(view.dropSquares.map((sq) => [sq, 'move-dest'])) },
+      drawable: { enabled: true },
     });
+    this.markPromoted(new Map(view.dropSquares.map((sq) => [sq, 'move-dest'])));
     this.setShapes(view.shapes);
     this.wrap.classList.remove('ch-editing');
   }
@@ -132,8 +180,8 @@ export class CrazyBoard {
       check: false,
       movable: { free: true, color: 'both', dests: new Map() },
       draggable: { deleteOnDropOff: true },
-      highlight: { custom: new Map() },
     });
+    this.markPromoted();
     this.cg.setAutoShapes([]);
     this.cg.selectSquare(null);
     this.setBrush(brush);
@@ -143,8 +191,14 @@ export class CrazyBoard {
   setBrush(brush: Brush) {
     this.brush = brush;
     const painting = brush !== 'pointer';
-    this.cg.set({ selectable: { enabled: !painting }, draggable: { enabled: !painting } });
+    this.cg.set({ selectable: { enabled: !painting }, draggable: { enabled: !painting }, drawable: { enabled: !painting } });
     this.wrap.dataset.brush = typeof brush === 'string' ? brush : 'piece';
+    this.wrap.style.removeProperty('--ch-cursor');
+    if (brush === 'trash') this.wrap.style.setProperty('--ch-cursor', TRASH_CURSOR);
+    else if (brush !== 'pointer')
+      void pieceCursor(brush).then((cursor) => {
+        if (cursor && this.brush === brush) this.wrap.style.setProperty('--ch-cursor', cursor);
+      });
   }
 
   /** The editor's board as a FEN board field. */
@@ -214,7 +268,32 @@ export class CrazyBoard {
     return this.cg.getKeyAtDomPos([point.clientX, point.clientY]);
   }
 
+  /**
+   * Marks promoted pieces, which go back to the partner as pawns when taken. Chessground keeps
+   * the flag (a ~ in the FEN) but draws nothing for it.
+   */
+  private markPromoted(custom = new Map<Key, string>()) {
+    for (const [key, piece] of this.cg.state.pieces)
+      if (piece.promoted) custom.set(key, `${custom.get(key) ?? ''} ch-promoted`.trim());
+    this.cg.set({ highlight: { custom } });
+  }
+
+  /** Shift-click in the editor marks a queen, rook, bishop or knight promoted, or not. */
+  private togglePromoted(e: MouseEvent | TouchEvent): boolean {
+    if (!this.options.promotedPieces || this.mode !== 'editor' || !(e instanceof MouseEvent) || !e.shiftKey || e.button !== 0) return false;
+    const key = this.keyAt(e);
+    const here = key && this.cg.state.pieces.get(key);
+    if (!key || !here || here.role === 'king' || here.role === 'pawn') return false;
+    e.preventDefault();
+    e.stopPropagation();
+    this.cg.setPieces(new Map([[key, { ...here, promoted: !here.promoted }]]));
+    this.markPromoted();
+    this.hooks.edited();
+    return true;
+  }
+
   private pressed(e: MouseEvent | TouchEvent) {
+    if (this.togglePromoted(e)) return;
     if (this.mode !== 'editor' || this.brush === 'pointer') return;
     if (e instanceof MouseEvent && e.button !== 0) return;
     const key = this.keyAt(e);
@@ -244,6 +323,7 @@ export class CrazyBoard {
     if (!piece && !here) return;
     if (piece && here && here.role === piece.role && here.color === piece.color) return;
     this.cg.setPieces(new Map([[key, piece ? { ...piece } : undefined]]));
+    this.markPromoted();
     this.hooks.edited();
   }
 

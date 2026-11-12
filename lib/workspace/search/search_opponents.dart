@@ -143,10 +143,7 @@ OpponentPolicy opponentFor(
   final model = MaiaOpponent(maia, elo: request.elo);
   final played = switch (request.replies) {
     ReplySource.maia => null,
-    ReplySource.masters => lichessPlayed(
-      explorer,
-      const ExplorerChoice(source: ExplorerSource.masters),
-    ),
+    ReplySource.masters => lichessPlayed(explorer, const ExplorerChoice()),
     ReplySource.lichess => lichessPlayed(explorer, request.lichess),
     ReplySource.twic => twicPlayed(book),
   };
@@ -178,6 +175,44 @@ final class MastersPlayed {
     ],
     BookAbsent() || BookUnreadable() || BookClassicalIncomplete() => const [],
   };
+}
+
+/// The engine's shortlist at each position, asked once a run: a position
+/// reached by two move orders gets the same moves of ours both times, where
+/// two engine searches of it can rank near-equal moves differently.
+///
+/// Keyed by the four-field position and the count; a ranking that failed is
+/// asked again.
+final class CandidateAnswers implements CandidateSource {
+  CandidateAnswers(this.source);
+
+  final CandidateSource source;
+  final _asked = <(String, int), Future<List<String>?>>{};
+
+  @override
+  Future<List<String>?> candidates(Position position, int count) {
+    final key = (Fen(position.fen).position, count);
+    return _asked[key] ??= _ask(key, position, count);
+  }
+
+  Future<List<String>?> _ask(
+    (String, int) key,
+    Position position,
+    int count,
+  ) async {
+    try {
+      final ranked = await source.candidates(position, count);
+      if (ranked == null) _forget(key);
+      return ranked;
+    } on Object {
+      _forget(key);
+      rethrow;
+    }
+  }
+
+  void _forget((String, int) key) {
+    _asked.removeWhere((asked, _) => asked == key);
+  }
 }
 
 /// What the engine said during one owner's searches that the tree does not

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# A None here fails the test on its own, so pyright's None checks add nothing.
+# pyright: reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportOptionalIterable=false, reportOptionalOperand=false
 """Prove the bundled bughouse engine can actually run on this platform.
 
 Two questions, deliberately separated because only one of them can be answered
@@ -34,7 +36,6 @@ import hashlib
 import json
 import os
 import platform
-import shutil
 import struct
 import subprocess
 import sys
@@ -42,6 +43,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from typing import NoReturn
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ASSETS = REPO_ROOT / "assets" / "bughouse"
@@ -94,7 +96,7 @@ class Failure(Exception):
     pass
 
 
-def fail(message: str) -> None:
+def fail(message: str) -> NoReturn:
     raise Failure(message)
 
 
@@ -227,7 +229,7 @@ def audit_target(name: str, workdir: Path) -> list[str]:
     if name == "bughouse-windows":
         if "onnxruntime.dll" in [dll.lower() for dll in pe_imports(files["engine"].read_bytes())]:
             fail("Windows engine still implicitly imports onnxruntime.dll")
-        for role, path in files.items():
+        for _role, path in files.items():
             for dll in pe_imports(path.read_bytes()):
                 low = dll.lower()
                 if low.startswith("api-ms-win-"):
@@ -251,7 +253,7 @@ def audit_target(name: str, workdir: Path) -> list[str]:
     if name.startswith("bughouse-macos"):
         if platform.system() != "Darwin":
             return ["skipped: needs otool (macOS host)"]
-        for role, path in files.items():
+        for _role, path in files.items():
             for dylib in macho_dylibs(path):
                 base = os.path.basename(dylib)
                 if dylib.startswith(("/usr/lib/", "/System/")):
@@ -263,7 +265,7 @@ def audit_target(name: str, workdir: Path) -> list[str]:
         return notes
 
     # Linux.
-    for role, path in files.items():
+    for _role, path in files.items():
         needed, versions = elf_needed_and_versions(path)
         for lib in needed:
             if lib in LINUX_SYSTEM_LIBS or lib.lower() in deployed:
@@ -489,7 +491,7 @@ def cmd_run(args) -> int:
             try:
                 send("quit")
                 proc.wait(timeout=5)
-            except Exception:
+            except (OSError, ValueError, subprocess.TimeoutExpired):
                 proc.kill()
 
     print("\nThe bughouse engine loads its network and searches on this platform.")

@@ -1,13 +1,13 @@
+import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/generation/draft_lines.dart'
     show continuationPlies;
 import 'package:chess_auto_prep/chess/generation/eval.dart';
 import 'package:chess_auto_prep/chess/generation/evaluation_source.dart';
 import 'package:chess_auto_prep/chess/generation/legal_moves.dart';
+import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/chess/generation/sources.dart';
-import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pv_text.dart';
-import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/net/chessdb_moves.dart';
 import 'package:chess_auto_prep/net/remote_queue.dart';
@@ -15,9 +15,9 @@ import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
+import 'package:chess_auto_prep/workspace/explorer/opening_names.dart';
 import 'package:chess_auto_prep/workspace/search/fill_gaps.dart';
 import 'package:chess_auto_prep/workspace/search/fill_states.dart';
-import 'package:chess_auto_prep/workspace/explorer/opening_names.dart';
 import 'package:dartchess/dartchess.dart' show Position;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -103,11 +103,7 @@ void main() {
   });
 
   for (final (label, next, reusable) in const [
-    (
-      'same evaluation settings',
-      FillRequest(elo: 2200, depthPlies: 3, evalDepth: 14),
-      true,
-    ),
+    ('same evaluation settings', FillRequest(elo: 2200, depthPlies: 3), true),
     (
       'changed depth',
       FillRequest(elo: 2200, depthPlies: 3, evalDepth: 20),
@@ -115,12 +111,7 @@ void main() {
     ),
     (
       'changed source',
-      FillRequest(
-        elo: 2200,
-        depthPlies: 3,
-        evalDepth: 14,
-        source: EvaluationSource.lichess,
-      ),
+      FillRequest(elo: 2200, depthPlies: 3, source: EvaluationSource.lichess),
       false,
     ),
   ]) {
@@ -140,9 +131,7 @@ void main() {
         ),
       );
       addTearDown(fill.dispose);
-      await fill.start(
-        const FillRequest(elo: 2200, depthPlies: 3, evalDepth: 14),
-      );
+      await fill.start(const FillRequest(elo: 2200, depthPlies: 3));
       expect(first.asked, isNotEmpty);
       useFirst = false;
       await fill.start(next);
@@ -355,6 +344,105 @@ void main() {
     expect(done.budgetReached, isTrue);
     expect(done.sourceLost, isFalse);
     expect(done.complete, isFalse);
+  });
+
+  group('making lines', () {
+    late FillGaps fill;
+    late EngineJobs jobs;
+    late _FirstLegalLine continuations;
+    var toolsAsked = 0;
+
+    setUp(() {
+      toolsAsked = 0;
+      continuations = _FirstLegalLine();
+      jobs = EngineJobs(analysis);
+      fill = FillGaps(
+        session: fixture.session,
+        jobs: jobs,
+        documents: fixture.store,
+        tools: (_) async {
+          toolsAsked++;
+          return FillReady(
+            evaluator: ScriptedEvaluator(
+              scores: {afterUci(positionOf(kingAndPawn), 'e2e4').fen: -100},
+            ),
+            policy: const ScriptedPolicy({'e8d8': 1}),
+            continuations: continuations,
+            release: () async {},
+          );
+        },
+        clock: () => DateTime(2026, 9, 22, 12),
+      );
+      addTearDown(fill.dispose);
+    });
+
+    test('while another job holds the machine writes the lines as they are, '
+        'without the engine', () async {
+      await fill.start(const FillRequest(elo: 2200, depthPlies: 3));
+      final asked = toolsAsked;
+      final other = Object();
+      expect(jobs.take(other, 'Reviewing a game'), isTrue);
+      await fill.makeLines();
+      expect(fill.lines, isA<LinesWritten>());
+      expect(toolsAsked, asked, reason: 'the machine was not this job\'s');
+      expect(continuations.asked, isEmpty);
+      expect(jobs.heldByOther(fill), isTrue);
+    });
+
+    test('a draft whose save failed can be given up, once; a written one '
+        'cannot', () async {
+      await fill.start(const FillRequest(elo: 2200, depthPlies: 3));
+      fixture.store.creates.add(const IoFailure('disk full'));
+      await fill.makeLines();
+      expect(fill.lines, isA<LinesFailed>());
+      expect(fill.canDiscardDraft, isTrue);
+      fill.discardDraftSave();
+      expect(fill.canDiscardDraft, isFalse);
+      expect(
+        (fill.lines as LinesFailed).reason,
+        startsWith('Draft save abandoned'),
+      );
+      expect(fill.canStart, isTrue);
+
+      await fill.start(const FillRequest(elo: 2200, depthPlies: 3));
+      await fill.makeLines();
+      final written = fill.lines;
+      expect(written, isA<LinesWritten>());
+      fill.discardDraftSave();
+      expect(fill.lines, same(written));
+    });
+  });
+
+  test('a root the chapter\'s games do not start from is left out of the '
+      'draft', () async {
+    fixture.dispose();
+    fixture = await openSession('// Root: 1. e4\n$chapter');
+    analysis.dispose();
+    analysis = EngineAnalysis(
+      fixture.session,
+      () async => Started(ScriptedEngine()),
+    );
+    await analysis.enable();
+    final own = FillGaps(
+      session: fixture.session,
+      jobs: EngineJobs(analysis),
+      documents: fixture.store,
+      tools: (_) async => FillReady(
+        evaluator: ScriptedEvaluator(),
+        policy: const ScriptedPolicy({'e8d8': 1}),
+        release: () async {},
+      ),
+    );
+    addTearDown(own.dispose);
+    await own.start(const FillRequest(elo: 2200, depthPlies: 3));
+    await own.makeLines();
+    final written = own.lines as LinesWritten;
+    final text = switch (fixture.store.documents[written.draft]) {
+      Opened(:final text) => text,
+      _ => fail('the draft was not written'),
+    };
+    expect(text, isNot(contains('// Root:')));
+    expect(text, contains('// Draft'));
   });
 }
 

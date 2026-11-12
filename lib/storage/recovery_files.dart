@@ -8,8 +8,8 @@ import 'dart:io';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
-import 'atomic_write.dart';
 import '../diagnostics/log.dart';
+import 'atomic_write.dart';
 
 /// Recovery cannot safely finish, so the caller must not read or mutate this
 /// Documents domain until the retained metadata is reconciled.

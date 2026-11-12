@@ -9,6 +9,19 @@ String rewritten(String movetext) =>
     writeMoveText(readGame(movetext).tree!, terminator: '*');
 
 void main() {
+  test('a line copied from a position with Black to move is numbered from '
+      'there', () {
+    const afterE4 =
+        'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+    final tree = readGame(
+      '[SetUp "1"]\n[FEN "$afterE4"]\n\n1... e5 2. Nf3 Nc6 *',
+    ).tree!;
+    expect(
+      writeLineTo(tree, NodePath.of(const [0, 0, 0])),
+      '[SetUp "1"]\n[FEN "$afterE4"]\n\n1... e5 2. Nf3 Nc6 *',
+    );
+  });
+
   test('a brace inside a comment is text and survives the trip', () {
     expect(rewritten('1. e4 {see {this} *'), '1. e4 {see {this} *');
   });

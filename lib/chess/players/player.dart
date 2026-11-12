@@ -92,9 +92,9 @@ List<Player> readPlayerList(String text) => _looksJson(text.trim())
 bool _looksJson(String text) => text.startsWith('{') || text.startsWith('[');
 List<Player> _jsonPlayers(String text) {
   final json = jsonDecode(text);
-  final rows = json is List
-      ? json
-      : (json['people'] ?? json['opponents'] ?? json['players']);
+  final rows = json is Map
+      ? json['people'] ?? json['opponents'] ?? json['players']
+      : json;
   if (rows is! List) {
     throw const FormatException('Use a player list or an opponents export.');
   }

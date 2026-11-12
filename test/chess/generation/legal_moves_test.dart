@@ -26,6 +26,12 @@ void main() {
     expect(names, isNot(contains('e1a1')));
   });
 
+  test('a king taking the opponent\'s rook is a capture, not castling', () {
+    final names = namesOf('4k3/8/8/8/8/8/5r2/4K3 w - - 0 1');
+    expect(names, contains('e1f2'));
+    expect(names, isNot(contains('e1g1')));
+  });
+
   test('enumerates the twenty opening moves, in a fixed order', () {
     final names = namesOf(Chess.initial.fen);
     expect(names, hasLength(20));

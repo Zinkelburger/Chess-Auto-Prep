@@ -7,15 +7,15 @@ import '../../chess/fen.dart';
 import '../../storage/settings_store.dart';
 import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
-import 'board_claim.dart';
-import 'board_view.dart';
-import '../document/document_session.dart';
 import '../analysis/engine_analysis.dart';
 import '../analysis/engine_pane.dart';
-import 'game_counter.dart';
+import '../document/document_session.dart';
 import '../document/game_ordering.dart';
-import 'move_field.dart';
 import '../reading/move_note.dart';
+import 'board_claim.dart';
+import 'board_view.dart';
+import 'game_counter.dart';
+import 'move_field.dart';
 import 'move_shapes.dart';
 
 /// The largest square board that fits above the engine's lines and the
@@ -33,6 +33,7 @@ class BoardAndCounter extends StatefulWidget {
     required this.engine,
     required this.analysis,
     this.noteEditable = false,
+    this.reserveNote,
     this.editing,
     this.quiet = false,
     this.engineInBoard = true,
@@ -42,6 +43,12 @@ class BoardAndCounter extends StatefulWidget {
   final SettingsStore settings;
   final EngineAnalysis analysis;
   final bool noteEditable;
+
+  /// Whether the board leaves room for the note under it. By default it
+  /// does where the note is edited there; a mode whose note is written
+  /// elsewhere for now (the Notes tab) keeps the room, so the board does
+  /// not change size as that tab comes and goes.
+  final bool? reserveNote;
   final ValueNotifier<bool>? editing;
 
   /// Whether the engine's row, the move field and an empty note stay away
@@ -121,19 +128,20 @@ class _BoardAndCounterState extends State<BoardAndCounter>
 
   @override
   Widget build(BuildContext context) {
-    final session = widget.session;
-    final settings = widget.settings;
-    final onMove = widget.onMove;
     return LayoutBuilder(
       builder: (context, constraints) {
         final room = navRowHeight + moveFeedbackHeight + Space.m + _engineRoom;
-        final noteRoom = widget.editing != null || widget.noteEditable
+        final noteRoom =
+            widget.reserveNote ??
+                (widget.editing != null || widget.noteEditable)
             ? moveNoteMinHeight + Space.s
             : 0.0;
-        final side = min(
-          constraints.maxWidth,
-          max(0.0, constraints.maxHeight - room - noteRoom),
-        );
+        final most = max(0.0, constraints.maxHeight - room);
+        var side = min(constraints.maxWidth, max(0.0, most - noteRoom));
+        // In a short window the board comes before the note's box: a
+        // board too small to play on takes the note's room, and the note is
+        // written in the Notes tab or the edit strip.
+        if (side < boardCrampedSide) side = min(constraints.maxWidth, most);
         final below = constraints.maxHeight - side - room - Space.s;
         return Align(
           alignment: Alignment.topCenter,
@@ -141,37 +149,12 @@ class _BoardAndCounterState extends State<BoardAndCounter>
             width: side,
             child: Column(
               children: [
-                ListenableBuilder(
-                  listenable: Listenable.merge([
-                    session.anyChange,
-                    settings,
-                    widget.analysis.threat,
-                    ?widget.editing,
-                  ]),
-                  // A comment's line on the board is read, not played on.
-                  builder: (context, _) {
-                    final keeps = drawsIntoComment(
-                      session,
-                      editing: widget.editing?.value ?? false,
-                    );
-                    return BoardView(
-                      fen: session.cursor.boardFen,
-                      orientation: session.orientation,
-                      lastMove: session.cursor.boardLastMove,
-                      onMove: onMove,
-                      movable: session.cursor.commentLine.value == null,
-                      coordinates: settings.value.boardCoordinates,
-                      shapes: shapesOnBoard(session),
-                      threat: threatOnBoard(
-                        session,
-                        widget.analysis.threat.value,
-                      ),
-                      onDraw: keeps
-                          ? (shape) => drawIntoComment(session, shape)
-                          : null,
-                      onClear: keeps ? () => clearCommentShapes(session) : null,
-                    );
-                  },
+                _ColumnBoard(
+                  session: widget.session,
+                  settings: widget.settings,
+                  analysis: widget.analysis,
+                  editing: widget.editing,
+                  onMove: widget.onMove,
                 ),
                 // Room for the field's name on its border.
                 const SizedBox(height: Space.m),
@@ -227,6 +210,49 @@ class _BoardAndCounterState extends State<BoardAndCounter>
         ),
       ],
     ),
+  );
+}
+
+/// The board of the column, showing the session at its cursor.
+class _ColumnBoard extends StatelessWidget {
+  const _ColumnBoard({
+    required this.session,
+    required this.settings,
+    required this.analysis,
+    required this.editing,
+    required this.onMove,
+  });
+
+  final DocumentSession session;
+  final SettingsStore settings;
+  final EngineAnalysis analysis;
+  final ValueNotifier<bool>? editing;
+  final ValueChanged<String> onMove;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([
+      session.anyChange,
+      settings,
+      analysis.threat,
+      ?editing,
+    ]),
+    // A comment's line on the board is read, not played on.
+    builder: (context, _) {
+      final keeps = drawsIntoComment(session, editing: editing?.value ?? false);
+      return BoardView(
+        fen: session.cursor.boardFen,
+        orientation: session.orientation,
+        lastMove: session.cursor.boardLastMove,
+        onMove: onMove,
+        movable: session.cursor.commentLine.value == null,
+        coordinates: settings.value.boardCoordinates,
+        shapes: shapesOnBoard(session),
+        threat: threatOnBoard(session, analysis.threat.value),
+        onDraw: keeps ? (shape) => drawIntoComment(session, shape) : null,
+        onClear: keeps ? () => clearCommentShapes(session) : null,
+      );
+    },
   );
 }
 

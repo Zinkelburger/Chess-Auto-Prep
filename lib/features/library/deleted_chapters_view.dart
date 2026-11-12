@@ -3,17 +3,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../storage/deleted_chapters.dart';
-import '../../ui/status_bar.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/list_message.dart';
 import '../../ui/name_dialog.dart';
+import '../../ui/pane_header.dart';
 import '../../ui/relative_time.dart';
+import '../../ui/status_bar.dart';
 import '../../ui/theme.dart';
+import '../../ui/tool_button.dart';
 import 'library.dart';
 import 'library_messages.dart';
 import 'library_state.dart';
-import '../../ui/list_message.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/tool_button.dart';
-import '../../ui/pane_header.dart';
 
 /// The chapters the user deleted under the repertoire each came from, newest
 /// first, each with `Restore`. It

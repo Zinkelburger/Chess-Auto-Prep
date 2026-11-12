@@ -92,7 +92,7 @@ void main() {
         isFalse,
       );
       final attempts = plan.files.last.after!.split('\n');
-      expect(jsonDecode(attempts.first)['futureField'], {
+      expect((jsonDecode(attempts.first) as Map)['futureField'], {
         'preserve': [1, 'two'],
       });
       expect(

@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart' show IterableIntegerExtension;
 import 'package:dartchess/dartchess.dart' show Side;
 
 import '../pgn/move_label.dart' show numberedMoves;
@@ -155,7 +156,7 @@ BookVerdict checkGame(PlayedGame game, List<BookFile> books) {
   ];
   if (mine.isEmpty) return const NoBook();
   final last = _lastInBook(game.positions, mine);
-  if (last < bookEntryPlies) return const OtherOpening();
+  if (last == null) return const OtherOpening();
   final position = game.positions[last];
   final place = _placeOf(position, mine);
   if (last == game.moves.length) return InBookThroughout(place);
@@ -177,28 +178,27 @@ BookVerdict checkGame(PlayedGame game, List<BookFile> books) {
 }
 
 /// The index of the last position of [positions] any of [books] reaches,
-/// or -1 when none does.
-int _lastInBook(List<String> positions, List<BookFile> books) {
-  for (var i = positions.length - 1; i >= 0; i--) {
+/// or null when none does from [bookEntryPlies] on.
+int? _lastInBook(List<String> positions, List<BookFile> books) {
+  for (var i = positions.length - 1; i >= bookEntryPlies; i--) {
     if (books.any((file) => file.index.movesAt(positions[i]) != null)) {
       return i;
     }
   }
-  return -1;
+  return null;
 }
 
 /// The file with the most lines through [position], or the first that
 /// reaches it where every one ends there.
 BookPlace _placeOf(String position, List<BookFile> books) {
-  BookFile? best;
-  var most = -1;
+  (BookFile, int)? best;
   for (final file in books) {
     final moves = file.index.movesAt(position);
     if (moves == null) continue;
-    final lines = moves.values.fold(0, (sum, move) => sum + move.lines);
-    if (lines > most) (best, most) = (file, lines);
+    final lines = moves.values.map((move) => move.lines).sum;
+    if (best == null || lines > best.$2) best = (file, lines);
   }
-  final file = best!;
+  final file = best!.$1;
   return BookPlace(file, file.index.into(position)?.sans ?? const []);
 }
 

@@ -9,8 +9,8 @@ import '../ui/pane_tabs.dart';
 import '../workspace/document/document_history.dart';
 import '../workspace/document/document_session.dart';
 import '../workspace/document/draft_keeper.dart';
-import 'workspace_requests.dart';
 import 'mode.dart';
+import 'workspace_requests.dart';
 
 /// Open files and temporary analyses. The session remains the active document;
 /// tabs retain navigation and drafts, while files are reread through its store.

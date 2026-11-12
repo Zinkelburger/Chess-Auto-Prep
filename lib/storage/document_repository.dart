@@ -3,8 +3,8 @@ import 'package:path/path.dart' as p;
 
 import 'document_ref.dart';
 import 'edit_scope.dart';
-import 'pgn_document_store.dart';
 import 'pending_writes.dart';
+import 'pgn_document_store.dart';
 
 enum DocumentChangeKind { created, saved, moved, deleted }
 

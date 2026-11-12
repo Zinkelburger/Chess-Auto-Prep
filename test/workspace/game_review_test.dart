@@ -1,21 +1,21 @@
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
+import 'package:chess_auto_prep/chess/pgn/chapter_edit.dart';
 import 'package:chess_auto_prep/chess/pgn/comment_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/game_review.dart';
-import 'package:chess_auto_prep/chess/pgn/chapter_edit.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/move_text.dart';
 import 'package:chess_auto_prep/chess/pgn/rewrite_gate.dart';
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
-import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
-import 'package:dartchess/dartchess.dart' show Move;
 import 'package:chess_auto_prep/engines/engine_line.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
-import 'package:chess_auto_prep/workspace/review/game_review.dart';
-import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document/document_session.dart';
+import 'package:chess_auto_prep/workspace/review/game_review.dart';
+import 'package:dartchess/dartchess.dart' show Move;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_engine.dart';
@@ -215,6 +215,15 @@ void main() {
       mark: ReviewMark.blunder,
       words: 'Lost forced checkmate sequence',
     ));
+    ReviewMark? left(int cp) => judgeMove(
+      const ReviewValue(10000, '#3', []),
+      ReviewValue(cp, '${cp / 100}', const []),
+      whiteMoved: true,
+    )!.mark;
+    expect(left(1000), ReviewMark.inaccuracy);
+    expect(left(999), ReviewMark.mistake);
+    expect(left(701), ReviewMark.mistake);
+    expect(left(700), ReviewMark.blunder);
     expect(
       judgeMove(
         const ReviewValue(10000, '#3', []),
@@ -241,6 +250,7 @@ void main() {
 
   test('stored eval supports depth and signed mate', () {
     expect(storedReviewValue('text [%eval -0.34,18]')?.cp, -34);
+    expect(storedReviewValue('[%eval 1.5]')?.cp, 150);
     expect(storedReviewValue('[%eval #-3]')?.cp, -10000);
     expect(storedReviewValue('no score'), isNull);
   });
@@ -306,6 +316,79 @@ void main() {
     final tree = again.chapter.tree;
     expect(tree.children.where((n) => n.san == 'd4'), hasLength(1));
     expect(tree.nodeAt(NodePath.of([1, 0]))?.children.single.san, 'c4');
+    expect(
+      tree.nodeAt(NodePath.of([1]))?.children,
+      hasLength(1),
+      reason: 'the line the review finds again is followed, not added twice',
+    );
+  });
+
+  test('a note on a later move of a review line keeps the line', () {
+    final marked =
+        annotateGame(fixture.session.chapter!, reviewed) as ChapterEdited;
+    final noted =
+        setComment(marked.chapter, at: NodePath.of([1, 0]), text: 'keep this')
+            as CommentWritten;
+    final removed = removeReview(noted.chapter) as ChapterEdited;
+    final d5 = removed.chapter.tree.nodeAt(NodePath.of([1, 0]));
+    expect(d5?.san, 'd5');
+    expect(d5?.comment, 'keep this');
+  });
+
+  test('the alternative a review writes is at most eight moves long', () {
+    final marked =
+        annotateGame(fixture.session.chapter!, const [
+              ReviewValue(30, '0.30', [
+                'd2d4', 'd7d5', 'c2c4', 'e7e6', 'b1c3', //
+                'g8f6', 'c1g5', 'f8e7', 'e2e3', 'e8g8',
+              ]),
+              ReviewValue(-220, '-2.20', []),
+              ReviewValue(20, '0.20', []),
+            ])
+            as ChapterEdited;
+    var plies = 0;
+    for (MoveNode? n = marked.chapter.tree.children[1]; n != null;) {
+      plies++;
+      n = n.children.firstOrNull;
+    }
+    expect(plies, 8);
+  });
+
+  test('an alternative the game already plays is followed and only its new '
+      'moves added', () {
+    final chapter = parseChapter(
+      name: 'Side line',
+      text: '[Event "G"]\n[Result "*"]\n\n1. e4 (1. d4 d5) e5 *\n',
+    );
+    final marked =
+        annotateGame(chapter, const [
+              ReviewValue(30, '0.30', ['d2d4', 'd7d5', 'c2c4']),
+              ReviewValue(-220, '-2.20', []),
+              ReviewValue(-220, '-2.20', []),
+            ])
+            as ChapterEdited;
+    // The game's own tree, as the file is written: the merged view would
+    // fold a duplicated branch away.
+    final tree = marked.chapter.lines.single.tree!;
+    expect(tree.nodeAt(NodePath.of([1]))!.children, hasLength(1));
+    expect(tree.nodeAt(NodePath.of([1, 0, 0]))?.san, 'c4');
+    final removed = removeReview(marked.chapter) as ChapterEdited;
+    expect(removed.chapter.tree.nodeAt(NodePath.of([1, 0]))?.children, isEmpty);
+  });
+
+  test('a move with only a position glyph still gets the review\'s mark', () {
+    final chapter = parseChapter(
+      name: 'Glyph',
+      text: '[Event "G"]\n[Result "*"]\n\n1. e4 \$14 e5 *\n',
+    );
+    final marked =
+        annotateGame(chapter, const [
+              ReviewValue(0, '0.00', []),
+              ReviewValue(-250, '-2.50', []),
+              ReviewValue(-250, '-2.50', []),
+            ])
+            as ChapterEdited;
+    expect(marked.chapter.tree.children.first.nags, containsAll([14, 4]));
   });
 
   test('an evaluation the file had is kept and survives removal', () async {
@@ -328,9 +411,7 @@ void main() {
     final running = review.start();
     for (final cp in [30, 220, 20]) {
       await pumpEventQueue();
-      engine.current.emit(
-        line(depth: 14, score: Centipawns(cp), pv: const ['g1f3']),
-      );
+      engine.current.emit(line(depth: 14, score: Centipawns(cp)));
       engine.current.end();
     }
     await running;
@@ -344,13 +425,58 @@ void main() {
     expect(fixture.session.tree!.children.first.nags, contains(4));
   });
 
+  test(
+    'turning the switch on for a game that has the review keeps it',
+    () async {
+      final running = review.start();
+      for (final cp in [30, 220, 20]) {
+        await pumpEventQueue();
+        engine.current.emit(line(depth: 14, score: Centipawns(cp)));
+        engine.current.end();
+      }
+      await running;
+      expect(review.annotated, isTrue);
+      review.setAnnotate(true);
+      expect(review.annotated, isTrue);
+      expect(review.problem, isNull);
+    },
+  );
+
+  test(
+    'a review counts from none done, and its owners hear the board move',
+    () async {
+      final done = <int>[];
+      review.addListener(() => done.add(review.completed));
+      final running = review.start();
+      await pumpEventQueue();
+      expect(done.first, 0);
+      review.stop();
+      engine.current.end();
+      await running;
+      final heard = done.length;
+      fixture.session.cursor.forward();
+      expect(done.length, greaterThan(heard));
+    },
+  );
+
+  test('Stop ends a review, and nothing is written', () async {
+    final running = review.start();
+    await pumpEventQueue();
+    review.stop();
+    expect(engine.current.stopped, isTrue);
+    engine.current.emit(line(depth: 14, score: const Centipawns(30)));
+    engine.current.end();
+    await running;
+    expect(review.running, isFalse);
+    expect(review.annotated, isFalse);
+    expect(fixture.session.hasHeldEdits, isFalse);
+  });
+
   test('a saved review is not put back onto a changed main line', () async {
     final running = review.start();
     for (final cp in [30, 220, 20]) {
       await pumpEventQueue();
-      engine.current.emit(
-        line(depth: 14, score: Centipawns(cp), pv: const ['g1f3']),
-      );
+      engine.current.emit(line(depth: 14, score: Centipawns(cp)));
       engine.current.end();
     }
     await running;
@@ -404,6 +530,8 @@ void main() {
       await pumpEventQueue();
       if (search == 1) {
         expect(review.batch, (game: 1, of: 2));
+        expect(review.running, isTrue);
+        expect(review.canReviewAll, isFalse);
       }
       if (search == 4) {
         // The user goes to the first game while the second is reviewed.
@@ -416,7 +544,6 @@ void main() {
           depth: 14,
           // 1. e4 throws the first game away; the rest is level.
           score: Centipawns(search == 1 ? 250 : 20),
-          pv: const ['g1f3'],
         ),
       );
       engine.current.end();
@@ -433,5 +560,60 @@ void main() {
     );
     expect(review.unreviewedGames, isEmpty);
     expect(review.canReviewAll, isFalse);
+  });
+  test('a game whose main line changed while it was reviewed is left as it '
+      'is, and a review after the batch still ends on an edit', () async {
+    const two =
+        '[Event "A"]\n[Result "*"]\n\n1. e4 e5 *\n\n'
+        '[Event "B"]\n[Result "*"]\n\n1. d4 d5 *\n';
+    final ref = chapterRef('Study', 'Games');
+    final store = ScriptedDocumentStore()
+      ..documents[ref] = Opened(two, scriptedRevision(two));
+    final saver = DocumentSaver(store, delay: Duration.zero);
+    final session = DocumentSession(store, saver);
+    await session.open(ref, game: 0);
+    final engine = ScriptedEngine();
+    final analysis = EngineAnalysis(
+      session,
+      () async => const StartFailed('off'),
+    );
+    final jobs = EngineJobs(analysis);
+    final review = GameReview(
+      session: session,
+      jobs: jobs,
+      launch: () async => Started(engine),
+    );
+    addTearDown(() {
+      review.dispose();
+      jobs.dispose();
+      analysis.dispose();
+      session.dispose();
+      saver.dispose();
+    });
+    final running = review.startAll();
+    for (var search = 0; search < 6; search++) {
+      await pumpEventQueue();
+      if (search == 0) {
+        // 1... e5 becomes 1... c5 while the first game is reviewed: as many
+        // moves, other positions.
+        expect(deleteFrom(session, NodePath.of([0, 0])), isNull);
+        session.cursor.goTo(NodePath.of([0]));
+        session.playMove('c7c5');
+        expect(session.tree!.nodeAt(NodePath.of([0, 0]))?.san, 'c5');
+      }
+      engine.current.emit(line(depth: 14, score: const Centipawns(20)));
+      engine.current.end();
+    }
+    await running;
+    final lines = session.chapter!.lines;
+    expect(hasReview(lines[0].tree!), isFalse);
+    expect(hasReview(lines[1].tree!), isTrue);
+
+    final single = review.start();
+    await pumpEventQueue();
+    session.setComment(const NodePath.root(), 'A note');
+    expect(engine.current.stopped, isTrue);
+    engine.current.end();
+    await single;
   });
 }

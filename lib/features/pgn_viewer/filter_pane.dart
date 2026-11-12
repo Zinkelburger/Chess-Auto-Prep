@@ -3,15 +3,15 @@ import 'package:flutter/material.dart';
 
 import '../../chess/fen.dart';
 import '../../chess/game_filter.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/choice_field.dart';
+import '../../ui/segments.dart';
 import '../../ui/theme.dart';
+import '../../ui/tool_button.dart';
 import '../../workspace/board/board_view.dart';
 import '../../workspace/explorer/file_filter.dart';
 import 'export_dialog.dart';
 import 'pgn_viewer.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/segments.dart';
-import '../../ui/tool_button.dart';
 
 /// The Filter tab: which of the open file's games the list shows. How many
 /// pass, one Field / Rule / Value row per rule starting with a blank one,

@@ -3,6 +3,29 @@ import 'package:chess_auto_prep/chess/tournament/standings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('a game Black wins is Black\'s', () {
+    final rows = Tournament({
+      'config': {
+        'engines': [
+          {'name': 'A'},
+          {'name': 'B'},
+        ],
+      },
+      'games': [_game(0, 1, 'blackWins')],
+    }).standings;
+    expect(rows.first.seat, 1);
+    expect(rows.first.score.wins, 1);
+    expect(rows.last.score.losses, 1);
+  });
+
+  test('the edges of the estimates: every game lost, a margin held inside '
+      'the possible, and a lopsided record', () {
+    expect(const MatchScore(0, 0, 3).elo, isNull);
+    expect(const MatchScore(0, 1, 9).margin, closeTo(1644.45, 0.01));
+    expect(const MatchScore(0, 0, 81).superiority, 0);
+    expect(const MatchScore(81, 0, 0).superiority, 1);
+  });
+
   test('seat identity, invalid results, head-to-head and SB standings', () {
     final tournament = Tournament({
       'config': {
@@ -25,6 +48,7 @@ void main() {
     expect(rows.first.opponents[1].label, '1.5/2');
     expect(rows.first.opponents[2].losses, 1);
     expect(rows.map((r) => r.sonnebornBerger), [.75, 1.5, .75]);
+    expect(rows.map((r) => r.score.losses), [1, 0, 1]);
     expect(() => rows.clear(), throwsUnsupportedError);
   });
   test('rating estimates keep the recorded convention and edge semantics', () {

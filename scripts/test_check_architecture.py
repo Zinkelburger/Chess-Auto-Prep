@@ -16,6 +16,7 @@ from check_architecture import (
     check_functions,
     check_icons,
     check_imports,
+    check_insets,
     check_members,
 )
 
@@ -37,6 +38,35 @@ class LayoutTest(unittest.TestCase):
             (root / "test/v2").mkdir()
             (root / "lib/services").mkdir()
             self.assertEqual(len(check_architecture.check_layout(root)), 3)
+
+
+class InsetsTest(unittest.TestCase):
+    def findings(self, source: str, relative: str = "features/a.dart") -> list[str]:
+        findings: list[str] = []
+        check_insets(relative, source, findings)
+        return findings
+
+    def test_named_values_and_zero_pass(self):
+        self.assertEqual(self.findings("EdgeInsets.fromLTRB(Space.m, 0, Space.xs, 0.0)"), [])
+        self.assertEqual(self.findings("EdgeInsets.zero"), [])
+
+    def test_a_number_fails(self):
+        self.assertEqual(len(self.findings("EdgeInsets.all(3)")), 1)
+        self.assertEqual(len(self.findings("EdgeInsetsDirectional.only(start: 1.5)")), 1)
+
+    def test_arithmetic_on_a_name_fails(self):
+        self.assertEqual(len(self.findings("EdgeInsets.all(Space.s / 2)")), 1)
+
+    def test_a_call_over_several_lines_is_read_whole(self):
+        findings = self.findings("\nEdgeInsets.symmetric(\n  horizontal: Space.xs,\n  vertical: 3,\n)")
+        self.assertEqual(findings, ["lib/features/a.dart:2: number in EdgeInsets (use Space or a token in ui/theme.dart)"])
+
+    def test_names_with_digits_comments_and_strings_pass(self):
+        self.assertEqual(self.findings("EdgeInsets.all(gap2) // EdgeInsets.all(3)"), [])
+        self.assertEqual(self.findings("'EdgeInsets.all(3)'"), [])
+
+    def test_the_theme_may_write_numbers(self):
+        self.assertEqual(self.findings("EdgeInsets.all(3)", "ui/theme.dart"), [])
 
 
 class IconsTest(unittest.TestCase):

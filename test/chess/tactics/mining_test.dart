@@ -235,6 +235,97 @@ void main() {
     });
   });
 
+  group('the engine\'s word', () {
+    test('a mate is packed as 10000 less its distance, being mated as less '
+        'than nothing, mate 0 included', () {
+      expect(const Verdict(mate: 3).packed, 9997);
+      expect(const Verdict(mate: -3).packed, -9997);
+      expect(const Verdict(mate: 0).packed, -10000);
+    });
+
+    test('a score is written in pawns', () {
+      expect(evalText(const Verdict(cp: 150)), '+1.5');
+      expect(evalText(const Verdict(cp: 150), negate: true), '-1.5');
+      expect(evalText(const Verdict(cp: 1000)), '+10.0');
+    });
+
+    test('a position nothing can read counts as over', () {
+      expect(isOver(const Fen('not a position')), isTrue);
+    });
+
+    test('a forcing line stops where the engine\'s line does', () {
+      expect(trainableLine(const ['Qxf7+', 'Kxf7']), ['Qxf7+']);
+      expect(trainableLine(const ['Qxf7+', 'Kxf7', 'Bxe6+']), [
+        'Qxf7+',
+        'Kxf7',
+        'Bxe6+',
+      ]);
+    });
+  });
+
+  group('a mined puzzle written', () {
+    MinedPuzzle copied(
+      MinedPuzzle p, {
+      Fen? fen,
+      SourceGame? game,
+      List<String>? answer,
+    }) => MinedPuzzle(
+      fen: fen ?? p.fen,
+      played: p.played,
+      kind: p.kind,
+      answer: answer ?? p.answer,
+      engineLine: p.engineLine,
+      note: p.note,
+      refutation: p.refutation,
+      game: game ?? p.game,
+    );
+
+    test(
+      'names both players, unknown or not, and leaves out what is empty',
+      () {
+        final text = puzzleText(
+          copied(minedScholarsMate(), game: const SourceGame(id: 'g')),
+          event: 'Set #1',
+        );
+        expect(text, contains('[White ""]'));
+        expect(text, contains('[Black ""]'));
+        expect(text, isNot(contains('[Date ')));
+      },
+    );
+
+    test('a puzzle that would not read back whole is refused', () {
+      final set = parseChapter(name: 'Set', text: tacticsSet);
+      final broken = copied(minedScholarsMate(), answer: const ['Ke2']);
+      expect(
+        withMined(set, [broken], analyzed: {'g'}),
+        isA<ChapterEditRefused>(),
+      );
+    });
+
+    test('is numbered after every puzzle already in the set and before it', () {
+      const twoGames = '[Event "A"]\n\n1. e4 *\n[Event "B"]\n\n1. d4 *\n';
+      final set = parseChapter(name: 'Set', text: twoGames);
+      final first = minedScholarsMate();
+      // The same puzzle from a position one move later, so it is new.
+      final second = copied(
+        first,
+        fen: const Fen(
+          'r1bqkbnr/pppp1ppp/2n5/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 4 3',
+        ),
+      );
+      final edited =
+          (withMined(set, [first, second], analyzed: {'g'}) as ChapterEdited)
+              .chapter;
+      expect(edited.lines[2].text, contains('[Event "Set #3"]'));
+      expect(edited.lines[3].text, contains('[Event "Set #4"]'));
+      expect(
+        edited.lines.first.trailer,
+        '\n',
+        reason: 'the games before keep the space they had',
+      );
+    });
+  });
+
   group('adding to a set with little in it', () {
     final set = parseChapter(name: 'Default', text: tacticsSet);
     final puzzle = minedScholarsMate();

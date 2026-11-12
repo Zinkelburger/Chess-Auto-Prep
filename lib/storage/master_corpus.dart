@@ -185,29 +185,35 @@ Database _open(String path) {
   return db;
 }
 
+/// The conditions [filter] asks of a game, and their values.
+({List<String> where, List<Object> args}) _matching(CorpusFilter filter) {
+  final where = <String>[];
+  final args = <Object>[];
+  void contains(String field, String text) {
+    if (text.trim().isEmpty) return;
+    where.add('instr(lower($field), lower(?)) > 0');
+    args.add(text.trim());
+  }
+
+  contains("white || ' ' || black", filter.player);
+  contains('event', filter.event);
+  contains('eco', filter.eco);
+  if (filter.minimumElo > 0) {
+    where.add('min(coalesce(white_elo, 0), coalesce(black_elo, 0)) >= ?');
+    args.add(filter.minimumElo);
+  }
+  if (filter.since.isNotEmpty) {
+    where.add("date >= ? AND date < '3'");
+    args.add(filter.since);
+  }
+  return (where: where, args: args);
+}
+
 CorpusPage _search(String path, CorpusFilter filter) {
   if (!File(path).existsSync()) return (games: <CorpusGame>[], more: false);
   final db = _open(path);
   try {
-    final where = <String>[];
-    final args = <Object>[];
-    void contains(String field, String text) {
-      if (text.trim().isEmpty) return;
-      where.add('instr(lower($field), lower(?)) > 0');
-      args.add(text.trim());
-    }
-
-    contains("white || ' ' || black", filter.player);
-    contains('event', filter.event);
-    contains('eco', filter.eco);
-    if (filter.minimumElo > 0) {
-      where.add('min(coalesce(white_elo, 0), coalesce(black_elo, 0)) >= ?');
-      args.add(filter.minimumElo);
-    }
-    if (filter.since.isNotEmpty) {
-      where.add("date >= ? AND date < '3'");
-      args.add(filter.since);
-    }
+    final (:where, :args) = _matching(filter);
     List<Row> select(String also, String order, int limit, int offset) =>
         db.select(
           'SELECT id, white, black, event, date, eco, result, white_elo, '

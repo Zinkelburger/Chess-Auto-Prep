@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:chess_auto_prep/chess/pgn/collection_player.dart';
 import 'package:chess_auto_prep/chess/pgn/game_order.dart';
 import 'package:chess_auto_prep/chess/pgn/game_text.dart';
-import 'package:chess_auto_prep/chess/pgn/reading_place.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/chess/pgn/reading_place.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -14,6 +14,34 @@ List<PgnHeader> game(String white, String black) => [
 ];
 
 void main() {
+  group('at the edges', () {
+    test('two games are enough to be a player\'s collection', () {
+      expect(
+        collectionPlayer([game('Me', 'Rival A'), game('Rival B', 'Me')]),
+        'Me',
+      );
+    });
+
+    test('an unknown or empty name is nobody', () {
+      final unknown = [game('A', '?'), game('B', '?'), game('', 'C')];
+      expect(collectionPlayer(unknown), isNull);
+      expect(playerCounts(unknown).keys, ['A', 'B', 'C']);
+      expect(sideOfPlayer('?', game('?', 'B')), isNull);
+      expect(sideOfPlayer('', game('', 'B')), isNull);
+    });
+
+    test('a full name that matches one side is that side, though the other '
+        'shares its surname', () {
+      expect(
+        sideOfPlayer(
+          'Carlsen, Magnus',
+          game('Carlsen, Henrik', 'Carlsen, Magnus'),
+        ),
+        Side.black,
+      );
+    });
+  });
+
   test('a collection is a player\'s when four games in five have them', () {
     final carlsen = [
       for (var i = 0; i < 4; i++) game('Carlsen, Magnus', 'Rival $i'),

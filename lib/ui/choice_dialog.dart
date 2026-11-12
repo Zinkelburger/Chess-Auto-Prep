@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'search_field.dart';
 import 'list_message.dart';
+import 'search_field.dart';
 import 'theme.dart';
 
 /// Asks the user to pick one of [options], answering null when they back out.

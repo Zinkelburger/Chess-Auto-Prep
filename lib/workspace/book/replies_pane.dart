@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../../ui/app_icons.dart';
 import '../../ui/listening_state.dart';
+import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
+import '../board/line_preview.dart';
+import '../board/preview_target.dart';
 import '../document/document_session.dart';
 import 'gap_hunt.dart';
 import 'gap_walk.dart' show MissingReply;
-import '../board/line_preview.dart';
-import '../board/preview_target.dart';
 import 'replies.dart';
-import '../../ui/move_notation.dart';
-import '../../ui/app_icons.dart';
 
 /// The Replies tab of the reading card: what the opponent plays at the
 /// position on the board, how often, and whether the chapter answers it.

@@ -71,8 +71,9 @@ To publish:
    --prepare . --assets-from /path/to/main-checkout` before running checks;
    preparing from a different checkout before the squash could copy newer
    workflow files into the clean publication input.
-3. Push that publication branch, run the full required checks on its exact
-   HEAD using local bounded checks, and then
+3. Push that publication branch, run `scripts/ci.sh preflight` and
+   `scripts/ci.sh tools` on its exact HEAD (the release workflow runs both;
+   preflight alone misses the Python tool tests), and then
    fast-forward `origin/main` with the explicit `HEAD:refs/heads/main` refspec.
    If the remote advanced, reconcile and revalidate; never force-push it.
 4. Merge the published commit back into a task worktree based on local main,

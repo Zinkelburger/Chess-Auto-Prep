@@ -3,9 +3,9 @@ import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../support/window_fixture.dart';
-import '../support/viewer_fixture.dart';
 import '../support/scripted_store.dart';
+import '../support/viewer_fixture.dart';
+import '../support/window_fixture.dart';
 
 void main() {
   test(

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'theme.dart';
 import 'app_icons.dart';
+import 'theme.dart';
 
 /// A quiet button that folds a group of settings away under it and back:
 /// its fixed [label], and a chevron saying which way it will go.

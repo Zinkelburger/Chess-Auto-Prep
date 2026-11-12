@@ -2,9 +2,9 @@ import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/features/tactics/my_games.dart';
 import 'package:chess_auto_prep/features/tactics/puzzle_pane.dart';
-import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/document/study_choice.dart';
 import 'package:chess_auto_prep/workspace/explorer/explorer_pane.dart';
 import 'package:flutter/material.dart';
@@ -178,11 +178,9 @@ void main() {
     await toTactics(tester);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(
-      find.widgetWithText(SubmenuButton, 'Action Tabs'),
-    );
+    await tester.ensureVisible(find.widgetWithText(SubmenuButton, 'View'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(SubmenuButton, 'Action Tabs'));
+    await tester.tap(find.widgetWithText(SubmenuButton, 'View'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Show Explorer'));
     await tester.tap(find.text('Show Explorer'));

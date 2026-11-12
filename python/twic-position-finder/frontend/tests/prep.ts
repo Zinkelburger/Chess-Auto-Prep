@@ -73,9 +73,7 @@ assert.deepEqual(keptReplies({ a: 0.5, b: 0.3, c: 0.15, d: 0.05 }, 0.9, 5).map((
 assert.deepEqual(keptReplies({ a: 0.5, b: 0.3, c: 0.15 }, 0.9, 2).map(([, s]) => Math.round(s * 1000)), [625, 375]);
 const after = (fen: string, uci: string) => playLine(fen, [uci])[0].fen;
 const scores = new Map<string, number>();
-let engineCalls = 0;
 const fakeLines = async (fen: string, width: number) => {
-  engineCalls++;
   const pos = new Chess(fen);
   // A position in `scores` is worth that whatever is played; elsewhere White likes e4 (+50) and d4 (+30).
   const own = scores.get(fen);

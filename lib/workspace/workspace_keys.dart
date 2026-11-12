@@ -5,8 +5,8 @@ import 'package:flutter/services.dart';
 
 import '../ui/app_keys.dart';
 import '../ui/pane_tabs.dart';
-import 'document/document_session.dart';
 import '../ui/screen_keys.dart';
+import 'document/document_session.dart';
 
 /// The keys of the workspace, wherever the focus is under [child]: the line
 /// (← → Home End PgUp PgDn), the games of the file (↑ ↓), the board (F),

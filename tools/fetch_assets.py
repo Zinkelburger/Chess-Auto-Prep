@@ -822,7 +822,7 @@ def check(names: list[str], lock: dict, only: list[str] | None) -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap = argparse.ArgumentParser(description=(__doc__ or "").split("\n")[0])
     ap.add_argument("--check", action="store_true", help="verify only, do not download")
     ap.add_argument("--force", action="store_true", help="re-download even if present")
     ap.add_argument(

@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import '../../chess/pgn/game_text.dart';
 import '../../chess/pgn/study.dart';
 import '../../chess/pgn/study_cleanup.dart';
-import '../../ui/theme.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/form_dialog.dart';
+import '../../ui/theme.dart';
 import '../../ui/tool_button.dart';
 
 /// The chapter's tags to edit, the game's own first: who played, the

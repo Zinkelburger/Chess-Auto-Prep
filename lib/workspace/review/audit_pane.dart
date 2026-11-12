@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 
 import '../../chess/audit/chapter_audit.dart';
 import '../../chess/fen.dart';
-import '../../ui/theme.dart';
-import 'chapter_audit.dart';
-import '../document/document_session.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/problem_line.dart';
-import '../../ui/tool_button.dart';
+import '../../ui/theme.dart';
 import '../../ui/toggle_chip.dart';
+import '../../ui/tool_button.dart';
+import '../document/document_session.dart';
+import 'chapter_audit.dart';
 
 /// The Audit tab: the chapter's own moves checked against the engine.
 ///

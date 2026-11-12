@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:archive/archive.dart' show Archive, ArchiveFile, ZipEncoder;
+import 'package:archive/archive.dart'
+    show Archive, ArchiveFile, CompressionType, ZipEncoder;
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/features/databases/twic_download.dart';
 import 'package:chess_auto_prep/storage/master_book.dart';
@@ -346,4 +347,185 @@ void main() {
     );
     expect(describeImportFailure(StateError('other')), contains('other'));
   });
+
+  test('a TWIC archive whose bytes fail their checksum is refused', () {
+    final bytes = utf8.encode(game);
+    final stored = ArchiveFile('twic.pgn', bytes.length, bytes)
+      ..compression = CompressionType.none;
+    final zip = Uint8List.fromList(
+      ZipEncoder().encode(Archive()..addFile(stored)),
+    );
+    // Flip one letter of the stored PGN, past where the headers are read.
+    final at = _indexOf(zip, utf8.encode('London ENG'));
+    expect(at, isNonNegative);
+    zip[at] ^= 0x20;
+    expect(() => importTwicIssue(path, 1600, zip), throwsA(anything));
+    expect(
+      File(path).existsSync() && masterGamesIssues(path).issues.isNotEmpty,
+      isFalse,
+    );
+  });
+
+  test('a small import still keeps its movetext dictionary', () {
+    importTwicIssue(path, 1600, zipped(game));
+    final db = sqlite3.open(path, mode: OpenMode.readOnly);
+    addTearDown(db.close);
+    expect(
+      db.select("SELECT 1 FROM meta WHERE key = 'movetext_dict'"),
+      hasLength(1),
+    );
+  });
+
+  test('ratings are summed and counted only where a game has them', () {
+    importTwicIssue(
+      path,
+      1600,
+      zipped(
+        game.replaceFirst(
+          '[Result',
+          '[WhiteElo "2400"]\n[BlackElo "2300"]\n[Result',
+        ),
+      ),
+    );
+    importTwicIssue(
+      path,
+      1601,
+      zipped(
+        game
+            .replaceAll('Test Open', 'Other Open')
+            .replaceFirst('[Result', '[WhiteElo "2500"]\n[Result'),
+      ),
+    );
+    final db = sqlite3.open(path, mode: OpenMode.readOnly);
+    addTearDown(db.close);
+    final first = db
+        .select('SELECT elo_sum, elo_n, max_elo FROM book WHERE ply = 0')
+        .single;
+    expect(
+      (first['elo_sum'], first['elo_n'], first['max_elo']),
+      (7200, 3, 2500),
+    );
+  });
+
+  test('an unrated draw counts as a draw with no rating', () {
+    importTwicIssue(path, 1600, zipped(game.replaceAll('1-0', '1/2-1/2')));
+    final db = sqlite3.open(path, mode: OpenMode.readOnly);
+    addTearDown(db.close);
+    final first = db
+        .select(
+          'SELECT white_wins, draws, black_wins, max_elo FROM book WHERE ply = 0',
+        )
+        .single;
+    expect(
+      (
+        first['white_wins'],
+        first['draws'],
+        first['black_wins'],
+        first['max_elo'],
+      ),
+      (0, 1, 0, 0),
+    );
+  });
+
+  test('a year is read from four digits, and not before 1000', () {
+    int yearOf(String date) {
+      final own = p.join(temp.path, 'year $date.db');
+      importTwicIssue(own, 1600, zipped(game.replaceFirst('2026.09.21', date)));
+      final db = sqlite3.open(own, mode: OpenMode.readOnly);
+      try {
+        return db
+                .select('SELECT last_year FROM book WHERE ply = 0')
+                .single['last_year']
+            as int;
+      } finally {
+        db.close();
+      }
+    }
+
+    expect(yearOf('2026'), 2026);
+    expect(yearOf('1000.01.01'), 1000);
+    expect(yearOf('0999.01.01'), 0);
+  });
+
+  test('an issue records how many games it brought', () {
+    final both = '$game\n${game.replaceAll('Test Open', 'Test Blitz')}';
+    importTwicIssue(path, 1600, zipped(both));
+    final db = sqlite3.open(path, mode: OpenMode.readOnly);
+    addTearDown(db.close);
+    expect(
+      db
+          .select('SELECT games FROM twic_issues WHERE issue = 1600')
+          .single['games'],
+      2,
+    );
+  });
+
+  test('a database error other than damage leaves the file where it is', () {
+    importTwicIssue(path, 1600, zipped(game));
+    Process.runSync('chmod', ['444', path]);
+    addTearDown(() => Process.runSync('chmod', ['644', path]));
+    final setAside = <String>[];
+    expect(
+      () => withMasterGames(
+        path,
+        (db) => db.execute('CREATE TABLE extra(x)'),
+        setAside: setAside.add,
+      ),
+      throwsA(isA<SqliteException>()),
+    );
+    expect(setAside, isEmpty);
+    expect(masterGamesIssues(path).issues, {1600});
+  }, skip: Platform.isLinux ? false : 'Linux permissions');
+
+  test('a database damaged past its header is set aside and begun again', () {
+    importTwicIssue(path, 1600, zipped(game));
+    for (final suffix in ['-wal', '-shm']) {
+      final side = File('$path$suffix');
+      if (side.existsSync()) side.deleteSync();
+    }
+    final bytes = File(path).readAsBytesSync();
+    bytes.fillRange(100, 164, 0xFF);
+    File(path).writeAsBytesSync(bytes);
+    final setAside = <String>[];
+    final read = withMasterGames(
+      path,
+      (db) => db.select('SELECT count(*) AS n FROM games').first['n'],
+      setAside: setAside.add,
+    );
+    expect(read, 0);
+    expect(setAside, hasLength(1));
+    expect(File(setAside.single).existsSync(), isTrue);
+  });
+
+  test('the movetext dictionary is zlib\'s whole window, no more', () {
+    final many = [
+      for (var i = 0; i < 800; i++)
+        game
+            .replaceAll('Test Open', 'Open $i')
+            .replaceFirst(
+              '2. Nf3 Nc6',
+              '2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7',
+            ),
+    ].join('\n');
+    importTwicIssue(path, 1600, zipped(many));
+    final db = sqlite3.open(path, mode: OpenMode.readOnly);
+    addTearDown(db.close);
+    final dictionary =
+        db
+                .select("SELECT value FROM meta WHERE key = 'movetext_dict'")
+                .single['value']
+            as List<int>;
+    expect(dictionary, hasLength(32768));
+  });
+}
+
+int _indexOf(List<int> haystack, List<int> needle) {
+  for (var i = 0; i + needle.length <= haystack.length; i++) {
+    var found = true;
+    for (var j = 0; j < needle.length && found; j++) {
+      found = haystack[i + j] == needle[j];
+    }
+    if (found) return i;
+  }
+  return -1;
 }

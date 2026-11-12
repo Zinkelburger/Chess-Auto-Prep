@@ -104,7 +104,44 @@ void main() {
       );
       expect(movesOf(tree.answerAt(Fen.initial)), ['e2e4', 'd2d4']);
       expect(tree.summary, '2 of 3 games');
+      expect(states.length, greaterThan(built), reason: 'the rule is told');
       expect(states.skip(built), everyElement(isA<TreeBuilt>()));
+    },
+  );
+
+  test(
+    'while the filter is still reading, This file answers nothing',
+    () async {
+      await over(threeGameFile);
+      await settled(tree);
+      fixture.filter.apply(
+        const GameFilter(
+          rules: [HeaderRule(rule: FilterRule.regex, value: 'Carl.en')],
+        ),
+      );
+      expect(fixture.filter.busy, isTrue);
+      expect(tree.answerAt(Fen.initial), isNull);
+      while (fixture.filter.busy) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(movesOf(tree.answerAt(Fen.initial)), ['e2e4']);
+    },
+  );
+
+  test(
+    'a rule set while a large file is built leaves the build to finish',
+    () async {
+      await over(bigChapter(games: 1500));
+      final first = tree.state as TreeReading;
+      expect((first.done, first.total), (0, 1500));
+      fixture.filter.apply(
+        const GameFilter(
+          rules: [HeaderRule(field: 'Event', value: 'Game')],
+        ),
+      );
+      await settled(tree);
+      expect(tree.state, isA<TreeBuilt>());
+      expect(states.whereType<TreeBuilt>(), hasLength(1));
     },
   );
 

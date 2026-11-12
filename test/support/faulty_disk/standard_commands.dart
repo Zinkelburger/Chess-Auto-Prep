@@ -10,9 +10,9 @@ import 'package:chess_auto_prep/chess/pgn/line_id_pins.dart';
 import 'package:chess_auto_prep/chess/training/records.dart';
 import 'package:chess_auto_prep/chess/training/schedule.dart';
 import 'package:chess_auto_prep/storage/book_list.dart';
+import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:chess_auto_prep/storage/training_rows.dart' show asWritten;
 import 'package:chess_auto_prep/storage/training_store.dart';
-import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:chess_auto_prep/workspace/book/books.dart';
 
 import '../fixtures.dart';

@@ -1,18 +1,18 @@
 import 'dart:io';
 
-import 'package:chess_auto_prep/storage/book_list.dart';
-import 'package:chess_auto_prep/storage/chapter_files.dart';
-import 'package:chess_auto_prep/storage/deleted_chapters.dart';
-import 'package:chess_auto_prep/storage/chapter_directory.dart';
-import 'package:chess_auto_prep/storage/document_ref.dart';
-import 'package:chess_auto_prep/storage/document_repository.dart';
-import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/workspace/document/document_projection.dart'
-    as projection;
-import 'package:chess_auto_prep/workspace/book/repertoire_catalog.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_edit.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_sections.dart';
+import 'package:chess_auto_prep/storage/book_list.dart';
+import 'package:chess_auto_prep/storage/chapter_directory.dart';
+import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/deleted_chapters.dart';
+import 'package:chess_auto_prep/storage/document_ref.dart';
+import 'package:chess_auto_prep/storage/document_repository.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/workspace/book/repertoire_catalog.dart';
+import 'package:chess_auto_prep/workspace/document/document_projection.dart'
+    as projection;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -45,6 +45,55 @@ void main() {
       expect(moved.touches('/repertoires/C'), isFalse);
     },
   );
+
+  test('a PGN beside the repertoires belongs to the root itself', () {
+    final catalog = RepertoireCatalog(
+      files: ScriptedFiles(),
+      root: '/repertoires',
+    );
+    addTearDown(catalog.dispose);
+    expect(catalog.repertoireOf('/repertoires/Loose.pgn'), '/repertoires');
+    expect(catalog.repertoireOf('/repertoires/A/Main.pgn'), '/repertoires/A');
+  });
+
+  test('only an explicit refresh is a reload; a change is not', () async {
+    final disk = ScriptedDocumentStore();
+    final repo = DocumentRepository(disk);
+    final catalog = RepertoireCatalog(
+      files: ScriptedFiles(),
+      documents: repo,
+      root: '/repertoires',
+    );
+    addTearDown(repo.dispose);
+    addTearDown(catalog.dispose);
+    expect(catalog.reloaded, isFalse);
+    await repo.create(const DocumentRef('/repertoires/A/Main.pgn'), '*');
+    await catalog.synchronize();
+    expect(catalog.reloaded, isFalse);
+    await catalog.refresh();
+    expect(catalog.reloaded, isTrue);
+    expect(catalog.admittedChange, isNull);
+    await repo.create(const DocumentRef('/repertoires/B/Main.pgn'), '*');
+    await catalog.synchronize();
+    expect(catalog.reloaded, isFalse);
+    expect(catalog.admittedChange?.path, '/repertoires/B/Main.pgn');
+  });
+
+  test('a closed catalog neither reads nor tells anyone', () async {
+    final files = ScriptedFiles(
+      listing: Repertoires([
+        folder('A', ['Main']),
+      ]),
+    );
+    final catalog = RepertoireCatalog(files: files, root: '/repertoires');
+    await catalog.refresh();
+    files.listing = Repertoires([
+      folder('B', ['Main']),
+    ]);
+    catalog.dispose();
+    await catalog.refresh();
+    expect(catalog.repertoires.single.name, 'A');
+  });
 
   test('failed catalog refresh retains the last good folders', () async {
     final files = ScriptedFiles(

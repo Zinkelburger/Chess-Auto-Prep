@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../document/document_session.dart';
 import '../../ui/segments.dart';
+import '../document/document_session.dart';
 
 /// `Read | Edit` at the foot of the card in the PGN Viewer and Study: the
 /// one control that turns editing on and off there. Reading keeps what is

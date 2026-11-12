@@ -12,7 +12,6 @@ reads this JSON for the fast, iterable parsing step.
 import argparse
 import io
 import json
-import sys
 import time
 
 import fitz  # pymupdf

@@ -1,18 +1,18 @@
-import '../features/tournaments/tournament_run.dart';
 import 'dart:async';
 
-import '../features/settings/app_updates.dart';
-import '../features/settings/lichess_account.dart';
 import '../features/databases/database_library.dart';
 import '../features/databases/twic_download.dart';
+import '../features/settings/app_updates.dart';
+import '../features/settings/lichess_account.dart';
+import '../features/tournaments/tournament_run.dart';
 import '../storage/my_games_files.dart';
 import '../storage/settings_store.dart';
 import '../workspace/book/books.dart';
 import '../workspace/book/repertoire_catalog.dart';
-import '../workspace/document/save_copy.dart';
 import '../workspace/document/document_saver.dart';
 import '../workspace/document/document_session.dart';
 import '../workspace/document/draft_keeper.dart';
+import '../workspace/document/save_copy.dart';
 import '../workspace/document/session_results.dart';
 import '../workspace/workspace.dart';
 import 'environment.dart';
@@ -20,6 +20,7 @@ import 'exit_guard.dart';
 import 'full_screen.dart';
 import 'mode.dart';
 import 'mode_wiring.dart';
+import 'place_memory.dart';
 import 'player_wiring.dart';
 import 'window_input.dart';
 import 'workspace_requests.dart';
@@ -239,7 +240,16 @@ final class AppParts {
     unawaited(labs.offer(env.bughouse.bundled));
     unawaited(_startUpdates());
     await _workspace.start();
+    if (_disposed) return;
+    await requests.resume(settings.value.lastPlace);
+    if (!_disposed) _place.start();
   }
+
+  late final _place = PlaceMemory(
+    settings: settings,
+    requests: requests,
+    session: session,
+  );
 
   /// Starts the update checks and says once when the last install failed.
   Future<void> _startUpdates() async {
@@ -290,6 +300,7 @@ final class AppParts {
     labs.dispose();
     _training.dispose();
     if (_started) _drafts?.dispose();
+    _place.dispose();
     requests.dispose();
     _workspace.dispose();
     documents.dispose();

@@ -132,12 +132,16 @@ void main() {
         elo: 1800,
         depthPlies: 3,
         rootMoves: 2,
-        candidateMoves: 1,
         replyFloor: 0.02,
       );
       await fill.start(custom);
       final root = fill.found!.tree as OurNode;
-      expect(root.candidates, hasLength(2), reason: 'root moves');
+      expect(
+        root.candidates.map((c) => c.move.san),
+        hasLength(3),
+        reason: 'the two root moves and the chapter\'s own e4 beside them',
+      );
+      expect(root.candidates.map((c) => c.move.san), contains('e4'));
       for (final candidate in root.candidates) {
         for (final reply in (candidate.child as OpponentNode).replies) {
           expect((reply.child as OurNode).candidates, hasLength(1));

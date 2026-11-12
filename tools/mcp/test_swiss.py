@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# A None here fails the test on its own, so pyright's None checks add nothing.
+# pyright: reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportOptionalIterable=false, reportOptionalOperand=false
 """Property tests for the Swiss pairer and the event simulator.
 
 `chess_prep/swiss.py` is the one module here whose output is checkable
@@ -454,7 +456,7 @@ class DegenerateFields(unittest.TestCase):
 
     def test_one_player_byes_every_round(self):
         pairer = SwissPairer(_seeds(1))
-        for rnd in range(1, 5):
+        for _ in range(1, 5):
             sheet = pairer.next_round()
             self.assertEqual(sheet.pairings, [])
             (bye,) = sheet.byes

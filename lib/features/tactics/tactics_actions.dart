@@ -3,14 +3,14 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 import '../../ui/app_action.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/app_keys.dart';
 import '../../ui/pane_tabs.dart';
-import '../../workspace/document/document_session.dart';
 import '../../workspace/analysis/engine_analysis.dart';
+import '../../workspace/document/document_session.dart';
 import '../../workspace/workspace_tabs.dart';
 import 'my_games.dart';
 import 'puzzle_trainer.dart';
-import '../../ui/app_keys.dart';
-import '../../ui/app_icons.dart';
 
 /// The Actions menu in Tactics, which is for solving: the puzzle's own
 /// actions, the user's games, the board and the card's tabs — none of the
@@ -38,9 +38,7 @@ List<AppAction> tacticsActions({
     AppAction(
       analysis.enabled ? 'Engine off' : 'Engine on',
       analysis.enabled || !hidden
-          ? () => unawaited(
-              analysis.enabled ? analysis.disable() : analysis.enable(),
-            )
+          ? () => unawaited(analysis.turn(!analysis.enabled))
           : null,
       group: 'Board',
     ),

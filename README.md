@@ -47,8 +47,13 @@ Use that SDK (or set `FLUTTER=/path/to/flutter/bin/flutter`).
 `scripts/ci.sh format` is the separate command that applies formatting.
 `scripts/ci.sh full` also checks formatting without applying fixes.
 
+No bot opens dependency pull requests. Run `python3 scripts/outdated_deps.py`
+now and then to list outdated Dart and npm packages, pinned Python
+requirements and commit-pinned GitHub Actions; it changes nothing. Name
+ecosystems to narrow it, e.g. `python3 scripts/outdated_deps.py dart actions`.
+
 Before tagging, commit the final release candidate and run
-`scripts/ci.sh preflight` in its clean checkout. This checks the SDK,
+`scripts/ci.sh preflight` and `scripts/ci.sh tools` in its clean checkout. This checks the SDK,
 dependencies, formatting, analysis and unit/widget tests. It records
 the commit and rejects uncommitted/untracked files or a changed HEAD at the end.
 Inspect `build/quality-gates/summary.md` and the per-gate logs on failure;
@@ -74,9 +79,9 @@ engines and packaged-app checks remain required.
 
 Only a `v*` **tag push** can enter the publication job, and only after every required gate
 and artifact check passes. Diagnostic artifacts stay in Actions. Only the
-publication job has write access; actions are pinned to commits and Dependabot
-proposes weekly updates. Each Mac release bundle is checked in its packaging
-job.
+publication job has write access; actions are pinned to commits, and
+`scripts/outdated_deps.py actions` lists newer releases. Each Mac release
+bundle is checked in its packaging job.
 
 Stockfish 19 stores the Intel network data in the arm64 slice of its universal
 executable ([upstream implementation](https://github.com/official-stockfish/Stockfish/blob/sf_19/src/universal/patch_x86_slice.sh)).

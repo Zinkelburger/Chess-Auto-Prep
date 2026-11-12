@@ -1,9 +1,10 @@
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/fen.dart';
-import 'package:chess_auto_prep/chess/pgn/chapter_heading.dart';
-import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/chess/generation/eval.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
+import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
+import 'package:chess_auto_prep/chess/pgn/chapter_heading.dart';
+import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:dartchess/dartchess.dart' show Side;
@@ -103,6 +104,17 @@ void main() {
     await tester.tap(find.text('Train this line'));
     await tester.pumpAndSettle();
   }
+
+  testWidgets('a board that is neither the chapter nor a find\'s line '
+      'lists every find, with no This chapter', (tester) async {
+    await openWith(tester, chapterWith('1. d4 d5'));
+    expect(find.text('None in this chapter.'), findsOneWidget);
+    await w.session.showAnalysisBoard(analysisBoard(side: Side.white));
+    await tester.pumpAndSettle();
+    expect(find.text('This chapter'), findsNothing);
+    expect(find.text('None in this chapter.'), findsNothing);
+    expect(find.textContaining('f6?', findRichText: true), findsOneWidget);
+  });
 
   testWidgets('a trap the chapter plays is trained there at once', (
     tester,

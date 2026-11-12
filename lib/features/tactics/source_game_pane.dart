@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import '../../chess/pgn/move_label.dart';
 import '../../chess/tactics/puzzle.dart';
 import '../../chess/tactics/source_game.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/theme.dart';
 import 'source_games.dart';
-import '../../ui/app_icons.dart';
 
 /// The Game tab in Tactics: the whole game the puzzle on the board came
 /// from, who played it and how it went, the review's counts for it, and its

@@ -21,6 +21,11 @@ void main() {
     );
   });
 
+  test('the very first line of the text is read too', () {
+    expect(readHeading('// Draft\n').draft, isTrue);
+    expect(readHeading('// Root: 1. e4\n').rootMoves, ['e4']);
+  });
+
   test('a heading with no root starts at the start and is not a draft', () {
     final heading = readHeading(emptyChapter);
     expect(heading.startsAtTheStart, isTrue);
@@ -43,7 +48,7 @@ void main() {
     final text = newChapterText(
       name: 'Gambit',
       side: Side.white,
-      created: DateTime(2026, 9, 21, 10, 0, 0),
+      created: DateTime(2026, 9, 21, 10),
       rootMoves: const ['e4', 'e5', 'f4'],
     );
     expect(

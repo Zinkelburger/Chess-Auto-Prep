@@ -5,13 +5,13 @@ import 'package:flutter/material.dart';
 
 import '../../chess/fen.dart';
 import '../../chess/pgn/comment_layout.dart';
-import '../../chess/pv_text.dart';
 import '../../chess/pgn/game_tree.dart';
+import '../../chess/pv_text.dart';
 import '../../ui/theme.dart';
-import '../board/preview_target.dart';
-import 'comment_line.dart';
-import '../document/document_session.dart';
 import '../board/line_preview.dart';
+import '../board/preview_target.dart';
+import '../document/document_session.dart';
+import 'comment_line.dart';
 
 /// Asked when the pointer rests on a move written in a comment, with where
 /// on the screen it is; and when it leaves.

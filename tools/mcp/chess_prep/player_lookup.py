@@ -23,13 +23,16 @@ finds land in `lookup.candidates` until the user confirms one.
 
 from __future__ import annotations
 
+import http.client
 import json
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Collection, Sequence
 from typing import Any
 
 from . import uscf
+from .chesscom import ChesscomError
 from .names import handle_guesses, name_match
 from .people import PeopleStore, TournamentStore, handles
 
@@ -42,6 +45,10 @@ ELO_AGREEMENT = 300
 
 _TRUSTED_SOURCES = {"uscf_online_event", "self_declared", "manual"}
 _LICHESS_USERS = "https://lichess.org/api/users"
+
+#: What a failed account probe raises: the site gave up, the socket or HTTP
+#: exchange broke, or the body was not the JSON list it should be.
+_PROBE_ERRORS = (ChesscomError, OSError, http.client.HTTPException, ValueError, TypeError)
 
 
 # ── Account probes ──────────────────────────────────────────────────────────
@@ -113,7 +120,7 @@ def probe_accounts(
     *,
     title: str | None = None,
     rating: int | None = None,
-    skip: set[tuple[str, str]] = frozenset(),
+    skip: Collection[tuple[str, str]] = frozenset(),
 ) -> dict[str, Any]:
     """Try usernames built from each spelling on chess.com and Lichess."""
     # Round-robin over spellings, so an alias gets its most likely
@@ -134,7 +141,7 @@ def probe_accounts(
             continue
         try:
             profile = _chesscom_profile(username)
-        except Exception as e:  # network trouble is reported, not raised
+        except _PROBE_ERRORS as e:  # network trouble is reported, not raised
             errors.append(f"chess.com {username}: {e}")
             continue
         if not profile or "username" not in profile:
@@ -168,7 +175,7 @@ def probe_accounts(
         lichess = _lichess_profiles(
             [g for g in guesses if ("lichess", g.lower()) not in skip]
         )
-    except Exception as e:
+    except _PROBE_ERRORS as e:
         lichess = []
         errors.append(f"lichess: {e}")
     for profile in lichess:
@@ -224,7 +231,7 @@ def lookup_person(
     title: str | None = None,
     probe: bool = True,
     people: PeopleStore | None = None,
-    otb_dbs: list[tuple[str, Any]] = (),
+    otb_dbs: Sequence[tuple[str, Any]] = (),
     use_uscf: bool = True,
 ) -> dict[str, Any]:
     """Everything the sources say about one person, and what is still open.
@@ -628,7 +635,7 @@ _APP_OPEN_NOTE = (
 
 
 def register_people_tools(registry: Any) -> None:
-    from .roster import load_roster, save_roster
+    from .roster import load_roster
     from .tools import ToolError, _b, _i, _obj, _s, _text
 
     def _otb(args: dict) -> list[tuple[str, Any]]:

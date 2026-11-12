@@ -1,6 +1,6 @@
 import '../ui/app_action.dart';
-import '../ui/pane_tabs.dart';
 import '../ui/app_keys.dart';
+import '../ui/pane_tabs.dart';
 import 'action_layout.dart';
 
 /// The tabs of the reading card: the moves, the
@@ -12,6 +12,7 @@ import 'action_layout.dart';
 /// and the Actions menu know nothing about which tabs there are.
 enum WorkspaceTab {
   moves('Moves'),
+  notes('Notes'),
   analysis('Analysis'),
   review('Game review'),
   solitaire('Solitaire'),
@@ -62,6 +63,7 @@ PaneTabs<WorkspaceTab> newWorkspaceTabs() => PaneTabs(
 PaneTabs<WorkspaceTab> readingTabs() => PaneTabs(
   [
     WorkspaceTab.moves.tab,
+    WorkspaceTab.notes.tab,
     WorkspaceTab.explorer.tab,
     WorkspaceTab.analysis.tab,
     WorkspaceTab.review.tab,
@@ -75,6 +77,7 @@ PaneTabs<WorkspaceTab> readingTabs() => PaneTabs(
 PaneTabs<WorkspaceTab> studyTabs() => PaneTabs(
   [
     WorkspaceTab.moves.tab,
+    WorkspaceTab.notes.tab,
     WorkspaceTab.train.tab,
     WorkspaceTab.explorer.tab,
     WorkspaceTab.analysis.tab,
@@ -91,6 +94,7 @@ PaneTabs<WorkspaceTab> studyTabs() => PaneTabs(
 PaneTabs<WorkspaceTab> viewerTabs() => PaneTabs(
   [
     WorkspaceTab.moves.tab,
+    WorkspaceTab.notes.tab,
     WorkspaceTab.explorer.tab,
     WorkspaceTab.filter.tab,
     WorkspaceTab.analysis.tab,
@@ -161,7 +165,7 @@ List<AppAction> tabActions(
                       _ => null,
                     },
               shortcut: tabs.selected == tab.id ? AppKey.closeTab.label : null,
-              group: 'Action Tabs',
+              group: 'View',
               alternatives: layout?.destinations(tab.id) ?? const [],
             )
           : AppAction(
@@ -169,13 +173,13 @@ List<AppAction> tabActions(
               layout == null
                   ? () => tabs.show(tab.id)
                   : () => layout.reveal(tab.id),
-              group: 'Action Tabs',
+              group: 'View',
               alternatives: layout?.destinations(tab.id) ?? const [],
             ),
   AppAction(
     'Next tab',
     tabs.open.length < 2 ? null : tabs.next,
     shortcut: AppKey.nextTab.label,
-    group: 'Action Tabs',
+    group: 'View',
   ),
 ];

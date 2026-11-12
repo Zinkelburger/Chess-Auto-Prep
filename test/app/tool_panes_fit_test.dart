@@ -1,13 +1,13 @@
 import 'dart:async';
 
 import 'package:chess_auto_prep/app/mode.dart';
-import 'package:chess_auto_prep/features/trainer/lesson_view.dart';
-import 'package:chess_auto_prep/ui/theme.dart';
-import 'package:chess_auto_prep/ui/navigation_pages.dart';
 import 'package:chess_auto_prep/features/library/library_panel.dart';
-import 'package:chess_auto_prep/workspace/action_panes.dart';
-import 'package:chess_auto_prep/workspace/action_layout.dart';
 import 'package:chess_auto_prep/features/library/outline_panel.dart';
+import 'package:chess_auto_prep/features/trainer/lesson_view.dart';
+import 'package:chess_auto_prep/ui/navigation_pages.dart';
+import 'package:chess_auto_prep/ui/theme.dart';
+import 'package:chess_auto_prep/workspace/action_layout.dart';
+import 'package:chess_auto_prep/workspace/action_panes.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -103,7 +103,7 @@ void main() {
     expect(find.text('Positions'), findsWidgets);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
-    final layoutMenu = find.widgetWithText(SubmenuButton, 'Layout');
+    final layoutMenu = find.widgetWithText(SubmenuButton, 'View');
     await tester.ensureVisible(layoutMenu);
     await tester.tap(layoutMenu);
     await tester.pumpAndSettle();

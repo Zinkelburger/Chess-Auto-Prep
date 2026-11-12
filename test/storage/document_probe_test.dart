@@ -67,12 +67,16 @@ void main() {
   });
 
   test('both kinds are still unreadable, with a detail for the log', () async {
-    for (final status in [2, 3, 4]) {
+    for (final (status, detail) in [
+      (2, 'the file could not be read (error 5)'),
+      (3, 'the file changed while it was being read'),
+      (4, 'not a plain file this app can read'),
+    ]) {
       final probe = await probeAnswered(
         NativeFileObservation(status: status, error: 5),
       );
       expect(probe, isA<FileUnreadable>());
-      expect((probe as FileUnreadable).detail, isNotEmpty);
+      expect((probe as FileUnreadable).detail, detail);
     }
   });
 

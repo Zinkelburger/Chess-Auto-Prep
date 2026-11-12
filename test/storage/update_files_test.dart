@@ -131,6 +131,26 @@ void main() {
     expect(await folder.verified(expected), isNull);
   });
 
+  test("a verified file in another release's folder is not this one", () async {
+    final payload = ((await receive([bytes])) as Verified).payload;
+    final elsewhere = Directory(p.join(folder.root.path, 'v1.16.0-a'))
+      ..createSync();
+    File(payload.path).renameSync(p.join(elsewhere.path, expected.name));
+    File(p.join(folder.root.path, 'v1.17.0-file')).writeAsStringSync('x');
+    expect(await folder.verified(expected), isNull);
+  });
+
+  test('a download makes its folder, parents and all', () async {
+    final nested = UpdateFolder(Directory(p.join(root.path, 'a', 'b')));
+    final received = await nested.receive(
+      expected,
+      Stream.fromIterable([bytes]),
+      progress: (_) {},
+      stop: never,
+    );
+    expect(received, isA<Verified>());
+  });
+
   group('pruning', () {
     final old = DateTime.now().subtract(const Duration(hours: 1));
 
@@ -179,6 +199,22 @@ void main() {
       expect(killed.existsSync(), isFalse);
       expect(stalled.existsSync(), isFalse);
     });
+
+    test('a marker counts as live for five minutes, no longer', () async {
+      final stalled = attempt('v1.17.0-g', [
+        '${expected.name}.part',
+      ], at: DateTime.now().subtract(const Duration(minutes: 5, seconds: 30)));
+      final payload = ((await receive([bytes])) as Verified).payload;
+      await folder.prune(keep: payload, helperRunning: false);
+      expect(stalled.existsSync(), isFalse);
+    });
+
+    test('a running helper keeps only the attempt it waits in', () async {
+      final older = attempt('v1.16.0-a', ['old.zip'], at: old);
+      final payload = ((await receive([bytes])) as Verified).payload;
+      await folder.prune(keep: payload, helperRunning: true);
+      expect(older.existsSync(), isFalse);
+    });
   });
 
   test("a failed install's report is read at one start only", () async {
@@ -212,6 +248,26 @@ void main() {
         (await folder.takeFailedInstall())!.folder,
         folder.root.path,
         reason: 'only one of ours is shown',
+      );
+
+      Directory(p.dirname(outside)).createSync(recursive: true);
+      File(
+        p.join(folder.root.path, 'last-error.txt'),
+      ).writeAsStringSync('Update installation failed: x. Details: $outside');
+      expect(
+        (await folder.takeFailedInstall())!.folder,
+        folder.root.path,
+        reason: 'a folder outside, even one that is there, is not shown',
+      );
+
+      final gone = p.join(folder.root.path, 'v1.17.0-gone', 'install.log');
+      File(
+        p.join(folder.root.path, 'last-error.txt'),
+      ).writeAsStringSync('Update installation failed: x. Details: $gone');
+      expect(
+        (await folder.takeFailedInstall())!.folder,
+        folder.root.path,
+        reason: 'an attempt removed since is not shown',
       );
     },
   );

@@ -10,35 +10,35 @@ import '../features/settings/setting_rows.dart';
 import '../features/tournaments/tournament_run.dart';
 import '../features/trainer/train_pane.dart';
 import '../features/trainer/training_outline.dart';
+import '../storage/finds_store.dart';
 import '../ui/confirm_dialog.dart';
-import '../ui/status_bar.dart';
 import '../ui/listening_state.dart';
 import '../ui/move_notation.dart';
-import '../ui/pane_tabs.dart';
 import '../ui/navigation_pages.dart';
+import '../ui/pane_tabs.dart';
+import '../ui/status_bar.dart';
 import '../ui/theme.dart';
-import '../storage/finds_store.dart';
 import '../workspace/board/board_claim.dart';
+import '../workspace/board/move_field.dart';
 import '../workspace/book/book_chip.dart';
 import '../workspace/search/finds_panel.dart';
-import '../workspace/board/move_field.dart';
 import '../workspace/workspace.dart';
+import '../workspace/workspace_hooks.dart';
 import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_tabs.dart';
 import '../workspace/workspace_view.dart';
-import '../workspace/workspace_hooks.dart';
 import 'board_doors.dart';
 import 'document_views.dart';
 import 'full_screen.dart';
 import 'job_door.dart';
 import 'layout_memory.dart';
-import 'search_door.dart';
-import 'mode_view.dart';
 import 'mode.dart';
-import 'training_visibility.dart';
+import 'mode_view.dart';
 import 'player_wiring.dart';
+import 'search_door.dart';
 import 'top_bar.dart';
 import 'train_doors.dart';
+import 'training_visibility.dart';
 import 'window_actions.dart';
 import 'window_columns.dart';
 import 'window_keys.dart';
@@ -304,23 +304,13 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       _editing.value = _view.startsEditing;
       _view.entered();
     }
-    _editing.addListener(_redraw);
-    _columns.addListener(_redraw);
     _requests.addListener(_modeMayHaveChanged);
     _ws.inspection?.addListener(_analysisChanged);
     _ws.jobs?.addListener(_jobChanged);
   }
 
-  /// Reading quiets the board and editing gives it its tools back; the
-  /// columns redraw what they hold.
-  void _redraw() {
-    if (mounted) setState(() {});
-  }
-
   @override
   void dispose() {
-    _editing.removeListener(_redraw);
-    _columns.removeListener(_redraw);
     _requests.removeListener(_modeMayHaveChanged);
     _ws.jobs?.removeListener(_jobChanged);
     _ws.inspection?.removeListener(_analysisChanged);
@@ -443,7 +433,14 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
           say: _requests.say,
           child: ListenableBuilder(
             key: _statusContext,
-            listenable: Listenable.merge([_requests, widget.labs.offered]),
+            // Reading quiets the board and editing gives it its tools back;
+            // the columns redraw what they hold.
+            listenable: Listenable.merge([
+              _requests,
+              widget.labs.offered,
+              _editing,
+              _columns,
+            ]),
             builder: (context, _) => _requests.mode == Mode.repertoires
                 ? PgnDropRegion(
                     library: _docs.library,
@@ -552,6 +549,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
             session: _ws.session,
             onOpen: _doors.openFind,
             onTrain: _trainFind,
+            onBack: _columns.togglePositions,
             trailing: trailing,
           )
         : _requests.mode == Mode.trainer
@@ -628,6 +626,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         ),
         onOpenChapter: (ref) => unawaited(_requests.readInBuilder(ref, [])),
         onShowPositions: _columns.showPositions,
+        onTogglePositions: _columns.togglePositions,
         // The chapter a book move was found in: in the builder, at the
         // position the move leads to.
         onOpenPlace: (place) =>

@@ -8,8 +8,9 @@ import '../../chess/generation/evaluation_source.dart';
 import '../../chess/generation/expectimax_options.dart';
 import '../../storage/settings.dart';
 import '../../storage/settings_store.dart';
-import '../../ui/theme.dart';
+import '../../ui/listening_state.dart';
 import '../../ui/segments.dart';
+import '../../ui/theme.dart';
 
 /// What each Expectimax setting is called and the one line under it, said
 /// the same way behind the tab's gear and in Settings ▸ Expectimax.
@@ -34,10 +35,17 @@ abstract final class SearchSettingCopy {
       '${choice.speedsInOrder.map((s) => s.title).join(' ')} · '
       '${choice.ratingsInOrder.join(' ')}';
   static const rating = ('Maia rating', 'opponent replies at this Elo');
-  static const rootMoves = ('First move', 'our best engine moves searched');
+  static const rootMoves = (
+    'First move',
+    'our best engine moves compared at the start',
+  );
   static const candidateMoves = (
     'Later moves',
-    'our best engine moves searched',
+    'our moves searched after it; 1 goes deepest',
+  );
+  static const bothSides = (
+    'Other side too',
+    'adds its column; about twice the time',
   );
   static const rare = (
     'Search replies met once in',
@@ -132,6 +140,20 @@ class SearchSettingsView extends StatelessWidget {
     ),
   );
 
+  /// The tick that searches the board for the other side as well.
+  Widget _bothSides(ExpectimaxOptions e) => _SettingLine(
+    copy: SearchSettingCopy.bothSides,
+    leading: Checkbox(
+      value: e.bothSides,
+      semanticLabel: SearchSettingCopy.bothSides.$1,
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      onChanged: locked
+          ? null
+          : (on) => _change((o) => o.copyWith(bothSides: on ?? false)),
+    ),
+  );
+
   /// Who answers for the opponent besides the bar's choice: which Lichess
   /// games, whether Maia fills in, and Maia's rating where it is asked.
   List<Widget> _opponent(Settings s) {
@@ -202,6 +224,7 @@ class SearchSettingsView extends StatelessWidget {
             max: ExpectimaxOptions.maxMoves,
             onChanged: (n) => _change((o) => o.copyWith(candidateMoves: n)),
           ),
+          _bothSides(e),
           _number(
             SearchSettingCopy.rare,
             value: e.rareOnceIn,
@@ -353,7 +376,8 @@ class SearchNumberBox extends StatefulWidget {
   State<SearchNumberBox> createState() => _SearchNumberBoxState();
 }
 
-class _SearchNumberBoxState extends State<SearchNumberBox> {
+class _SearchNumberBoxState extends State<SearchNumberBox>
+    with ListeningState<SearchNumberBox> {
   late final _box = TextEditingController(text: _shown);
   final _focus = FocusNode();
 
@@ -365,10 +389,7 @@ class _SearchNumberBoxState extends State<SearchNumberBox> {
       '${widget.empty == null ? '' : ', or empty'}';
 
   @override
-  void initState() {
-    super.initState();
-    _focus.addListener(_onFocus);
-  }
+  Listenable listenableOf(SearchNumberBox widget) => _focus;
 
   @override
   void didUpdateWidget(SearchNumberBox old) {
@@ -378,14 +399,15 @@ class _SearchNumberBoxState extends State<SearchNumberBox> {
 
   @override
   void dispose() {
-    _focus.removeListener(_onFocus);
+    stopListening();
     _focus.dispose();
     _box.dispose();
     super.dispose();
   }
 
-  void _onFocus() {
-    if (_focus.hasFocus || !mounted) return;
+  @override
+  void changed() {
+    if (_focus.hasFocus) return;
     if (_box.text != _shown) {
       _box.text = _shown;
       widget.onProblem(null);

@@ -42,6 +42,7 @@ import time
 from collections import Counter
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
+from typing import Any
 
 import chess
 import chess.variant
@@ -108,7 +109,7 @@ def play(engines: tuple[Engine, Engine], settings: Settings, rng: random.Random,
     `outcome["team_one"]` is +1 if team one won, -1 if it lost, 0 for a
     draw, and None when the game hit `max_plies` and was abandoned.
     """
-    from bughouse.board import DualBoard  # noqa: PLC0415 -- worker-local import
+    from bughouse.board import DualBoard, IllegalMove  # noqa: PLC0415 -- worker-local import
 
     for engine in set(engines):
         engine.new_game()
@@ -119,7 +120,7 @@ def play(engines: tuple[Engine, Engine], settings: Settings, rng: random.Random,
     for letter, san in opening or []:
         try:
             dual.push(letter, san)
-        except Exception:  # noqa: BLE001 -- a bad opening just ends early
+        except (IllegalMove, ValueError, AssertionError, IndexError):  # a bad opening just ends early
             break
         plies[letter] += 1
     for step in range(2 * settings.max_plies):
@@ -263,7 +264,7 @@ def selfplay(games: int, settings: Settings, jobs: int, seed: int | None) -> int
                     f"{stats['plies'] / stats['games'] / 2:.0f} plies/board", flush=True,
                 )
     stats["seconds"] = round(time.time() - started, 1)
-    history = json.loads(stats_path.read_text()) if stats_path.exists() else {"runs": []}
+    history: dict[str, Any] = json.loads(stats_path.read_text()) if stats_path.exists() else {"runs": []}
     history["runs"].append(stats)
     history["positions"] = {
         k: sum(run["positions"].get(k, 0) for run in history["runs"]) for k in ("train", "validation")

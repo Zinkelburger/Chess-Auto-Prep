@@ -237,6 +237,86 @@ void main() {
     );
   });
 
+  test('an answer cites the games of at most twelve moves', () async {
+    final db = sqlite3.open(p.join(folder.path, 'master_games.db'));
+    final key = positionKey(Fen.initial);
+    const more = [
+      'a2a3',
+      'a2a4',
+      'b2b3',
+      'b2b4',
+      'c2c3',
+      'c2c4',
+      'f2f3',
+      'f2f4',
+      'g2g3',
+      'g2g4',
+      'h2h3',
+    ];
+    for (final (i, uci) in more.indexed) {
+      final id = i + 3;
+      db.execute(
+        'INSERT INTO games(id, event, white, black, result, movetext) '
+        'VALUES(?, ?, ?, ?, ?, ?)',
+        [
+          id,
+          'Event $id',
+          'A',
+          'B',
+          '1-0',
+          ZLibEncoder().convert(utf8.encode('1. e4')),
+        ],
+      );
+      db.execute(
+        'INSERT INTO book(pos, move, ply, games, white_wins, draws, '
+        'black_wins, elo_sum, elo_n, max_elo, last_year, top_game, '
+        'recent_game) VALUES(?, ?, 0, 5, 2, 2, 1, 0, 0, 0, 0, ?, ?)',
+        [key, uci, id, id],
+      );
+    }
+    db.close();
+    final found =
+        await book.lookup(Fen.initial, classicalOnly: false) as BookFound;
+    expect(found.answer.moves, hasLength(13));
+    expect(found.answer.games, hasLength(12));
+  });
+
+  test('a date of just a year still gives the year', () async {
+    final db = sqlite3.open(p.join(folder.path, 'master_games.db'));
+    db.execute("UPDATE games SET date = '2023' WHERE id = 2");
+    db.close();
+    final found =
+        await book.lookup(Fen.initial, classicalOnly: false) as BookFound;
+    expect(found.answer.games.first.year, 2023);
+  });
+
+  test('a game\'s PGN leaves out the tags it has no value for', () async {
+    final pgn = (await book.gamePgn('2'))!;
+    expect(pgn, contains('[Event "Rapid"]'));
+    for (final tag in ['Site', 'Round', 'WhiteElo', 'BlackElo', 'ECO']) {
+      expect(pgn, isNot(contains('[$tag ')), reason: tag);
+    }
+  });
+
+  test('a file that is not a database is not available', () async {
+    final path = p.join(folder.path, 'broken.db');
+    await File(path).writeAsString('not sqlite');
+    expect(await SqliteMasterBook(path).available(), isFalse);
+  });
+
+  test('a classical marker that is not text reads as not built', () async {
+    final db = sqlite3.open(p.join(folder.path, 'master_games.db'));
+    db.execute('INSERT OR REPLACE INTO meta VALUES(?, ?)', [
+      'classical_counts',
+      [0xFF, 0xFE, 0x63],
+    ]);
+    db.close();
+    expect(
+      await book.lookup(Fen.initial, classicalOnly: true),
+      isA<BookClassicalIncomplete>(),
+    );
+  });
+
   test('the key is the FNV-1a over the four position fields', () {
     // The counters are not part of the position.
     expect(

@@ -3,15 +3,17 @@
  * Lichess's analysis settings with Lichess's defaults; the engine ones are
  * its engine gear.
  */
-const KEY = 'bughouse-analysis-v4';
-/** Earlier keys, read when this one is missing. Their sit search counted something else then (Hivemind's positions, Fairy-Stockfish's thousands of nodes), so it is dropped. */
-const OLD_KEYS = ['bughouse-analysis-v3', 'bughouse-analysis-v2', 'bughouse-analysis-v1'];
-/** The sit panel's default search per row, in nodes. */
-const SIT_NODES = 500_000;
+const KEY = 'bughouse-analysis-v5';
+/** Earlier keys, read when this one is missing. v4 and before belonged to other engines; their display switches still apply. */
+const OLD_KEYS = ['bughouse-analysis-v4', 'bughouse-analysis-v3', 'bughouse-analysis-v2', 'bughouse-analysis-v1'];
+/** The default time to measure piece values on the board shown, in seconds. */
+const VALUES_SECONDS = 3;
 /** The gear's search times in seconds, as lila's; 0 is ∞ (infinite analysis). */
 export const SEARCH_TICKS = [2, 4, 6, 8, 10, 12, 15, 20, 30, 60, 120, 300, 0];
-/** The gear's sit searches, in nodes per row. */
-export const SIT_TICKS = [100_000, 200_000, 500_000, 1_000_000, 2_000_000, 5_000_000];
+/** The bughouse board's: HypeBeast decides within a time, so it has no ∞. */
+export const BUGHOUSE_SEARCH_TICKS = SEARCH_TICKS.filter((s) => s > 0);
+/** The gear's times for measuring piece values, in seconds. */
+export const VALUES_TICKS = [1, 2, 3, 5, 10, 20, 30];
 
 export interface Settings {
   engineOn: boolean;
@@ -21,8 +23,10 @@ export interface Settings {
   searchSeconds: number;
   /** Search threads; null for the recommended count. */
   threads: number | null;
-  /** The sit panel's search for each row, in nodes; null for the default. */
-  sitNodes: number | null;
+  /** Time to measure what one more piece is worth on the board shown, in seconds; null for the default. */
+  valuesSeconds: number | null;
+  /** Bughouse boards shown: one (the partner board stays out of play) or both. */
+  boards: 1 | 2;
   inline: boolean;
   disclosure: boolean;
   liveGlyphs: boolean;
@@ -46,7 +50,7 @@ export const TOGGLES: { key: Toggle; label: string; hotkey?: string; group: 'Mov
 ];
 
 const DEFAULTS: Settings = {
-  engineOn: true, multiPv: 2, searchSeconds: 10, threads: null, sitNodes: null,
+  engineOn: true, multiPv: 2, searchSeconds: 10, threads: null, valuesSeconds: null, boards: 1,
   inline: false, disclosure: false, liveGlyphs: false, glyphsOnBoard: true,
   bestArrows: true, maneuverArrows: false, variationArrows: true,
 };
@@ -71,9 +75,9 @@ export function threadsFor(settings: Settings): number {
   return Math.min(max, settings.threads ?? recommendedThreads(max));
 }
 
-/** The sit panel's search per row: the setting, or the default. */
-export function sitNodesFor(settings: Settings): number {
-  return settings.sitNodes ?? SIT_NODES;
+/** The time to measure piece values: the setting, or the default. */
+export function valuesSecondsFor(settings: Settings): number {
+  return settings.valuesSeconds ?? VALUES_SECONDS;
 }
 
 /** The settings kept in this browser, over the defaults. */
@@ -91,9 +95,8 @@ export function loadSettings(key = KEY, oldKeys = OLD_KEYS): Settings {
     if (typeof saved.searchSeconds === 'number' && SEARCH_TICKS.includes(saved.searchSeconds)) out.searchSeconds = saved.searchSeconds;
     else if (saved.infinite === true) out.searchSeconds = 0; // the old Infinite analysis switch
     if (typeof saved.threads === 'number') out.threads = clamp(saved.threads, 1, 32, 1);
-    // A sit search between the gear's ticks moves to the nearest one.
-    if (current && typeof saved.sitNodes === 'number')
-      out.sitNodes = SIT_TICKS.reduce((a, b) => (Math.abs(b - (saved.sitNodes as number)) < Math.abs(a - (saved.sitNodes as number)) ? b : a));
+    if (current && typeof saved.valuesSeconds === 'number' && VALUES_TICKS.includes(saved.valuesSeconds)) out.valuesSeconds = saved.valuesSeconds;
+    if (saved.boards === 2) out.boards = 2;
   } catch { /* Defaults. */ }
   return out;
 }

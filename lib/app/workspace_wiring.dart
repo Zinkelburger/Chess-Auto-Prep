@@ -1,39 +1,38 @@
 import 'dart:async';
 
 import '../chess/generation/evaluation_source.dart';
-
 import '../engines/engine_supervisor.dart';
+import '../engines/fixed_depth.dart';
 import '../net/chessdb_moves.dart';
 import '../net/search_evaluator.dart';
-import '../engines/fixed_depth.dart';
-import '../workspace/book/repertoire_catalog.dart';
 import '../storage/eval_cache.dart' show CachedEvaluator;
 import '../storage/my_games_files.dart';
 import '../storage/settings.dart';
-import '../workspace/book/board_book.dart';
-import '../workspace/book/books.dart';
-import '../workspace/review/chapter_audit.dart';
-import '../workspace/document/collection_analysis.dart';
 import '../workspace/analysis/engine_analysis.dart';
 import '../workspace/analysis/engine_jobs.dart';
+import '../workspace/book/board_book.dart';
+import '../workspace/book/books.dart';
+import '../workspace/book/gap_hunt.dart';
+import '../workspace/book/repertoire_catalog.dart';
+import '../workspace/book/repertoire_shelf.dart';
+import '../workspace/book/repertoire_tree.dart';
+import '../workspace/book/replies.dart';
+import '../workspace/document/collection_analysis.dart';
+import '../workspace/document/document_saver.dart';
+import '../workspace/document/document_session.dart';
 import '../workspace/explorer/explorer.dart';
 import '../workspace/explorer/file_filter.dart';
+import '../workspace/explorer/game_fetcher.dart';
+import '../workspace/explorer/local_games.dart';
+import '../workspace/explorer/opening_names.dart';
+import '../workspace/review/chapter_audit.dart';
+import '../workspace/review/game_review.dart';
+import '../workspace/review/solitaire.dart';
 import '../workspace/search/fill_gaps.dart';
 import '../workspace/search/fill_states.dart';
 import '../workspace/search/finds.dart';
-import '../workspace/explorer/game_fetcher.dart';
-import '../workspace/book/gap_hunt.dart';
-import '../workspace/explorer/local_games.dart';
-import '../workspace/explorer/opening_names.dart';
-import '../workspace/book/replies.dart';
-import '../workspace/book/repertoire_shelf.dart';
-import '../workspace/book/repertoire_tree.dart';
 import '../workspace/search/search_opponents.dart';
 import '../workspace/workspace.dart';
-import '../workspace/review/game_review.dart';
-import '../workspace/review/solitaire.dart';
-import '../workspace/document/document_saver.dart';
-import '../workspace/document/document_session.dart';
 import 'environment.dart';
 
 /// Builds the [Workspace] over the [AppEnvironment] and keeps its owners in step
@@ -94,6 +93,9 @@ final class WorkspaceWiring {
     _env.startAnalysisEngine,
     multiPv: _env.settings.value.engineLines,
     elsewhere: _tree.board,
+    switched: (on) => unawaited(
+      _env.settings.update(_env.settings.value.copyWith(engineOn: on)),
+    ),
   );
 
   late final _review = GameReview(
@@ -272,6 +274,9 @@ final class WorkspaceWiring {
       ..showThreat(s.engineThreat);
     _inspection.engine.setLines(s.engineLines);
     _env.settings.addListener(_engineSettings);
+    // The switch as it was left: a mode that hides an answer turns the
+    // engine off for itself when the answer comes up.
+    if (s.engineOn) unawaited(_analysis.enable());
   }
 
   /// What the engine was last started with, so a settings change that

@@ -32,6 +32,10 @@ USCF_EVENTS_CACHE = Path(__file__).parent / "data" / "uscf_events_cache.json"
 AFFILIATE_ID = "A6044892"  # CHESSCOM LLC
 
 SESSION = requests.Session()
+
+#: One bad event is counted and skipped: a failed request (requests' errors
+#: are OSErrors) or a reply missing the fields it should have.
+_EVENT_ERRORS = (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError)
 SESSION.headers.update({"User-Agent": "USCF-ChessCom-Mapper/1.0"})
 
 # Game data cutoff: chess.com retains full game records only after this date
@@ -60,7 +64,7 @@ def uscf_request(url: str, params: dict | None = None, retries: int = 3) -> dict
     for attempt in range(retries):
         try:
             resp = SESSION.get(url, params=params, timeout=30)
-        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
             wait = 10 * (attempt + 1)
             print(f"    [timeout/connection error, waiting {wait}s...]")
             time.sleep(wait)
@@ -283,7 +287,7 @@ def find_seed(standings: list[dict], cc_games: dict[str, list[dict]]) -> tuple[s
     Returns (uscf_member_id, cc_username) or None.
     """
     # Build all CC signatures
-    cc_signatures: dict[str, list[tuple]] = {}
+    cc_signatures: dict[tuple, list[str]] = {}
     for username, games in cc_games.items():
         sig = tuple(
             (g["round"], cc_result_to_wld(g["result"]))
@@ -426,7 +430,7 @@ def match_disconnected_components(
     additions: dict[str, str] = {}
 
     # Build CC signatures for unmapped players
-    cc_sigs: dict[str, list[tuple]] = {}
+    cc_sigs: dict[tuple, list[str]] = {}
     for username in unmapped_cc:
         games = cc_games[username]
         sig = tuple(
@@ -507,7 +511,7 @@ def score_based_matching(
         uid = s["memberId"]
         name = f"{s.get('firstName', '')} {s.get('lastName', '')}".strip()
         target_score = s["score"]
-        target_ordinal = s["ordinal"]
+        s["ordinal"]
 
         # Count real games played (not byes/unpaired)
         real_games = sum(
@@ -992,7 +996,7 @@ def main():
                 # Process this tournament section
                 try:
                     matches = process_tournament(eid, slug, standings, has_game_data)
-                except Exception as e:
+                except _EVENT_ERRORS as e:
                     print(f"  ✗ Error: {e}")
                     stats["error"] += 1
                     continue
@@ -1030,7 +1034,7 @@ def main():
 
                 print(f"  ✓ {len(standings)} players: {exact} exact, {ambiguous} ambiguous")
 
-        except Exception as e:
+        except _EVENT_ERRORS as e:
             print(f"  ✗ Unexpected error: {e}")
             stats["error"] += 1
 
@@ -1060,7 +1064,7 @@ def main():
     print("=" * 70)
     print(f"Events processed: {len(output['events_processed'])}")
     print(f"Players mapped: {len(output['players'])}")
-    print(f"\nConfidence breakdown:")
+    print("\nConfidence breakdown:")
     for conf in ["exact", "high", "medium", "low", "ambiguous", "unmappable"]:
         count = stats.get(conf, 0)
         if count:

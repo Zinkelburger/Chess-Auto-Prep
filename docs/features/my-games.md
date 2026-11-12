@@ -3,8 +3,8 @@
 A player who has repertoires and plays online opens this to see where their
 own games left their book: their moves the book does not play, opponents'
 moves the book has no answer for, and places the book ran out. They leave
-knowing which lines to fix, one click from the file that holds them. Saved
-games stay browsable and searchable with no book chosen.
+knowing which lines to fix, one click from the file that holds them. With no
+book chosen the games are read against every repertoire.
 
 Code: `lib/features/my_games/` (`MyGamesPanel`, `BookPane`, owner `GameBook`,
 copy in `book_words.dart`), composed by `MyGamesView` in
@@ -40,8 +40,7 @@ the list instead.
   same position (or the same place the book ended), most games first, under
   `You left book (n)`, `Not in your book (n)` and `Book ended (n)`. A row
   reads `6.f3 · 3 games` over `Book 6.Be3 · {file}` (`after 5.d3` over the
-  file for a book that ended). With no book: `Choose a book above to compare
-  openings. Your saved games are in Games.`
+  file for a book that ended).
 - **Card tabs** — `Game` (pinned: the moves), `Book` and `Game review` open by
   default, `Explorer` when opened.
 - **Book tab** — the verdict in full (`You left book: 6.f3 (book 6.Be3)`,
@@ -113,5 +112,7 @@ Repertoire builder at that position. Clicking a book move's file name (`Open
   check what they played compared to their book"), not a block inside
   Tactics.
 - 2026-09-23: games are read against the one opening book in use app-wide
-  (Books), shown and switched with the book chip wherever a book is read. The
-  default is no book, not every repertoire.
+  (Books), shown and switched with the book chip wherever a book is read.
+- 2026-11-09: until a book is chosen the book is every repertoire (`All
+  repertoires` on the chip), so the mode compares games without a book being
+  made first. This replaces the 2026-09-23 default of no book.

@@ -57,7 +57,10 @@ DraftLine fake(List<String> ucis, {double reach = 1}) => DraftLine(
 );
 
 /// The draft of a Ruy Lopez line with a d3 sideline folded into it.
-String ruyLopezDraft({Openings openings = Openings.none}) {
+String ruyLopezDraft({
+  Openings openings = Openings.none,
+  Side side = Side.white,
+}) {
   final kept = line('e4 e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6 O-O', reach: 0.6, value: 0.6);
   final aside = line(
     'e4 e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6 d3',
@@ -68,12 +71,12 @@ String ruyLopezDraft({Openings openings = Openings.none}) {
   expect(plan.entries.single.sidelines, hasLength(1));
   return draftChapterText(
     name: 'Main (draft)',
-    side: Side.white,
+    side: side,
     rootFen: Fen.initial,
     rootMoves: const [],
     prefix: const [],
     plan: plan,
-    created: DateTime(2026, 9, 22, 12, 0, 0),
+    created: DateTime(2026, 9, 22, 12),
     openings: openings,
   );
 }
@@ -93,6 +96,14 @@ DraftLine oneMove(String uci, {required String before}) => DraftLine(
 );
 
 void main() {
+  test('a draft names the user as the side it is for', () {
+    expect(ruyLopezDraft(), contains('[White "Me"]\n[Black "Training"]'));
+    expect(
+      ruyLopezDraft(side: Side.black),
+      contains('[White "Training"]\n[Black "Me"]'),
+    );
+  });
+
   group('lines of a searched tree', () {
     test('follow our chosen move and every answered reply, most reached '
         'first, ending on our move', () async {
@@ -125,6 +136,7 @@ void main() {
         anything,
       ]);
       expect(lines.first.moves.last.ours, isTrue);
+      expect(lines.first.moves[1].ours, isFalse, reason: 'Kd8 is theirs');
       expect(lines.last.reach, 0.3);
       expect(lines.last.moves.map((m) => m.move.san), ['e4', 'Kf8', anything]);
     });
@@ -149,6 +161,37 @@ void main() {
   });
 
   group('near-copies', () {
+    // Sixteen plies, ours on the even ones: eight decisions.
+    final base = [for (var i = 0; i < 16; i++) 'm$i'];
+
+    test('a near-copy that only goes on past a kept line folds in where '
+        'that line ends', () {
+      final plan = planDraft([
+        fake(base, reach: 0.5),
+        fake([...base, 'm16', 'm17'], reach: 0.4),
+      ]);
+      final (divergeAt, _) = plan.entries.single.sidelines.single;
+      expect(divergeAt, 16);
+    });
+
+    test('a near-copy that shares only the first move folds in after it', () {
+      final plan = planDraft([
+        fake(base, reach: 0.5),
+        fake(['m0', 'other', ...base.sublist(2, 7)], reach: 0.4),
+      ]);
+      final (divergeAt, _) = plan.entries.single.sidelines.single;
+      expect(divergeAt, 1);
+    });
+
+    test('a near-copy that leaves at the first move shares nothing and is '
+        'dropped', () {
+      final plan = planDraft([
+        fake(base, reach: 0.5),
+        fake(['other', ...base.skip(1), 'm16', 'm17'], reach: 0.4),
+      ]);
+      expect(plan.entries.single.sidelines, isEmpty);
+    });
+
     test('a near-copy folds into the kept line it shares the longest '
         'prefix with, as a short sideline', () {
       // Five decisions, four of them already taught: too little that is
@@ -461,5 +504,211 @@ void main() {
       final same = withContinuations(plan, const {});
       expect(same.entries.single.continuation, isEmpty);
     });
+  });
+
+  group('one move per position', () {
+    Fen fenOf(Position position) => Fen(position.fen);
+    final start = positionOf(Fen.initial.value);
+
+    /// Our position [at] with [moves] as candidates, best by value first,
+    /// each leading to a leaf worth what it says.
+    OurNode choice(Position at, List<(String, String, int)> moves) =>
+        OurNode.over(
+          fen: fenOf(at),
+          evalForUs: const Eval(0),
+          candidates: [
+            for (final (uci, san, cp) in moves)
+              CandidateMove(
+                move: MoveRef(uci: uci, san: san),
+                child: HorizonNode(
+                  fen: fenOf(afterUci(at, uci)),
+                  evalForUs: Eval(cp),
+                ),
+              ),
+          ],
+        );
+
+    test('a position two move orders reach is answered with the move of '
+        'the likelier line', () {
+      // 1.Nf3 Nf6 2.Nc3 and 1.Nc3 Nf6 2.Nf3 are not searched here: the two
+      // paths are built by hand to end on the same position, where the
+      // search, valuing each path on its own, chose differently.
+      final shared = afterUci(afterUci(start, 'e2e4'), 'e7e5');
+      final likely = choice(shared, [('g1f3', 'Nf3', 60), ('b1c3', 'Nc3', 40)]);
+      final rare = choice(shared, [('b1c3', 'Nc3', 70), ('g1f3', 'Nf3', 30)]);
+      final tree = OpponentNode.over(
+        fen: fenOf(start),
+        evalForUs: const Eval(0),
+        replies: [
+          ReplyMove(
+            move: const MoveRef(uci: 'x1', san: 'x1'),
+            probability: 0.7,
+            child: likely,
+          ),
+          ReplyMove(
+            move: const MoveRef(uci: 'x2', san: 'x2'),
+            probability: 0.3,
+            child: rare,
+          ),
+        ],
+      );
+      expect(likely.chosen.move.uci, 'g1f3');
+      expect(rare.chosen.move.uci, 'b1c3');
+
+      final decided = draftDecisions(tree);
+      expect(decided[fenOf(shared).position], 'g1f3');
+      final lines = linesOf(tree, decided: decided);
+      expect([for (final l in lines) l.moves.last.move.uci], ['g1f3', 'g1f3']);
+      // Without the decisions each path keeps its own choice.
+      expect(
+        [for (final l in linesOf(tree)) l.moves.last.move.uci],
+        ['g1f3', 'b1c3'],
+      );
+    });
+
+    test('where the chapter already plays a move the search looked at, the '
+        'line follows the chapter', () {
+      final at = afterUci(afterUci(start, 'e2e4'), 'e7e5');
+      final node = choice(at, [('g1f3', 'Nf3', 60), ('f1c4', 'Bc4', 40)]);
+      final decided = draftDecisions(
+        node,
+        pins: {
+          fenOf(at).position: {'f1c4'},
+        },
+      );
+      expect(
+        linesOf(node, decided: decided).single.moves.single.move.uci,
+        'f1c4',
+      );
+      // A move the search never looked at cannot be followed.
+      final unknown = draftDecisions(
+        node,
+        pins: {
+          fenOf(at).position: {'d2d4'},
+        },
+      );
+      expect(
+        linesOf(node, decided: unknown).single.moves.single.move.uci,
+        'g1f3',
+      );
+    });
+  });
+
+  group('the order of a draft', () {
+    test('lines that start on the opponent\'s move group by that move', () {
+      // From a position with the opponent to move: each line starts with
+      // their reply, and teaches decisions of its own.
+      DraftLine theirs(String reply, String ours, double reach) => DraftLine(
+        moves: [
+          DraftMove(
+            move: MoveRef(uci: reply, san: reply),
+            before: 'start',
+            after: Fen.initial,
+            value: 0.5,
+            ours: false,
+          ),
+          DraftMove(
+            move: MoveRef(uci: ours, san: ours),
+            before: 'after $reply',
+            after: Fen.initial,
+            value: 0.5,
+            ours: true,
+          ),
+        ],
+        reach: reach,
+      );
+      final plan = planDraft([
+        theirs('a', 'x', 0.3),
+        theirs('b', 'y', 0.25),
+        theirs('a', 'z', 0.2),
+      ]);
+      expect([for (final e in plan.entries) e.line.ucis.last], ['x', 'z', 'y']);
+    });
+
+    test('lines that start with the same reply are kept together, the reply '
+        'games take most often first', () {
+      // Ours on the even plies: the first reply is the second move.
+      final plan = planDraft([
+        fake(['a', 'r1', 'b', 's1', 'c'], reach: 0.30),
+        fake(['a', 'r2', 'd', 't1', 'e'], reach: 0.25),
+        fake(['a', 'r2', 'd', 't2', 'f'], reach: 0.20),
+        fake(['a', 'r1', 'b', 's2', 'g'], reach: 0.05),
+      ]);
+      expect(
+        [for (final entry in plan.entries) entry.line.ucis.join(' ')],
+        [
+          // r2 is met in 45% of games, r1 in 35%.
+          'a r2 d t1 e',
+          'a r2 d t2 f',
+          'a r1 b s1 c',
+          'a r1 b s2 g',
+        ],
+      );
+    });
+  });
+
+  group('what a trap says', () {
+    test('a trap\'s reply carries why it is marked, in words, before its '
+        'tokens', () {
+      const trap = DraftMove(
+        move: MoveRef(uci: 'f7f6', san: 'f6'),
+        before: 'board',
+        after: Fen.initial,
+        value: 0.6,
+        ours: false,
+        share: 0.44,
+        trapLossCp: 90,
+      );
+      expect(trapNote(trap), 'Trap: played 44%, loses 0.9.');
+      final tree = draftTree(
+        const DraftEntry(line: DraftLine(moves: [trap], reach: 1)),
+        rootFen: Fen.initial,
+      );
+      expect(
+        tree.children.single.comment,
+        startsWith('Trap: played 44%, loses 0.9. [%cumProb'),
+      );
+      expect(tree.children.single.nags, [2]);
+    });
+
+    test('any other move says nothing', () {
+      expect(trapNote(line('e4').moves.single), isNull);
+    });
+  });
+
+  group('line names', () {
+    test('the family most lines share is left off each of them', () {
+      const names = [
+        'Italian Game: Two Knights Defense',
+        'Italian Game: Classical Variation',
+        'Scotch Game: Benima Defense',
+        null,
+      ];
+      final family = sharedFamily(names);
+      expect(family, 'Italian Game');
+      expect(
+        [for (final name in names.nonNulls) withoutFamily(name, family)],
+        [
+          'Two Knights Defense',
+          'Classical Variation',
+          'Scotch Game: Benima Defense',
+        ],
+      );
+    });
+
+    test(
+      'one line, or lines of different openings, keep their whole names',
+      () {
+        expect(sharedFamily(const ['Ruy Lopez: Morphy Defense']), isNull);
+        expect(
+          sharedFamily(const [
+            'Ruy Lopez: Morphy Defense',
+            'Italian Game: Classical Variation',
+          ]),
+          isNull,
+        );
+        expect(withoutFamily('Italian Game', 'Italian Game'), 'Italian Game');
+      },
+    );
   });
 }

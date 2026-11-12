@@ -10,6 +10,230 @@
 # that file misses may well be caught next door. Survivors are re-run against
 # the third field before being reported, otherwise the score is a lower bound
 # and it sends people to write tests that already exist.
+#
+# Not listed: files whose only survivors are equivalent mutants, which no
+# test can kill because the program behaves the same either way. Listing
+# them would report a hole that is not there on every sweep.
+#   lib/chess/explorer_answer.dart:109 `n >= 10` -> `>`: both branches print 10.
+#   lib/chess/bughouse/table_line.dart:250 the `-1` floor: nodes are never negative.
+#   lib/chess/fen.dart:84,142,145,185: each only sends the fast writer to
+#     dartchess's own FEN, which writes the same characters.
+#   lib/chess/generation/draft_lines.dart:98 the queue's first tie number,
+#     :111 `?? false` (the chosen move is always the first candidate), and
+#     :343 `fold(0` (a constant added to every group keeps their order).
+#   lib/chess/generation/expectimax_options.dart:185 the least later moves:
+#     the default is that least too.
+#   lib/chess/generation/finds.dart:408 `gain < practicalMinGain` -> `<=`:
+#     a gain of exactly 0.02 cannot be built from expected scores.
+#   lib/chess/generation/legal_moves.dart:61 `>` -> `>=`: a move never
+#     lands where it started.
+#   lib/chess/generation/mainline_book.dart:131 the `0` level of an empty
+#     queue (nothing runs), :397 the share given our adopted candidates
+#     (only replies' shares are read).
+#   lib/chess/generation/sources.dart:167 `covered >= mass - 1e-12` -> `>`:
+#     the tolerance already takes the equal case.
+#   lib/chess/generation/trap_scent.dart:48 the max's `>` -> `>=`.
+#   lib/chess/generation/traps.dart:306 `<` -> `<=` on the off-thread size:
+#     the same work either way.
+#   lib/chess/generation/tree_wire_v4.dart:196 `depth > deepest` -> `>=`.
+#   lib/chess/move_sequence.dart:65 `-` -> `+` on the last start: later
+#     starts fail the length check.
+#   lib/chess/pgn/chapter_grouping.dart:128 the `1 << 30` start of the best
+#     run count, :178 the runs' start (every key moves by the same amount).
+#   lib/chess/pgn/movetext_reader.dart:268 the UCI cache's 64 * 64 size.
+#   lib/chess/pgn/pgn_lexer.dart:162, :196, :198, :238: each guards an index
+#     no input reaches (a found newline or brace at 0, a backslash second
+#     from the end).
+#   lib/chess/pgn/chapter_sections.dart:240 `<` -> `<=` on the kept order:
+#     a game's place never repeats.
+#   lib/chess/pgn/comment_layout.dart:123 the `-1` of a marker with no
+#     closing name, :329 `next[1]` -> `next[2]` (the dots come with the
+#     number), :396 which wrapped reading is tried first (unspecified).
+#   lib/chess/pgn/game_order.dart:30 the size of the 1 and -1 that put an
+#     unrated game last (only their sign is read).
+#   lib/chess/pgn/line_moves.dart:119 `.first` -> `.last` for an empty
+#     chapter's root: lines from two roots are refused either way.
+#   lib/chess/pgn/pgn_issue.dart:149 `offset < length` -> `<=`: both give
+#     the length at the end.
+#   lib/chess/pgn/pgn_reader.dart:128 the `0` place of a FEN issue with no
+#     FEN tag: only a FEN tag makes the position unreadable.
+#   lib/chess/pgn/reading_place.dart:91 `game >= 0` -> `>= 1`: game 0 is
+#     found by its key either way.
+#   lib/chess/pgn/repertoire_import.dart:274, :462 `.first` -> `.last`: a
+#     line's positions each have one move.
+#   lib/chess/pgn/rewrite_gate.dart:118-119 (headers) and :182-183 (NAGs):
+#     no header or NAG the writer writes comes back different without the
+#     reader first reporting an issue, which the gate refuses on already.
+#   lib/chess/pgn/study_edits.dart:117 `by < 0` -> `< 1` (the refusal's
+#     words for a move of none, which the editor never asks for), :209 the
+#     `0` focus when nothing was taken (a moved chapter is always found).
+#   lib/chess/tactics/analyzed_games.dart:19, :47 `end < 0` -> `<= 0` or
+#     `< 1`: the newline follows the prefix, so it is never at 0.
+#   lib/chess/tactics/puzzle_edits.dart:143, :155 a header found at 0: a
+#     puzzle game's first header is always its Event.
+#   lib/chess/tactics/puzzle_run.dart:83 the `-1` place of no current
+#     puzzle: anything below 0 reads the same.
+#   lib/chess/training/sitting.dart:56 the epoch a due line with no date
+#     sorts by, 1 ms later or in local time: no line is due before 1970.
+#   lib/chess/tournament/standings.dart:107 the top clamp of the low bound
+#     (mean less a band never reaches 1), :117 the 9 cut-off and `>` -> `>=`
+#     (the quadrature gives the same 0 or 1 there, and z is never 0).
+#   lib/chess/training/line_order.dart:31 the `-1` of a line with no
+#     likelihood (every likelihood is at least 0), :54 the last band's 4.
+# Listed with equivalent mutants a --max 30 sample can draw:
+#   lib/storage/master_games_import.dart:174 the Windows disk-full codes,
+#     which a Linux run never reads.
+#   lib/storage/master_games_import.dart:232 `.first` -> `.last`: a pragma
+#     answers one row.
+#   lib/storage/master_corpus.dart:131, :134 `.first` -> `.last` (a count
+#     is one row), :201 `> 0` -> `>= 0` (every rating is at least 0), :224
+#     the offset's upper clamp, :231 and :254 the page limits (one row
+#     past the page is all `more` needs; extra rows are dropped).
+#   lib/storage/master_book.dart:212, :270, :283 `.first` -> `.last`: each
+#     lookup is by a primary key, so it finds one row at most.
+#   lib/storage/line_progress.dart:172 `< 2` -> `<= 2`: every training
+#     row the reader accepts has more than two cells.
+#   lib/storage/log_file.dart:21 the byte count's first value: `open`
+#     sets it before anything is written.
+#   lib/storage/edit_scope.dart:151 `?? -1` -> `?? 0`: reached only when
+#     the other scope is a whole document, so the pair is one either way.
+#   lib/storage/generation_trees.dart:116 `create: false` -> `true`: the
+#     runs folder was just seen, so every folder above it exists.
+#   lib/storage/file_lock.dart:69 `recursive: true` (the temp folder
+#     exists), :81 the two-minute deadline and :97 the 10 ms wait (timing),
+#     :85 `return true` -> `false` (closing the lock database rolls the
+#     transaction back as the explicit ROLLBACK does).
+#   lib/storage/eval_cache.dart:86-87 `.first` -> `.last`: `fen` is the
+#     key, so a lookup finds one row at most.
+#   lib/storage/document_text.dart:128 `<` -> `<=`: a file of exactly the
+#     sample size is sampled whole either way.
+#   lib/storage/directory_snapshot.dart:162 `||` -> `&&` after the hash
+#     check: a file seen without one fails its null check, and capture
+#     refuses any error the same way.
+#   lib/storage/training_writes.dart:122 `||` -> `&&`: the disk returns
+#     bytes exactly when it reports success.
+#   lib/storage/disk_usage.dart:126, :132, :133 `>=` -> `>`: the Windows
+#     sharing-violation retry, which a Linux run never takes.
+#   lib/storage/directory_entries.dart: the Windows long-path branch, which
+#     a Linux run never takes.
+#   lib/storage/directory_snapshot.dart:74 `||` -> `&&` (an entry with the
+#     right count of fields but a wrong one lacks a field the reader then
+#     refuses), :210 `||` -> `&&` after `path.isEmpty` (an empty path never
+#     normalizes to itself).
+#   lib/storage/chapter_directory.dart:176 `.first` -> `.last` (either
+#     names an unreadable file the snapshot needs), :550 the off-thread
+#     parse threshold.
+#   lib/storage/book_references.dart:239 `||` -> `&&`: planning the move
+#     again from what it planned from, or wrote, gives what it wrote.
+#   lib/storage/backup_relocation.dart:275 the two-second retry window.
+#   lib/storage/backups.dart:242 following a link where the index should
+#     be: it only decides whether the folder's parents are flushed again.
+#   lib/storage/book_file.dart:75 the read counter's start: only compared.
+#   lib/storage/update_files.dart:274 `<` -> `<=` at exactly five minutes:
+#     no clock lands on it.
+#   lib/storage/update_install.dart:156 the 100 ms poll, :384 the poll
+#     count's start (a last look follows the loop), :411 the 10 s command
+#     timeout, :285 `flush: true` on the arming marker: timing and
+#     durability only.
+#   lib/storage/atomic_write.dart:121 the macOS flush codes: a Linux run
+#     never reads them.
+#   lib/storage/audit_store.dart:98 `.first` -> `.last`: `fen` is the key,
+#     so a lookup finds one row at most.
+#   lib/storage/viewer_drafts.dart:92, :109, :160 the 64 KiB off-thread
+#     threshold (the same bytes either side), :146-148 `||` -> `&&` (a
+#     field of the wrong type then fails its cast, and `find` sets the
+#     record aside the same way).
+#   lib/chess/typed_move.dart:102 `>` -> `>=` (a castling king never lands
+#     on its own square), :187 `.first` -> `.last` (every candidate is then
+#     checked against the same four characters).
+#   lib/chess/game_filter.dart:168 `> 32` -> `>= 32`: when the pattern cache
+#     is emptied, which no result shows.
+#   lib/chess/pgn/game_review.dart:73 `was > 0` -> `> 1`: a mate is
+#     thousands of centipawns either way.
+#   lib/storage/file_relocation.dart:434 `create: true` for a source's parents,
+#     which exist; :123 `$1` -> `$2`: admission refuses the same changes.
+#   lib/chess/training/records.dart:53 `_capped`'s `>` -> `>=`: a streak
+#     of three is capped to three.
+#   lib/chess/training/training_line.dart:84 the `yourMoves` loop's
+#     `<` -> `<=`: `isYours` refuses the ply at the quiz end itself.
+#   lib/chess/generation/search.dart:241 `> _deepest` -> `>=`, :400 the
+#     snapshot interval's `>` -> `>=`, :638 the 16 ms yield: timing only.
+#   lib/workspace/search/fill_gaps.dart:165 (read only while a run is
+#     running), :589 (a 25000-node budget one larger), :689 (the run's end
+#     notifies a microtask later).
+# lib/workspace (outside document/), lib/net and lib/engines, with
+# equivalent mutants a --max 30 sample can draw:
+#   lib/workspace/book/books.dart:47 the first `_unreadable` (every read
+#     sets it before anything asks), :450 the id counter's start (ids stay
+#     unique).
+#   lib/workspace/book/repertoire_catalog.dart:45 the first `_dirty` (every
+#     read is begun by setting it), :47 the revision counter's start (only
+#     its changes are read).
+#   lib/workspace/book/repertoire_shelf.dart:45 the version counter's start
+#     (only its changes are read), :169 `.first` -> `.last` (the chapters
+#     of one file share its path), :226 `<` -> `<=` on the off-thread size.
+#   lib/workspace/search/finds.dart:302 `<` -> `<=` in the node count:
+#     only which isolate reads the tree.
+#   lib/workspace/search/fill_states.dart:329, :330 FillDone's two `false`
+#     defaults (the one maker of a FillDone passes both).
+#   lib/workspace/analysis/engine_analysis.dart:182 the first `_replaced`
+#     (enable resets it before an engine can stop answering).
+#   lib/workspace/search/search_opponents.dart:75, :156 the `1` game a database
+#     falls back under when nothing is named (read only with a fallback,
+#     which always names its own).
+#   lib/workspace/search/fill_lines.dart:64 the first line count, :113, :131
+#     the `0` lines of a draft not written (the count is read only with a
+#     written draft).
+#   lib/workspace/review/game_review.dart:67 the main line compared from its
+#     second position (a game of the same file and number with another start
+#     reaches other positions after it).
+#   lib/workspace/book/gap_hunt.dart:51 the first `_walking`, :53, :107, :133 the
+#     Next index set to -1 (every finished walk sets it, and no Next is
+#     offered before one), :117 both `!=` (a session always has a chapter).
+#   lib/workspace/book/gap_walk.dart:168 a position reached below the floor
+#     (replies under it are never visited; only a floor above 1 reaches it),
+#     :191 `<` -> `<=` (the same value is kept either way).
+#   lib/workspace/explorer/explorer.dart:494 the first empty-answer count (the
+#     first empty answer sets it, there being no line before it to go on).
+#   lib/workspace/explorer/filter_run.dart:25 the 2 s limit, :36 the 4 ms turn and
+#     :84 its `>=`: timing only.
+#   lib/workspace/explorer/local_games.dart:342 `||` -> `&&` on a build's
+#     progress (a build is cancelled whenever it stops being the one, and a
+#     cancelled build reports nothing more).
+#   lib/workspace/explorer/file_filter.dart:189 the 15 s limit, :204 the size
+#     count's start and :208 the 64 KiB line: when and where a filter runs,
+#     not what it keeps.
+#   lib/workspace/explorer/index_build.dart:31, :66 the size count's start
+#     and :33, :67 `<` -> `<=` (where a build runs), :56 the 4 ms turn and
+#     :105 its clock's `<`: timing only.
+#   lib/workspace/latest.dart:9 the ticket counter's start (only compared).
+#   lib/engines/alternative_answer.dart:28 the 30 s patience, :42 whether a
+#     cancelled check logs: timing and logging only.
+#   lib/net/chessdb_moves.dart:71 `at > 0` -> `>= 0` or `> 1`: an empty or
+#     one-letter key names nothing read (`move`, `score`).
+#   lib/net/github_releases.dart:112, :115, :116 the 20, 30 and 45 s
+#     limits: timing only.
+#   lib/workspace/action_layout.dart:677 the three-split depth of a saved
+#     layout: a fourth split needs a fifth pane, which the count refuses.
+#   lib/net/lichess_explorer.dart:80 the 15 s limit, :212 `<` -> `<=` on the
+#     100 ms gap (a wait of nothing).
+#   lib/net/player_ratings.dart:21, :22 the 700 ms pacing, :30 the 20 s limit:
+#     timing only.
+#   lib/net/lichess_login.dart:110 the port tried first (any free one serves),
+#     :126 the 20 s limit, :160 the verifier's 64 bytes (PKCE takes 43-128
+#     characters), :184 a log line, :370 a forced close of a server with no
+#     connection left.
+#   lib/net/lichess_studies.dart:133 the 20 s limit: timing only.
+#   lib/net/lichess_study_writes.dart:83 the interface's `initial = false`
+#     (a call takes the implementation's default).
+#   lib/net/remote_queue.dart:24 the 3 s wait (timing), :100 `_closed ||
+#     _dropped` -> `&&` (the queue's stillWanted refuses a closed or dropped
+#     run all the same).
+#   lib/net/recent_games.dart:66 the 60 s limit (timing), :210 `< 6` -> `<= 6`
+#     (six characters kept either way), :392 the two-segment floor (Chess.com's
+#     archive paths are six segments).
+#   lib/net/search_evaluator.dart:102, :103 `.first` -> `.last`: the cloud is
+#     asked for one line.
 lib/chess/pgn/game_review.dart|test/workspace/game_review_test.dart|test/chess/pgn/edit_laws_test.dart test/app
 lib/chess/pgn/line_edits.dart|test/chess/pgn/line_edits_test.dart|test/chess/pgn test/workspace
 lib/chess/pgn/chapter_edits.dart|test/chess/pgn/chapter_edits_test.dart|test/chess/pgn test/workspace
@@ -18,3 +242,154 @@ lib/chess/game_filter.dart|test/chess/game_filter_test.dart|test/chess test/feat
 lib/chess/typed_move.dart|test/chess/typed_move_test.dart|test/workspace
 lib/storage/compound_write.dart|test/storage/compound_write_test.dart|test/storage
 lib/workspace/document/document_saver.dart|test/workspace/document_saver_test.dart|test/workspace
+lib/chess/audit/chapter_audit.dart|test/chess/audit/chapter_audit_test.dart test/workspace/chapter_audit_test.dart|test/workspace/audit_pane_test.dart
+lib/chess/book/book_check.dart|test/chess/book/book_check_test.dart|test/app/viewer_books_test.dart test/features/my_games/book_pane_test.dart test/features/my_games/game_book_test.dart test/workspace/book_verdict_view_test.dart
+lib/chess/book/played_game.dart|test/workspace/book_verdict_view_test.dart test/chess/book/book_check_test.dart|
+lib/chess/bughouse/bpgn_moves.dart|test/chess/bughouse/bpgn_moves_test.dart|test/features/bughouse/bughouse_lab_test.dart
+lib/chess/bughouse/crazyhouse_pgn.dart|test/chess/bughouse/crazyhouse_pgn_test.dart|
+lib/chess/bughouse/hivemind.dart|test/chess/bughouse/hivemind_test.dart|test/app/shell_bughouse_test.dart test/chess/bughouse/pv_steps_test.dart test/engines/hivemind_engine_test.dart test/engines/hivemind_real_test.dart test/features/bughouse/bughouse_screen_test.dart test/features/bughouse/lab_engine_test.dart
+lib/chess/bughouse/pv_steps.dart|test/chess/bughouse/pv_steps_test.dart|
+lib/chess/bughouse/table.dart|test/chess/bughouse/table_test.dart|test/app/shell_bughouse_test.dart test/chess/bughouse/bpgn_moves_test.dart test/chess/bughouse/crazyhouse_pgn_test.dart test/chess/bughouse/hivemind_test.dart test/chess/bughouse/pv_steps_test.dart test/chess/bughouse/table_line_test.dart test/chess/bughouse/table_setup_test.dart test/engines/hivemind_engine_test.dart test/engines/hivemind_real_test.dart test/features/bughouse/bughouse_lab_test.dart test/features/bughouse/bughouse_screen_test.dart test/features/bughouse/lab_engine_test.dart
+lib/chess/bughouse/table_game.dart|test/chess/bughouse/table_game_test.dart test/chess/bughouse/bpgn_moves_test.dart|
+lib/chess/bughouse/table_setup.dart|test/chess/bughouse/table_setup_test.dart|test/chess/bughouse/crazyhouse_pgn_test.dart test/chess/bughouse/table_test.dart
+lib/chess/explorer_choice.dart|test/chess/explorer_answer_test.dart test/workspace/explorer_databases_test.dart|test/net/lichess_explorer_test.dart test/workspace
+lib/chess/generation/draft_chapter.dart|test/chess/generation/draft_chapter_test.dart|test/chess/generation/draft_lines_test.dart
+lib/chess/generation/played_policy.dart|test/workspace/search_opponents_test.dart|
+lib/chess/generation/search_config.dart|test/chess/generation/search_config_test.dart|test/chess/generation/resume_test.dart test/chess/generation/reply_cut_test.dart
+lib/chess/generation/search_node.dart|test/chess/generation/search_node_test.dart|test/app/shell_positions_test.dart test/app/trap_training_test.dart test/chess/generation/backup_test.dart test/chess/generation/deep_narrow_test.dart test/chess/generation/draft_lines_test.dart test/chess/generation/finds_test.dart test/chess/generation/mainline_book_test.dart test/chess/generation/pure_oracle_test.dart test/chess/generation/pure_search_oracle_test.dart test/chess/generation/reply_cut_test.dart test/chess/generation/resume_test.dart test/chess/generation/search_limits_test.dart test/chess/generation/search_pins_floor_test.dart test/chess/generation/search_test.dart test/chess/generation/shortlist_test.dart test/chess/generation/terminal_test.dart test/chess/generation/trap_scent_test.dart test/chess/generation/traps_test.dart test/chess/generation/tree_wire_v4_laws_test.dart test/chess/generation/tree_wire_v4_reading_test.dart test/chess/generation/tree_wire_v4_test.dart test/workspace/builder_tree_seed_test.dart test/workspace/fill_gaps_test.dart test/workspace/fill_lines_test.dart test/workspace/fill_mirror_test.dart test/workspace/fill_resume_test.dart test/workspace/fill_stops_test.dart test/workspace/finds_test.dart test/workspace/search_opponents_test.dart test/workspace/search_table_test.dart
+lib/chess/generation/terminal.dart|test/chess/generation/terminal_test.dart|test/chess/generation/pure_search_oracle_test.dart
+lib/chess/generation/tree_wire_v4_reader.dart|test/workspace/builder_tree_seed_test.dart test/chess/generation/reply_cut_test.dart test/chess/generation/tree_wire_v4_laws_test.dart|test/chess/generation/mainline_book_test.dart test/chess/generation/tree_wire_v4_reading_test.dart test/chess/generation/tree_wire_v4_reading_test.dart
+lib/chess/generation/eval.dart|test/chess/generation/eval_test.dart|test/app/shell_positions_test.dart test/app/trap_training_test.dart test/chess/generation/draft_lines_test.dart test/chess/generation/finds_test.dart test/chess/generation/pure_oracle_test.dart test/chess/generation/pure_search_oracle_test.dart test/chess/generation/search_node_test.dart test/chess/generation/search_test.dart test/chess/generation/trap_scent_test.dart test/chess/generation/traps_test.dart test/chess/tactics/mining_test.dart test/engines/fixed_depth_test.dart test/features/players/practical_probe_test.dart test/workspace/audit_pane_test.dart test/workspace/fill_anchored_test.dart test/workspace/fill_gaps_test.dart test/workspace/fill_lines_test.dart test/workspace/finds_test.dart test/workspace/search_table_test.dart
+lib/chess/opening_index.dart|test/chess/opening_index_test.dart|test/workspace/index_build_test.dart
+lib/chess/openings.dart|test/chess/openings_test.dart|test/chess/generation/draft_lines_test.dart
+lib/chess/pgn/analysis_board.dart|test/workspace/analysis_board_test.dart|test/app/trap_training_test.dart test/workspace/chapter_audit_test.dart test/workspace/file_filter_test.dart test/workspace/file_tree_test.dart test/workspace/fill_gaps_test.dart test/workspace/search_opponents_test.dart test/workspace/search_pane_test.dart
+lib/chess/pgn/board_shapes.dart|test/chess/pgn/board_shapes_test.dart|test/chess/pgn/comment_edits_test.dart test/workspace/board_view_test.dart test/workspace/move_shapes_test.dart test/workspace/workspace_view_test.dart
+lib/chess/pgn/branch_edits.dart|test/chess/pgn/branch_edits_test.dart|test/chess/pgn/one_game_edits_test.dart
+lib/chess/pgn/chapter.dart|test/chess/pgn/chapter_test.dart|test/app/viewer_navigation_test.dart test/chess/audit/chapter_audit_test.dart test/chess/book/book_check_test.dart test/chess/generation/draft_chapter_test.dart test/chess/generation/draft_lines_test.dart test/chess/openings_test.dart test/chess/pgn/board_shapes_test.dart test/chess/pgn/branch_edits_test.dart test/chess/pgn/chapter_edits_scope_test.dart test/chess/pgn/chapter_edits_test.dart test/chess/pgn/chapter_heading_test.dart test/chess/pgn/chapter_round_trip_test.dart test/chess/pgn/chapter_sections_test.dart test/chess/pgn/chapter_showing_test.dart test/chess/pgn/comment_edits_test.dart test/chess/pgn/edit_laws_test.dart test/chess/pgn/game_summary_test.dart test/chess/pgn/glyph_edits_test.dart test/chess/pgn/line_edits_test.dart test/chess/pgn/line_id_pins_test.dart test/chess/pgn/line_moves_test.dart test/chess/pgn/new_line_ids_test.dart test/chess/pgn/one_game_edits_test.dart test/chess/pgn/pgn_hostile_test.dart test/chess/pgn/pgn_laws_test.dart test/chess/pgn/pgn_round_trip_test.dart test/chess/pgn/pgn_size_test.dart test/chess/pgn/repertoire_import_test.dart test/chess/pgn/rewrite_gate_test.dart test/chess/pgn/study_cleanup_test.dart test/chess/pgn/study_lichess_test.dart test/chess/pgn/study_test.dart test/chess/pgn/study_training_test.dart test/chess/pgn/tree_merge_test.dart test/chess/repertoire_index_test.dart test/chess/tactics/mining_test.dart test/chess/tactics/puzzle_edits_test.dart test/chess/tactics/puzzle_queue_test.dart test/chess/tactics/puzzle_test.dart test/chess/tactics/source_game_test.dart
+lib/chess/pgn/chapter_heading.dart|test/chess/pgn/chapter_heading_test.dart|test/app/trap_training_test.dart test/chess/generation/draft_chapter_test.dart test/features/outline_panel_test.dart test/features/trainer/trainer_test.dart test/storage/chapter_files_test.dart test/workspace/generated_draft_test.dart test/workspace/repertoire_tree_test.dart
+lib/chess/pgn/pgn_chars.dart|test/chess/pgn/pgn_reader_test.dart test/chess/pgn/pgn_malformed_test.dart test/chess/pgn/pgn_comment_test.dart|test/chess/pgn/pgn_hostile_test.dart test/chess/pgn/pgn_round_trip_test.dart test/chess/tactics test/chess/pgn/game_text_test.dart
+lib/chess/pgn/chapter_line.dart|test/chess/pgn/chapter_line_test.dart|test/chess/pgn/rewrite_gate_test.dart test/chess/pgn/chapter_showing_test.dart
+lib/chess/pgn/collection_player.dart|test/chess/pgn/collection_player_test.dart|test/features/pgn_viewer/pgn_viewer_panel_test.dart test/features/pgn_viewer/viewer_perspective_test.dart
+lib/chess/pgn/comment_edits.dart|test/chess/pgn/comment_edits_test.dart|test/chess/pgn/board_shapes_test.dart test/chess/pgn/chapter_edits_scope_test.dart test/chess/pgn/chapter_edits_test.dart test/chess/pgn/chapter_test.dart test/chess/pgn/glyph_edits_test.dart test/chess/pgn/one_game_edits_test.dart test/chess/pgn/rewrite_gate_test.dart test/workspace/game_review_test.dart
+lib/chess/pgn/comment_text.dart|test/chess/pgn/comment_text_test.dart|test/chess/pgn/board_shapes_test.dart test/chess/pgn/game_tree_test.dart
+lib/chess/pgn/game_summary.dart|test/chess/pgn/game_summary_test.dart|
+lib/chess/pgn/game_text.dart|test/chess/pgn/game_text_test.dart|test/app/study_lichess_send_test.dart test/chess/pgn/branch_edits_test.dart test/chess/pgn/chapter_edits_test.dart test/chess/pgn/chapter_round_trip_test.dart test/chess/pgn/chapter_showing_test.dart test/chess/pgn/collection_player_test.dart test/chess/pgn/comment_edits_test.dart test/chess/pgn/edit_laws_test.dart test/chess/pgn/line_edits_test.dart test/chess/pgn/pgn_hostile_test.dart test/chess/pgn/pgn_laws_test.dart test/chess/pgn/pgn_malformed_test.dart test/chess/pgn/pgn_property_test.dart test/chess/pgn/solitaire_record_test.dart test/chess/pgn/study_cleanup_test.dart test/chess/pgn/study_lichess_test.dart test/features/study/study_additions_test.dart test/features/study/study_sender_test.dart test/storage/master_book_test.dart test/storage/section_reference_check_test.dart test/workspace/filter_run_test.dart
+lib/chess/pgn/game_tree.dart|test/chess/pgn/game_tree_test.dart|test/app/annotating_test.dart test/app/app_exit_test.dart test/app/cross_mode_native_test.dart test/app/cross_mode_window_test.dart test/app/document_tabs_test.dart test/app/exit_guard_test.dart test/app/gap_invalidation_test.dart test/app/mode_documents_test.dart test/app/native_file_requests_test.dart test/app/native_training_test.dart test/app/puzzle_shutdown_test.dart test/app/read_edit_test.dart test/app/shell_doors_test.dart test/app/shell_keys_test.dart test/app/shell_test.dart test/app/shell_typed_moves_test.dart test/app/study_training_workflow_test.dart test/app/viewer_drafts_window_test.dart test/app/viewer_navigation_test.dart test/app/workspace_requests_test.dart test/chess/audit/chapter_audit_test.dart test/chess/generation/draft_lines_test.dart test/chess/opening_index_test.dart test/chess/openings_test.dart test/chess/pgn/board_shapes_test.dart test/chess/pgn/branch_edits_test.dart test/chess/pgn/chapter_edits_scope_test.dart test/chess/pgn/chapter_edits_test.dart test/chess/pgn/chapter_showing_test.dart test/chess/pgn/chapter_test.dart test/chess/pgn/collection_player_test.dart test/chess/pgn/comment_edits_test.dart test/chess/pgn/edit_laws_test.dart test/chess/pgn/glyph_edits_test.dart test/chess/pgn/move_text_test.dart test/chess/pgn/new_line_ids_test.dart test/chess/pgn/one_game_edits_test.dart test/chess/pgn/pgn_property_test.dart test/chess/pgn/pgn_round_trip_test.dart test/chess/pgn/repertoire_import_test.dart
+lib/chess/pgn/games_written.dart|test/chess/pgn/games_written_test.dart|test/chess/pgn/chapter_edits_scope_test.dart test/chess/pgn/chapter_sections_test.dart test/chess/pgn/line_id_pins_test.dart test/chess/pgn/new_line_ids_test.dart test/features/compound_rename_test.dart test/features/tactics/my_games_test.dart test/storage/compound_completed_retry_test.dart test/storage/compound_process_test.dart test/storage/compound_write_test.dart test/storage/edit_scope_laws_test.dart test/storage/faults/contracts_self_test.dart test/storage/faults/save_faults_test.dart test/storage/faults/section_rename_faults_test.dart test/storage/file_relocation_test.dart test/storage/my_games_files_test.dart test/storage/outside_root_test.dart test/storage/pair_store_test.dart test/storage/pgn_file_store_test.dart test/storage/rearranged_scope_test.dart test/storage/recovery_access_test.dart test/storage/reorder_scope_test.dart test/storage/save_scope_test.dart test/storage/section_reference_check_test.dart test/workspace/document_saver_test.dart
+lib/chess/pgn/line_id_pins.dart|test/chess/pgn/line_id_pins_test.dart|test/chess/pgn/chapter_sections_test.dart test/chess/pgn/edit_laws_test.dart test/chess/pgn/new_line_ids_test.dart test/chess/pgn/repertoire_import_test.dart test/features/study/study_chapters_test.dart test/storage/faults/delete_restore_faults_test.dart test/storage/faults/folder_move_faults_test.dart test/storage/faults/move_faults_test.dart test/storage/faults/save_pair_faults_test.dart
+lib/storage/training_store.dart|test/storage/training_store_test.dart|test/storage/training_retry_test.dart test/storage/training_source_test.dart test/storage/training_codec_laws_test.dart test/storage/faults/training_faults_test.dart test/storage/recovery_access_test.dart test/storage/recovery_matrix_test.dart test/storage/unlocked_recovery_test.dart test/storage/profile_snapshot_test.dart test/storage/persistence_lifecycle_test.dart test/workspace/faults/rating_owner_faults_test.dart
+lib/storage/pgn_file_store.dart|test/storage/pgn_file_store_test.dart|test/storage/compound_completed_retry_test.dart test/storage/compound_write_test.dart test/storage/faults/create_faults_test.dart test/storage/faults/save_faults_test.dart test/storage/file_relocation_test.dart test/storage/my_games_files_test.dart test/storage/operation_journal_test.dart test/storage/pair_store_test.dart test/storage/pgn_file_import_test.dart test/storage/platform_documents_test.dart test/storage/profile_snapshot_test.dart test/storage/recovery_access_test.dart test/storage/unlocked_recovery_test.dart test/workspace/chapter_on_disk_test.dart test/workspace/external_document_edits_test.dart test/features/library_on_disk_test.dart test/features/library_open_course_test.dart test/features/compound_rename_test.dart
+lib/storage/file_relocation.dart|test/storage/file_relocation_test.dart test/storage/folder_relocation_test.dart|test/storage/compound_alias_test.dart test/storage/file_delete_recovery_test.dart test/storage/file_relocation_recovery_test.dart test/storage/folder_relocation_recovery_test.dart test/storage/journal_format_test.dart test/storage/operation_journal_test.dart test/storage/recovery_access_test.dart test/storage/relocation_sync_test.dart test/storage/training_during_move_test.dart test/features/library_unfinished_move_test.dart test/features/library_import_recovery_test.dart
+lib/chess/generation/search.dart|test/chess/generation/search_test.dart test/chess/generation/shortlist_test.dart|test/chess/generation test/workspace/fill_gaps_test.dart
+lib/workspace/search/fill_gaps.dart|test/workspace/fill_gaps_test.dart|test/workspace/fill_anchored_test.dart test/workspace/fill_lines_test.dart test/workspace/fill_mirror_test.dart test/workspace/fill_resume_test.dart test/workspace/fill_stops_test.dart test/workspace/search_opponents_test.dart test/workspace/search_pane_test.dart
+lib/chess/pgn/move_label.dart|test/chess/pgn/move_label_test.dart|test/chess/pgn/game_tree_test.dart
+lib/chess/pgn/move_text.dart|test/chess/pgn/move_text_test.dart|test/chess/pgn/branch_edits_test.dart test/chess/pgn/chapter_edits_test.dart test/chess/pgn/comment_edits_test.dart test/workspace/game_review_test.dart test/workspace/solitaire_engine_test.dart
+lib/chess/pgn/solitaire_record.dart|test/chess/pgn/solitaire_record_test.dart|test/workspace/solitaire_engine_test.dart
+lib/chess/pgn/study.dart|test/chess/pgn/study_test.dart|test/app/study_training_workflow_test.dart test/app/workspace_requests_test.dart test/chess/pgn/one_game_edits_test.dart test/chess/pgn/study_cleanup_test.dart test/chess/pgn/study_training_test.dart test/features/study/studies_test.dart test/features/study/study_additions_test.dart test/features/study/study_chapters_test.dart
+lib/chess/pgn/study_cleanup.dart|test/chess/pgn/study_cleanup_test.dart|test/chess/pgn/study_lichess_test.dart
+lib/chess/pgn/study_lichess.dart|test/chess/pgn/study_lichess_test.dart|test/app/study_lichess_send_test.dart test/features/study/study_sender_test.dart
+lib/chess/pgn/study_training.dart|test/chess/pgn/study_training_test.dart|
+lib/chess/pgn/tree_edit.dart|test/chess/pgn/tree_edit_test.dart|test/chess/pgn/tree_merge_test.dart test/chess/pgn/pgn_reader_test.dart
+lib/chess/players/download_range.dart|test/chess/players/download_range_test.dart|test/features/players/player_download_test.dart test/net/recent_games_test.dart
+lib/chess/players/player.dart|test/chess/players/player_test.dart|test/storage/player_files_test.dart test/features/players/players_owner_test.dart
+lib/chess/pv_text.dart|test/chess/pv_text_test.dart|test/chess/audit/chapter_audit_test.dart test/chess/generation/mainline_book_test.dart test/workspace/document_session_test.dart test/workspace/fill_lines_test.dart test/workspace/move_shapes_test.dart
+lib/chess/position_setup.dart|test/chess/position_setup_test.dart|
+lib/chess/repertoire_index.dart|test/chess/repertoire_index_test.dart|test/chess/book/book_check_test.dart test/workspace/book_verdict_view_test.dart
+lib/chess/tactics/game_ids.dart|test/chess/tactics/time_class_test.dart test/chess/tactics/analyzed_games_test.dart test/app/corpus_invalidation_test.dart test/chess/tactics/mistake_counts_test.dart|test/app/app_parts_test.dart test/app/shell_my_games_test.dart test/app/shell_players_test.dart test/app/shell_tactics_test.dart test/chess/tactics/mining_test.dart test/chess/tactics/time_class_test.dart test/features/my_games/game_book_test.dart test/features/players/player_analysis_test.dart test/features/players/saved_games_test.dart test/features/tactics/account_persistence_test.dart test/features/tactics/my_games_test.dart test/features/tactics/source_games_test.dart test/storage/my_accounts_test.dart test/storage/my_games_files_test.dart test/storage/settings_store_test.dart test/workspace/explorer_pane_test.dart test/workspace/my_games_tree_test.dart
+lib/chess/tactics/mined_set.dart|test/chess/tactics/mining_test.dart test/storage/my_games_files_test.dart|
+lib/chess/tactics/mining.dart|test/chess/tactics/mining_test.dart|test/features/tactics/mining_native_checkpoint_test.dart
+lib/chess/tactics/mistake_counts.dart|test/chess/tactics/mistake_counts_test.dart|test/features/my_games/game_book_test.dart test/features/tactics/my_games_test.dart
+lib/chess/tactics/puzzle.dart|test/chess/tactics/puzzle_test.dart|test/chess/tactics/mining_test.dart test/chess/tactics/mistake_counts_test.dart test/chess/tactics/puzzle_edits_test.dart test/chess/tactics/puzzle_queue_test.dart test/chess/tactics/source_game_test.dart test/features/tactics/mining_native_checkpoint_test.dart test/features/tactics/my_games_test.dart test/features/tactics/set_additions_test.dart
+lib/chess/tactics/puzzle_queue.dart|test/chess/tactics/puzzle_queue_test.dart|test/app/puzzle_shutdown_test.dart test/features/tactics/puzzle_trainer_test.dart test/features/tactics/tactics_set_test.dart
+lib/chess/tactics/source_game.dart|test/chess/tactics/source_game_test.dart|
+lib/chess/threat.dart|test/chess/threat_test.dart|test/workspace/engine_analysis_test.dart
+lib/chess/tournament/config.dart|test/chess/tournament/config_test.dart|test/app/app_parts_test.dart test/chess/tournament/time_label_test.dart test/features/tournaments/engine_check_test.dart test/features/tournaments/game_runner_test.dart test/features/tournaments/setup_dialog_test.dart test/features/tournaments/tournament_run_test.dart test/storage/journal_format_test.dart test/storage/record_codec_laws_test.dart test/storage/tournaments_test.dart
+lib/chess/tournament/positions.dart|test/chess/tournament/positions_test.dart|
+lib/chess/tournament/result.dart|test/chess/tournament/result_test.dart|test/chess/tournament/standings_test.dart
+lib/chess/training/drill.dart|test/chess/training/drill_test.dart|test/features/trainer/trainer_test.dart
+lib/chess/training/records.dart|test/chess/training/records_test.dart|test/chess/training/drill_test.dart
+lib/chess/training/schedule.dart|test/chess/training/schedule_test.dart|test/app/cross_mode_native_test.dart test/app/native_training_test.dart test/chess/training/line_order_test.dart test/chess/training/sitting_test.dart test/features/trainer/lesson_fit_test.dart test/features/trainer/train_pane_test.dart test/features/trainer/trainer_test.dart test/storage/compound_mapping_property_test.dart test/storage/persistence_lifecycle_test.dart test/storage/recovery_matrix_test.dart test/storage/training_codec_laws_test.dart test/storage/training_retry_test.dart test/storage/training_source_test.dart test/storage/training_store_test.dart test/storage/unlocked_recovery_test.dart test/workspace/faults/rating_owner_faults_test.dart
+lib/chess/training/training_line.dart|test/chess/training/training_line_test.dart|test/chess/pgn/chapter_sections_test.dart test/chess/pgn/study_training_test.dart test/chess/training/drill_test.dart test/chess/training/line_order_test.dart test/chess/training/sitting_test.dart test/features/trainer/trainer_test.dart test/storage/persistence_lifecycle_test.dart test/storage/training_retry_test.dart test/workspace/faults/rating_owner_faults_test.dart
+lib/chess/training/training_options.dart|test/chess/training/training_options_test.dart|test/features/trainer/lesson_fit_test.dart test/features/trainer/training_workspace_test.dart test/storage/settings_store_test.dart test/features/trainer/train_pane_test.dart test/features/trainer/trainer_test.dart
+lib/storage/viewer_places.dart|test/storage/viewer_places_test.dart|test/app/viewer_navigation_test.dart test/features/pgn_viewer/pgn_viewer_panel_test.dart test/features/pgn_viewer/viewer_perspective_test.dart test/features/pgn_viewer/viewer_workflows_test.dart
+lib/storage/backup_history.dart|test/storage/backup_history_test.dart|
+lib/storage/audit_store.dart|test/storage/audit_store_test.dart|test/workspace/audit_pane_test.dart test/workspace/chapter_audit_test.dart test/workspace/engine_jobs_test.dart
+lib/storage/viewer_drafts.dart|test/storage/viewer_drafts_test.dart|test/app/viewer_drafts_window_test.dart test/workspace/draft_keeper_test.dart
+lib/storage/update_files.dart|test/storage/update_files_test.dart|test/features/settings/app_updates_test.dart test/features/settings/update_prompt_test.dart test/storage/update_install_test.dart
+lib/storage/update_install.dart|test/storage/update_install_test.dart|test/features/settings/app_updates_test.dart test/features/settings/update_offer_test.dart test/features/settings/update_prompt_test.dart
+lib/storage/atomic_write.dart|test/storage/atomic_write_test.dart|test/storage/platform_documents_test.dart test/storage/document_failures_test.dart test/storage/unlocked_recovery_test.dart test/app/cross_mode_native_test.dart test/storage/backups_test.dart test/storage/book_snapshot_test.dart test/storage/compound_pair_test.dart test/storage/faults/contracts_self_test.dart test/storage/faults/faulty_disk_test.dart test/storage/generation_trees_test.dart test/storage/settings_store_test.dart test/storage/snapshot_lifetime_test.dart test/storage/training_retry_test.dart
+lib/storage/backups.dart|test/storage/backups_test.dart test/storage/backup_archive_test.dart|test/storage/backup_history_test.dart test/storage/backup_relocation_test.dart test/storage/file_delete_recovery_test.dart test/storage/folder_relocation_recovery_test.dart test/storage/record_codec_laws_test.dart
+lib/storage/backup_relocation.dart|test/storage/backup_relocation_test.dart|test/storage/record_codec_laws_test.dart test/storage/operation_journal_test.dart test/storage/file_delete_recovery_test.dart test/storage/file_relocation_recovery_test.dart test/storage/folder_relocation_recovery_test.dart test/storage/faults/faulty_disk_test.dart
+lib/storage/update_choices.dart|test/storage/update_choices_test.dart|test/storage/settings_store_test.dart test/features/settings/app_updates_test.dart
+lib/storage/book_list.dart|test/storage/book_list_test.dart|test/workspace/faults/books_owner_faults_test.dart test/storage/faults/books_faults_test.dart test/features/trainer/trainer_scope_test.dart test/app/catalog_propagation_test.dart test/app/cross_mode_native_test.dart test/features/books_screen_test.dart test/features/closed_rename_navigation_test.dart test/features/compound_rename_test.dart test/storage/book_references_test.dart test/storage/book_snapshot_test.dart test/storage/books_codec_laws_test.dart test/storage/catalog_lifecycle_test.dart test/storage/compound_completed_retry_test.dart test/storage/compound_write_test.dart test/storage/persistence_lifecycle_test.dart test/storage/profile_snapshot_test.dart test/storage/snapshot_lifetime_test.dart test/workspace/books_test.dart
+lib/storage/book_file.dart|test/storage/book_snapshot_test.dart|test/features/trainer/trainer_scope_test.dart test/features/closed_rename_navigation_test.dart test/features/books_screen_test.dart test/features/trainer/trainer_test.dart test/storage/books_codec_laws_test.dart test/storage/persistence_lifecycle_test.dart test/storage/profile_snapshot_test.dart test/storage/snapshot_lifetime_test.dart test/workspace/books_test.dart
+lib/workspace/book/books.dart|test/workspace/books_test.dart|test/features/books_screen_test.dart test/features/closed_rename_navigation_test.dart test/features/compound_rename_test.dart test/features/trainer/trainer_scope_test.dart test/features/trainer/trainer_test.dart test/storage/book_snapshot_test.dart test/storage/persistence_lifecycle_test.dart test/storage/snapshot_lifetime_test.dart
+lib/workspace/book/repertoire_catalog.dart|test/features/trainer/training_workspace_test.dart test/features/books_screen_test.dart test/storage/catalog_lifecycle_test.dart|test/storage/repertoire_snapshot_test.dart
+lib/workspace/book/repertoire_shelf.dart|test/workspace/repertoire_shelf_test.dart|test/features/my_games/game_book_test.dart test/storage/repertoire_snapshot_test.dart test/workspace/explorer_pane_test.dart test/workspace/repertoire_tree_test.dart test/workspace/tree_pane_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/book/repertoire_tree.dart|test/workspace/repertoire_tree_test.dart|test/app/catalog_propagation_test.dart test/workspace/explorer_pane_test.dart test/workspace/tree_pane_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/book/board_book.dart|test/workspace/board_book_test.dart|test/app/viewer_books_test.dart
+lib/workspace/search/finds.dart|test/workspace/finds_test.dart|test/workspace/fill_gaps_test.dart test/workspace/fill_resume_test.dart test/workspace/fill_stops_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/search/fill_states.dart|test/workspace/fill_states_test.dart|test/workspace/fill_stops_test.dart test/workspace/fill_anchored_test.dart test/workspace/fill_gaps_test.dart test/workspace/fill_lines_test.dart test/workspace/fill_mirror_test.dart test/workspace/fill_resume_test.dart test/workspace/search_opponents_test.dart test/workspace/search_pane_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/analysis/engine_analysis.dart|test/workspace/engine_analysis_test.dart|test/app/app_parts_test.dart test/app/shell_tactics_test.dart test/features/trainer/lesson_fit_test.dart test/features/trainer/train_pane_test.dart test/features/trainer/trainer_scope_test.dart test/features/trainer/trainer_test.dart test/features/trainer/training_workspace_test.dart test/workspace/audit_pane_test.dart test/workspace/board_column_test.dart test/workspace/chapter_audit_test.dart test/workspace/document_actions_test.dart test/workspace/engine_jobs_test.dart test/workspace/engine_lines_test.dart test/workspace/engine_pane_test.dart test/workspace/fill_anchored_test.dart test/workspace/fill_gaps_test.dart test/workspace/fill_lines_test.dart test/workspace/fill_mirror_test.dart test/workspace/fill_resume_test.dart test/workspace/fill_stops_test.dart test/workspace/game_review_test.dart test/workspace/repertoire_tree_test.dart test/workspace/search_opponents_test.dart test/workspace/search_pane_test.dart test/workspace/solitaire_engine_test.dart test/workspace/solitaire_pane_test.dart test/workspace/solitaire_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/search/search_opponents.dart|test/workspace/search_opponents_test.dart|test/workspace/fill_resume_test.dart
+lib/workspace/search/fill_lines.dart|test/workspace/fill_lines_test.dart|test/workspace/fill_gaps_test.dart test/workspace/fill_anchored_test.dart test/workspace/fill_mirror_test.dart test/workspace/fill_resume_test.dart test/workspace/fill_stops_test.dart test/workspace/search_opponents_test.dart test/workspace/search_pane_test.dart
+lib/workspace/analysis/engine_jobs.dart|test/workspace/engine_jobs_test.dart|test/app/navigation_discovery_test.dart test/features/tournaments/tournament_run_test.dart test/workspace/audit_pane_test.dart test/workspace/chapter_audit_test.dart test/workspace/fill_anchored_test.dart test/workspace/fill_gaps_test.dart test/workspace/fill_lines_test.dart test/workspace/fill_mirror_test.dart test/workspace/fill_resume_test.dart test/workspace/fill_stops_test.dart test/workspace/game_review_test.dart test/workspace/search_opponents_test.dart test/workspace/search_pane_test.dart test/workspace/solitaire_engine_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/analysis/engine_status.dart|test/workspace/engine_status_test.dart|
+lib/workspace/review/chapter_audit.dart|test/workspace/chapter_audit_test.dart|test/workspace/audit_pane_test.dart test/workspace/engine_jobs_test.dart
+lib/workspace/review/game_review.dart|test/workspace/game_review_test.dart|test/workspace/engine_jobs_test.dart
+lib/workspace/book/replies.dart|test/workspace/replies_test.dart|test/app/cross_mode_native_test.dart test/app/gap_invalidation_test.dart test/workspace/audit_pane_test.dart test/workspace/builder_guidance_test.dart test/workspace/chapter_audit_test.dart test/workspace/engine_jobs_test.dart test/workspace/gap_hunt_test.dart test/workspace/reply_model_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/book/gap_hunt.dart|test/workspace/gap_hunt_test.dart|test/storage/scoped_repertoire_snapshot_test.dart test/workspace/audit_pane_test.dart test/workspace/chapter_audit_test.dart test/workspace/engine_jobs_test.dart test/workspace/repertoire_answers_test.dart test/workspace/replies_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/book/gap_walk.dart|test/workspace/gap_walk_test.dart|test/app/cross_mode_native_test.dart test/app/gap_invalidation_test.dart test/workspace/builder_guidance_test.dart test/workspace/gap_hunt_test.dart test/workspace/replies_test.dart
+lib/workspace/explorer/explorer.dart|test/workspace/explorer_test.dart|test/app/cross_mode_window_test.dart test/workspace/explorer_answers_test.dart test/workspace/explorer_databases_test.dart test/workspace/explorer_pane_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/explorer/filter_run.dart|test/workspace/filter_run_test.dart|
+lib/workspace/explorer/local_games.dart|test/app/corpus_invalidation_test.dart test/workspace/my_games_tree_test.dart test/workspace/file_tree_test.dart|test/workspace/explorer_pane_test.dart test/workspace/explorer_test.dart
+lib/workspace/explorer/file_filter.dart|test/workspace/file_filter_test.dart|test/workspace/explorer_pane_test.dart
+lib/workspace/explorer/index_build.dart|test/workspace/index_build_test.dart|
+lib/workspace/explorer/game_fetcher.dart|test/workspace/game_fetcher_test.dart|test/workspace/workspace_view_test.dart
+lib/workspace/explorer/opening_names.dart|test/workspace/opening_names_test.dart|test/workspace/reading_header_test.dart test/workspace/fill_lines_test.dart test/workspace/explorer_pane_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/board/move_shapes.dart|test/workspace/move_shapes_test.dart|
+lib/workspace/latest.dart|test/workspace/latest_test.dart|
+lib/storage/book_references.dart|test/storage/book_references_test.dart|test/storage/books_codec_laws_test.dart test/storage/compound_mapping_property_test.dart test/storage/record_codec_laws_test.dart
+lib/storage/chapter_directory.dart|test/storage/chapter_files_test.dart test/features/library_import_test.dart test/features/library_on_disk_test.dart|test/features/course_chapters_test.dart test/storage/profile_snapshot_test.dart test/features/library_import_recovery_test.dart test/storage/scoped_repertoire_snapshot_test.dart test/features/library_open_course_test.dart
+lib/storage/chapter_files.dart|test/storage/chapter_files_test.dart|test/app/catalog_propagation_test.dart test/app/cross_mode_native_test.dart test/app/gap_invalidation_test.dart test/app/native_training_test.dart test/app/read_edit_test.dart test/app/shell_books_test.dart test/app/shell_players_test.dart test/app/shell_tactics_test.dart test/app/shell_test.dart test/app/shell_trainer_navigation_test.dart test/app/trap_training_test.dart test/app/workspace_requests_test.dart test/features/books_screen_test.dart test/features/closed_rename_navigation_test.dart test/features/compound_rename_test.dart test/features/course_chapters_test.dart test/features/library_changes_test.dart test/features/library_follows_test.dart test/features/library_import_test.dart test/features/library_lines_test.dart test/features/library_on_disk_test.dart test/features/library_open_course_test.dart test/features/library_panel_test.dart test/features/library_test.dart test/features/library_unfinished_move_test.dart test/features/my_games/game_book_test.dart test/features/outline_panel_test.dart test/features/pgn_drop_region_test.dart test/features/pgn_viewer/pgn_viewer_panel_test.dart test/features/pgn_viewer/pgn_viewer_test.dart test/features/study/studies_test.dart test/features/study/study_panel_test.dart test/features/study/study_recovery_test.dart test/features/tactics/mining_native_checkpoint_test.dart test/features/trainer/trainer_scope_test.dart test/features/trainer/trainer_test.dart test/features/trainer/training_workspace_test.dart test/storage/catalog_lifecycle_test.dart test/storage/faults/books_faults_test.dart test/storage/faults/derived_faults_test.dart
+lib/storage/training_writes.dart|test/storage/training_store_test.dart test/storage/training_retry_test.dart test/storage/training_source_test.dart|test/storage/faults/training_faults_test.dart test/storage/training_during_move_test.dart
+lib/storage/diagnostic_report.dart|test/storage/diagnostic_report_test.dart|
+lib/storage/directory_snapshot.dart|test/storage/directory_snapshot_test.dart|test/storage/folder_relocation_test.dart
+lib/storage/disk_usage.dart|test/storage/disk_usage_test.dart|
+lib/storage/deleted_chapters.dart|test/storage/deleted_chapters_test.dart|test/features/study/study_recovery_test.dart test/storage/catalog_lifecycle_test.dart test/storage/backups_test.dart test/features/library_on_disk_test.dart test/features/library_panel_test.dart test/storage/backup_relocation_test.dart test/storage/chapter_files_test.dart test/storage/file_delete_recovery_test.dart test/storage/folder_relocation_recovery_test.dart test/storage/recovery_access_test.dart
+lib/storage/directory_entries.dart|test/storage/directory_entries_test.dart|test/storage/deleted_chapters_test.dart test/storage/chapter_files_test.dart
+lib/storage/csv_records.dart|test/storage/csv_records_test.dart|test/storage/record_codec_laws_test.dart test/storage/training_codec_laws_test.dart
+lib/storage/document_probe.dart|test/storage/document_probe_test.dart|test/storage/book_snapshot_test.dart test/storage/faults/contracts_self_test.dart test/storage/file_relocation_recovery_test.dart test/storage/operation_journal_test.dart
+lib/workspace/workspace_tabs.dart|test/workspace/workspace_tabs_test.dart|test/app/viewer_books_test.dart test/app/layout_memory_test.dart test/app/shell_doors_test.dart test/workspace/action_panes_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/reading/comment_line.dart|test/workspace/comment_line_test.dart|test/workspace/document_session_test.dart test/workspace/move_note_test.dart
+lib/engines/alternative_answer.dart|test/engines/alternative_answer_test.dart|test/features/tactics/puzzle_trainer_test.dart
+lib/engines/tournament_launch.dart|test/engines/tournament_launch_test.dart|
+lib/net/chessdb_moves.dart|test/net/chessdb_moves_test.dart|test/workspace/fill_lines_test.dart
+lib/net/github_releases.dart|test/net/github_releases_test.dart|test/features/settings/app_updates_test.dart test/features/settings/update_offer_test.dart test/features/settings/update_prompt_test.dart
+lib/engines/analysis_launch.dart|test/engines/analysis_launch_test.dart|
+lib/workspace/action_layout.dart|test/workspace/action_layout_test.dart|test/app/layout_memory_test.dart test/app/tool_panes_fit_test.dart test/workspace/action_panes_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/workspace.dart|test/workspace/workspace_test.dart|test/workspace/workspace_view_test.dart
+lib/net/lichess_explorer.dart|test/net/lichess_explorer_test.dart|test/app/cross_mode_window_test.dart test/net/credential_diagnostics_test.dart test/workspace/explorer_databases_test.dart test/workspace/explorer_pane_test.dart test/workspace/explorer_test.dart
+lib/net/lichess_http.dart|test/net/lichess_studies_test.dart test/net/lichess_explorer_test.dart test/net/lichess_login_test.dart|test/net/recent_games_test.dart
+lib/net/player_ratings.dart|test/features/players/player_download_test.dart test/features/players/players_owner_test.dart|
+lib/net/lichess_login.dart|test/net/lichess_login_test.dart|test/features/settings/lichess_account_test.dart test/features/settings/settings_dialog_test.dart
+lib/net/lichess_studies.dart|test/net/lichess_studies_test.dart|test/features/study/studies_test.dart test/features/study/study_recovery_test.dart test/net/credential_diagnostics_test.dart test/storage/pgn_file_import_test.dart
+lib/net/lichess_study_writes.dart|test/net/lichess_study_writes_test.dart|test/features/study/study_sender_test.dart
+lib/net/remote_queue.dart|test/net/remote_queue_test.dart|test/net/chessdb_moves_test.dart test/net/search_evaluator_test.dart test/workspace/audit_pane_test.dart test/workspace/chapter_audit_test.dart test/workspace/engine_jobs_test.dart test/workspace/fill_lines_test.dart
+lib/engines/engine_line.dart|test/engines/engine_line_test.dart|test/app/shell_players_test.dart test/engines/fixed_depth_test.dart test/engines/solitaire_evaluator_test.dart test/engines/uci_engine_test.dart test/features/players/player_hunt_test.dart test/features/players/practical_probe_test.dart test/features/tactics/alternative_answers_test.dart test/features/tactics/my_games_test.dart test/features/tournaments/game_runner_test.dart test/workspace/engine_analysis_test.dart test/workspace/engine_pane_test.dart test/workspace/engine_status_test.dart test/workspace/game_review_test.dart test/workspace/solitaire_engine_test.dart
+lib/net/recent_games.dart|test/net/recent_games_test.dart|test/features/players/player_analysis_test.dart test/features/players/player_download_test.dart test/features/tactics/my_games_test.dart test/net/credential_diagnostics_test.dart
+lib/net/search_evaluator.dart|test/net/search_evaluator_test.dart|
+lib/storage/document_text.dart|test/storage/document_text_test.dart|
+lib/storage/document_repository.dart|test/storage/document_repository_test.dart|test/storage/catalog_lifecycle_test.dart test/storage/pair_store_test.dart
+lib/storage/document_ref.dart|test/storage/document_ref_test.dart|test/features/pgn_drop_region_test.dart test/storage/outside_root_test.dart test/app/corpus_invalidation_test.dart test/app/copy_shutdown_test.dart test/app/shell_doors_test.dart test/app/shell_players_test.dart test/features/books_screen_test.dart test/features/library_import_test.dart test/features/library_lines_test.dart test/features/library_panel_test.dart test/features/library_unfinished_move_test.dart test/features/players/player_analysis_test.dart test/features/players/player_hunt_test.dart test/features/players/prep_sheet_test.dart test/features/players/saved_games_test.dart test/features/study/studies_test.dart test/features/tactics/mining_native_checkpoint_test.dart test/features/tournaments/tournament_run_test.dart test/storage/backup_index_metadata_test.dart test/storage/backups_test.dart test/storage/catalog_lifecycle_test.dart test/storage/chapter_files_test.dart test/storage/compound_completed_retry_test.dart test/storage/compound_pair_process_test.dart test/storage/compound_process_test.dart test/storage/compound_write_test.dart test/storage/faults/contracts_self_test.dart test/storage/file_delete_recovery_test.dart test/storage/file_relocation_recovery_test.dart test/storage/file_relocation_test.dart test/storage/folder_relocation_recovery_test.dart test/storage/journal_format_test.dart test/storage/my_games_files_test.dart test/storage/operation_journal_test.dart test/storage/pair_store_test.dart test/storage/persistence_lifecycle_test.dart test/storage/pgn_file_store_test.dart test/storage/platform_documents_test.dart test/storage/profile_snapshot_test.dart test/storage/record_codec_laws_test.dart test/storage/recovery_access_test.dart test/storage/recovery_matrix_test.dart test/storage/relocation_sync_test.dart
+lib/storage/eval_cache.dart|test/storage/eval_cache_test.dart|test/engines/fixed_depth_test.dart test/workspace/audit_pane_test.dart test/workspace/chapter_audit_test.dart test/workspace/engine_jobs_test.dart
+lib/storage/finds_store.dart|test/storage/finds_store_test.dart|test/workspace/fill_stops_test.dart test/storage/faults/derived_faults_test.dart test/workspace/finds_test.dart test/workspace/fill_gaps_test.dart test/workspace/fill_resume_test.dart test/workspace/workspace_view_test.dart
+lib/storage/file_lock.dart|test/storage/file_lock_test.dart|test/features/library_unfinished_move_test.dart test/storage/pgn_file_store_test.dart test/storage/recovery_access_test.dart test/storage/snapshot_lifetime_test.dart test/storage/training_retry_test.dart
+lib/storage/generation_trees.dart|test/storage/generation_trees_test.dart|test/storage/faults/derived_faults_test.dart test/workspace/fill_anchored_test.dart test/workspace/fill_gaps_test.dart test/workspace/fill_mirror_test.dart test/workspace/fill_resume_test.dart
+lib/storage/edit_scope.dart|test/storage/edit_scope_test.dart test/storage/edit_scope_laws_test.dart|test/storage/reorder_scope_test.dart test/storage/outside_root_test.dart test/storage/compound_write_test.dart test/storage/faults/save_faults_test.dart
+lib/storage/journal_records.dart|test/storage/journal_records_test.dart|test/storage/faults/faulty_disk_test.dart test/storage/operation_journal_test.dart
+lib/storage/lichess_token.dart|test/storage/lichess_account_test.dart|test/storage/lichess_account_persistence_test.dart test/features/settings/lichess_account_test.dart test/features/settings/settings_dialog_test.dart
+lib/storage/log_file.dart|test/storage/log_file_test.dart|
+lib/storage/line_progress.dart|test/storage/line_progress_test.dart test/storage/compound_mapping_property_test.dart|test/storage/compound_follow_process_test.dart
+lib/storage/master_book.dart|test/storage/master_book_test.dart|test/storage/master_corpus_test.dart test/storage/master_games_import_test.dart test/workspace/explorer_databases_test.dart test/workspace/explorer_pane_test.dart test/workspace/explorer_test.dart
+lib/storage/master_corpus.dart|test/storage/master_corpus_test.dart|test/features/database_library_test.dart test/features/database_storage_test.dart

@@ -84,7 +84,7 @@ final class Drill {
     required this.pass,
     required this.shown,
     required this.stage,
-    this.replayMistakes = true,
+    required this.replayMistakes,
     this.missed = const [],
     this.replaying = const [],
   });

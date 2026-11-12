@@ -5,6 +5,7 @@ import '../../chess/bughouse/bpgn_moves.dart';
 import '../../chess/bughouse/crazyhouse_pgn.dart';
 import '../../chess/bughouse/hivemind.dart';
 import '../../chess/bughouse/table.dart';
+import '../../chess/bughouse/table_game.dart';
 import '../../chess/bughouse/table_line.dart';
 import '../../chess/bughouse/table_setup.dart';
 
@@ -21,7 +22,8 @@ enum LabBoards {
 
 /// The Bughouse mode's table: the two boards, the line played on them with
 /// a cursor per board, how many boards are shown, the clock case the engine
-/// answers for, and what the user is pointing at.
+/// answers for, and what the user is pointing at. When the line is a game
+/// from a BPGN, also who played it and the other games of its file.
 ///
 /// A scratchpad: nothing here is saved. Leaving the mode keeps the table
 /// for when the user comes back; quitting the app loses it.
@@ -33,6 +35,14 @@ final class BughouseLab extends ChangeNotifier {
   ClockCase _clock = ClockCase.cdMaySit;
   bool _flipped = false;
   TableRefusal? _problem;
+  TableGame? _game;
+
+  /// The line as [_game] played it, to tell a copy of the game from one of a
+  /// line changed since.
+  TableLine? _asPlayed;
+  BpgnGames? _games;
+  int _gameAt = 0;
+  String? _file;
 
   /// The move a table row, an analysis row or an archive row is pointing
   /// at, drawn as an arrow on its board. Apart from the rest, so a pointer
@@ -52,6 +62,20 @@ final class BughouseLab extends ChangeNotifier {
 
   /// Why the last move or step was refused, for the status line.
   TableRefusal? get problem => _problem;
+
+  /// Who played the line on the boards and how it ended, when it was read
+  /// from a BPGN with tags; null for a line made here.
+  TableGame? get game => _game;
+
+  /// How many games the opened file holds, and which is on the boards,
+  /// from 0. One game, or a line made here, is not counted: 0.
+  int get gameCount => _games?.length ?? 0;
+  int get gameAt => _gameAt;
+
+  /// What [seat]'s clock reads with the boards as they are: after its last
+  /// move, or the time the game started with; null when the game notes
+  /// neither.
+  Duration? timeLeft(Seat seat) => _line.clock(seat) ?? _game?.startClock;
 
   /// The colour at the bottom of [board]: A + B's, unless flipped.
   Side bottom(BoardNumber board) {
@@ -100,18 +124,45 @@ final class BughouseLab extends ChangeNotifier {
     _show(position, focus: _focus);
   }
 
-  /// [board] at [node] of its lines (null for its start), unless the other
-  /// board's moves would no longer play from there.
-  void goTo(BoardNumber board, int? node) {
-    final next = _line.goTo(board, node);
-    switch (next.replay()) {
-      case LineReplayed(:final position):
-        _line = next;
-        _show(position, focus: board);
-      case LineBroken(:final move):
-        _focus = board;
-        _refuse(StepRefused(move));
+  /// [board] at [node] of its lines (null for its start), with the other
+  /// board where it was when that move was made, so every drop on either
+  /// has its piece; [board] alone when that table no longer replays.
+  void goTo(BoardNumber board, int? node) => _stepTo([
+    if (node == null) _line.beforeFirst(board) else _line.asAt(node),
+    _line.goTo(board, node),
+  ], focus: board);
+
+  /// The first of [ways] that replays, on the boards; when none does, the
+  /// boards stay and the move that would not play is named.
+  void _stepTo(Iterable<TableLine> ways, {BoardNumber? focus}) {
+    LineMove? broken;
+    for (final next in ways) {
+      switch (next.replay()) {
+        case LineReplayed(:final position):
+          final moved = focus ?? _moved(next);
+          _line = next;
+          _show(position, focus: moved);
+          return;
+        case LineBroken(:final move):
+          broken ??= move;
+      }
     }
+    if (broken == null) return;
+    if (focus != null) _focus = focus;
+    _refuse(StepRefused(broken));
+  }
+
+  /// The board a step to [next] moves: the one whose place changes, the
+  /// later-made of the two when both do, the focused one when neither.
+  BoardNumber _moved(TableLine next) {
+    final changed = [
+      for (final board in BoardNumber.values)
+        if (next.at(board) != _line.at(board)) board,
+    ];
+    if (changed.length != 2) return changed.firstOrNull ?? _focus;
+    final one = next.at(BoardNumber.one) ?? -1;
+    final two = next.at(BoardNumber.two) ?? -1;
+    return one > two ? BoardNumber.one : BoardNumber.two;
   }
 
   /// [node] and everything after it on its board taken out of the line,
@@ -130,12 +181,18 @@ final class BughouseLab extends ChangeNotifier {
     }
   }
 
-  /// The focused board a step forward (1), along its main continuation,
-  /// or back (−1).
-  void step(int by) => stepOn(_focus, by);
+  /// What ← and → do. With one board, board 1 a step forward (1) or back
+  /// (−1). With two, the game a step in the order its moves were made:
+  /// forward plays the next move of the two boards' lines, back takes the
+  /// last one made off.
+  void step(int by) {
+    if (single) return stepOn(_focus, by);
+    if (by > 0) return _stepTo(_line.stepsOn);
+    if (_line.steppedBack case final back?) _stepTo([back]);
+  }
 
-  /// [board] a step forward (1), along its main continuation, or back (−1);
-  /// nothing at either end.
+  /// [board] a step forward (1), along its main continuation, or back (−1),
+  /// as [goTo] goes there; nothing at either end.
   void stepOn(BoardNumber board, int by) {
     final at = _line.at(board);
     if (by < 0 && at != null) goTo(board, _line.nodes[at].parent);
@@ -144,12 +201,31 @@ final class BughouseLab extends ChangeNotifier {
     }
   }
 
-  void toStart() => goTo(_focus, null);
+  /// Board 1 at its start with one board; with two, both at theirs.
+  void toStart() =>
+      single ? goTo(_focus, null) : _stepTo([_line.atStart], focus: _focus);
 
-  /// The focused board at the end of the line it is on.
+  /// Board 1 at the end of the line it is on with one board; with two,
+  /// both boards at the ends of theirs, or as far on as the moves play in
+  /// the order made.
   void toEnd() {
-    final line = _line.lineOf(_focus);
-    if (line.isNotEmpty) goTo(_focus, line.last);
+    if (single) {
+      final line = _line.lineOf(_focus);
+      if (line.isNotEmpty) goTo(_focus, line.last);
+      return;
+    }
+    if (_line.atEnd case final end when end.replay() is LineReplayed) {
+      return _stepTo([end], focus: _focus);
+    }
+    var end = _line;
+    var position = _position;
+    for (var steps = 0; steps < _line.nodes.length; steps++) {
+      final next = end.stepOnFrom(position);
+      if (next == null) break;
+      (line: end, position: position) = next;
+    }
+    _line = end;
+    _show(position, focus: _focus);
   }
 
   /// The variation [node] is in one place up among the lines there.
@@ -214,17 +290,27 @@ final class BughouseLab extends ChangeNotifier {
     }
   }
 
-  /// Each board's line as the mode copies it (see [tableLineText]).
-  String get movesText => tableLineText(_line);
+  /// Each board's line as the mode copies it, a whole BPGN game when the
+  /// line is one (see [tableLineText]). Once the line is no longer the one
+  /// the game played, its result and ending are left out.
+  String get movesText {
+    final game = _game;
+    final asPlayed = _asPlayed;
+    final same =
+        asPlayed != null &&
+        bpgnMovetext(_line, clocks: false) ==
+            bpgnMovetext(asPlayed, clocks: false);
+    return tableLineText(_line, game: same ? game : game?.unfinished);
+  }
 
   /// The line up to and including [node] as a PGN: with one board, a
-  /// crazyhouse PGN of board 1 that Lichess imports; with two, the BPGN
-  /// [movesText] writes.
+  /// crazyhouse PGN of board 1 that Lichess imports; with two, BPGN moves
+  /// without the game's tags or clocks.
   String linePgnThrough(int node) {
     final line = _line.through(node);
     return single
         ? crazyhouseLinePgn(line, _line.nodes[node].board)
-        : tableLineText(line);
+        : tableLineText(line, clocks: false);
   }
 
   /// The table just after [node], as the line up to it leaves it; null when
@@ -248,18 +334,80 @@ final class BughouseLab extends ChangeNotifier {
     }
     return single
         ? crazyhouseLinePgn(line, BoardNumber.one)
-        : tableLineText(line);
+        : tableLineText(line, clocks: false);
   }
 
-  /// Pasted movetext as a new line, every move played; refused whole when
-  /// one does not play. [file] names the file it was read from, when it was
-  /// opened rather than pasted.
-  void pasteMoves(String text, {String? file}) {
+  /// Pasted BPGN as a new line, every move played; refused whole when one
+  /// does not play. [file] names the file it was read from, when it was
+  /// opened rather than pasted: a pasted line is shown at its end, to go on
+  /// from, and an opened game at its start, to play through. Moves on board
+  /// 2 show both boards. Text with several games shows the first, the rest
+  /// a step away with [showGame]; pasted, the first must play, or nothing
+  /// is taken, as with one game.
+  void pasteMoves(String text, {String? file}) =>
+      openGames(BpgnGames(text), file: file);
+
+  /// [games] as [pasteMoves] takes its text: what Open BPGN shows, once
+  /// [BpgnGames.index] has found the file's games.
+  void openGames(BpgnGames games, {String? file}) {
+    final text = games.length == 1 ? games[0] : games.text;
+    if (games.length > 1) {
+      final first = readTableLineText(games[0]);
+      if (file == null && first is PastedMovesRefused) {
+        _refuse(MovesRefused(first.token));
+        return;
+      }
+      _games = games;
+      _file = file;
+      _showGame(0, first);
+      return;
+    }
     switch (readTableLineText(text)) {
-      case PastedLine(:final line):
-        showLine(line);
+      case PastedLine(:final line, :final game):
+        _games = null;
+        _gameAt = 0;
+        _file = null;
+        _game = game;
+        _asPlayed = game == null ? null : line;
+        _bothBoardsFor(line);
+        if (file != null) _focus = BoardNumber.one;
+        showLine(file == null ? line : line.atStart);
       case PastedMovesRefused(:final token):
         _refuse(MovesRefused(token, file: file));
+    }
+  }
+
+  /// Game [index] of the opened file on the boards, at its start. One that
+  /// does not play is shown at its start without its moves, with the move
+  /// that broke it named, so the games after it can still be reached.
+  void showGame(int index) {
+    final games = _games;
+    if (games == null || index < 0 || index >= games.length) return;
+    _showGame(index, readTableLineText(games[index]));
+  }
+
+  void _showGame(int index, PastedMoves read) {
+    _gameAt = index;
+    _focus = BoardNumber.one;
+    switch (read) {
+      case PastedLine(:final line, :final game):
+        _game = game;
+        _asPlayed = line;
+        _bothBoardsFor(line);
+        showLine(line.atStart);
+      case PastedMovesRefused(:final token, :final game, :final start):
+        _game = game;
+        _asPlayed = null;
+        _line = TableLine(start);
+        _position = start;
+        preview.value = null;
+        _refuse(MovesRefused(token, file: _file));
+    }
+  }
+
+  void _bothBoardsFor(TableLine line) {
+    if (line.nodes.any((node) => node.board == BoardNumber.two)) {
+      _boards = LabBoards.two;
     }
   }
 
@@ -281,7 +429,13 @@ final class BughouseLab extends ChangeNotifier {
     if (board != _focus) _change(() => _focus = board);
   }
 
+  /// A new line from [position], which is no game of a file.
   void _reset(TablePosition position, {BoardNumber focus = BoardNumber.one}) {
+    _game = null;
+    _asPlayed = null;
+    _games = null;
+    _gameAt = 0;
+    _file = null;
     _line = TableLine(position);
     _show(position, focus: focus);
   }
@@ -353,8 +507,8 @@ final class LineMisfits extends TableRefusal {
   const LineMisfits();
 }
 
-/// A step that would leave [move], on the other board, without the piece
-/// it dropped.
+/// A step that would leave [move] without the piece it dropped: the capture
+/// it came from, on the other board, is no longer in the line.
 final class StepRefused extends TableRefusal {
   const StepRefused(this.move);
 

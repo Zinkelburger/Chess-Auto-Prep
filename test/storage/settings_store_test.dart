@@ -1,11 +1,12 @@
-import 'package:chess_auto_prep/chess/training/training_options.dart';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/chess/generation/evaluation_source.dart';
 import 'package:chess_auto_prep/chess/generation/expectimax_options.dart';
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
+import 'package:chess_auto_prep/chess/training/training_options.dart';
 import 'package:chess_auto_prep/storage/atomic_write.dart';
+import 'package:chess_auto_prep/storage/saved_place.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -63,6 +64,8 @@ void main() {
           method: SearchMethod.mainline,
           depth: 6,
           rootMoves: 8,
+          candidateMoves: 3,
+          bothSides: true,
           rareOnceIn: 0,
           source: EvaluationSource.chessDb,
           replies: ReplySource.lichess,
@@ -78,6 +81,22 @@ void main() {
       expect(odd.depth, isNull, reason: 'no limit');
     },
   );
+
+  test('a search goes deep by default: one later move, one side; the four '
+      'later moves older settings always saved are not read', () {
+    expect(ExpectimaxOptions.defaults.candidateMoves, 1);
+    expect(ExpectimaxOptions.defaults.bothSides, isFalse);
+    final old = Settings.fromJson(
+      '{"expectimax": {"rootMoves": 6, "candidateMoves": 4}}',
+    ).expectimax;
+    expect(old.rootMoves, 6);
+    expect(old.candidateMoves, 1);
+    final chosen = Settings.fromJson(
+      '{"expectimax": {"laterMoves": 3, "bothSides": true}}',
+    ).expectimax;
+    expect(chosen.candidateMoves, 3);
+    expect(chosen.bothSides, isTrue);
+  });
 
   Directory quarantine() =>
       Directory(p.join(support.path, 'recovery-quarantine'));
@@ -265,6 +284,28 @@ void main() {
       expect(next.value.analysisEngine, 'engine-1');
       expect(next.value, store.value);
     });
+  });
+
+  test('the last place and the engine switch round-trip; a place that is '
+      'not one is none', () {
+    const left = Settings(
+      lastPlace: SavedPlace(
+        mode: 'pgnViewer',
+        path: '/docs/games.pgn',
+        section: 'Round 1',
+        game: 3,
+      ),
+      engineOn: true,
+    );
+    final back = Settings.fromJson(left.toJson());
+    expect(back, left);
+    expect(back.lastPlace!.game, 3);
+    expect(Settings.fromJson('{"lastPlace": 4}').lastPlace, isNull);
+    expect(
+      Settings.fromJson('{"lastPlace": {"path": "/x"}}').lastPlace,
+      isNull,
+    );
+    expect(Settings.fromJson('{}').engineOn, isFalse);
   });
 
   test('a missing or mistyped field keeps its default', () {

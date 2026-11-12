@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:chess_auto_prep/chess/generation/eval.dart';
 import 'package:chess_auto_prep/chess/generation/evaluation_source.dart';
 import 'package:chess_auto_prep/chess/generation/sources.dart';
 import 'package:chess_auto_prep/net/remote_queue.dart';
@@ -94,4 +97,68 @@ void main() {
       expect(local.asked, isEmpty);
     },
   );
+
+  test('a ChessDB score is centipawns up to the mate base, and mate in up to '
+      '999 past it; anything else is no score', () {
+    expect(chessDbCp(mateBaseCp)?.cp, mateBaseCp);
+    expect(chessDbCp(-mateBaseCp)?.cp, -mateBaseCp);
+    expect(chessDbCp(30000)?.cp, mateBaseCp);
+    expect(chessDbCp(29001)?.cp, mateBaseCp - 999);
+    expect(chessDbCp(-29001)?.cp, -(mateBaseCp - 999));
+    expect(chessDbCp(29000), isNull);
+    expect(chessDbCp(30001), isNull);
+    expect(chessDbCp(-30001), isNull);
+  });
+
+  test('a cloud answer of the wrong shape, or with no line, is no score; one '
+      'exactly as deep as asked is one', () {
+    Eval? score(String body) =>
+        lichessScore(body, whiteToMove: true, minDepth: 20);
+    expect(score('[]'), isNull);
+    expect(score('{"depth":30}'), isNull);
+    expect(score('{"depth":30,"pvs":[]}'), isNull);
+    expect(score('{"depth":30,"pvs":[1]}'), isNull);
+    expect(score('{"depth":20,"pvs":[{"cp":15}]}')?.cp, 15);
+    expect(score('{"depth":20,"pvs":[{"mate":499}]}'), isNotNull);
+    expect(score('{"depth":20,"pvs":[{"mate":500}]}'), isNull);
+    expect(score('{"depth":20,"pvs":[{"mate":1}]}')?.cp, mateBaseCp - 2);
+    expect(score('{"depth":20,"pvs":[{"mate":0}]}'), isNull);
+  });
+
+  test('a cloud score for Black to move is turned to Black\'s side', () async {
+    final evaluator = SearchEvaluator(
+      source: EvaluationSource.lichess,
+      fallback: ScriptedEvaluator(),
+      minDepth: 14,
+      run: RemoteQueue(
+        MockClient(
+          (_) async => http.Response('{"depth":22,"pvs":[{"cp":50}]}', 200),
+        ),
+      ).run(),
+    );
+    addTearDown(evaluator.close);
+    final afterE4 = positionOf(
+      'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+    );
+    final answer = await evaluator.evaluate(afterE4) as Evaluated;
+    expect(answer.eval.cp, -50);
+  });
+
+  test('a lookup still out when the search stops is not used', () async {
+    final answer = Completer<http.Response>();
+    final evaluator = SearchEvaluator(
+      source: EvaluationSource.lichess,
+      fallback: ScriptedEvaluator(),
+      minDepth: 14,
+      run: RemoteQueue(MockClient((_) => answer.future)).run(),
+    );
+    final evaluating = evaluator.evaluate(positionOf(kingAndPawn));
+    await pumpEventQueue();
+    evaluator.close();
+    answer.complete(http.Response('{"depth":22,"pvs":[{"cp":30}]}', 200));
+    expect(
+      (await evaluating as EvaluationUnavailable).reason,
+      'The search was stopped.',
+    );
+  });
 }

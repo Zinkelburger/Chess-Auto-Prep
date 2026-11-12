@@ -9,8 +9,8 @@ import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/book_snapshot.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/workspace/book/books.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
+import 'package:chess_auto_prep/workspace/book/books.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -91,7 +91,7 @@ void main() {
   test('a book whose last edit did not save is still trained', () {
     fakeAsync((clock) {
       bookStore.fail = true;
-      books.rename(books.active!, 'Retained name');
+      books.rename(books.chosen!, 'Retained name');
       trainer.setScope(TrainScope.book);
       clock.flushMicrotasks();
       expect(books.canRetry, isTrue);
@@ -109,7 +109,7 @@ void main() {
   test('a book edit still being written does not hold training up', () {
     fakeAsync((clock) {
       bookStore.hold = Completer<void>();
-      books.rename(books.active!, 'Uncommitted');
+      books.rename(books.chosen!, 'Uncommitted');
       trainer.setScope(TrainScope.book);
       clock.flushMicrotasks();
       expect(trainer.state, isA<TrainerReady>());

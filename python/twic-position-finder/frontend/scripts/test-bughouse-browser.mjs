@@ -35,12 +35,13 @@ const until = (page, selector, pattern) => page.waitForFunction(
 const evaluated = (page) => page.waitForFunction(() => /^[+\-#]?\d/.test(document.querySelector('#ch-pearl').textContent) && document.querySelectorAll('.ch-pv').length > 0, { timeout: 180_000 });
 const text = (page, selector) => page.$eval(selector, (el) => el.textContent);
 const url = (position) => `${origin}/bughouse/?fen=${encodeURIComponent(position)}`;
-const sitDone = (page) => page.waitForFunction(() => {
-  const rows = document.querySelectorAll('#bs-sit .bs-sit-row');
-  return rows.length === 6 && ![...rows].some((r) => r.querySelector('.ch-spinner'));
+// Piece values measured on the board shown (not only read across from the other board).
+const valuesDone = (page) => page.waitForFunction(() => {
+  const note = document.querySelector('#bs-partner .bs-values-note')?.textContent ?? '';
+  const cells = [...document.querySelectorAll('#bs-partner .bs-values-give')];
+  return /^depth \d+$/.test(note) && cells.length === 10 && !cells.some((c) => /…|—/.test(c.textContent));
 }, { timeout: 180_000 });
 const HOLE = 'r2q1rk1/pp3p1p/2n2Bp1/8/8/8/PPP2PPP/R2Q1RK1[] w - - 0 1';
-const depthOf = (info) => Number(/Depth (\d+)/.exec(info)?.[1] ?? 0);
 
 try {
   const page = await browser.newPage();
@@ -49,23 +50,26 @@ try {
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   await page.setViewport({ width: 1440, height: 900 });
-  // Small sit searches keep the check quick on a two-CPU runner.
+  // A short piece-value measure keeps the check quick on a two-CPU runner.
   await page.goto(`${origin}/bughouse/`);
   await page.evaluate(() => {
     localStorage.clear();
-    localStorage.setItem('bughouse-analysis-v4', JSON.stringify({ sitNodes: 100_000 }));
+    localStorage.setItem('bughouse-analysis-v5', JSON.stringify({ valuesSeconds: 1 }));
   });
   await page.goto(url('r1bqkb1r/pppp1ppp/2n2n2/4p3/4P3/2N2N2/PPPP1PPP/R1BQKB1R[] w KQkq - 4 4'));
   assert.equal(await page.evaluate(() => crossOriginIsolated), true, 'the page is cross-origin isolated');
 
-  // The engine downloads its net, starts and evaluates; the sit panel fills.
+  // The engine downloads its net, starts and evaluates; the piece values fill.
   await evaluated(page);
   assert.equal(await page.$('#ch-gauge'), null, 'no evaluation bar beside the board');
   assert.equal(await page.$('.ch-moves-empty'), null, 'an empty move list has no hint');
-  await sitDone(page);
-  console.log('sit panel:', (await page.$$eval('#bs-sit .bs-sit-row', (rows) => rows.map((r) => r.textContent))).join(' | '));
+  await valuesDone(page);
+  console.log('piece values:', await page.$eval('#bs-partner .bs-values-table', (t) => t.innerText.replace(/\s+/g, ' ')));
+  assert.equal(await page.$eval('#ch-partner', (el) => el.hidden), true, 'one board by default');
+  assert.equal(await page.$$eval('#ch-pvs .ch-pv', (rows) => rows.filter((r) => r.dataset.uci).length), 2, 'two lines, the default, with one board');
   const before = await page.$eval('#ch-pearl', (el) => el.textContent);
   console.log('eval without hands:', before, await page.$eval('#ch-engine-info', (el) => el.textContent));
+  assert.match(await page.$eval('#ch-engine-info', (el) => el.textContent), /^Board · Depth \d+/, 'one board names its score the board’s');
   await page.screenshot({ path: path.join(output, 'analysis.png') });
 
   // + under Black's knight: the hand, the FEN and the eval follow.
@@ -92,7 +96,7 @@ try {
   await click(page, 'd2'); await click(page, 'd4');
   await until(page, '#ch-fen', / b /); // d4 is on the board before Black answers
   await click(page, 'e5'); await click(page, 'd4');
-  await until(page, '#ch-fen', /\/p w/); // exd4: the pawn went to Black's hand, as in crazyhouse
+  await until(page, '#ch-fen', /R1BQKB1R\/ w/); // exd4: the pawn left the board for the partner, as in bughouse
   await page.click('#ch-hand-bottom .ch-step[data-role="knight"][data-step="more"]'); // White +N
   await page.click('#ch-hand-bottom .zh-slot[data-role="knight"]');
   await click(page, 'd5');
@@ -102,7 +106,7 @@ try {
   await page.keyboard.press('ArrowLeft');
   assert.match(await fen(page), /\/ b/, 'back before exd4');
   await page.keyboard.press('ArrowDown');
-  assert.match(await fen(page), /\/3N4\/.*\/p b/, 'last move: after N@d5');
+  assert.match(await fen(page), /\/3N4\/.*R1BQKB1R\/ b/, 'last move: after N@d5');
 
   // PGN shows the line.
   assert.match(await page.$eval('#ch-pgn', (el) => el.value), /4\. d4 exd4 \{ Hands edited: \+N \} 5\. N@d5/);
@@ -124,7 +128,7 @@ try {
   await page.keyboard.press('x');
   await until(page, '#ch-engine-name', /Show threat/);
   await page.keyboard.press('x');
-  await until(page, '#ch-engine-name', /Fairy-Stockfish/);
+  await until(page, '#ch-engine-name', /HypeBeast/);
   // Right-click a move: Lichess's menu, Copy PGN puts the line on the clipboard.
   await page.browserContext().overridePermissions(origin, ['clipboard-read', 'clipboard-write', 'clipboard-sanitized-write']);
   await page.bringToFront();
@@ -176,7 +180,7 @@ try {
   assert.equal(await page.$eval('#ch-practice', (el) => el.hidden), true);
   // Back to N@d5: Bb5 and the reply are a variation now.
   await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowRight');
-  await until(page, '#ch-fen', /\/3N4\/.*\/p b/);
+  await until(page, '#ch-fen', /\/3N4\/.*R1BQKB1R\/ b/);
 
   // Board editor: a white queen painted on h5 and a black pawn removed, then analysed.
   await page.click('#ch-edit');
@@ -185,38 +189,102 @@ try {
   const queen = await page.$('#ch-spare-bottom .ch-spare-piece:nth-child(3)');
   await queen.click();
   await new Promise((r) => setTimeout(r, 200));
+  // The cursor is the piece in hand, as on lila.
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('#ch-board-wrap cg-board')).cursor.includes('data:image/svg+xml'), { timeout: 5000 });
+  // Right-click takes the other colour, and again back.
+  const pressed = (strip) => page.$eval(`#ch-spare-${strip} .ch-spare-piece:nth-child(3)`, (el) => el.getAttribute('aria-pressed'));
+  const right = async (key) => { const p = await square(page, key); await page.mouse.click(p.x, p.y, { button: 'right' }); };
+  await right('a3');
+  assert.equal(await pressed('top'), 'true', 'right-click takes the black queen');
+  assert.equal(await pressed('bottom'), 'false');
+  await right('a3');
+  assert.equal(await pressed('bottom'), 'true', 'and back to the white one');
+  assert.doesNotMatch(await fen(page), /\/Q7\/|\/q7\//, 'right-clicks place nothing');
+  // F flips the board in the editor too.
+  await page.keyboard.press('f');
+  await page.waitForSelector('#ch-board-wrap .cg-wrap.orientation-black');
+  await page.keyboard.press('f');
+  await page.waitForSelector('#ch-board-wrap .cg-wrap.orientation-white');
   await click(page, 'h5');
   await until(page, '#ch-fen', /\/3N3Q\//); // the queen is on h5
+  // Shift-click marks it promoted, with a dot in its square, and again clears it.
+  // Chessground draws on the next frame, and hides squares it no longer needs rather than removing them.
+  const marks = (n) => page.waitForFunction((n) => [...document.querySelectorAll('#ch-board-wrap square.ch-promoted')]
+    .filter((q) => q.style.display !== 'none').length === n, { timeout: 5000 }, n);
+  const shiftClick = async (key) => { await page.keyboard.down('Shift'); await click(page, key); await page.keyboard.up('Shift'); };
+  await shiftClick('h5');
+  await until(page, '#ch-fen', /\/3N3Q~\//);
+  await marks(1);
+  await shiftClick('h5');
+  await until(page, '#ch-fen', /\/3N3Q\//);
+  await marks(0);
+  await shiftClick('h5');
+  await until(page, '#ch-fen', /\/3N3Q~\//); // kept promoted, to be analysed so
   await page.click('#ch-spare-top .ch-trash');
   await click(page, 'a7');
   await until(page, '#ch-fen', /^r1bqkb1r\/1ppp/); // the a7 pawn is gone
+  // Binning the h1 rook takes White's O-O away instead of leaving an unplayable right.
+  assert.match(await fen(page), / KQkq /);
+  await click(page, 'h1');
+  await until(page, '#ch-fen', / Qkq /);
+  assert.equal(await page.$eval('#ch-castling input[data-right="K"]', (el) => el.disabled && !el.checked), true);
+  assert.equal(await text(page, '#ch-editor-error'), '');
   await page.click('#ch-hand-top .ch-step[data-role="queen"][data-step="more"]'); // Black +Q in the editor
   assert.match(await fen(page), /\/[A-Za-z]*q[A-Za-z]* [wb] /);
   await page.screenshot({ path: path.join(output, 'editor.png') });
   await page.click('#ch-turn button[data-turn="black"]');
+  // The engine follows the position being set up.
+  assert.equal(await page.$eval('#ch-ceval', (el) => el.offsetParent !== null), true, 'the engine header shows in the editor');
+  await evaluated(page);
   await page.click('#ch-editor-apply');
   assert.equal(await page.$eval('#ch', (el) => el.dataset.mode), 'analysis');
   assert.match(await fen(page), / b /);
+  assert.match(await fen(page), /\/3N3Q~\//, 'the promoted queen reaches the analysis');
+  await marks(1); // and is marked there
   await evaluated(page);
 
-  // The g7 hole: a knight would mate, and its row is marked as mating.
+  // Clear board: castling follows a king and rook put home; the engine waits for a legal position.
+  await page.click('#ch-edit');
+  await page.click('#ch-editor-clear');
+  // A FEN must parse: two boards run together are refused.
+  await page.$eval('#ch-fen', (el) => { el.focus(); el.select(); });
+  await page.keyboard.type('8/8/8/8/8/8/8/8/8/8/8/8[] w - - 0 1');
+  await page.keyboard.press('Enter');
+  await until(page, '#ch-fen-error', /not a FEN/);
+  await page.$eval('#ch-fen', (el) => el.blur()); // a focused box keeps what was typed
+  await until(page, '#ch-engine-info', /Waiting for a legal position/);
+  await page.click('#ch-spare-bottom .ch-spare-piece:nth-child(2)'); // white king
+  await click(page, 'e1');
+  await page.click('#ch-spare-bottom .ch-spare-piece:nth-child(4)'); // white rook
+  await click(page, 'h1');
+  await until(page, '#ch-fen', /\/[A-Za-z]* [wb] K - /); // an empty hand: a bare ninth rank
+  assert.equal(await page.$eval('#ch-castling input[data-right="K"]', (el) => el.checked), true);
+  // En passant: kept from a FEN and chosen among the squares the board allows.
+  await page.$eval('#ch-fen', (el) => { el.focus(); el.select(); });
+  await page.keyboard.type('rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR[] w KQkq f6 0 3');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('#ch-ep:not([hidden])');
+  assert.deepEqual(await page.$$eval('#ch-ep button', (bs) => bs.map((b) => `${b.textContent}:${b.getAttribute('aria-checked')}`)), ['None:false', 'd6:false', 'f6:true']);
+  await page.click('#ch-ep button:nth-child(2)');
+  await until(page, '#ch-fen', / KQkq d6 /);
+  await page.click('#ch-ep button:nth-child(1)');
+  await until(page, '#ch-fen', / KQkq - /);
+  await page.click('#ch-editor-cancel');
+  assert.equal(await page.$eval('#ch', (el) => el.dataset.mode), 'analysis');
+
+  // The g7 hole: a knight in White's hand would mate, and its cell says so.
   await page.goto(url(HOLE));
-  await sitDone(page);
-  console.log('hole:', (await page.$$eval('#bs-sit .bs-sit-row', (rows) => rows.map((r) => r.textContent))).join(' | '));
-  assert.deepEqual(await page.$$eval('#bs-sit th', (ths) => ths.map((th) => th.textContent)), ['Option', 'Eval', 'Best move']);
-  assert.deepEqual(await page.$$eval('#bs-sit .bs-sit-label', (ls) => ls.map((l) => l.textContent)), ['Move now', 'Pawn', 'Knight', 'Bishop', 'Rook', 'Queen'], 'piece rows carry no +');
-  assert.match(await text(page, '#bs-sit .bs-sit-row[data-role="knight"].bs-sit-mates'), /#1.*N@h6/);
-  // Hovering a row draws its move solid, in place of the engine's pale arrows.
-  await page.hover('#bs-sit .bs-sit-row[data-role="knight"]');
-  await page.waitForSelector('cg-container svg g[cgHash$=",h6,blue"]', { timeout: 5_000 });
-  assert.equal(await page.$('cg-container svg g[cgHash*="paleBlue"]'), null, 'engine arrows give way to the hovered row');
-  await page.screenshot({ path: path.join(output, 'sit-for-knight.png') });
-  // Clicking the knight row gives White the knight; the engine then mates.
-  await page.click('#bs-sit .bs-sit-row[data-role="knight"]');
+  await valuesDone(page);
+  console.log('hole:', await page.$eval('#bs-partner .bs-values-table', (t) => t.innerText.replace(/\s+/g, ' ')));
+  assert.deepEqual(await page.$$eval('#bs-partner th[scope="col"]', (ths) => ths.map((th) => th.textContent)), ['P', 'N', 'B', 'R', 'Q']);
+  assert.equal(await text(page, '#bs-partner [data-give="white-knight"]'), 'Mate');
+  await page.screenshot({ path: path.join(output, 'values-knight-mates.png') });
+  // Clicking the cell gives White the knight; the engine then mates.
+  await page.click('#bs-partner [data-give="white-knight"]');
   assert.match(await fen(page), /\/N w/);
   await page.waitForFunction(() => document.querySelector('#ch-pearl').textContent.startsWith('#'), { timeout: 120_000 });
 
-  // A laptop screen: the move list keeps its rows and the sit panel all six.
+  // A laptop screen: the move list keeps its rows and the piece values both of theirs.
   await page.setViewport({ width: 1366, height: 768 });
   await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
   // At least three rows of moves in view, without scrolling the panel.
@@ -225,10 +293,10 @@ try {
     return Math.min(moves.bottom, tools.bottom) - moves.top;
   });
   assert.ok(visible >= 70, `the move list is in view at 1366×768 (${Math.round(visible)} px)`);
-  assert.equal(await page.$$eval('#bs-sit .bs-sit-row', (rows) => rows.filter((r) => r.getBoundingClientRect().height > 20).length), 6);
+  assert.equal(await page.$$eval('#bs-partner tbody tr', (rows) => rows.filter((r) => r.getBoundingClientRect().height > 20).length), 2);
   await page.screenshot({ path: path.join(output, 'laptop-1366x768.png') });
 
-  // The gear: lila's sliders. ∞ search time is infinite analysis, which searches on without a limit after the sit rows.
+  // The gear: lila's sliders. HypeBeast decides within a time, so search time stops at 5 minutes.
   await page.setViewport({ width: 1440, height: 900 });
   const slide = (selector, value, event = 'input') => page.$eval(selector, (el, [v, ev]) => {
     el.value = String(v);
@@ -238,25 +306,19 @@ try {
   const rows = () => page.$$eval('#ch-settings .ch-setting', (rs) => rs.filter((r) => !r.hidden).map((r) => r.querySelector('label').textContent));
   const max = Number(await page.$eval('#ch-set-threads', (el) => el.max));
   console.log('gear rows →', (await rows()).join(', '));
-  assert.deepEqual(await rows(), max > 1 ? ['Search time', 'Multiple lines', 'Threads', 'Sit search'] : ['Search time', 'Multiple lines', 'Sit search']);
+  assert.deepEqual(await rows(), max > 1 ? ['Search time', 'Multiple lines', 'Threads', 'Piece values'] : ['Search time', 'Multiple lines', 'Piece values']);
   assert.equal(await text(page, '#ch-settings .ch-setting:first-child .ch-setting-value'), '10s');
   await page.screenshot({ path: path.join(output, 'gear.png') });
   await page.keyboard.press('Escape');
   assert.equal(await page.$eval('#ch-settings', (el) => el.hidden), true, 'Esc closes the gear');
   await page.click('#ch-gear');
-  await slide('#ch-set-search', 12); // ∞
-  assert.equal(await text(page, '#ch-settings .ch-setting:first-child .ch-setting-value'), '∞');
+  assert.equal(await page.$eval('#ch-set-search', (el) => el.max), '11');
+  await slide('#ch-set-search', 11);
+  assert.equal(await text(page, '#ch-settings .ch-setting:first-child .ch-setting-value'), '300s', 'no ∞');
+  await slide('#ch-set-search', 4); // back to 10 s
   await page.mouse.click(300, 300); // on the board: a click elsewhere closes it
   assert.equal(await page.$eval('#ch-settings', (el) => el.hidden), true, 'a click elsewhere closes the gear');
-  await page.goto(url('r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R/ w KQkq - 4 4'));
-  await evaluated(page);
-  await sitDone(page);
-  await page.waitForFunction(() => /^Depth \d+\/∞/.test(document.querySelector('#ch-engine-info').textContent), { timeout: 60_000 });
-  const first = depthOf(await text(page, '#ch-engine-info'));
-  await page.waitForFunction((n) => Number(/Depth (\d+)/.exec(document.querySelector('#ch-engine-info').textContent)?.[1] ?? 0) > n, { timeout: 30_000 }, first);
-  console.log('infinite analysis searched on past depth', first, ':', await text(page, '#ch-engine-info'));
   await page.click('#ch-gear');
-  await slide('#ch-set-search', 4); // back to 10 s
   // Threads restart the search with that many threads.
   if (max > 1) {
     const want = Math.max(1, Math.min(max, 2));
@@ -268,11 +330,43 @@ try {
   }
   await page.keyboard.press('Escape');
 
-  // A phone: board, hands with + and −, engine and sit panel.
+  // Two boards: the partner board beside the board, a capture lands in the partner's hand there.
+  await page.goto(`${origin}/bughouse/?fen=${encodeURIComponent('rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR[] w KQkq d6 0 2')}&fen2=${encodeURIComponent('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1')}`);
+  await page.waitForSelector('#ch-partner:not([hidden]) cg-board');
+  assert.equal(await page.$eval('#ch-boards', (b) => b.getAttribute('aria-pressed')), 'true', 'a fen2 link shows both boards');
+  assert.equal(await page.$eval('#ch-practice-toggle', (b) => b.disabled), true, 'practice is for one board');
+  await click(page, 'e4'); await click(page, 'd5');
+  await until(page, '#ch-fen', /RNBQKBNR\/ b/); // exd5, nothing in White's hand
+  // Board 2 faces the other way: Black, the capturer's partner, at the bottom, with the pawn.
+  await page.waitForFunction(() => document.querySelector('#ch-partner-hand-bottom .zh-slot')?.dataset.nb === '1');
+  assert.match(page.url(), /fen2=[^&]*%2Fp(\+|%20)w/, 'the link carries board 2 with its pawn');
+  await evaluated(page);
+  // The partner board gets its own search; the panel says what may arrive and why.
+  await page.waitForFunction(() => /\d/.test(document.querySelector('#ch-partner-eval').textContent) && !/…/.test(document.querySelector('#ch-partner-eval').textContent), { timeout: 180_000 });
+  await page.waitForSelector('#bs-partner .bs-why', { timeout: 180_000 });
+  console.log('two boards:', await text(page, '#ch-partner-eval'), '|', await page.$eval('#bs-partner', (el) => el.innerText.replace(/\s+/g, ' ')));
+  // Two boards name the score the team's, with the board's own share when the line gives it.
+  const info = await page.$eval('#ch-engine-info', (el) => el.textContent);
+  console.log('two-board score:', await page.$eval('#ch-pearl', (el) => el.textContent), info);
+  assert.match(info, /^Team( · board [+-]?\d+\.\d)? · Depth \d+/);
+  assert.match(await text(page, '#ch-partner-eval'), /^Team [+\-#]?\d/);
+  await page.screenshot({ path: path.join(output, 'two-boards.png') });
+  // Working on board 2 makes it the large board.
+  await page.click('#ch-partner-switch');
+  await until(page, '#ch-fen', /RNBQKBNR\/p w/);
+  await evaluated(page);
+  await page.keyboard.press('s');
+  await until(page, '#ch-fen', /RNBQKBNR\/ b/);
+  // Back to one board: board 1, alone.
+  await page.click('#ch-boards');
+  assert.equal(await page.$eval('#ch-partner', (el) => el.hidden), true);
+  assert.doesNotMatch(page.url(), /fen2=/);
+
+  // A phone: board, hands with + and −, engine and piece values.
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await page.goto(url('r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R[] w KQkq - 4 4'));
   await evaluated(page);
-  await sitDone(page);
+  await valuesDone(page);
   await page.screenshot({ path: path.join(output, 'mobile.png'), fullPage: true });
   // A phone widens its layout viewport to fit wide content, so measure against
   // the device width, not innerWidth.
@@ -298,29 +392,29 @@ try {
   await fresh.waitForSelector('#ch-engine-action:not([hidden])');
   assert.equal(await fresh.$eval('#ch-engine-action', (b) => b.textContent), 'Download');
   assert.match(await fresh.$eval('#ch-engine-info', (el) => el.textContent), /MB, once/);
-  assert.equal(await fresh.$$eval('#bs-sit .ch-spinner', (s) => s.length), 0, 'no spinners while the engine waits');
+  assert.equal(await fresh.$$eval('#bs-partner .ch-spinner', (s) => s.length), 0, 'no spinners while the engine waits');
   await fresh.click('#ch-engine-action');
   await evaluated(fresh);
   await phone.close();
 
-  // A failed download says so, with one button to try again; the sit rows stop spinning.
+  // A failed download says so, with one button to try again; the piece values stop spinning.
   const broken = await browser.createBrowserContext();
   const desk = await broken.newPage();
   desk.setDefaultTimeout(30_000);
   await desk.setViewport({ width: 1440, height: 900 });
   let block = true;
   await desk.setRequestInterception(true);
-  desk.on('request', (req) => (block && req.url().includes('/crazyhouse-engine/net-') ? req.abort() : req.continue()));
+  desk.on('request', (req) => (block && req.url().includes('/hypebeast-engine/net-') ? req.abort() : req.continue()));
   await desk.goto(url(HOLE));
   await desk.waitForSelector('#ch-engine-action:not([hidden])', { timeout: 60_000 });
   assert.equal(await desk.$eval('#ch-engine-action', (b) => b.textContent), 'Try again');
   assert.match(await desk.$eval('#ch-engine-info', (el) => el.textContent), /download failed/);
-  assert.equal(await desk.$$eval('#bs-sit .ch-spinner', (s) => s.length), 0, 'no endless spinners after a failure');
+  assert.equal(await desk.$$eval('#bs-partner .ch-spinner', (s) => s.length), 0, 'no endless spinners after a failure');
   await desk.screenshot({ path: path.join(output, 'download-failed.png') });
   block = false;
   await desk.click('#ch-engine-action');
   await evaluated(desk);
-  await sitDone(desk);
+  await valuesDone(desk);
   await broken.close();
   console.log('bughouse browser: ok');
 } finally {

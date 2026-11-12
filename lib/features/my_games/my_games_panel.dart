@@ -4,15 +4,15 @@ import 'package:flutter/material.dart';
 
 import '../../chess/book/book_check.dart';
 import '../../chess/tactics/mistake_counts.dart';
+import '../../ui/list_message.dart';
+import '../../ui/list_row.dart';
+import '../../ui/pane_header.dart';
 import '../../ui/search_field.dart';
+import '../../ui/segments.dart';
 import '../../ui/theme.dart';
 import '../../workspace/document/document_session.dart';
 import 'book_words.dart';
 import 'game_book.dart';
-import '../../ui/list_message.dart';
-import '../../ui/list_row.dart';
-import '../../ui/segments.dart';
-import '../../ui/pane_header.dart';
 
 /// The two ways the column lists what the book says: game by game, or
 /// grouped by where the games left it, most often first.
@@ -294,11 +294,6 @@ class _Openings extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!checked.hasBook) {
-      return const ListMessage(
-        'Choose a book above to compare openings. Your saved games are in Games.',
-      );
-    }
     final items = <Widget>[];
     for (final kind in Deviation.values) {
       final ways = checked.waysOf(kind);

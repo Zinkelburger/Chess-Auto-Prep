@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
+# A None here fails the test on its own, so pyright's None checks add nothing.
+# pyright: reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportOptionalIterable=false, reportOptionalOperand=false
 """Offline tests for agent admission, isolation and cleanup; no Flutter jobs."""
-import contextlib
 import argparse
 import importlib.util
 import json
@@ -16,7 +17,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'scripts'))
-import agent_job as jobs
+import agent_job as jobs  # noqa: E402
 
 
 def reserve(root, name, events, duration):
@@ -298,6 +299,7 @@ class DriverStorageTests(unittest.TestCase):
             if override is not None:
                 os.environ['CHESS_PREP_DRIVER_DIR'] = str(override)
             spec = importlib.util.spec_from_file_location('test_app_driver', ROOT / 'scripts/app_driver.py')
+            assert spec is not None and spec.loader is not None
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             return module

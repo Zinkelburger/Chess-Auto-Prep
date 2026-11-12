@@ -28,14 +28,14 @@ import 'document_probe.dart';
 import 'document_ref.dart';
 import 'file_lock.dart';
 import 'file_relocation.dart';
-import 'training_records.dart' show repointedBytes;
-import 'recovery_gate.dart';
-import 'recovery_files.dart';
-import 'training_rows.dart';
-import 'training_snapshot.dart';
 import 'operation_id.dart';
+import 'recovery_files.dart';
+import 'recovery_gate.dart';
 import 'training_payload.dart';
 import 'training_progress.dart';
+import 'training_records.dart' show repointedBytes;
+import 'training_rows.dart';
+import 'training_snapshot.dart';
 import 'training_writes.dart';
 
 /// A change accepted by [TrainingStore] and not yet written.

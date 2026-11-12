@@ -8,15 +8,15 @@ import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/chapter_edit.dart';
 import '../../chess/pgn/chapter_sections.dart';
 import '../../diagnostics/log.dart';
-import '../../storage/pending_writes.dart';
 import '../../storage/backup_history.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/deleted_chapters.dart';
-import '../../storage/training_records.dart' as records;
 import '../../storage/document_ref.dart';
-import '../../storage/reference_change.dart';
+import '../../storage/pending_writes.dart';
 import '../../storage/pgn_document_store.dart' as store;
 import '../../storage/pgn_file_picker.dart';
+import '../../storage/reference_change.dart';
+import '../../storage/training_records.dart' as records;
 import '../../ui/file_names.dart';
 import '../../workspace/book/books.dart';
 import '../../workspace/book/repertoire_catalog.dart';
@@ -26,8 +26,8 @@ import '../../workspace/document/session_results.dart';
 import 'file_changes.dart';
 import 'file_edits.dart';
 import 'library_imports.dart';
-import 'line_transfers.dart';
 import 'library_state.dart';
+import 'line_transfers.dart';
 
 /// The user's repertoires: the list, the search over it, and the one change
 /// at a time that adds, renames, moves or removes one.
@@ -262,6 +262,23 @@ final class Library extends ChangeNotifier {
       lines: board.gameCount,
     );
   });
+
+  /// [board] — the analysis board — as the first chapter of a new
+  /// repertoire [name], for the board's side: what was explored before any
+  /// repertoire was made for it is kept as it stands.
+  Future<LibraryResult> saveBoardAsRepertoire(String name, Chapter board) =>
+      _run('save the analysis board as the repertoire $name', () async {
+        if (_named(name) != null) return const LibraryNameTaken();
+        final ref = DocumentRef(p.join(_root, name, '$firstChapter.pgn'));
+        final games = writeChapter(board).substring(board.preamble.length);
+        final result = await _create(ref, name, board.side, games: games);
+        if (result is! LibraryDone) return result;
+        return LibraryAdded(
+          ChapterRef.at(ref.path),
+          chapters: 1,
+          lines: board.gameCount,
+        );
+      });
 
   /// A chapter file is renamed on disk; a chapter of a course file is its
   /// games' `[ChapterName]`, so renaming it rewrites that tag — and the

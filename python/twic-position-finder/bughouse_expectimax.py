@@ -4,6 +4,7 @@ import json
 import math
 import os
 from pathlib import Path
+from typing import Any
 import sqlite3
 import time
 
@@ -17,7 +18,7 @@ SCHEMA = '''CREATE TABLE IF NOT EXISTS analysis(
 
 def read(key, fen, path=None):
     path = Path(path or DB_PATH)
-    result = {'A': None, 'B': None}
+    result: dict[str, Any] = {'A': None, 'B': None}
     if not path.exists():
         return result
     with closing(sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True, timeout=5)) as db:

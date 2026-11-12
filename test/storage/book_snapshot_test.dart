@@ -2,12 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chess_auto_prep/storage/book_file.dart';
 import 'package:chess_auto_prep/storage/atomic_write.dart';
-import 'package:chess_auto_prep/workspace/book/books.dart';
+import 'package:chess_auto_prep/storage/book_file.dart';
 import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/document_probe.dart';
 import 'package:chess_auto_prep/storage/recovery_gate.dart';
+import 'package:chess_auto_prep/workspace/book/books.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -120,7 +120,7 @@ void main() {
       addTearDown(owner.dispose);
       await owner.load();
       final before = owner.source;
-      owner.rename(owner.active!, 'Updated');
+      owner.rename(owner.chosen!, 'Updated');
       await owner.settled;
       expect(owner.current, isFalse);
       expect(owner.canRetry, isTrue);
@@ -128,7 +128,7 @@ void main() {
       fail = false;
       await owner.retry();
       expect(owner.current, isTrue);
-      expect(owner.active!.name, 'Updated');
+      expect(owner.chosen!.name, 'Updated');
       final current =
           await probeDocument(p.join(support.path, 'books.json')) as FileFound;
       expect(owner.source!.revision!.nativeIdentity, current.identity);
@@ -139,6 +139,29 @@ void main() {
   Future<BookList> onDisk() async => BookList.decode(
     await File(p.join(support.path, 'books.json')).readAsString(),
   );
+
+  test('a books file another program deleted since it was read is a '
+      'conflict, not written over', () async {
+    await store.write(books);
+    final reader = fileStore();
+    await reader.snapshot();
+    File(p.join(support.path, 'books.json')).deleteSync();
+    await expectLater(
+      reader.write(BookList(books: books.books, active: 'a')),
+      throwsA(isA<BookConflict>()),
+    );
+    expect(File(p.join(support.path, 'books.json')).existsSync(), isFalse);
+  });
+
+  test('a Support folder not made yet is made, parents and all', () async {
+    final nested = Directory(p.join(root.path, 'a', 'Support'));
+    final fresh = BookFile(
+      nested,
+      recovery: RecoveryGate(documents: documents, support: nested),
+    );
+    await fresh.write(books);
+    expect(File(p.join(nested.path, 'books.json')).existsSync(), isTrue);
+  });
 
   test('a book edit rebases over another instance\'s write', () async {
     final other = fileStore();
@@ -158,7 +181,7 @@ void main() {
         active: 'a',
       ),
     );
-    owner.rename(owner.active!, 'Updated');
+    owner.rename(owner.chosen!, 'Updated');
     await owner.settled;
     expect(owner.canRetry, isFalse);
     expect(owner.current, isTrue);
@@ -184,7 +207,7 @@ void main() {
     await owner.load();
     final e4 = folder('e4', ['Italian']);
     final italian = ref('e4', 'Italian');
-    owner.setChapter(owner.active!, e4, italian, true);
+    owner.setChapter(owner.chosen!, e4, italian, true);
     await owner.settled;
     expect(owner.canRetry, isTrue);
     final result = await owner.changeReferences(() async {

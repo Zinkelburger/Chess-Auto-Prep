@@ -7,8 +7,8 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/features/library/library.dart';
 import 'package:chess_auto_prep/features/library/library_state.dart';
-import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/chapter_directory.dart';
+import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_file_store.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document/document_session.dart';
@@ -51,7 +51,7 @@ void main() {
       ..createSync(recursive: true);
     File(p.join(folder.path, 'Course.pgn')).writeAsStringSync(_course);
     final store = PgnFileStore(documents: documents, support: support);
-    saver = DocumentSaver(store, delay: const Duration(seconds: 1));
+    saver = DocumentSaver(store);
     session = DocumentSession(store, saver);
     final files = ChapterDirectory(Directory(root), recovery: store.recovery);
     library = libraryOver(files, store, session, saver, root: root);

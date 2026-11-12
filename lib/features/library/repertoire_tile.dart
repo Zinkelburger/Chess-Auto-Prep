@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../../storage/chapter_files.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/choice_dialog.dart';
 import '../../ui/confirm_dialog.dart';
+import '../../ui/list_row.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/relative_time.dart';
-import '../../ui/list_row.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
 import 'library.dart';
 import 'library_messages.dart';
-import '../../ui/app_icons.dart';
 
 /// One repertoire in the list, and its chapters when it is open.
 class RepertoireTile extends StatelessWidget {

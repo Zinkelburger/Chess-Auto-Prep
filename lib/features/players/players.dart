@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../../storage/pending_writes.dart';
-import '../../net/player_ratings.dart';
-import '../../storage/player_files.dart';
 import '../../chess/players/player.dart';
+import '../../net/player_ratings.dart';
+import '../../storage/pending_writes.dart';
+import '../../storage/player_files.dart';
 
 /// Owns the saved directory and group selection. Failed writes remain explicit
 /// retryable obligations; refresh never pretends that a save succeeded. An

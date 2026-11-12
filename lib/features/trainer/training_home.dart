@@ -3,20 +3,20 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../chess/pgn/move_label.dart';
-import '../../chess/training/sitting.dart';
 import '../../chess/training/records.dart';
+import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
+import '../../ui/app_icons.dart';
 import '../../ui/check_row.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/problem_line.dart';
 import '../../ui/relative_time.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
+import '../../ui/toggle_chip.dart';
+import '../../ui/tool_button.dart';
 import 'trainer.dart';
 import 'trainer_state.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/problem_line.dart';
-import '../../ui/tool_button.dart';
-import '../../ui/toggle_chip.dart';
 
 /// The selected scope's training desk, inside the shared Train pane.
 class TrainingHome extends StatefulWidget {
@@ -39,22 +39,27 @@ class TrainingHome extends StatefulWidget {
 class _TrainingHomeState extends State<TrainingHome> {
   bool _mistakes = false;
   Trainer get trainer => widget.trainer;
+  TrainerReady get ready => widget.ready;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: widget.ready.progress,
+    listenable: ready.progress,
     builder: (context, _) => SingleChildScrollView(
       padding: const EdgeInsets.all(readingCardInset),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _heading(context),
+          _Heading(
+            trainer: trainer,
+            ready: ready,
+            onSettings: widget.onSettings,
+          ),
           const SizedBox(height: Space.s),
-          _summary(context),
+          _Summary(trainer: trainer, ready: ready),
           const SizedBox(height: Space.l),
-          _actions(context),
+          _Actions(trainer: trainer, ready: ready),
           const SizedBox(height: Space.m),
-          _reviewChoices(),
+          _ReviewChoices(trainer: trainer),
           CheckRow(
             label: 'Rate difficulty myself',
             value: trainer.options.rateReviews,
@@ -64,30 +69,61 @@ class _TrainingHomeState extends State<TrainingHome> {
               trainer.options.copyWith(rateReviews: on),
             ),
           ),
-          if (trainer.progressProblem case final problem?)
-            _problem(context, problem),
+          if (trainer.progressProblem case final problem?) ProblemLine(problem),
           if (trainer.settings?.problem case final problem?)
-            _problem(context, problem),
-          if (widget.ready.progress.stale)
-            _problem(
-              context,
+            ProblemLine(problem),
+          if (ready.progress.stale)
+            const ProblemLine(
               'The repertoire changed. Reload progress before training.',
             ),
           const Divider(height: Space.xl),
-          _next(context),
+          _Next(trainer: trainer, ready: ready, onRead: widget.onRead),
           const SizedBox(height: Space.l),
-          _tools(),
-          if (_mistakes) ..._mistakeRows(),
+          _Tools(
+            trainer: trainer,
+            ready: ready,
+            mistakes: _mistakes,
+            onToggleMistakes: () => setState(() => _mistakes = !_mistakes),
+          ),
+          if (_mistakes)
+            for (final mistake in _scopedMistakes(trainer, ready))
+              _MistakeRow(
+                ready: ready,
+                mistake: mistake,
+                onRead: widget.onRead,
+              ),
         ],
       ),
     ),
   );
+}
 
-  Widget _heading(BuildContext context) {
+bool _linePaused(Trainer trainer, TrainerReady ready) {
+  final key = trainer.selection.line;
+  return key != null && (ready.progress.reviews[key]?.excluded ?? false);
+}
+
+// Existing mistake records remain accessible without occupying the home.
+List<Attempt> _scopedMistakes(Trainer trainer, TrainerReady ready) {
+  final keys = trainer.scopeLines.map((l) => l.key).toSet();
+  return ready.progress.mistakes.where((m) => keys.contains(m.key)).toList();
+}
+
+class _Heading extends StatelessWidget {
+  const _Heading({
+    required this.trainer,
+    required this.ready,
+    required this.onSettings,
+  });
+
+  final Trainer trainer;
+  final TrainerReady ready;
+  final VoidCallback? onSettings;
+
+  @override
+  Widget build(BuildContext context) {
     final selection = trainer.selection;
-    final line = selection.line == null
-        ? null
-        : widget.ready.lineOf(selection.line!);
+    final line = selection.line == null ? null : ready.lineOf(selection.line!);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -109,35 +145,29 @@ class _TrainingHomeState extends State<TrainingHome> {
             RowActions(
               tooltip: 'Training actions',
               children: [
-                if (widget.onSettings != null)
+                if (onSettings != null)
                   rowAction(
                     'Training settings…',
-                    widget.onSettings!,
+                    onSettings!,
                     icon: AppIcons.settings,
                   ),
                 rowAction(
                   'Mark scope as learned',
                   () => unawaited(
                     trainer.changeProgress(
-                      widget.ready.progress.mark(
-                        trainer.scopeLines,
-                        known: true,
-                      ),
+                      ready.progress.mark(trainer.scopeLines, known: true),
                     ),
                   ),
-                  busy: widget.ready.progress.stale,
+                  busy: ready.progress.stale,
                 ),
                 rowAction(
                   'Mark scope as new',
                   () => unawaited(
                     trainer.changeProgress(
-                      widget.ready.progress.mark(
-                        trainer.scopeLines,
-                        known: false,
-                      ),
+                      ready.progress.mark(trainer.scopeLines, known: false),
                     ),
                   ),
-                  busy: widget.ready.progress.stale,
+                  busy: ready.progress.stale,
                 ),
                 rowAction('Reload progress', () => unawaited(trainer.reload())),
               ],
@@ -147,9 +177,17 @@ class _TrainingHomeState extends State<TrainingHome> {
       ],
     );
   }
+}
 
-  Widget _summary(BuildContext context) {
-    final progress = widget.ready.progress;
+class _Summary extends StatelessWidget {
+  const _Summary({required this.trainer, required this.ready});
+
+  final Trainer trainer;
+  final TrainerReady ready;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = ready.progress;
     final lines = trainer.scopeLines
         .where((l) => !l.modelGame && l.yourMoves > 0)
         .toList();
@@ -166,17 +204,19 @@ class _TrainingHomeState extends State<TrainingHome> {
       style: Theme.of(context).textTheme.bodySmall,
     );
   }
+}
 
-  bool get _linePaused {
-    final key = trainer.selection.line;
-    return key != null &&
-        (widget.ready.progress.reviews[key]?.excluded ?? false);
-  }
+class _Actions extends StatelessWidget {
+  const _Actions({required this.trainer, required this.ready});
 
-  Widget _actions(BuildContext context) {
+  final Trainer trainer;
+  final TrainerReady ready;
+
+  @override
+  Widget build(BuildContext context) {
     final selection = trainer.selection;
-    final paused = selection.scopePaused || _linePaused;
-    final busy = widget.ready.progress.stale;
+    final paused = selection.scopePaused || _linePaused(trainer, ready);
+    final busy = ready.progress.stale;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -235,18 +275,25 @@ class _TrainingHomeState extends State<TrainingHome> {
     } else if (selection.scopePaused) {
       selection.pauseScope(false, chapter: selection.chapter);
     } else if (selection.line case final key?) {
-      final line = widget.ready.lineOf(key);
+      final line = ready.lineOf(key);
       if (line != null) {
         unawaited(
           trainer.changeProgress(
-            widget.ready.progress.setExcluded(line, excluded: false),
+            ready.progress.setExcluded(line, excluded: false),
           ),
         );
       }
     }
   }
+}
 
-  Widget _reviewChoices() {
+class _ReviewChoices extends StatelessWidget {
+  const _ReviewChoices({required this.trainer});
+
+  final Trainer trainer;
+
+  @override
+  Widget build(BuildContext context) {
     final selection = trainer.selection;
     if (selection.line != null) return const SizedBox.shrink();
     return Wrap(
@@ -281,17 +328,30 @@ class _TrainingHomeState extends State<TrainingHome> {
       ],
     );
   }
+}
 
-  Widget _next(BuildContext context) {
+class _Next extends StatelessWidget {
+  const _Next({
+    required this.trainer,
+    required this.ready,
+    required this.onRead,
+  });
+
+  final Trainer trainer;
+  final TrainerReady ready;
+  final ValueChanged<LineToRead> onRead;
+
+  @override
+  Widget build(BuildContext context) {
     final selection = trainer.selection;
     final lines = toLearn(
       trainer.availableLines,
-      widget.ready.progress.reviews,
-      widget.ready.progress.now,
+      ready.progress.reviews,
+      ready.progress.now,
     );
     final line = selection.line == null
         ? lines.firstOrNull
-        : widget.ready.lineOf(selection.line!);
+        : ready.lineOf(selection.line!);
     if (line == null) {
       return Text(
         selection.choosing
@@ -315,50 +375,76 @@ class _TrainingHomeState extends State<TrainingHome> {
         Text(displaySan(context, numberedMoves(line.moves)), style: monoText),
         const SizedBox(height: Space.s),
         TextButton(
-          onPressed: () =>
-              widget.onRead(widget.ready.toRead(line, ReadIn.moves)),
+          onPressed: () => onRead(ready.toRead(line, ReadIn.moves)),
           child: const Text('Read moves and notes'),
         ),
-        if (selection.line != null) _learned(line),
+        if (selection.line != null)
+          _Learned(trainer: trainer, ready: ready, line: line),
       ],
     );
   }
+}
 
-  Widget _learned(TrainingLine line) => CheckRow(
+class _Learned extends StatelessWidget {
+  const _Learned({
+    required this.trainer,
+    required this.ready,
+    required this.line,
+  });
+
+  final Trainer trainer;
+  final TrainerReady ready;
+  final TrainingLine line;
+
+  @override
+  Widget build(BuildContext context) => CheckRow(
     label: 'Learned',
-    value: !widget.ready.progress.reviewOf(line).untrained,
-    onChanged: widget.ready.progress.stale
+    value: !ready.progress.reviewOf(line).untrained,
+    onChanged: ready.progress.stale
         ? null
         : (on) => unawaited(
-            trainer.changeProgress(
-              widget.ready.progress.mark([line], known: on),
-            ),
+            trainer.changeProgress(ready.progress.mark([line], known: on)),
           ),
   );
+}
 
-  Widget _tools() {
+class _Tools extends StatelessWidget {
+  const _Tools({
+    required this.trainer,
+    required this.ready,
+    required this.mistakes,
+    required this.onToggleMistakes,
+  });
+
+  final Trainer trainer;
+  final TrainerReady ready;
+  final bool mistakes;
+  final VoidCallback onToggleMistakes;
+
+  @override
+  Widget build(BuildContext context) {
     final selection = trainer.selection;
     return Wrap(
       spacing: Space.s,
       runSpacing: Space.s,
       children: [
         TextButton(
-          onPressed: () => setState(() => _mistakes = !_mistakes),
+          onPressed: onToggleMistakes,
           child: Text(
-            _mistakes
+            mistakes
                 ? 'Hide mistakes'
-                : 'Mistakes · ${_scopedMistakes.length}',
+                : 'Mistakes · ${_scopedMistakes(trainer, ready).length}',
           ),
         ),
-        if (!selection.scopePaused && !_linePaused)
+        if (!selection.scopePaused && !_linePaused(trainer, ready))
           TextButton(
             onPressed: () {
               final key = selection.line;
-              final line = key == null ? null : widget.ready.lineOf(key);
+              final line = key == null ? null : ready.lineOf(key);
               if (line != null) {
                 unawaited(
                   trainer.changeProgress(
-                    widget.ready.progress.setExcluded(line, excluded: true),
+                    ready.progress.setExcluded(line, excluded: true),
                   ),
                 );
               } else {
@@ -376,31 +462,29 @@ class _TrainingHomeState extends State<TrainingHome> {
       ],
     );
   }
+}
 
-  // Existing mistake records remain accessible without occupying the home.
-  List<Attempt> get _scopedMistakes {
-    final keys = trainer.scopeLines.map((l) => l.key).toSet();
-    return widget.ready.progress.mistakes
-        .where((m) => keys.contains(m.key))
-        .toList();
-  }
+class _MistakeRow extends StatelessWidget {
+  const _MistakeRow({
+    required this.ready,
+    required this.mistake,
+    required this.onRead,
+  });
 
-  List<Widget> _mistakeRows() => [
-    for (final mistake in _scopedMistakes)
-      ListTile(
-        dense: true,
-        title: Text('Played ${mistake.played} · expected ${mistake.expected}'),
-        subtitle: Text(relativeTime(mistake.at.toLocal())),
-        onTap: () {
-          final line = widget.ready.lineOf(mistake.key);
-          if (line != null) {
-            widget.onRead(
-              widget.ready.toRead(line, ReadIn.board, ply: mistake.ply),
-            );
-          }
-        },
-      ),
-  ];
+  final TrainerReady ready;
+  final Attempt mistake;
+  final ValueChanged<LineToRead> onRead;
 
-  Widget _problem(BuildContext context, String text) => ProblemLine(text);
+  @override
+  Widget build(BuildContext context) => ListTile(
+    dense: true,
+    title: Text('Played ${mistake.played} · expected ${mistake.expected}'),
+    subtitle: Text(relativeTime(mistake.at.toLocal())),
+    onTap: () {
+      final line = ready.lineOf(mistake.key);
+      if (line != null) {
+        onRead(ready.toRead(line, ReadIn.board, ply: mistake.ply));
+      }
+    },
+  );
 }

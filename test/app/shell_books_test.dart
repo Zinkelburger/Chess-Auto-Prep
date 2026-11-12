@@ -4,14 +4,14 @@ import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/features/books/books_screen.dart';
 import 'package:chess_auto_prep/features/library/library_panel.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/ui/choice_field.dart';
+import 'package:chess_auto_prep/workspace/explorer/explorer_pane.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:chess_auto_prep/workspace/explorer/explorer_pane.dart';
-import 'package:chess_auto_prep/ui/choice_field.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../support/window_fixture.dart';
 import '../support/scripted_files.dart';
+import '../support/window_fixture.dart';
 
 /// Books in the window: the mode that edits them, the pencil beside the
 /// book wherever it is read, and Back to where the user came from.
@@ -70,8 +70,8 @@ void main() {
       ]);
       await w.pumpShell(tester);
       final books = w.parts.books;
-      books.setRepertoire(books.active!, kid, false);
-      books.setChapter(books.active!, kid, nested, true);
+      books.setRepertoire(books.chosen!, kid, false);
+      books.setChapter(books.chosen!, kid, nested, true);
       await toMode(tester, 'Opening books');
       expect(books.includes(nested), isTrue);
       final kidRow = find.ancestor(

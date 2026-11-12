@@ -1,6 +1,9 @@
 import 'dart:math' as math;
 
+import 'package:dartchess/dartchess.dart' show NormalMove, Role;
+
 import '../fen.dart';
+import '../pgn/tree_edit.dart' show positionOf;
 import 'search_node.dart';
 import 'traps.dart';
 
@@ -15,7 +18,8 @@ import 'traps.dart';
 ///   leaves us at least level and better than our best move would have:
 ///   a reply that only fails to punish a bad move of ours sets no trap;
 /// * our only move — one move of ours holds and every other loses a pawn
-///   and a half more;
+///   and a half more, unless it is a capture nobody would miss: taking the
+///   piece that just moved, or one worth more than the piece that takes;
 /// * their only move — one reply holds the opponent's position, the rest
 ///   lose a pawn and a half more, and they find it less than half the time;
 /// * a practical choice — the move worth most against the modelled opponent
@@ -163,6 +167,63 @@ List<Find> findsOf(SearchNode root, {int limit = findsPerSearch}) {
     if (held == null || find.worth > held.worth) found[key] = find;
   }
 
+  _trapFinds(root, keep);
+
+  void walk(
+    SearchNode node,
+    List<String> sofar,
+    double reach,
+    int given,
+    String? arrivedBy,
+  ) {
+    if (given > findMaxGivenCp) return;
+    void keepHere(Find find) => keep(find, given);
+    switch (node) {
+      case OurNode(:final candidates):
+        _ourOnlyMove(node, sofar, reach, keepHere, arrivedBy: arrivedBy);
+        _practical(node, sofar, reach, keepHere);
+        final best = _bestCp(node);
+        for (final c in candidates) {
+          walk(
+            c.child,
+            [...sofar, c.move.san],
+            reach,
+            given + (best - c.evalForUs.cp),
+            c.move.uci,
+          );
+        }
+      case OpponentNode(:final replies):
+        _theirOnlyMove(node, sofar, reach, keepHere);
+        for (final r in replies) {
+          walk(
+            r.child,
+            [...sofar, r.move.san],
+            reach * r.probability,
+            given,
+            r.move.uci,
+          );
+        }
+      case TerminalNode() || HorizonNode() || FrontierNode():
+        return;
+    }
+  }
+
+  walk(root, const [], 1, 0, null);
+  final ranked = found.values.toList()
+    ..sort((a, b) {
+      final byWorth = b.worth.compareTo(a.worth);
+      return byWorth != 0
+          ? byWorth
+          : a.sans.join(' ').compareTo(b.sans.join(' '));
+    });
+  return ranked.length > limit ? ranked.sublist(0, limit) : ranked;
+}
+
+/// The traps of [root] as finds, each handed to [keep] with what our moves
+/// on the way to it gave up: every move of ours is followed, and a trap
+/// that leaves us worse, or no better than our best move before it would
+/// have, is not one.
+void _trapFinds(SearchNode root, void Function(Find find, int given) keep) {
   for (final trap in trapsOf(root, everyMove: true)) {
     final (evalCp, given, bestBefore) = _walkTo(root, [
       for (final move in [...trap.toTrap, trap.blunder]) move.move.uci,
@@ -185,42 +246,6 @@ List<Find> findsOf(SearchNode root, {int limit = findsPerSearch}) {
       given,
     );
   }
-
-  void walk(SearchNode node, List<String> sofar, double reach, int given) {
-    if (given > findMaxGivenCp) return;
-    void keepHere(Find find) => keep(find, given);
-    switch (node) {
-      case OurNode(:final candidates):
-        _ourOnlyMove(node, sofar, reach, keepHere);
-        _practical(node, sofar, reach, keepHere);
-        final best = _bestCp(node);
-        for (final c in candidates) {
-          walk(
-            c.child,
-            [...sofar, c.move.san],
-            reach,
-            given + (best - c.evalForUs.cp),
-          );
-        }
-      case OpponentNode(:final replies):
-        _theirOnlyMove(node, sofar, reach, keepHere);
-        for (final r in replies) {
-          walk(r.child, [...sofar, r.move.san], reach * r.probability, given);
-        }
-      case TerminalNode() || HorizonNode() || FrontierNode():
-        return;
-    }
-  }
-
-  walk(root, const [], 1, 0);
-  final ranked = found.values.toList()
-    ..sort((a, b) {
-      final byWorth = b.worth.compareTo(a.worth);
-      return byWorth != 0
-          ? byWorth
-          : a.sans.join(' ').compareTo(b.sans.join(' '));
-    });
-  return ranked.length > limit ? ranked.sublist(0, limit) : ranked;
 }
 
 /// The score of the position [ucis] reach, what our moves on the way gave
@@ -254,13 +279,16 @@ SearchNode? _child(SearchNode node, String uci) => switch (node) {
   _ => null,
 };
 
-/// One move of ours holds and the rest lose [onlyMoveGapCp] more.
+/// One move of ours holds and the rest lose [onlyMoveGapCp] more. A
+/// capture nobody would miss ([obviousCapture]) is not news and is left out;
+/// [arrivedBy] is the move that led to [node], when the search made one.
 void _ourOnlyMove(
   OurNode node,
   List<String> sofar,
   double reach,
-  void Function(Find) keep,
-) {
+  void Function(Find) keep, {
+  String? arrivedBy,
+}) {
   final scored = [
     for (final c in node.candidates)
       if (c.child.evaluated) c,
@@ -271,6 +299,7 @@ void _ourOnlyMove(
   final gap = best - second;
   if (best < onlyMoveFloorCp || second > onlyMoveCeilingCp) return;
   if (gap < onlyMoveGapCp) return;
+  if (obviousCapture(node.fen, scored[0].move.uci, after: arrivedBy)) return;
   keep(
     Find(
       kind: FindKind.onlyMove,
@@ -286,6 +315,42 @@ void _ourOnlyMove(
     ),
   );
 }
+
+/// Whether [uci], played at [fen], is a capture nobody needs pointing out:
+/// it takes the piece that has just moved there ([after], the move before,
+/// as UCI) — a recapture, or the pawn that came forward to attack — or it
+/// takes a piece worth more than the one taking. A capture that gives up
+/// material for something else is not obvious, and neither is any move that
+/// is not a capture.
+bool obviousCapture(Fen fen, String uci, {String? after}) {
+  final position = positionOf(fen);
+  final move = position == null ? null : NormalMove.fromUci(uci);
+  if (position == null || move == null) return false;
+  final taker = position.board.pieceAt(move.from);
+  final taken = position.board.pieceAt(move.to);
+  // A pawn taking en passant lands on an empty square: the pawn it takes
+  // has, by the rule, just moved.
+  if (taker == null) return false;
+  if (taken == null) {
+    return taker.role == Role.pawn && move.to == position.epSquare;
+  }
+  if (after != null &&
+      after.length >= 4 &&
+      after.substring(2, 4) == uci.substring(2, 4)) {
+    return true;
+  }
+  return _worth(taken.role) > _worth(taker.role);
+}
+
+/// What a piece is worth beside another, for telling a plain win of
+/// material from a trade.
+int _worth(Role role) => switch (role) {
+  Role.pawn => 1,
+  Role.knight || Role.bishop => 3,
+  Role.rook => 5,
+  Role.queen => 9,
+  Role.king => 100,
+};
 
 /// One reply holds the opponent's position and they find it less than half
 /// the time.

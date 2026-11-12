@@ -52,7 +52,7 @@ Top to bottom, left to right:
   mode. The builder and the trainer share their documents (one repertoire
   list); modes with a screen of their own leave the board as it is.
 - **List column** (`«` in its corner hides it) — the mode's own list,
-  or `Positions`, the searches' finds (Actions ▸ Panels ▸ `Positions`,
+  or `Positions`, the searches' finds (Actions ▸ View ▸ `Positions`,
   or the list button on the Expectimax bar).
 - **Board** — Lichess's chessground board: click-click or drag; only legal
   moves land; a pawn on the last rank waits for its piece. Coordinates are a
@@ -70,7 +70,10 @@ Top to bottom, left to right:
   the move note: the
   current move with its glyph and note (`14. Nf5!  Good move`), the game's
   introduction and first move (muted, clickable) at the start; fixed height, a
-  long note scrolls; no card when there is nothing to say.
+  long note scrolls; no card when there is nothing to say. In a window so
+  short that the board would be under 300 px (`boardCrampedSide`), the board
+  takes the note's room and the note is written in the `Notes` tab or the
+  edit strip.
 - **Engine pane** — a labelled sliding switch (`Engine`), the status
   (`Off`, `Starting…`, `Depth 24 · 12 MN/s · 345M nodes · Stockfish 19`,
   shortened to fit; no depth shown past 100), the threat crosshair (`Show
@@ -83,7 +86,7 @@ Top to bottom, left to right:
   quiet board (the viewer and Study on Read) keeps it blank until the engine
   is on, and a hidden
   puzzle answer keeps it blank too.
-- **Reading card** — the pane tabs (`WorkspaceTab`: `Moves`, `Analysis`, `Game
+- **Reading card** — the pane tabs (`WorkspaceTab`: `Moves`, `Notes`, `Analysis`, `Game
   review`, `Solitaire`, `Train`, `Replies`, `Explorer`, `Expectimax`, `Audit`,
   `Puzzle`, `Game`, `Book`, `Filter`, `Player openings`, `My book`; each mode
   lists its own). Moves alone has no tab strip and no frame; the game or
@@ -95,6 +98,13 @@ Top to bottom, left to right:
   replaces. Glyphs follow the SAN. The editing strip opens under it from Actions ▸
   `Edit`, or with `Edit` at the card's foot in the viewer and Study (see
   [pgn-viewer](pgn-viewer.md) for `Read | Edit` and held edits).
+- **Notes** (`notes_pane.dart`) — the note on the move under the cursor (the
+  chapter's introduction at the start) as a page: one box the height of the
+  pane in the reading prose size, named `Note on 9... b5` or `Note before the
+  first move`. It is the same note the moves show under the move and commits
+  the same way (leaving the box, Ctrl+Enter, moving to another move). While it
+  is up, the note card under the board and the edit strip show the note to
+  read and keep no second box. Blank while part of the game is hidden.
 - **Explorer** — a source row `Book | Masters | Lichess | TWIC | This file |
   My games` (one typeable `Database` box when narrow), `Filters` at its end for
   the chosen source's chips (folded by default; Lichess `Speed` and `Rating`,
@@ -107,7 +117,7 @@ Top to bottom, left to right:
   Under it, the games here (Masters 15, Lichess four top and four recent, TWIC
   12). `This file` and `My games` show `40 games` / `12 of 40 games`.
 - **Explorer `Book`** — the book in use as an explorer (see
-  [books](books.md)); `No book set.` without one. For the board's position,
+  [books](books.md)); every repertoire while none is chosen. For the board's position,
   every move any chapter of the book for the board's side plays, matched by
   position: `Move` · `Lines` · `Goes on` · `Found in` (a click opens that
   file there). While it is up the board is free: a move the file does not play
@@ -147,7 +157,7 @@ to study…` in the viewer and Study, the quiz markers in Study).
 
 **Edit a note or glyph** — Actions ▸ `Edit`, or `Edit` at the card's
 foot in the viewer and Study opens the strip; in the builder also the pencil on
-the move note. The comment field edits the prose only; machine
+the move note; the `Notes` tab from a pane's `+` gives the note a whole pane. The comment field edits the prose only; machine
 tokens are re-attached after the prose on save, clearing the prose keeps them,
 and a comment left empty is removed rather than written as `{}`. Clicking
 another move while typing goes there in one click, and the note stays on the
@@ -161,7 +171,9 @@ comment's shapes out where edits are taken, else hides them until the
 position changes; the threat stays.
 
 **Engine** — the switch or Actions ▸ `Engine on` → starts or retries a
-failed start; the engine is off at every launch. Changing cores or memory
+failed start. The switch is remembered (`engineOn`): a launch starts the
+engine when it was left on, and a mode that turns it off to hide an answer
+(a puzzle, a lesson, solitaire) does not change what is remembered. Changing cores or memory
 restarts it; lines apply to the next search. Show threat (setting
 `engineThreat`, off by default) runs a depth-12 search of the turn-passed
 position just before the position's lines and draws its best move red; a
@@ -195,7 +207,8 @@ FEN first.` Ctrl+N / `New analysis tab` opens the `Analysis` tab: a scratch
 copy of the whole current game at the cursor, facing the same way, that never
 writes the source. While that tab is up, paste and set-up fill it instead. In
 the builder `Save to repertoire…` and in Study `Add game to study…` ask where,
-then a chapter name. Closing the window forgets analysis boards.
+then a chapter name; `Save to repertoire…` also offers `New repertoire…`,
+which asks its name and makes the board's lines its first chapter. Closing the window forgets analysis boards.
 
 **Edit position** — Actions ▸ `Edit position…` → the
 board editor (`Edit position`) on the board's position, same way up:
@@ -209,11 +222,18 @@ An illegal setup names its reason while `Use this position` waits. The result
 is a new analysis board. The same editor is embedded in Study's new-chapter
 dialog and the tournament's position dialog.
 
-**Full screen** — F11 or Actions ▸ Window ▸ `Full screen`, every mode.
+**Where the app opens** — on the mode and the file the last run was left on
+(`lastPlace` in `settings.json`: mode, path, chapter, game; written when the
+place changes). A file gone since leaves that mode on an empty analysis
+board, with nothing said. The first launch opens the Repertoire builder.
+
+**Full screen** — F11 or Actions ▸ View ▸ `Full screen`, every mode.
 
 **Layout** — panes, open tabs and board size are remembered per mode and
-document in `settings.json` `workspaceLayouts`; Actions ▸ `Reset workspace
-layout` restores the mode's default.
+document in `settings.json` `workspaceLayouts`; Actions ▸ View ▸ `Reset
+workspace layout` restores the mode's default. The board and the panes are
+resized by dragging their dividers (a pane also from its `+`: `More room` /
+`Less room`).
 
 ### Keys
 
@@ -237,8 +257,8 @@ focus: arrows, Enter/Space, Esc. A text field with focus keeps its keys.
   markers and the app's generated metrics (`[%score]`, `[%expectimax]`,
   `[%cumProb]`).
 - **Settings** are global across boards (`settings.json`): coordinates,
-  figurines, engine choice, cores, memory, lines, threat, explorer source and
-  chips, layouts. See [settings](settings.md).
+  figurines, engine choice, cores, memory, lines, threat, the engine switch,
+  explorer source and chips, layouts, the last place. See [settings](settings.md).
 - **Engine cache** — `<support>/eval_cache.db`, SQLite `evals(fen,
   eval_cp_white, depth, created_at)` keyed by the four-field FEN, White's view,
   deeper wins. Read and written by

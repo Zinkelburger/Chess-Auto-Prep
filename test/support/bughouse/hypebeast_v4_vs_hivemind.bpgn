@@ -1,0 +1,22 @@
+[Event "HypeBeast v4 vs HiveMind 1500 nodes, game 1"]
+[Date "2026.11.10"]
+[WhiteA "HypeBeast v4"]
+[BlackA "HiveMind n1500"]
+[WhiteB "HiveMind n1500"]
+[BlackB "HypeBeast v4"]
+[TimeControl "120"]
+[Result "1-0"]
+[Termination "checkmate"]
+
+1A. Nf3 1a. Nf6 1B. d4 2A. g3 1b. e6 2B. Nc3 2a. d6 3A. Bg2 2b. Nf6 3B. e4 3b.
+d5 4B. Nf3 3a. Nc6 4A. h3 4b. Nxe4 5B. Ne5 4a. e5 5b. Bb4 5A. O-O 6B. Bd2 5a.
+Be7 6b. Nxd2 6A. d3 7B. Qxd2 6a. h5 7b. f6 7A. e4 8B. Bb5 7a. N@d4 8b. c6 8A.
+Nxd4 8a. Nxd4 9B. N@f7 9A. c3 9b. cxb5 10B. Nxd8 9a. Ng4 10b. fxe5 10A. hxg4
+11B. Qg5 10a. hxg4 11b. O-O 11A. P@h6 12B. P@f7 11a. Nf3 12b. Kh8 12A. Bxf3 12a.
+gxf3 13B. B@f6 13b. gxf6 13A. B@a4 14B. Qxf6 13a. c6 14b. N@g7 14A. Qxf3 14a.
+P@g4 15B. Qxe5 15A. Qxf7 15b. P@d2 15a. Kxf7 16B. Kd1 16A. Bb3 16b. N@c4 16a. d5
+17B. Qf6 17A. exd5 17b. Nxb2 17a. cxd5 18B. Ke2 18A. B@e4 18b. Nd7 18a. P@h2 19A.
+Kh1 19B. Q@g8 19a. Rxh6 19b. Rxg8 20A. Bxh6 20B. fxg8=Q 20a. R@g1 20b. Kxg8 21B.
+Qf7 21b. Kh8 22B. P@h6 21A. Rxg1 22b. R@e5 21a. hxg1=Q 23B. dxe5 22A. Kxg1 23b.
+N@d4 22a. Q@e1 24B. Kf1 23A. B@f1 24b. P@e2 25B. Nxe2 23a. R@d6 24A. Q@h5 25b.
+R@e1 24a. P@g6 26B. Rxe1 26b. dxe1=Q 1-0

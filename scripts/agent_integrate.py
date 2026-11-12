@@ -133,4 +133,4 @@ if __name__ == '__main__':
     try:
         main()
     except (RuntimeError, subprocess.CalledProcessError) as exc:
-        raise SystemExit(f'agent-integrate: {exc}')
+        raise SystemExit(f'agent-integrate: {exc}') from exc

@@ -3,13 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:chess_auto_prep/net/lichess_http.dart';
 import 'package:chess_auto_prep/diagnostics/log.dart';
+import 'package:chess_auto_prep/net/lichess_http.dart';
 import 'package:chess_auto_prep/net/lichess_login.dart';
 import 'package:crypto/crypto.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:flutter_test/flutter_test.dart';
 
 /// The real flow against a real loopback server: this test is the
 /// browser, coming back to the page the app opened.
@@ -180,8 +180,8 @@ void main() {
     });
     final account = (await outcome as LoggedIn).account;
     expect(
-      account.until!.difference(DateTime.now()).inDays,
-      inInclusiveRange(364, 365),
+      account.until!.difference(DateTime.now()).inHours,
+      inInclusiveRange(365 * 24 - 1, 365 * 24),
     );
   });
 
@@ -314,5 +314,46 @@ void main() {
       openBrowser: (_) async => true,
     );
     await broken.revoke('lip_old');
+  });
+
+  test('a browser that cannot be opened at all is said so', () async {
+    final login = LichessLoginApi(
+      lichess(),
+      openBrowser: (_) async => throw const ProcessException('xdg-open', []),
+      wait: const Duration(seconds: 5),
+      random: Random(7),
+    );
+    final (outcome, pageFuture) = start(login, opens: false);
+    await pageFuture;
+    await login.cancel();
+    expect(await outcome, isA<LoginCancelled>());
+  });
+
+  test('the browser coming back with neither a code nor an error is a '
+      'denial', () async {
+    final login = api();
+    final (outcome, pageFuture) = start(login);
+    final page = await pageFuture;
+    await comeBack(page, {'state': page.queryParameters['state']!});
+    expect((await outcome as LoginFailed).problem, LoginProblem.denied);
+    expect(seen, isEmpty);
+  });
+
+  test('every login asks with a verifier and a state Lichess can read, '
+      'whatever the random bytes', () async {
+    for (var seed = 0; seed < 10; seed++) {
+      final login = LichessLoginApi(
+        lichess(),
+        openBrowser: (_) async => true,
+        wait: const Duration(seconds: 5),
+        random: Random(seed),
+      );
+      final (outcome, pageFuture) = start(login);
+      final page = await pageFuture;
+      expect(page.queryParameters['state'], hasLength(32));
+      expect(page.queryParameters['code_challenge'], hasLength(43));
+      await login.cancel();
+      expect(await outcome, isA<LoginCancelled>());
+    }
   });
 }

@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
-import 'package:chess_auto_prep/chess/pgn/comment_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_line.dart';
+import 'package:chess_auto_prep/chess/pgn/comment_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/pgn_reader.dart';
 import 'package:chess_auto_prep/chess/pgn/rewrite_gate.dart';
@@ -51,6 +51,30 @@ void main() {
       treeWithComment('1. d4 d5 *', 'careful } here'),
     );
     expect(rewrite, isA<LineRefused>());
+  });
+
+  test('a comment that reads back as other words, with no complaint from '
+      'the reader, is refused', () {
+    // `{x } { y}` reads cleanly as two comments joined: not what was said.
+    final chapter = parseChapter(name: 'A', text: _oneGame);
+    final rewrite = rewritten(
+      lineOf(chapter),
+      treeWithComment('1. d4 d5 *', 'x } { y'),
+    );
+    expect(rewrite, isA<LineRefused>());
+  });
+
+  test('a move whose squares are not its name is refused', () {
+    final chapter = parseChapter(name: 'A', text: _oneGame);
+    final tree = readGame('1. d4 d5 *').tree!;
+    final d4 = tree.children.first;
+    final mislabelled = GameTree(
+      rootFen: tree.rootFen,
+      children: [
+        MoveNode(san: d4.san, uci: 'c2c4', fen: d4.fen, children: d4.children),
+      ],
+    );
+    expect(rewritten(lineOf(chapter), mislabelled), isA<LineRefused>());
   });
 
   test('a game reading could not take whole is refused before anything is '

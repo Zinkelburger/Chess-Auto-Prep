@@ -3,14 +3,14 @@ import 'package:flutter/material.dart';
 
 import '../../chess/explorer_answer.dart';
 import '../../chess/pv_text.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/list_message.dart';
 import '../../ui/move_notation.dart';
+import '../../ui/pane_header.dart';
 import '../../ui/theme.dart';
 import '../../workspace/document/document_session.dart';
 import '../../workspace/explorer/explorer_rows.dart';
 import 'player_analysis.dart';
-import '../../ui/list_message.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/pane_header.dart';
 
 /// The Player openings tab: what the chosen player's games did from the
 /// position on the board, as the Explorer tab draws a database — a row per

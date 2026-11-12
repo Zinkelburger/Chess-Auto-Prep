@@ -169,7 +169,7 @@ def san_moves(text: str, limit: int = OPENING_PLIES) -> list[str]:
     return out
 
 
-def parse_date(text: str) -> dt.date:
+def parse_date(text: object) -> dt.date:
     try:
         return dt.date.fromisoformat(str(text).strip())
     except ValueError:
@@ -193,7 +193,7 @@ def day_window(date: dt.date, tz: str = "US") -> tuple[int, int]:
         from zoneinfo import ZoneInfo
 
         info = ZoneInfo(zone)
-    except Exception:
+    except (KeyError, ValueError, OSError):  # not found, malformed, a directory
         raise ChesscomError(
             f'Unknown time zone "{tz}". Use US, UTC or an IANA name such as '
             "America/New_York."
@@ -937,7 +937,7 @@ def _pid_alive(pid: int | None) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=__doc__ and __doc__.splitlines()[0])
     parser.add_argument("--job", required=True, help="search job directory")
     args = parser.parse_args(argv)
     _install_stop_handler()
@@ -1191,7 +1191,7 @@ def register_chesscom_tools(registry: Any) -> None:
         job = job_dir(args)
         progress = _read_json(job / PROGRESS_FILE) or {}
         pid = progress.get("pid")
-        if not _pid_alive(pid):
+        if pid is None or not _pid_alive(pid):
             return {"id": job.name, "stopped": False, "note": "Not running."}
         os.kill(pid, signal.SIGTERM)
         for _ in range(40):

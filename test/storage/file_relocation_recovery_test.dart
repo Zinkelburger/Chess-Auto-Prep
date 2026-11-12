@@ -397,7 +397,10 @@ void main() {
         addTearDown(child.close);
         expect(await File(from.path).exists(), isFalse);
         expect(await File(to.path).readAsString(), documentText);
-        expect(jsonDecode(await note().readAsString())['state'], 'committing');
+        expect(
+          (jsonDecode(await note().readAsString()) as Map)['state'],
+          'committing',
+        );
         expect(child.process.kill(ProcessSignal.sigkill), isTrue);
         await child.process.exitCode.timeout(const Duration(seconds: 10));
         await engine().recover();

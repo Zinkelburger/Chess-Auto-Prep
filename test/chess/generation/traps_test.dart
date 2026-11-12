@@ -180,6 +180,40 @@ void main() {
 
     expect(traps, hasLength(1));
     expect(ucis(traps.single.toTrap), ['p', 'x']);
+    expect([for (final m in traps.single.toTrap) m.ours], [false, true]);
+  });
+
+  test('of two roads that spring a trap equally often, the first is kept', () {
+    SearchNode trapAt(String name) => theirs(name, [
+      ('good', 0.5, leaf('good', 0)),
+      ('bad', 0.5, leaf('same', 200)),
+    ]);
+    final tree = theirs('root', [
+      ('p', 0.5, ours('p', [('x', trapAt('via p'))])),
+      ('q', 0.5, ours('q', [('x', trapAt('via q'))])),
+    ]);
+
+    expect(ucis(trapsOf(tree).single.toTrap), ['p', 'x']);
+  });
+
+  test('a reply that throws away exactly half a pawn is a trap', () {
+    final tree = theirs('root', [
+      ('best', 0.5, leaf('best', 0)),
+      ('slip', 0.5, leaf('slip', 50)),
+    ]);
+
+    expect(trapsOf(tree).single.lossCp, 50);
+  });
+
+  test('a win past 300 ranks as 300', () {
+    final tree = theirs('root', [
+      ('best', 0.4, leaf('best', 0)),
+      // Both spring 0.3 and rank 0.3 × 300: the moves break the tie.
+      ('zz', 0.3, leaf('zz', 1000)),
+      ('aa', 0.3, leaf('aa', 300)),
+    ]);
+
+    expect(trapsOf(tree).map((t) => t.blunder.move.uci), ['aa', 'zz']);
   });
 
   test('traps are ranked by how often they spring times what they win', () {
@@ -273,6 +307,13 @@ void main() {
         'g7g6',
       ]);
       expect(withThem.entries.last.line.reach, closeTo(0.3, 1e-9));
+    });
+
+    test('does not write a trap a kept line is exactly', () {
+      final trap = trapsOf(tree).single;
+      final plan = planDraft([DraftLine(moves: trap.moves, reach: 0.3)]);
+
+      expect(withTraps(plan, [trap]).lines, 1);
     });
 
     test('does not write a trap a kept line already holds', () {

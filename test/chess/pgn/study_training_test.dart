@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_edit.dart';
+import 'package:chess_auto_prep/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/chess/pgn/study.dart';
 import 'package:chess_auto_prep/chess/pgn/study_training.dart';
 import 'package:chess_auto_prep/chess/training/training_line.dart';
@@ -8,6 +9,25 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/study_fixture.dart';
 
 void main() {
+  test('changing a side replaces that tag and keeps every other header', () {
+    final study = parseChapter(
+      name: 'S',
+      text:
+          '[Event "S: A"]\n[ChapterName "A"]\n[TrainingSide "white"]\n\n'
+          '1. e4 *\n',
+    );
+    final changed =
+        setStudyTrainingSides(study, {0: Side.black}) as ChapterEdited;
+    final tags = changed.chapter.lines.single.tags;
+    expect(tagValue(tags, 'Event'), 'S: A');
+    expect(tagValue(tags, 'ChapterName'), 'A');
+    expect(tagValue(tags, 'TrainingSide'), 'black');
+    expect(
+      'TrainingSide'.allMatches(changed.chapter.lines.single.text),
+      hasLength(1),
+    );
+  });
+
   test(
     'side changes preserve orientation and every untouched chapter byte',
     () {

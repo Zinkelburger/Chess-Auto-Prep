@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../ui/app_icons.dart';
+import '../../ui/list_message.dart';
 import '../../ui/theme.dart';
 import '../../workspace/board/move_field.dart';
 import 'lesson_view.dart';
@@ -8,8 +10,6 @@ import 'trainer.dart';
 import 'trainer_state.dart';
 import 'trainer_words.dart';
 import 'training_home.dart';
-import '../../ui/list_message.dart';
-import '../../ui/app_icons.dart';
 
 /// The Train tab of the reading card: the lines of the chapter, or of its
 /// repertoire, with where each stands and the two ways in — Review what is
@@ -140,35 +140,11 @@ class _TrainPaneState extends State<TrainPane> {
         context,
         trainer,
       ),
-      TrainerEmpty(:final why) => Padding(
-        padding: const EdgeInsets.all(Space.m),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: TrainScopeButtons(trainer: trainer),
-            ),
-            if (widget.onImport != null) ...[
-              const SizedBox(height: Space.m),
-              FilledButton.icon(
-                onPressed: widget.onImport,
-                icon: const Icon(AppIcons.open, size: IconSize.action),
-                label: const Text('Import course PGN…'),
-              ),
-              const SizedBox(height: Space.s),
-              const Text(
-                'Choose a downloaded Chessable course or repertoire PGN.',
-              ),
-            ],
-            if (trainer.scope == TrainScope.book) ?widget.bookChip,
-            const SizedBox(height: Space.s),
-            Text(
-              emptyReason(why),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
+      TrainerEmpty(:final why) => _NothingHere(
+        trainer: trainer,
+        why: why,
+        onImport: widget.onImport,
+        bookChip: widget.bookChip,
       ),
       TrainerFailed(:final failure) => ListMessage(
         progressProblem(failure, doing: 'read the training progress'),
@@ -195,4 +171,46 @@ class _TrainPaneState extends State<TrainPane> {
       ),
     };
   }
+}
+
+/// No lines in this scope: the scopes, the way to bring a course in, and why.
+class _NothingHere extends StatelessWidget {
+  const _NothingHere({
+    required this.trainer,
+    required this.why,
+    required this.onImport,
+    required this.bookChip,
+  });
+
+  final Trainer trainer;
+  final NothingToTrain why;
+  final VoidCallback? onImport;
+  final Widget? bookChip;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(Space.m),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: TrainScopeButtons(trainer: trainer),
+        ),
+        if (onImport != null) ...[
+          const SizedBox(height: Space.m),
+          FilledButton.icon(
+            onPressed: onImport,
+            icon: const Icon(AppIcons.open, size: IconSize.action),
+            label: const Text('Import course PGN…'),
+          ),
+          const SizedBox(height: Space.s),
+          const Text('Choose a downloaded Chessable course or repertoire PGN.'),
+        ],
+        if (trainer.scope == TrainScope.book) ?bookChip,
+        const SizedBox(height: Space.s),
+        Text(emptyReason(why), style: Theme.of(context).textTheme.bodySmall),
+      ],
+    ),
+  );
 }

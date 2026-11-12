@@ -17,6 +17,7 @@ import '../features/study/study_panel.dart';
 import '../features/trainer/trainer.dart';
 import '../features/trainer/trainer_state.dart';
 import '../ui/app_action.dart';
+import '../ui/app_icons.dart';
 import '../ui/app_keys.dart';
 import '../workspace/book/board_book.dart';
 import '../workspace/book/board_book_pane.dart';
@@ -25,16 +26,15 @@ import '../workspace/book/repertoire_shelf.dart' show BookFileRef;
 import '../workspace/document/chapter_commands.dart';
 import '../workspace/document/document_actions.dart';
 import '../workspace/document/game_ordering.dart';
+import '../workspace/document/study_drafts.dart';
 import '../workspace/reading/move_tree_view.dart' show MoveMenu;
 import '../workspace/review/solitaire.dart';
 import '../workspace/review/solitaire_pane.dart';
-import '../workspace/document/study_drafts.dart';
 import '../workspace/workspace.dart';
 import '../workspace/workspace_tabs.dart';
 import 'mode.dart';
 import 'mode_view.dart';
 import 'workspace_requests.dart';
-import '../ui/app_icons.dart';
 
 /// The three modes whose list opens a document: the builder, the viewer and
 /// Study. They share the Actions menu and differ in the list and in the one
@@ -574,9 +574,7 @@ final class ViewerView extends _ReadingView {
   /// are the games list's own.
   @override
   bool _keeps(AppAction action) =>
-      action.group != 'File' &&
-      action.group != 'Panels' &&
-      action.label != 'Save a copy…';
+      action.group != 'File' && action.label != 'Save a copy…';
 
   @override
   List<AppAction> actions(ModeMenu menu) => [

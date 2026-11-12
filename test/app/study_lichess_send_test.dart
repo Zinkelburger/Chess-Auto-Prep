@@ -26,7 +26,7 @@ void main() {
     );
     w.studyFiles.listing = StudiesListed([ref]);
     await w.pumpShell(tester);
-    await w.requests.openStudy(ref, chapter: 0);
+    await w.requests.openStudy(ref);
     await tester.pumpAndSettle();
     expect(w.requests.mode, Mode.study);
 
@@ -87,7 +87,7 @@ void main() {
     );
     w.studyFiles.listing = StudiesListed([ref]);
     await w.pumpShell(tester);
-    await w.requests.openStudy(ref, chapter: 0);
+    await w.requests.openStudy(ref);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, 'Send to Lichess…'));
     await tester.pumpAndSettle();
@@ -110,7 +110,7 @@ void main() {
     );
     w.studyFiles.listing = StudiesListed([ref]);
     await w.pumpShell(tester);
-    await w.requests.openStudy(ref, chapter: 0);
+    await w.requests.openStudy(ref);
     await tester.pumpAndSettle();
     expect(find.text('Send to Lichess…'), findsNothing);
   });

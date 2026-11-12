@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
-import '../features/trainer/trainer.dart';
 import '../features/tactics/puzzle_trainer.dart';
+import '../features/trainer/trainer.dart';
 import 'mode.dart';
 import 'workspace_requests.dart';
 

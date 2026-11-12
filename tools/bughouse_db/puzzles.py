@@ -430,7 +430,7 @@ def _collect(engine, board: CrazyhouseBoard, within: int) -> _Step | None:
     as much is accepted too. None when the best move takes nothing, so the
     material was already won and the line ends before it."""
     ranks, _ = engine.search(board.fen(), VERIFY_NODES, multipv=5)
-    scores = {rank: (_rank_score(r), r[2][0]) for rank, r in ranks.items()}
+    scores: dict[int, tuple[Score, str]] = {rank: ((r[0], r[1]), r[2][0]) for rank, r in ranks.items()}
     best_score, move = scores[1]
     uci = chess.Move.from_uci(move)
     if not board.is_capture(uci):
@@ -442,7 +442,8 @@ def _collect(engine, board: CrazyhouseBoard, within: int) -> _Step | None:
         return board.is_capture(candidate) or board.gives_check(candidate)
 
     accept = [m for score, m in scores.values() if as_cp(score) >= floor and takes(m)]
-    return _Step(move, best_score, scores.get(2, (None, ""))[0], board.gives_check(uci), True, accept)
+    second = scores[2][0] if 2 in scores else None
+    return _Step(move, best_score, second, board.gives_check(uci), True, accept)
 
 
 def _solver_cp(engine, board: CrazyhouseBoard, nodes: int) -> int:

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../ui/app_action.dart';
+import '../ui/app_icons.dart';
+import '../ui/app_keys.dart';
 import '../ui/choice_dialog.dart';
 import '../ui/menu_entry.dart';
 import '../ui/theme.dart';
-import 'mode.dart';
-import '../ui/app_keys.dart';
-import '../ui/app_icons.dart';
 import '../ui/tool_button.dart';
+import 'mode.dart';
 
 /// The row over the window: the mode menu and, beside it, the Actions menu —
 /// one menu of everything that can be done now, the same shape in every mode.
@@ -276,13 +276,7 @@ class _ActionsMenuState extends State<_ActionsMenu> {
   }
 
   /// Keep the document's work in view; secondary controls expand beside it.
-  static const _secondary = {
-    'Copy': AppIcons.copy,
-    'Panels': AppIcons.panels,
-    'Action Tabs': AppIcons.paneTabs,
-    'Layout': AppIcons.layout,
-    'Window': AppIcons.window,
-  };
+  static const _secondary = {'Copy': AppIcons.copy, 'View': AppIcons.layout};
 
   @override
   Widget build(BuildContext context) {

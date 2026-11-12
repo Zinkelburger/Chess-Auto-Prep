@@ -9,19 +9,19 @@ import 'package:path/path.dart' as p;
 import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'backups.dart';
-import 'document_text.dart';
 import 'book_file.dart';
 import 'book_references.dart';
 import 'compound_commit.dart';
-import 'line_progress.dart';
 import 'compound_write.dart';
-import 'operation_participants.dart';
 import 'document_probe.dart';
 import 'document_ref.dart';
+import 'document_text.dart';
 import 'edit_scope.dart';
 import 'file_relocation.dart';
-import 'operation_id.dart';
+import 'line_progress.dart';
 import 'mutation_guards.dart';
+import 'operation_id.dart';
+import 'operation_participants.dart';
 import 'pgn_document_store.dart';
 import 'recovery_files.dart';
 import 'recovery_gate.dart';
@@ -271,6 +271,50 @@ final class PgnFileStore implements PgnDocumentStore {
     }
   }
 
+  /// Adds [edit] to [inputs] if it still applies to what is on disk;
+  /// otherwise the answer the pair ends with.
+  Future<SaveResult?> _preparePairEdit(
+    DocumentEdit edit,
+    List<_PairInput> inputs,
+  ) async {
+    final observed = await probeDocument(edit.ref.path);
+    switch (observed) {
+      case FileMissing():
+        return const Conflict(null);
+      case FileUnreadable(:final detail):
+        return IoFailure(detail);
+      case FileFound(:final revision, :final bytes):
+        if (revision != edit.expected ||
+            (edit.expected.nativeIdentity != null &&
+                revision.nativeIdentity != edit.expected.nativeIdentity)) {
+          return Conflict(revision);
+        }
+        final prepared = await preparedSave(
+          edit.ref.path,
+          bytes,
+          revision.contentHash,
+          edit.text,
+          edit.scope,
+        );
+        switch (prepared) {
+          case NotReplaceable(:final result):
+            return result;
+          case OutsideScope(:final detail):
+            return SaveRefused(detail);
+          case UnchangedText(:final before):
+            inputs.add((edit: edit, found: observed, before: before));
+          case ReadyToWrite(:final before, :final hash, :final undeclared):
+            if (undeclared) log.w('save pair ${edit.ref.path}', _undeclared);
+            if (edit.scope is RestoredVersion) {
+              final refused = await _keptHere(edit.ref, hash);
+              if (refused != null) return refused;
+            }
+            inputs.add((edit: edit, found: observed, before: before));
+        }
+    }
+    return null;
+  }
+
   Future<SaveResult> _savePair(
     DocumentEdit primary,
     DocumentEdit secondary,
@@ -287,40 +331,8 @@ final class PgnFileStore implements PgnDocumentStore {
     // Prepare and validate both scopes before preserving either preimage.
     final inputs = <_PairInput>[];
     for (final edit in edits) {
-      final observed = await probeDocument(edit.ref.path);
-      switch (observed) {
-        case FileMissing():
-          return const Conflict(null);
-        case FileUnreadable(:final detail):
-          return IoFailure(detail);
-        case FileFound(:final revision, :final bytes):
-          if (revision != edit.expected ||
-              (edit.expected.nativeIdentity != null &&
-                  revision.nativeIdentity != edit.expected.nativeIdentity)) {
-            return Conflict(revision);
-          }
-          final prepared = await preparedSave(
-            edit.ref.path,
-            bytes,
-            revision.contentHash,
-            edit.text,
-            edit.scope,
-          );
-          switch (prepared) {
-            case NotReplaceable(:final result):
-              return result;
-            case OutsideScope(:final detail):
-              return SaveRefused(detail);
-            case UnchangedText(:final before):
-              inputs.add((edit: edit, found: observed, before: before));
-            case ReadyToWrite(:final before, :final hash, :final undeclared):
-              if (undeclared) log.w('save pair ${edit.ref.path}', _undeclared);
-              if (edit.scope is RestoredVersion) {
-                final refused = await _keptHere(edit.ref, hash);
-                if (refused != null) return refused;
-              }
-              inputs.add((edit: edit, found: observed, before: before));
-          }
+      if (await _preparePairEdit(edit, inputs) case final failed?) {
+        return failed;
       }
     }
     final List<CompoundTraining> training;

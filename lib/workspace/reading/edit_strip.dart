@@ -4,18 +4,18 @@ import '../../chess/pgn/comment_edits.dart' show isGlyph, isPositionGlyph;
 import '../../chess/pgn/comment_text.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/study.dart';
-import '../../ui/toggle_chip.dart';
-import '../../ui/listening_state.dart';
+import '../../ui/app_icons.dart';
+import '../../ui/app_keys.dart';
 import '../../ui/confirm_dialog.dart';
+import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
-import 'comment_field.dart';
-import '../document/save_copy.dart';
+import '../../ui/toggle_chip.dart';
+import '../../ui/tool_button.dart';
 import '../document/document_saver.dart';
 import '../document/document_session.dart';
+import '../document/save_copy.dart';
 import '../document/session_results.dart';
-import '../../ui/app_keys.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/tool_button.dart';
+import 'comment_field.dart';
 
 /// Everything about changing the document, under the moves: Done, Undo, the
 /// save state, the six glyphs and the note on the move the board is on.

@@ -64,6 +64,17 @@ void main() {
     expect(keeps(until, clubGame), isTrue);
   });
 
+  test('≥ and ≤ both keep a game exactly at the value', () {
+    final rated = headers({'WhiteElo': '2000'});
+    for (final rule in [FilterRule.atLeast, FilterRule.atMost]) {
+      expect(
+        keeps(HeaderRule(field: 'WhiteElo', rule: rule, value: '2000'), rated),
+        isTrue,
+        reason: rule.name,
+      );
+    }
+  });
+
   test('a rating or date the game does not know fails both ≥ and ≤', () {
     final unknown = headers({'WhiteElo': '?', 'Date': '????.??.??'});
     for (final rule in [FilterRule.atLeast, FilterRule.atMost]) {

@@ -24,7 +24,6 @@ String emptyReason(NothingToTrain why) => switch (why) {
   NothingToTrain.noChapter => 'Open a repertoire chapter to train it.',
   NothingToTrain.studyChapter =>
     'Choose training sides to practice this study.',
-  NothingToTrain.noBook => 'No book set.',
   NothingToTrain.emptyBook => 'Your book has no chapters yet.',
 };
 

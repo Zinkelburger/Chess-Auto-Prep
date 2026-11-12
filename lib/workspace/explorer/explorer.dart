@@ -12,8 +12,8 @@ import '../../diagnostics/log.dart';
 import '../../net/lichess_explorer.dart';
 import '../../storage/master_book.dart';
 import '../../storage/settings_store.dart';
-import '../document/document_session.dart';
 import '../book/gap_walk.dart' show indexOfReply;
+import '../document/document_session.dart';
 import '../latest.dart';
 import 'local_games.dart';
 

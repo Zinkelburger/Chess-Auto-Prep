@@ -3,12 +3,12 @@ import 'package:chess_auto_prep/net/remote_queue.dart';
 import 'package:chess_auto_prep/storage/audit_store.dart';
 import 'package:chess_auto_prep/storage/eval_cache.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
-import 'package:chess_auto_prep/workspace/review/chapter_audit.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
-import 'package:chess_auto_prep/workspace/review/game_review.dart';
 import 'package:chess_auto_prep/workspace/book/gap_hunt.dart';
 import 'package:chess_auto_prep/workspace/book/replies.dart';
+import 'package:chess_auto_prep/workspace/review/chapter_audit.dart';
+import 'package:chess_auto_prep/workspace/review/game_review.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/audit_fixture.dart';
@@ -87,6 +87,38 @@ void main() {
     cache.close();
     game.dispose();
     chapter.dispose();
+  });
+
+  test('owners hear when the machine changes hands or jobs, not when its '
+      'holder only gives another reason', () {
+    final own = EngineJobs(board);
+    addTearDown(own.dispose);
+    var heard = 0;
+    own.addListener(() => heard++);
+    final job = Object();
+    expect(own.take(job, 'Searching', kind: EngineJobKind.search), isTrue);
+    expect(heard, 1);
+    expect(
+      own.take(job, 'Still searching', kind: EngineJobKind.search),
+      isTrue,
+    );
+    expect(heard, 1);
+    own.take(job, 'Paused while making lines', kind: EngineJobKind.makingLines);
+    expect(heard, 2);
+    expect(own.activeKind, EngineJobKind.makingLines);
+    expect(own.take(Object(), 'Another', kind: EngineJobKind.audit), isFalse);
+    expect(heard, 2);
+    own.release(job);
+    expect(heard, 3);
+  });
+
+  test('a job that takes or gives back the machine after the window went '
+      'does so quietly', () {
+    final gone = EngineJobs(board)..dispose();
+    final job = Object();
+    expect(gone.take(job, 'Late', kind: EngineJobKind.review), isTrue);
+    gone.release(job);
+    expect(gone.heldByOther(Object()), isFalse);
   });
 
   test('a game review does not start while an audit holds the machine; the '

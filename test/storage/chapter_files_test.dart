@@ -1,14 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
-
 import 'package:chess_auto_prep/chess/pgn/chapter_heading.dart';
+import 'package:chess_auto_prep/storage/chapter_directory.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/deleted_chapters.dart';
-import 'package:chess_auto_prep/storage/chapter_directory.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/recovery_gate.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -167,6 +166,11 @@ void main() {
     expect(await files.removeUnused(indian, of('// Indian\n')), isTrue);
     expect(await files.removeUnused(edited, of('// Edited\n')), isFalse);
     expect(
+      await files.removeUnused(indian, of('// Indian\n')),
+      isTrue,
+      reason: 'already gone is removed',
+    );
+    expect(
       await files.removeUnused(
         DocumentRef(p.join(profile.path, 'Elsewhere.pgn')),
         of(''),
@@ -274,6 +278,47 @@ void main() {
     expect(File(p.join(root.path, 'KID', 'Main.pgn')).existsSync(), isTrue);
   });
 
+  test('import staging an hour and a half old is swept', () async {
+    await put('.import-abc/X.pgn', '[Event "Line"]\n\n1. e4 *');
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final files = ChapterDirectory(
+      root,
+      recovery: recovery,
+      now: () => DateTime.now().add(const Duration(minutes: 90)),
+    );
+    await files.list();
+    expect(Directory(p.join(root.path, '.import-abc')).existsSync(), isFalse);
+  });
+
+  test('import staging is swept once a run: one too young at the first '
+      'listing waits for the next run', () async {
+    await put('.import-abc/X.pgn', '[Event "Line"]\n\n1. e4 *');
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    var later = Duration.zero;
+    final files = ChapterDirectory(
+      root,
+      recovery: recovery,
+      now: () => DateTime.now().add(later),
+    );
+    await files.list();
+    later = const Duration(hours: 2);
+    await files.list();
+    expect(Directory(p.join(root.path, '.import-abc')).existsSync(), isTrue);
+  });
+
+  test('only a staging folder directly in the repertoires folder is '
+      'removed as one', () async {
+    final outside = Directory(p.join(profile.path, '.import-abc'))
+      ..createSync(recursive: true);
+    final unstaged = Directory(p.join(root.path, 'KID'))
+      ..createSync(recursive: true);
+    final files = ChapterDirectory(root, recovery: recovery);
+    await files.removeStaging(outside.path);
+    await files.removeStaging(unstaged.path);
+    expect(outside.existsSync(), isTrue);
+    expect(unstaged.existsSync(), isTrue);
+  });
+
   test('import staging from the last hour is left for another copy of the '
       'app to place', () async {
     await put('.import-abc/X.pgn', '[Event "Line"]\n\n1. e4 *');
@@ -281,6 +326,66 @@ void main() {
     final files = ChapterDirectory(root, recovery: recovery);
     await files.list();
     expect(Directory(p.join(root.path, '.import-abc')).existsSync(), isTrue);
+  });
+
+  group('a chapter and a listing, as values', () {
+    test('a chapter of a course file is called by its section, its file by '
+        'the file', () {
+      final whole = ChapterRef.at('/r/KID/Main.pgn');
+      expect((whole.name, whole.fileName), ('Main', 'Main'));
+      final section = ChapterRef.at('/r/Course.pgn', section: 'Najdorf');
+      expect((section.name, section.fileName), ('Najdorf', 'Course'));
+    });
+
+    test('a bounded listing covers its boundaries, what is under them, and '
+        'the folders above them only as intersecting', () {
+      const listing = Repertoires(
+        [],
+        boundaries: {'/r/KID/Main.pgn', '/r/Benko'},
+      );
+      expect(listing.includesPath('/r/KID/Main.pgn'), isTrue);
+      expect(listing.includesPath('/r/Benko/Main.pgn'), isTrue);
+      expect(listing.includesPath('/r/KID/Other.pgn'), isFalse);
+      expect(listing.intersectsPath('/r/Benko/Main.pgn'), isTrue);
+      expect(listing.intersectsPath('/r/KID'), isTrue);
+      expect(listing.intersectsPath('/r/Grunfeld'), isFalse);
+    });
+
+    test('a listing narrowed to one chapter keeps that chapter\'s folder', () {
+      final listing = Repertoires([
+        RepertoireFolder(
+          name: 'KID',
+          path: '/r/KID',
+          modified: DateTime.utc(2026),
+          chapters: [ChapterRef.at('/r/KID/Main.pgn')],
+        ),
+        RepertoireFolder(
+          name: 'Benko',
+          path: '/r/Benko',
+          modified: DateTime.utc(2026),
+          chapters: [ChapterRef.at('/r/Benko/Main.pgn')],
+        ),
+      ]);
+      final narrowed = listing.within({'/r/KID/Main.pgn'});
+      expect(narrowed.folders.map((f) => f.name), ['KID']);
+    });
+
+    test('one chapter revision is another only with the same bytes from the '
+        'same file', () {
+      const a = Revision('ab12', nativeIdentity: '1:2');
+      expect(
+        sameChapterRevision(a, const Revision('ab12', nativeIdentity: '1:2')),
+        isTrue,
+      );
+      expect(
+        sameChapterRevision(a, const Revision('ab12', nativeIdentity: '1:3')),
+        isFalse,
+      );
+      expect(
+        sameChapterRevision(a, const Revision('cd34', nativeIdentity: '1:2')),
+        isFalse,
+      );
+    });
   });
 }
 

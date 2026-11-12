@@ -1,17 +1,17 @@
+import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/study.dart';
-import 'package:dartchess/dartchess.dart' show Side;
-import 'package:chess_auto_prep/app/mode.dart';
-import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/features/trainer/lesson_view.dart';
+import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/study_files.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../support/window_fixture.dart';
-import '../support/study_fixture.dart';
 import '../support/scripted_store.dart';
+import '../support/study_fixture.dart';
+import '../support/window_fixture.dart';
 
 void main() {
   testWidgets(
@@ -72,7 +72,7 @@ void main() {
     );
     w.studyFiles.listing = StudiesListed([ref]);
     await w.pumpShell(tester);
-    await w.requests.openStudy(ref, chapter: 0);
+    await w.requests.openStudy(ref);
     await tester.pumpAndSettle();
     w.session.cursor.goTo(NodePath.of([0]));
     await tester.pumpAndSettle();
@@ -125,7 +125,7 @@ void main() {
       w.requests.switchTo(Mode.trainer);
       await tester.pumpAndSettle();
       expect(w.lineTrainer.selection.active, isTrue);
-      await w.requests.openStudy(ref, chapter: 0);
+      await w.requests.openStudy(ref);
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(OutlinedButton, 'Train study'));
       await tester.pumpAndSettle();

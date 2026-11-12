@@ -56,4 +56,34 @@ void main() {
     expect(countsOf(lines, reviews, now)[LineStatus.due], 0);
     expect(dueNow(lines, reviews, now), isEmpty);
   });
+
+  group('lines due now', () {
+    final open = lines[1];
+    final sicilian = lines[2];
+    Review dueOn(TrainingLine line, DateTime due) => Review(
+      key: line.key,
+      lineName: line.name,
+      intervalDays: 1,
+      lastRating: 'good',
+      due: due,
+    );
+
+    test('come longest overdue first, each with one move of the user\'s', () {
+      expect((open.yourMoves, sicilian.yourMoves), (1, 1));
+      final reviews = {
+        open.key: dueOn(open, now.subtract(const Duration(days: 1))),
+        sicilian.key: dueOn(sicilian, now.subtract(const Duration(days: 3))),
+      };
+      expect(dueNow(lines, reviews, now), [sicilian, open]);
+    });
+
+    test('keep file order when due at once', () {
+      final yesterday = now.subtract(const Duration(days: 1));
+      final reviews = {
+        sicilian.key: dueOn(sicilian, yesterday),
+        open.key: dueOn(open, yesterday),
+      };
+      expect(dueNow(lines, reviews, now), [open, sicilian]);
+    });
+  });
 }

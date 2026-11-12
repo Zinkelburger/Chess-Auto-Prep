@@ -7,16 +7,19 @@
  * of a piece no longer in hand) is cut. The tree never checks material counts: any hand chessops accepts
  * is allowed (no kings, at most 64 pieces), capped per piece.
  *
- * Crazyhouse rules, as the engine plays them: a capture goes to the
- * capturer's hand, and anything else a partner would send arrives through a
- * hand edit. Positions are kept in chessops' crazyhouse form, which reads and
- * writes hands in FENs.
+ * Bughouse rules, as the engine plays them: a captured piece leaves the
+ * board for the partner's hand on the other board (a promoted piece goes as a
+ * pawn), so it never reaches the capturer's own hand. What the partner sends
+ * arrives through a hand edit; with both boards shown, the page makes that edit
+ * on the other board itself. Positions are kept in chessops' crazyhouse form,
+ * which reads and writes hands in FENs.
  */
 import { makeFen, parseFen, INITIAL_FEN } from 'chessops/fen';
 import { makeSan as chessopsSan, parseSan } from 'chessops/san';
 import { parsePgn, startingPosition, type PgnNodeData, type Node as PgnNode } from 'chessops/pgn';
 import { Crazyhouse } from 'chessops/variant';
-import { makeSquare, makeUci, parseUci } from 'chessops/util';
+import { makeSquare, makeUci, parseSquare, parseUci } from 'chessops/util';
+import { SquareSet } from 'chessops/squareSet';
 import { normalizeMove } from 'chessops/chess';
 import { chessgroundDests } from 'chessops/compat';
 import type { Color, Move, Role, SquareName } from 'chessops/types';
@@ -69,6 +72,39 @@ function makeSan(pos: Crazyhouse, move: Move): string {
   return san.startsWith('@') ? `P${san}` : san;
 }
 
+/** A piece taken by a move: its colour and what it counts as in hand. */
+export interface Captured { color: Color; role: Exclude<Role, 'king'> }
+
+/**
+ * Plays a legal move by bughouse rules: as crazyhouse, but the captured piece
+ * leaves the board instead of joining the capturer's hand. Returns it.
+ */
+export function playMove(pos: Crazyhouse, move: Move): Captured | null {
+  let captured: Captured | null = null;
+  if ('from' in move) {
+    const target = pos.board.get(move.to);
+    const mover = pos.board.get(move.from);
+    // chessops writes castling as the king taking its own rook.
+    if (target && target.color !== pos.turn)
+      captured = { color: target.color, role: pos.board.promoted.has(move.to) ? 'pawn' : target.role as Captured['role'] };
+    else if (!target && mover?.role === 'pawn' && pos.epSquare === move.to)
+      captured = { color: pos.turn === 'white' ? 'black' : 'white', role: 'pawn' };
+  }
+  pos.play(move);
+  if (captured && pos.pockets) {
+    const capturer = captured.color === 'white' ? 'black' : 'white';
+    pos.pockets[capturer][captured.role] = Math.max(0, pos.pockets[capturer][captured.role] - 1);
+  }
+  return captured;
+}
+
+/** What a move captures, by bughouse rules; null for a quiet move, a drop or an illegal move. */
+export function capturedBy(fen: string, uci: string): Captured | null {
+  const pos = positionOf(fen);
+  const move = readMove(pos, uci);
+  return move ? playMove(pos, move) : null;
+}
+
 export type PositionResult = { ok: true; pos: Crazyhouse } | { ok: false; error: string };
 
 const ERRORS: Record<string, string> = {
@@ -79,9 +115,52 @@ const ERRORS: Record<string, string> = {
   ERR_VARIANT: 'More than 64 pieces on the board and in hand.',
 };
 
+export type CastlingRight = 'K' | 'Q' | 'k' | 'q';
+
+const CASTLING: Record<CastlingRight, readonly [Color, SquareName, SquareName]> = {
+  K: ['white', 'e1', 'h1'], Q: ['white', 'e1', 'a1'], k: ['black', 'e8', 'h8'], q: ['black', 'e8', 'a8'],
+};
+
+/** Whether a castling right can stand: its king on e1/e8 and its rook in the corner, as in standard chess. */
+export function castlingPossible(right: CastlingRight, pieceAt: (square: SquareName) => { role: Role; color: Color } | undefined): boolean {
+  const [color, king, rook] = CASTLING[right];
+  const k = pieceAt(king), r = pieceAt(rook);
+  return k?.role === 'king' && k.color === color && r?.role === 'rook' && r.color === color;
+}
+
+/**
+ * The squares a pawn could be taken en passant on: a pawn of the side not to move that could have
+ * just stepped two squares, with an enemy pawn beside it. Lichess's editor offers the same list.
+ */
+export function enPassantOptions(turn: Color, pieceAt: (square: SquareName) => { role: Role; color: Color } | undefined): SquareName[] {
+  const [rank, behind, start] = turn === 'white' ? ['5', '6', '7'] : ['4', '3', '2'];
+  const options: SquareName[] = [];
+  for (const file of 'abcdefgh') {
+    const pawn = pieceAt(`${file}${rank}` as SquareName);
+    if (pawn?.role !== 'pawn' || pawn.color === turn) continue;
+    if (pieceAt(`${file}${behind}` as SquareName) || pieceAt(`${file}${start}` as SquareName)) continue;
+    const beside = [-1, 1].some((d) => {
+      const f = String.fromCharCode(file.charCodeAt(0) + d);
+      const p = f >= 'a' && f <= 'h' ? pieceAt(`${f}${rank}` as SquareName) : undefined;
+      return p?.role === 'pawn' && p.color === turn;
+    });
+    if (beside) options.push(`${file}${behind}` as SquareName);
+  }
+  return options;
+}
+
 export function readFen(fen: string): PositionResult {
   const setup = parseFen(fen.trim());
   if (setup.isErr) return { ok: false, error: 'That is not a FEN.' };
+  // chessops would keep a right whose king or rook has moved as Chess960 castling; drop it, as Lichess's editor does.
+  const board = setup.value.board;
+  const pieceAt = (square: SquareName) => board.get(parseSquare(square)!);
+  let rights = SquareSet.empty();
+  for (const right of Object.keys(CASTLING) as CastlingRight[]) {
+    const rook = parseSquare(CASTLING[right][2])!;
+    if (setup.value.castlingRights.has(rook) && castlingPossible(right, pieceAt)) rights = rights.with(rook);
+  }
+  setup.value.castlingRights = rights;
   const pos = Crazyhouse.fromSetup(setup.value);
   if (pos.isErr) return { ok: false, error: ERRORS[pos.error.message] ?? 'That position is not playable.' };
   return { ok: true, pos: pos.value };
@@ -197,7 +276,7 @@ export function playLine(fen: string, ucis: string[], limit = ucis.length): Line
     const move = readMove(pos, uci);
     if (!move) break;
     const san = makeSan(pos, move);
-    pos.play(move);
+    playMove(pos, move);
     out.push({ uci, san, fen: fenOf(pos) });
   }
   return out;
@@ -231,7 +310,7 @@ export class Tree extends VariationTree<TreeNode> {
     const parent = this.parent(id);
     if (!parent) return this.loadedFen;
     const pos = positionOf(parent.fen);
-    pos.play(parseUci(node.uci)!);
+    playMove(pos, parseUci(node.uci)!);
     return fenOf(pos);
   }
 
@@ -244,7 +323,7 @@ export class Tree extends VariationTree<TreeNode> {
     const existing = parent.children.find((c) => c.uci === makeUci(move));
     if (existing) return existing;
     const san = makeSan(pos, move);
-    pos.play(move);
+    playMove(pos, move);
     const child: TreeNode = { id: newId(), ply: parent.ply + 1, uci: makeUci(move), san, fen: fenOf(pos), children: [] };
     this.attach(parent, child);
     return child;
@@ -268,7 +347,7 @@ export class Tree extends VariationTree<TreeNode> {
       const move = parseUci(child.uci);
       if (!move || !readMove(pos, child.uci)) { this.unindex(child); continue; }
       child.san = makeSan(pos, move);
-      pos.play(move);
+      playMove(pos, move);
       child.fen = applyDelta(fenOf(pos), child.hand);
       kept.push(child);
       this.replay(child);
@@ -337,7 +416,7 @@ export class Tree extends VariationTree<TreeNode> {
   }
 
   private headers(): string[] {
-    const headers = ['[Event "Bughouse analysis"]', '[Site "https://chessautoprep.com/bughouse"]', '[Variant "Crazyhouse"]'];
+    const headers = ['[Event "Bughouse analysis"]', '[Site "https://chessautoprep.com/bughouse"]', '[Variant "Bughouse"]'];
     if (this.root.fen !== START_FEN) headers.push(`[FEN "${lichessFen(this.root.fen)}"]`, '[SetUp "1"]');
     return headers;
   }
@@ -380,7 +459,7 @@ export class Tree extends VariationTree<TreeNode> {
     out.push(node.san);
   }
 
-  /** A tree from a bughouse or crazyhouse PGN (the first game; any variant tag is read as this page's rules). */
+  /** A tree from a bughouse or crazyhouse PGN (the first game; any variant tag is read as this page's rules, bughouse). */
   static fromPgn(text: string): Tree | null {
     const game = parsePgn(text)[0];
     if (!game) return null;

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
-import '../../ui/theme.dart';
 import '../../chess/players/player.dart';
-import 'players.dart';
-import 'saved_games.dart';
 import '../../ui/attempting.dart';
 import '../../ui/form_dialog.dart';
+import '../../ui/theme.dart';
+import 'players.dart';
+import 'saved_games.dart';
 
 /// What removing a person from the directory takes with it.
 enum Removal { keepGames, withGames }

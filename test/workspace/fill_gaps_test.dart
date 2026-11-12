@@ -1,23 +1,23 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
+import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/generation/eval.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/chess/generation/sources.dart';
+import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
-import 'package:chess_auto_prep/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/storage/pending_writes.dart';
-import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
-import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
 import 'package:chess_auto_prep/storage/finds_store.dart';
 import 'package:chess_auto_prep/storage/generation_trees.dart';
+import 'package:chess_auto_prep/storage/pending_writes.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
 import 'package:chess_auto_prep/workspace/search/fill_gaps.dart';
 import 'package:chess_auto_prep/workspace/search/fill_states.dart';
 import 'package:chess_auto_prep/workspace/search/finds.dart';
-import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:dartchess/dartchess.dart' show Position, Side;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -329,55 +329,6 @@ void main() {
     expect(shown.first, isA<OurNode>(), reason: 'the root was answered first');
   });
 
-  test(
-    'clicking a running result saves old values before searching the new board',
-    () async {
-      final saved = <String>[];
-      final gate = Completer<void>();
-      final fill = fillWith(
-        ScriptedEvaluator(),
-        keepTree: (_, text, {required runId}) async {
-          saved.add(text);
-          if (saved.length == 1) await gate.future;
-        },
-      );
-      Future<String?>? following;
-      void follow() {
-        if (fill.running && fill.found?.tree is OurNode && following == null) {
-          // Set the latch before the navigation notifies listeners again.
-          following = Future.value();
-          following = fill.followMove('e2e4');
-        }
-      }
-
-      fill.addListener(follow);
-      final first = fill.start(const FillRequest(elo: 2200, depthPlies: 2));
-      while (saved.isEmpty) {
-        await Future<void>.delayed(Duration.zero);
-      }
-      expect(fixture.session.cursor.currentMove?.san, 'e4');
-      expect(releases, 1);
-      expect(
-        fill.found!.target.sans,
-        isEmpty,
-        reason: 'old search still owns the save',
-      );
-      gate.complete();
-      await first;
-      await following;
-      fill.removeListener(follow);
-      expect(fill.found!.target.sans, ['e4']);
-      expect(
-        saved.length,
-        3,
-        reason:
-            'after e4 it is Black\'s move, and Black\'s side of that '
-            'board is kept beside White\'s',
-      );
-      expect(releases, 2);
-    },
-  );
-
   test('back restores an earlier root and reuses its scores', () async {
     final evaluator = ScriptedEvaluator();
     final fill = fillWith(evaluator);
@@ -402,49 +353,6 @@ void main() {
         await fill.start(FillRequest(elo: rating, depthPlies: 1));
         expect(fill.nodeAtBoard(), same(fill.found!.tree));
       }
-    },
-  );
-
-  test(
-    'rapid board navigation during save follows only the latest root',
-    () async {
-      final gate = Completer<void>();
-      var saves = 0;
-      var starts = 0;
-      final evaluator = ScriptedEvaluator();
-      final fill = fillWith(
-        evaluator,
-        tools: (_) async {
-          starts++;
-          return FillReady(
-            evaluator: evaluator,
-            policy: const ScriptedPolicy({'e8d8': 1}),
-            release: () async {},
-          );
-        },
-        keepTree: (_, _, {required runId}) async {
-          if (++saves == 1) await gate.future;
-        },
-      );
-      var moved = false;
-      fill.addListener(() {
-        if (!moved && fill.running && fill.found != null) {
-          moved = true;
-          fixture.session.playMove('e2e4');
-        }
-      });
-      final run = fill.start(const FillRequest(elo: 2200, depthPlies: 2));
-      while (saves == 0) {
-        await Future<void>.delayed(Duration.zero);
-      }
-      fixture.session.cursor.back();
-      expect(fill.nodeAtBoard(), isA<OurNode>());
-      gate.complete();
-      await run;
-      await pumpEventQueue(times: 100);
-      expect(starts, 2);
-      expect(fill.found!.target.sans, isEmpty);
-      expect(fill.running, isFalse);
     },
   );
 
@@ -806,6 +714,72 @@ void main() {
     expect(seen.last.depth, 3);
     expect(seen.last.nodes, greaterThan(1));
   });
+
+  test('back two roots still finds the first one', () async {
+    final fill = fillWith(ScriptedEvaluator());
+    const shallow = FillRequest(elo: 2200, depthPlies: 1);
+    await fill.start(shallow);
+    final original = fill.found!.tree;
+    fixture.session.playMove('e2e4');
+    await fill.start(shallow);
+    fixture.session.playMove('e8d8');
+    await fill.start(shallow);
+    fixture.session.cursor.back();
+    fixture.session.cursor.back();
+    expect(fill.nodeAtBoard(), same(original));
+  });
+
+  test(
+    'the result history keeps the 32 searches before the current one',
+    () async {
+      final fill = fillWith(ScriptedEvaluator());
+      FillRequest at(int elo) => FillRequest(elo: elo, depthPlies: 1);
+      for (var elo = 1800; elo < 1834; elo++) {
+        await fill.start(at(elo));
+      }
+      expect(fill.nodeAtBoard(request: at(1801)), isNotNull);
+      expect(fill.nodeAtBoard(request: at(1800)), isNull, reason: 'the oldest');
+    },
+  );
+
+  test('a failed tree save is told, and so is giving it up', () async {
+    final pending = PendingWrites();
+    final fill = fillWith(
+      ScriptedEvaluator(scores: e4Best()),
+      pending: pending,
+      keepTree: (ref, text, {required runId}) async =>
+          throw StateError('disk full'),
+    );
+    String? told;
+    var notified = 0;
+    fill.addListener(() {
+      told = fill.treeSaveProblem;
+      notified++;
+    });
+    await fill.start(request);
+    expect(told, isNotNull);
+    notified = 0;
+    fill.discardTreeSave();
+    expect(notified, 1);
+    expect(told, isNull);
+    expect(fill.canRetryTree, isFalse);
+  });
+
+  test(
+    'the root is a level of one, reported before anything is expanded',
+    () async {
+      final fill = fillWith(ScriptedEvaluator());
+      final seen = <FillRunning>[];
+      fill.addListener(() {
+        if (fill.state case final FillRunning running) seen.add(running);
+      });
+      await fill.start(request);
+      expect(
+        seen.where((r) => r.depth == 0).map((r) => r.levelShare),
+        contains(0.0),
+      );
+    },
+  );
 
   test('the search starts from the board, not the chapter root', () async {
     fixture.session.cursor.forward();

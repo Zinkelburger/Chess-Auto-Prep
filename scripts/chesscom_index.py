@@ -62,7 +62,7 @@ def scrape_page(page: int) -> list[dict]:
         if not link:
             continue
         href = link.get("href", "")
-        slug_match = re.search(r"/tournament/live/(.+?)(?:\?|$)", href)
+        slug_match = re.search(r"/tournament/live/(.+?)(?:\?|$)", str(href))
         if not slug_match:
             continue
         slug = slug_match.group(1)
@@ -201,7 +201,7 @@ def binary_search_page_for_date(target_date: str) -> int:
     Binary search across pages to find which page contains the target date.
     Returns the page number.
     """
-    target_dt = datetime.strptime(target_date, "%Y-%m-%d")
+    datetime.strptime(target_date, "%Y-%m-%d")
 
     # Establish bounds
     lo, hi = 1, 200

@@ -38,7 +38,7 @@ void main() {
     );
     w.studyFiles.listing = StudiesListed([ref]);
     await w.pumpShell(tester);
-    await w.requests.openStudy(ref, chapter: 0);
+    await w.requests.openStudy(ref);
     await tester.pumpAndSettle();
     return (w, ref);
   }

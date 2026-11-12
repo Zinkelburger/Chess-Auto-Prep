@@ -1,9 +1,9 @@
 import 'package:path/path.dart' as p;
 
-import '../../chess/players/player.dart';
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/move_text.dart';
 import '../../chess/pgn/study.dart';
+import '../../chess/players/player.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/pgn_document_store.dart';
 

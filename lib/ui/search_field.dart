@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'theme.dart';
 import 'app_icons.dart';
+import 'theme.dart';
 
 /// The one search input: a magnifier, the words typed into it, and a clear
 /// action once there is something to clear.

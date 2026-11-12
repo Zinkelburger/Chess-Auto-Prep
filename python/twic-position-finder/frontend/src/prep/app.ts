@@ -113,6 +113,8 @@ export class PrepApp {
       wheel: (forward) => forward ? this.next() : this.prev(),
       edited: () => this.draftChanged(),
     });
+    // The host's getters read the app's current fields; a getter cannot be an arrow.
+    // oxlint-disable-next-line typescript/no-this-alias
     const app = this;
     this.moves = new MoveList($('ch-moves'), $('ch-fork'), {
       get tree() { return app.tree; },

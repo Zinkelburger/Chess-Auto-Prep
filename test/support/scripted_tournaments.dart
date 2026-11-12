@@ -1,8 +1,9 @@
 import 'dart:async';
-import 'package:chess_auto_prep/storage/tournament_inbox.dart';
+
 import 'package:chess_auto_prep/chess/tournament/config.dart';
 import 'package:chess_auto_prep/chess/tournament/result.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
+import 'package:chess_auto_prep/storage/tournament_inbox.dart';
 import 'package:chess_auto_prep/storage/tournaments.dart';
 
 final class ScriptedTournaments

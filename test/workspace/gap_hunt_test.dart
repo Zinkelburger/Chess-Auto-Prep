@@ -119,6 +119,33 @@ void main() {
     expect(gaps.highlighted, isNull);
   });
 
+  test('Next gap goes most reached first, round and round, and starts over '
+      'on a new walk; none is offered while one is on its way', () async {
+    gaps.dispose();
+    settings.dispose();
+    settings = SettingsStore(
+      initial: const Settings(opponentElo: 2000, coverOnceIn: 10),
+    );
+    gaps = GapHunt(
+      session: fixture.session,
+      model: ReplyModel(policy: const _ThreeGaps(), settings: settings),
+      settings: settings,
+      answers: RepertoireAnswers(files: files, documents: fixture.store),
+    );
+    expect(gaps.walking, isTrue);
+    expect(gaps.canNextGap, isFalse);
+    await pumpEventQueue();
+    String? next() {
+      gaps.nextGap();
+      return (gaps.highlighted as MissingReply?)?.san;
+    }
+
+    expect([next(), next(), next(), next()], ['c5', 'e6', 'a6', 'c5']);
+    await settings.update(settings.value.copyWith(opponentElo: 1500));
+    await pumpEventQueue();
+    expect(next(), 'c5');
+  });
+
   test('a cursor move with nothing marked tells no one', () async {
     await pumpEventQueue();
     var told = 0;
@@ -227,4 +254,25 @@ void main() {
       await pumpEventQueue();
     },
   );
+}
+
+/// After 1. e4, three replies the chapter does not answer, each at least
+/// one game in ten: 1...c5, 1...e6 and 1...a6, most played first.
+final class _ThreeGaps implements MovePolicy {
+  const _ThreeGaps();
+
+  @override
+  Future<MaiaAnswer> policy(Fen fen, int elo) async =>
+      switch (fen.value.split(' ').take(2).join(' ')) {
+        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w' => const MaiaPolicy({
+          'e2e4': 1,
+        }),
+        'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b' => const MaiaPolicy({
+          'e7e5': 0.35,
+          'c7c5': 0.3,
+          'e7e6': 0.2,
+          'a7a6': 0.15,
+        }),
+        _ => const MaiaFailed('no opinion'),
+      };
 }

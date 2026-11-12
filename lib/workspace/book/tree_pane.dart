@@ -4,17 +4,17 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 
 import '../../chess/pgn/move_label.dart' show numberedMoves;
+import '../../ui/app_icons.dart';
+import '../../ui/app_keys.dart';
+import '../../ui/list_message.dart';
 import '../../ui/listening_state.dart';
+import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
-import 'repertoire_tree.dart';
-import '../document/document_session.dart';
+import '../../ui/tool_button.dart';
 import '../board/line_preview.dart';
 import '../board/preview_target.dart';
-import '../../ui/app_keys.dart';
-import '../../ui/move_notation.dart';
-import '../../ui/list_message.dart';
-import '../../ui/app_icons.dart';
-import '../../ui/tool_button.dart';
+import '../document/document_session.dart';
+import 'repertoire_tree.dart';
 
 /// The explorer's Book: the active book's chapters as an opening
 /// explorer. For the position on the board, every move any of the book's

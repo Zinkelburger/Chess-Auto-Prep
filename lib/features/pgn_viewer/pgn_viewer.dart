@@ -1,9 +1,4 @@
-import '../../chess/pgn/reading_place.dart';
-import '../../storage/viewer_places.dart';
-import 'viewer_reading.dart';
-import '../../chess/pgn/game_order.dart';
-import '../../storage/pgn_export.dart';
-import '../../workspace/document/game_ordering.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
@@ -11,20 +6,25 @@ import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/chapter_grouping.dart';
 import '../../chess/pgn/chapter_line.dart';
 import '../../chess/pgn/collection_player.dart';
-import '../../chess/pgn/study.dart' show ChapterDraft;
-import 'package:dartchess/dartchess.dart' show Side;
+import '../../chess/pgn/game_order.dart';
 import '../../chess/pgn/game_summary.dart';
 import '../../chess/pgn/game_text.dart';
 import '../../chess/pgn/game_tree.dart' show NodePath;
+import '../../chess/pgn/reading_place.dart';
+import '../../chess/pgn/study.dart' show ChapterDraft;
 import '../../storage/chapter_files.dart';
 import '../../storage/pending_writes.dart';
+import '../../storage/pgn_export.dart';
 import '../../storage/pgn_file_import.dart';
 import '../../storage/pgn_file_picker.dart';
 import '../../storage/recent_pgn_files.dart';
 import '../../storage/settings_store.dart';
+import '../../storage/viewer_places.dart';
 import '../../workspace/document/document_session.dart';
+import '../../workspace/document/game_ordering.dart';
 import '../../workspace/explorer/file_filter.dart';
 import '../../workspace/explorer/filter_run.dart' show mainLineSans;
+import 'viewer_reading.dart';
 
 /// The PGN Viewer's own state: the files opened before, which file the
 /// viewer has open now, and the search over its games. The list shows the

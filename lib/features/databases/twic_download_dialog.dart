@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'database_library.dart';
-import '../../ui/theme.dart';
-import '../../ui/number_field.dart';
-import '../../ui/form_dialog.dart';
 import '../../ui/field_row.dart';
+import '../../ui/form_dialog.dart';
+import '../../ui/number_field.dart';
+import '../../ui/theme.dart';
+import 'database_library.dart';
 
 /// Downloads through [library], which keeps it from running beside an
 /// import. Shown only where the library offers a download.

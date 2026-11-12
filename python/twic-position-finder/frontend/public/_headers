@@ -18,7 +18,7 @@
 /bughouse-puzzles/index.json
   Cache-Control: public, max-age=600
 
-# The bughouse board runs Lichess's multi-threaded Fairy-Stockfish, which needs
+# The bughouse board runs HypeBeast, a multi-threaded Fairy-Stockfish fork, which needs
 # SharedArrayBuffer, so only this page and its engine files are cross-origin
 # isolated. /bughouse-engine/ holds ONNX Runtime for the Expectimax tab's Maia.
 /bughouse
@@ -34,12 +34,12 @@
   Cross-Origin-Embedder-Policy: require-corp
   Cross-Origin-Resource-Policy: same-origin
 
-/crazyhouse-engine/*
+/hypebeast-engine/*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
   Cross-Origin-Resource-Policy: same-origin
 
-/crazyhouse-engine/net-*
+/hypebeast-engine/net-*
   Cache-Control: public, max-age=31536000, immutable
 
 # An isolated page may start a worker only from a script that is isolated too,

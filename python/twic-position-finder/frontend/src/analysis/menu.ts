@@ -115,8 +115,8 @@ const KEYS: [string, string][] = [
   ['?', 'This help'],
 ];
 
-/** The keyboard help; a page adds its own keys after the shared ones. */
-export function openHelp(extra: [string, string][] = []) {
+/** The keyboard help; a page adds its own keys after the shared ones, and its own notes after the shared note. */
+export function openHelp(extra: [string, string][] = [], notes: string[] = []) {
   const dialog = document.createElement('dialog');
   dialog.className = 'ch-help';
   dialog.setAttribute('aria-label', 'Keyboard shortcuts');
@@ -127,7 +127,7 @@ export function openHelp(extra: [string, string][] = []) {
   const table = el('dl', 'ch-help-keys');
   for (const [keys, what] of [...KEYS, ...extra]) table.append(el('dt', '', keys), el('dd', '', what));
   const note = el('p', 'ch-help-note', 'Right-click a move for Promote variation, Make main line, Force variation, Copy PGN and Delete from here.');
-  dialog.append(el('h2', '', 'Keyboard shortcuts'), close, table, note);
+  dialog.append(el('h2', '', 'Keyboard shortcuts'), close, table, note, ...notes.map((text) => el('p', 'ch-help-note', text)));
   dialog.addEventListener('click', (e) => { if (e.target === dialog) dialog.close(); });
   dialog.addEventListener('close', () => dialog.remove());
   document.body.append(dialog);

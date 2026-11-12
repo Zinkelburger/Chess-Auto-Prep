@@ -9,8 +9,8 @@ import '../../chess/pgn/move_text.dart';
 import '../../chess/tournament/config.dart';
 import '../../chess/tournament/result.dart';
 import '../../diagnostics/log.dart';
-import '../../engines/engine_supervisor.dart';
 import '../../engines/engine_line.dart';
+import '../../engines/engine_supervisor.dart';
 import '../../engines/playing_engine.dart';
 import '../../engines/uci_process.dart' show EngineTranscript;
 

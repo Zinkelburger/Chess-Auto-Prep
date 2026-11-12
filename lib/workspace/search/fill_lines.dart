@@ -1,10 +1,10 @@
 import 'package:path/path.dart' as p;
 
 import '../../chess/fen.dart';
-import '../../chess/openings.dart';
 import '../../chess/generation/draft_chapter.dart';
 import '../../chess/generation/draft_lines.dart';
 import '../../chess/generation/traps.dart';
+import '../../chess/openings.dart';
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/chapter_heading.dart';
 import '../../chess/pgn/tree_edit.dart' show positionOf;
@@ -13,9 +13,9 @@ import '../../storage/chapter_files.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/pgn_document_store.dart' as store;
 import '../analysis/engine_jobs.dart';
-import 'fill_states.dart';
 import '../document/generated_draft.dart';
 import '../explorer/opening_names.dart';
+import 'fill_states.dart';
 import 'search_opponents.dart';
 
 /// Turns a finished search into lines: a draft chapter written through the
@@ -99,9 +99,11 @@ final class FillLines {
         ? heading.rootMoves
         : const <String>[];
     final created = _clock();
+    final pins = chapterPins(chapter);
     final (plan, traps) = await foundIn(
       found.tree,
       known: chapterDecisions(chapter),
+      pins: pins,
     );
     if (plan.lines == 0) {
       return (

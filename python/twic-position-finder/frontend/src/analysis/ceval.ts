@@ -14,7 +14,7 @@ import type { Api } from '@lichess-org/chessground/api';
 import type { Key } from '@lichess-org/chessground/types';
 import type { Material } from 'chessops/setup';
 import type { Color, Role } from 'chessops/types';
-import type { EngineLine } from './engine';
+import { boardScore, type EngineLine } from './engine';
 import { el } from './moves';
 import type { LineMove } from './variation-tree';
 import { pieceSrc } from './board';
@@ -68,7 +68,15 @@ export interface CevalState {
   inCheck: boolean;
   /** Checkmate or stalemate on the board. */
   over: string | null;
+  /** Why there is nothing to search: the editor's position is not legal yet. */
+  unplayable?: string | null;
   orientation: Color;
+  /**
+   * What the evaluation measures, named before the depth: `board`, this board
+   * alone; `team`, this board plus what the line's captures are worth on the
+   * partner board (and, when the line says, the board's own share). Unset: no name.
+   */
+  scoreKind?: 'board' | 'team';
 }
 
 export interface CevalHooks {
@@ -84,6 +92,17 @@ export function formatEval(line: Pick<EngineLine, 'cp' | 'mate'>): string {
   if (line.mate !== undefined) return `#${line.mate}`;
   const pawns = (line.cp ?? 0) / 100;
   return `${pawns > 0 ? '+' : ''}${pawns.toFixed(1)}`;
+}
+
+const TEAM_TITLE = 'Team: this board plus what the line’s captures are worth on the partner board. Board: this board alone, along the same line.';
+const BOARD_TITLE = 'This board alone: no partner board is shown, so captures are worth only what they change here.';
+
+/** "Team · board +0.3" or "Board", named before the depth; empty when the page does not name its scores. */
+export function scoreName(kind: CevalState['scoreKind'], line: EngineLine | undefined): string {
+  if (kind === 'board') return 'Board';
+  if (kind !== 'team') return '';
+  const board = line && line.mate === undefined ? boardScore(line) : undefined;
+  return board === undefined ? 'Team' : `Team · board ${formatEval({ cp: board })}`;
 }
 
 export class CevalView {
@@ -131,13 +150,14 @@ export class CevalView {
     toggle.checked = state.enabled;
     header.classList.toggle('off', !state.enabled);
     header.classList.toggle('ch-threat-mode', state.threat);
-    threat.hidden = !state.enabled || state.inCheck || !!state.over;
+    threat.hidden = !state.enabled || state.inCheck || !!state.over || !!state.unplayable;
     threat.setAttribute('aria-pressed', String(state.threat));
     const { engineName } = this.options;
     name.textContent = state.threat ? 'Show threat' : engineName;
     // The running engine's thread count, for the browser test: the gear's label changes before the restart.
     if (state.status.kind === 'ready' && state.status.threads !== undefined) name.dataset.threads = String(state.status.threads); else delete name.dataset.threads;
     info.classList.remove('ch-failed');
+    info.title = '';
     action.hidden = true;
     header.classList.remove('ch-waiting');
     pvs.replaceChildren();
@@ -145,6 +165,7 @@ export class CevalView {
     bar.classList.toggle('threat', state.threat);
     if (state.over) { pearl.textContent = state.over === 'Checkmate' ? '#' : '½'; info.textContent = state.over; this.hideBoard(); return; }
     if (!state.enabled) { pearl.textContent = ''; info.textContent = 'Off · press L to turn on'; this.hideBoard(); return; }
+    if (state.unplayable) { pearl.textContent = ''; info.textContent = state.unplayable; this.hideBoard(); return; }
     if (!state.result) this.hideBoard();
     const result = state.result;
     const status = state.status;
@@ -170,7 +191,9 @@ export class CevalView {
     }
     pearl.textContent = formatEval(result.lines[0]);
     if (this.options.doneTitle !== undefined) pearl.title = result.done ? this.options.doneTitle : '';
-    info.textContent = result.info;
+    const named = scoreName(state.scoreKind, result.lines[0]);
+    info.textContent = named ? `${named} · ${result.info}` : result.info;
+    info.title = state.scoreKind === 'team' ? TEAM_TITLE : state.scoreKind === 'board' ? BOARD_TITLE : '';
     if (result.done && !state.threat) this.speak(state.fen, result);
     const progress = result.millis / state.searchMs;
     bar.style.width = `${result.done || state.infinite ? 100 : Math.min(100, 100 * progress)}%`;
@@ -195,7 +218,10 @@ export class CevalView {
     row.dataset.uci = line.pv[0];
     row.dataset.pv = line.pv.join(' ');
     row.classList.toggle('ch-pv-threat', state.threat);
-    row.append(el('strong', '', formatEval(line)));
+    const score = el('strong', '', formatEval(line));
+    const board = state.scoreKind === 'team' && line.mate === undefined ? boardScore(line) : undefined;
+    if (board !== undefined) score.title = `Team ${formatEval(line)} · board ${formatEval({ cp: board })}`;
+    row.append(score);
     let ply = state.ply + (state.threat ? 1 : 0);
     this.options.playLine(state.fen, line.pv, PV_MOVES).forEach((move, i) => {
       ply++;

@@ -46,7 +46,7 @@ move list, engine and explorer are described in [workspace](workspace.md).
   the user's book, one line under the heading says so, e.g. `You left book:
   3...Nf6 (book 3...cxd4) · Main`, with `Show my line`. Its foot is `Read |
   Edit`, then the four move arrows; the viewer opens on Read.
-- **`+` menu** — the viewer's tabs (`Moves`, `Explorer`, `Filter`, `Analysis`,
+- **`+` menu** — the viewer's tabs (`Moves`, `Notes`, `Explorer`, `Filter`, `Analysis`,
   `Game review`, `Solitaire`, `My books`), then `Engine on` with its key, then
   `New pane`. A tab picked while Moves is alone opens under it.
 - **Tabs** — `Explorer` starts on `This file` here (other modes keep their
