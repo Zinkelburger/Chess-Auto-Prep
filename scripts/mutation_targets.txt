@@ -220,6 +220,34 @@
 #     archive paths are six segments).
 #   lib/net/search_evaluator.dart:102, :103 `.first` -> `.last`: the cloud is
 #     asked for one line.
+#   lib/engines/fixed_depth.dart:103 `legalCount < count` -> `<=`: the
+#     smaller of two equal numbers is either.
+#   lib/engines/hivemind_engine.dart:30 the 10 min patience and :289 the 5 s
+#     quit (timing), :251 `_searching` left set (the next search clears the
+#     stop it would allow, and none is sent with no search out).
+#   lib/engines/maia/maia_vocabulary.dart:23 the first highest index and :27
+#     its `>` (an empty table is refused first; every index is at least 0).
+#   lib/engines/engine_supervisor.dart:178 the 1 s wait and :200 the 90 s
+#     patience (timing), :286 `_keep` after closing (dispose kills every
+#     handshake in flight, so no start reaches it after).
+#   lib/engines/hivemind_install.dart:150 the hour a part file is left (timing);
+#     :206 and :220-240, the Visual C++ runtime copy, run only on Windows and
+#     never reached by a Linux sweep.
+#   lib/engines/maia/maia_input.dart:64 `<` -> `<=` (eight ranks either way),
+#     :130, :131 the `'-'` fallbacks turned `'+'` (no rights and no square
+#     read the same: both come back `-`).
+#   lib/engines/playing_engine.dart:16 the 10 min deadline: timing only.
+#   lib/engines/stockfish_install.dart:76, :77, :305 the macOS helper and its
+#     ABI (never reached on Linux), :214 the hour a part file is left
+#     (timing), :257 `flush: true` (durability only).
+#   lib/engines/solitaire_evaluator.dart:46 the 2 s closing patience (timing),
+#     :61 the generation counter's start (only compared).
+#   lib/engines/uci_engine.dart:36 the 10 s patience (timing), :193 the two
+#     `||` of a deadline (it is disarmed whenever a search ends, and every
+#     search ends when the engine goes), :247 an option named nothing, :296
+#     `isRunning`'s `&&` (a search's predecessor has always begun by its turn).
+#   lib/engines/uci_process.dart:113 the 5 s wait after a kill (timing), :116
+#     its `-1` (no caller reads it).
 lib/chess/pgn/game_review.dart|test/workspace/game_review_test.dart|test/chess/pgn/edit_laws_test.dart test/app
 lib/chess/pgn/line_edits.dart|test/chess/pgn/line_edits_test.dart|test/chess/pgn test/workspace
 lib/chess/pgn/chapter_edits.dart|test/chess/pgn/chapter_edits_test.dart|test/chess/pgn test/workspace
@@ -374,3 +402,14 @@ lib/storage/file_lock.dart|test/storage/file_lock_test.dart|test/features/librar
 lib/storage/generation_trees.dart|test/storage/generation_trees_test.dart|test/storage/faults/derived_faults_test.dart test/workspace/fill_anchored_test.dart test/workspace/fill_gaps_test.dart test/workspace/fill_mirror_test.dart test/workspace/fill_resume_test.dart
 lib/storage/edit_scope.dart|test/storage/edit_scope_test.dart test/storage/edit_scope_laws_test.dart|test/storage/reorder_scope_test.dart test/storage/outside_root_test.dart test/storage/compound_write_test.dart test/storage/faults/save_faults_test.dart
 lib/storage/journal_records.dart|test/storage/journal_records_test.dart|test/storage/faults/faulty_disk_test.dart test/storage/operation_journal_test.dart
+lib/engines/fixed_depth.dart|test/engines/fixed_depth_test.dart|
+lib/engines/hivemind_engine.dart|test/engines/hivemind_engine_test.dart|test/engines/engine_startup_lifetime_test.dart test/engines/engine_supervisor_test.dart test/engines/hivemind_real_test.dart test/features/bughouse/bughouse_screen_test.dart test/features/bughouse/lab_engine_test.dart
+lib/engines/maia/maia_vocabulary.dart|test/engines/maia/maia_vocabulary_test.dart|test/engines/maia/maia_input_test.dart test/engines/maia/move_shares_test.dart
+lib/engines/engine_supervisor.dart|test/engines/engine_supervisor_test.dart test/engines/tournament_launch_test.dart|test/app/app_parts_test.dart test/app/shell_tournaments_test.dart test/engines/engine_startup_lifetime_test.dart test/engines/hivemind_real_test.dart test/engines/solitaire_evaluator_test.dart test/engines/stockfish_exit_test.dart test/features/players/player_hunt_test.dart test/features/tactics/account_persistence_test.dart test/features/tactics/alternative_answers_test.dart test/features/tactics/my_games_test.dart test/features/tournaments/engine_check_test.dart test/features/tournaments/game_runner_test.dart test/features/tournaments/tournament_dialogs_test.dart test/features/tournaments/tournament_run_test.dart test/features/trainer/lesson_fit_test.dart test/features/trainer/train_pane_test.dart test/features/trainer/trainer_scope_test.dart test/features/trainer/trainer_test.dart test/features/trainer/training_workspace_test.dart test/workspace/audit_pane_test.dart test/workspace/board_column_test.dart test/workspace/chapter_audit_test.dart test/workspace/document_actions_test.dart test/workspace/engine_analysis_test.dart test/workspace/engine_jobs_test.dart test/workspace/engine_lines_test.dart test/workspace/engine_pane_test.dart test/workspace/fill_anchored_test.dart test/workspace/fill_gaps_test.dart test/workspace/fill_lines_test.dart test/workspace/fill_mirror_test.dart test/workspace/fill_resume_test.dart test/workspace/fill_stops_test.dart test/workspace/game_review_test.dart test/workspace/repertoire_tree_test.dart test/workspace/search_opponents_test.dart test/workspace/search_pane_test.dart test/workspace/solitaire_engine_test.dart test/workspace/solitaire_pane_test.dart
+lib/engines/hivemind_install.dart|test/engines/hivemind_install_test.dart|test/engines/engine_supervisor_test.dart test/engines/hivemind_real_test.dart
+lib/engines/maia/maia_input.dart|test/engines/maia/maia_input_test.dart|
+lib/engines/playing_engine.dart|test/engines/playing_engine_test.dart|test/engines/uci_engine_test.dart
+lib/engines/stockfish_install.dart|test/engines/stockfish_install_test.dart|test/engines/stockfish_exit_test.dart
+lib/engines/solitaire_evaluator.dart|test/engines/solitaire_evaluator_test.dart|
+lib/engines/uci_engine.dart|test/engines/uci_engine_test.dart|
+lib/engines/uci_process.dart|test/engines/uci_process_test.dart|test/engines/hivemind_engine_test.dart test/engines/uci_engine_test.dart
