@@ -42,6 +42,14 @@ void main() {
     expect(file.existsSync(), isTrue);
   });
 
+  test('a Support folder not made yet is made, parents and all', () {
+    final dir = Directory.systemTemp.createTempSync('eval_cache');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final cache = EvalCache.open(Directory(p.join(dir.path, 'a', 'b')));
+    addTearDown(cache.close);
+    expect(cache.available, isTrue);
+  });
+
   test('on disk a new file holds only the evals table', () {
     final dir = Directory.systemTemp.createTempSync('eval_cache');
     addTearDown(() => dir.deleteSync(recursive: true));

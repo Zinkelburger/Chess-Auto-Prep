@@ -1,6 +1,7 @@
 // The directory lock every copy of the app takes, within one process and
 // across processes.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/storage/file_lock.dart';
@@ -98,6 +99,61 @@ void main() {
     await release();
     expect(await save, isA<Saved>());
     expect(await File(ref.path).readAsString(), after);
+  });
+
+  group('the lock files', () {
+    late Directory temp;
+    setUp(() async => temp = await Directory.systemTemp.createTemp('locks-'));
+    tearDown(() => temp.delete(recursive: true));
+
+    Future<T> withTemp<T>(Future<T> Function() body) =>
+        IOOverrides.runZoned(body, getSystemTempDirectory: () => temp);
+
+    // FNV-1a of the folder's key, written as sixteen hex digits: the name
+    // every copy of the app derives for one folder's lock.
+    String lockName(String key) {
+      var hash = 0xcbf29ce484222325;
+      for (final byte in utf8.encode(key)) {
+        hash ^= byte;
+        hash = (hash * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF;
+      }
+      return '${hash.toRadixString(16).padLeft(16, '0')}.sqlite3';
+    }
+
+    test('live in a folder made on first use', () async {
+      final locks = Directory(p.join(temp.path, 'chess-auto-prep-file-locks'));
+      expect(locks.existsSync(), isFalse);
+      expect(
+        await withTemp(
+          () => withDirectoryLock(fixture.documents, () async => 7),
+        ),
+        7,
+      );
+      expect(locks.existsSync(), isTrue);
+    });
+
+    test('a damaged lock file fails the action plainly, at once', () async {
+      // A folder whose hash prints as sixteen digits with no sign, so the
+      // name depends on its padding too.
+      late Directory folder;
+      late String key;
+      for (var i = 0; ; i++) {
+        folder = Directory(p.join(fixture.documents.path, 'f$i'))..createSync();
+        key = p.normalize(folder.resolveSymbolicLinksSync());
+        if (!lockName(key).startsWith('-')) break;
+      }
+      final locks = Directory(p.join(temp.path, 'chess-auto-prep-file-locks'))
+        ..createSync();
+      File(
+        p.join(locks.path, lockName(key)),
+      ).writeAsStringSync('not a database, not even close to one' * 100);
+      var ran = false;
+      await expectLater(
+        withTemp(() => withDirectoryLock(folder, () async => ran = true)),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(ran, isFalse);
+    }, timeout: const Timeout(Duration(seconds: 20)));
   });
 }
 
