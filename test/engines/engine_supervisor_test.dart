@@ -160,4 +160,48 @@ void main() {
       startsWith('The bughouse engine did not start.'),
     );
   }, timeout: const Timeout(Duration(seconds: 30)));
+
+  test('a CPU list names every CPU of its ranges and each one alone', () {
+    expect(cpuList('0-3,8,10-11'), [0, 1, 2, 3, 8, 10, 11]);
+    expect(cpuList(' 5 '), [5]);
+    expect(cpuList('2-2'), [2]);
+  });
+
+  test('an engine held to one core runs on the first CPU it may use', () async {
+    final sleeper = await Process.start('sleep', ['5']);
+    addTearDown(sleeper.kill);
+    final status = await File('/proc/self/status').readAsString();
+    final allowed = RegExp(
+      r'^Cpus_allowed_list:\s*(.+)$',
+      multiLine: true,
+    ).firstMatch(status)!.group(1)!;
+    await limitCores(sleeper.pid, 1);
+    final held = RegExp(
+      r'^Cpus_allowed_list:\s*(.+)$',
+      multiLine: true,
+    ).firstMatch(await File('/proc/${sleeper.pid}/status').readAsString());
+    expect(held!.group(1), '${cpuList(allowed).first}');
+  }, skip: !Platform.isLinux || !File('/usr/bin/taskset').existsSync());
+
+  test('an engine that answers only after the app began closing is let go, not '
+      'kept', () async {
+    final folder = await Directory.systemTemp.createTemp('late-engine');
+    addTearDown(() => folder.delete(recursive: true));
+    final script = File(p.join(folder.path, 'late'))
+      ..writeAsStringSync('''#!/bin/sh
+while read -r line; do
+  case "\$line" in
+    uci) sleep 1; echo "id name Late"; echo "uciok" ;;
+    isready) echo "readyok" ;;
+    quit) exit 0 ;;
+  esac
+done
+''');
+    await Process.run('chmod', ['+x', script.path]);
+    final engines = EngineSupervisor();
+    final starting = engines.start(script.path);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    await engines.dispose();
+    expect(await starting, isA<StartFailed>());
+  }, skip: !Platform.isLinux);
 }

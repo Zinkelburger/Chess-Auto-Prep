@@ -143,6 +143,44 @@ void main() {
     );
   });
 
+  test('a manifest that promises an empty file is damaged; a one-byte file '
+      'is a file', () async {
+    bundle.lies['hivemind.onnx'] = {'bytes': 0, 'sha256': 'a' * 64};
+    expect(
+      (await install.locate() as HivemindMissing).reason,
+      contains('manifest is damaged'),
+    );
+    bundle.lies.clear();
+    bundle.files['hivemind.onnx'] = [7];
+    expect(await install.locate(), isA<HivemindReady>());
+  });
+
+  test('an hour-old install is kept; only a half-written copy left an hour '
+      'ago is cleared', () async {
+    await install.locate();
+    final engine = installed('hivemind.onnx');
+    final old = DateTime.now().subtract(const Duration(hours: 2));
+    await engine.setLastModified(old);
+    final stale = File('${engine.path}.part')..writeAsStringSync('half');
+    await stale.setLastModified(old);
+    final fresh = File(p.join(support.path, 'bughouse', 'other.part'))
+      ..writeAsStringSync('still going');
+    bundle.reads.clear();
+    expect(await install.locate(), isA<HivemindReady>());
+    expect(bundle.reads, ['assets/bughouse/manifest.json']);
+    expect(await engine.lastModified(), old);
+    expect(await stale.exists(), isFalse);
+    expect(await fresh.exists(), isTrue);
+  });
+
+  test('installs into a support folder that is not there yet', () async {
+    final deeper = HivemindInstall(
+      supportDirectory: Directory(p.join(support.path, 'new', 'deeper')),
+      readAsset: bundle.read,
+    );
+    expect(await deeper.locate(), isA<HivemindReady>());
+  });
+
   test('a missing file in the build is named', () async {
     bundle.files.remove('hivemind.onnx');
     bundle.lies['hivemind.onnx'] = {'bytes': 5, 'sha256': 'a' * 64};

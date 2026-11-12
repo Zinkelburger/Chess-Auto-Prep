@@ -143,6 +143,77 @@ void main() {
       expect(await asked, isA<EvaluationUnavailable>());
     });
   });
+
+  group('the engine\'s best lines', () {
+    Future<List<({String uci, int cp})>?> ranked(
+      Position position,
+      int count,
+      List<EngineLine> lines,
+    ) async {
+      final engine = ScriptedEngine();
+      final asked = fixedDepthLines(engine, position, count: count, depth: 12);
+      await pumpEventQueue();
+      for (final line in lines) {
+        engine.current.emit(line);
+      }
+      engine.current.end();
+      return asked;
+    }
+
+    test('come best first, each its first move and its score', () async {
+      expect(
+        await ranked(start, 2, [
+          line(
+            depth: 12,
+            multiPv: 2,
+            score: const Centipawns(20),
+            pv: ['d2d4', 'd7d5'],
+          ),
+          line(depth: 12, score: const Centipawns(30), pv: ['e2e4', 'e7e5']),
+        ]),
+        [(uci: 'e2e4', cp: 30), (uci: 'd2d4', cp: 20)],
+      );
+    });
+
+    test('are no ranking when one owed is short of the depth, unless it is '
+        'a mate, or has no move', () async {
+      final best = line(depth: 12, score: const Centipawns(30), pv: ['e2e4']);
+      expect(
+        await ranked(start, 2, [
+          best,
+          line(depth: 11, multiPv: 2, pv: ['d2d4']),
+        ]),
+        isNull,
+      );
+      expect(
+        await ranked(start, 2, [
+          best,
+          line(depth: 3, multiPv: 2, score: const MateIn(2), pv: ['d2d4']),
+        ]),
+        hasLength(2),
+      );
+      expect(
+        await ranked(start, 2, [
+          best,
+          line(depth: 12, multiPv: 2, pv: const []),
+        ]),
+        isNull,
+      );
+    });
+
+    test('need only as many as the position has moves', () async {
+      final oneMove = Position.setupPosition(
+        Rule.chess,
+        Setup.parseFen('7k/8/8/8/8/8/6q1/7K w - - 0 1'),
+      );
+      expect(
+        await ranked(oneMove, 3, [
+          line(depth: 12, score: const Centipawns(-900), pv: ['h1g2']),
+        ]),
+        [(uci: 'h1g2', cp: -900)],
+      );
+    });
+  });
 }
 
 /// A depth-14 engine behind an empty in-memory cache, closed when the test
