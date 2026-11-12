@@ -52,6 +52,22 @@ void main() {
     }
   });
 
+  test('a turn of quick games still stops at the games it reports progress '
+      'by', () async {
+    final tiny = [
+      for (var game = 0; game < 4000; game++) '[Event "g"]\n\n1. e4 *',
+    ];
+    final lines = parseChapter(name: 'tiny', text: tiny.join('\n\n')).lines;
+    final progress = <int>[];
+    final build = IndexBuild.ofLines(lines, onProgress: progress.add);
+    expect((await build.result)!.gameCount, 4000);
+    var before = 0;
+    for (final done in progress) {
+      expect(done - before, lessThanOrEqualTo(OpeningIndex.progressEvery));
+      before = done;
+    }
+  });
+
   test('a file opened showing one game is indexed from the moves read on '
       'the other isolate, not read here a game at a time', () async {
     final text = bigChapter(games: 1500);

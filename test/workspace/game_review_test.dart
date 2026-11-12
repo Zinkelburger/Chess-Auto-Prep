@@ -425,6 +425,53 @@ void main() {
     expect(fixture.session.tree!.children.first.nags, contains(4));
   });
 
+  test(
+    'turning the switch on for a game that has the review keeps it',
+    () async {
+      final running = review.start();
+      for (final cp in [30, 220, 20]) {
+        await pumpEventQueue();
+        engine.current.emit(line(depth: 14, score: Centipawns(cp)));
+        engine.current.end();
+      }
+      await running;
+      expect(review.annotated, isTrue);
+      review.setAnnotate(true);
+      expect(review.annotated, isTrue);
+      expect(review.problem, isNull);
+    },
+  );
+
+  test(
+    'a review counts from none done, and its owners hear the board move',
+    () async {
+      final done = <int>[];
+      review.addListener(() => done.add(review.completed));
+      final running = review.start();
+      await pumpEventQueue();
+      expect(done.first, 0);
+      review.stop();
+      engine.current.end();
+      await running;
+      final heard = done.length;
+      fixture.session.cursor.forward();
+      expect(done.length, greaterThan(heard));
+    },
+  );
+
+  test('Stop ends a review, and nothing is written', () async {
+    final running = review.start();
+    await pumpEventQueue();
+    review.stop();
+    expect(engine.current.stopped, isTrue);
+    engine.current.emit(line(depth: 14, score: const Centipawns(30)));
+    engine.current.end();
+    await running;
+    expect(review.running, isFalse);
+    expect(review.annotated, isFalse);
+    expect(fixture.session.hasHeldEdits, isFalse);
+  });
+
   test('a saved review is not put back onto a changed main line', () async {
     final running = review.start();
     for (final cp in [30, 220, 20]) {
@@ -483,6 +530,8 @@ void main() {
       await pumpEventQueue();
       if (search == 1) {
         expect(review.batch, (game: 1, of: 2));
+        expect(review.running, isTrue);
+        expect(review.canReviewAll, isFalse);
       }
       if (search == 4) {
         // The user goes to the first game while the second is reviewed.
@@ -511,5 +560,60 @@ void main() {
     );
     expect(review.unreviewedGames, isEmpty);
     expect(review.canReviewAll, isFalse);
+  });
+  test('a game whose main line changed while it was reviewed is left as it '
+      'is, and a review after the batch still ends on an edit', () async {
+    const two =
+        '[Event "A"]\n[Result "*"]\n\n1. e4 e5 *\n\n'
+        '[Event "B"]\n[Result "*"]\n\n1. d4 d5 *\n';
+    final ref = chapterRef('Study', 'Games');
+    final store = ScriptedDocumentStore()
+      ..documents[ref] = Opened(two, scriptedRevision(two));
+    final saver = DocumentSaver(store, delay: Duration.zero);
+    final session = DocumentSession(store, saver);
+    await session.open(ref, game: 0);
+    final engine = ScriptedEngine();
+    final analysis = EngineAnalysis(
+      session,
+      () async => const StartFailed('off'),
+    );
+    final jobs = EngineJobs(analysis);
+    final review = GameReview(
+      session: session,
+      jobs: jobs,
+      launch: () async => Started(engine),
+    );
+    addTearDown(() {
+      review.dispose();
+      jobs.dispose();
+      analysis.dispose();
+      session.dispose();
+      saver.dispose();
+    });
+    final running = review.startAll();
+    for (var search = 0; search < 6; search++) {
+      await pumpEventQueue();
+      if (search == 0) {
+        // 1... e5 becomes 1... c5 while the first game is reviewed: as many
+        // moves, other positions.
+        expect(deleteFrom(session, NodePath.of([0, 0])), isNull);
+        session.cursor.goTo(NodePath.of([0]));
+        session.playMove('c7c5');
+        expect(session.tree!.nodeAt(NodePath.of([0, 0]))?.san, 'c5');
+      }
+      engine.current.emit(line(depth: 14, score: const Centipawns(20)));
+      engine.current.end();
+    }
+    await running;
+    final lines = session.chapter!.lines;
+    expect(hasReview(lines[0].tree!), isFalse);
+    expect(hasReview(lines[1].tree!), isTrue);
+
+    final single = review.start();
+    await pumpEventQueue();
+    session.setComment(const NodePath.root(), 'A note');
+    expect(engine.current.stopped, isTrue);
+    engine.current.end();
+    await single;
   });
 }

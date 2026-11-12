@@ -160,6 +160,72 @@ void main() {
     expect(found, isNull);
   });
 
+  test('a walk overtaken before it starts, or on its way to a reply\'s '
+      'answer, answers nothing', () async {
+    Future<GapWalk?> overtakenAfter(int checks) {
+      var seen = 0;
+      return walkGaps(
+        tree: tree,
+        side: Side.white,
+        floor: 0.01,
+        shares: model,
+        overtaken: () => ++seen > checks,
+      );
+    }
+
+    expect(await overtakenAfter(0), isNull);
+    // The start, 1. e4, the model's answer there, then 1... e5.
+    expect(await overtakenAfter(3), isNull);
+    expect(await overtakenAfter(1000), isNotNull);
+  });
+
+  test('a line that ends in mate is answered whole', () async {
+    const mate = '''
+// Color: White
+
+[Event "Mate"]
+[Result "*"]
+[FEN "6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1"]
+[SetUp "1"]
+
+1. Ra8# *
+''';
+    final found = (await walkGaps(
+      tree: parseChapter(name: 'Mate', text: mate).tree,
+      side: Side.white,
+      floor: 0.1,
+      shares: model,
+      overtaken: () => false,
+    ))!;
+    expect(found.gaps, isEmpty);
+    expect(found.covered, 1);
+  });
+
+  test('a position met a second time is not a draw: the walk goes on to the '
+      'chapter\'s end there', () async {
+    const shuffle = '''
+// Color: White
+
+[Event "Shuffle"]
+[Result "*"]
+
+1. Nf3 Nf6 2. Ng1 Ng8 *
+''';
+    final replies = <String, Map<String, double>>{
+      'rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b': {'g8f6': 1},
+      'rnbqkb1r/pppppppp/5n2/8/8/8/PPPPPPPP/RNBQKBNR b': {'f6g8': 1},
+    };
+    final found = (await walkGaps(
+      tree: parseChapter(name: 'Shuffle', text: shuffle).tree,
+      side: Side.white,
+      floor: 0.1,
+      shares: (fen) async => replies[fen.value.split(' ').take(2).join(' ')],
+      overtaken: () => false,
+    ))!;
+    expect(found.gaps.single, isA<DeadEnd>());
+    expect(found.gaps.single.at, NodePath.of([0, 0, 0, 0]));
+  });
+
   test('castling is found in the tree whichever way it is spelled', () {
     const position = Fen(
       'r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4',
