@@ -46,6 +46,55 @@ void main() {
     },
   );
 
+  test('a PGN beside the repertoires belongs to the root itself', () {
+    final catalog = RepertoireCatalog(
+      files: ScriptedFiles(),
+      root: '/repertoires',
+    );
+    addTearDown(catalog.dispose);
+    expect(catalog.repertoireOf('/repertoires/Loose.pgn'), '/repertoires');
+    expect(catalog.repertoireOf('/repertoires/A/Main.pgn'), '/repertoires/A');
+  });
+
+  test('only an explicit refresh is a reload; a change is not', () async {
+    final disk = ScriptedDocumentStore();
+    final repo = DocumentRepository(disk);
+    final catalog = RepertoireCatalog(
+      files: ScriptedFiles(),
+      documents: repo,
+      root: '/repertoires',
+    );
+    addTearDown(repo.dispose);
+    addTearDown(catalog.dispose);
+    expect(catalog.reloaded, isFalse);
+    await repo.create(const DocumentRef('/repertoires/A/Main.pgn'), '*');
+    await catalog.synchronize();
+    expect(catalog.reloaded, isFalse);
+    await catalog.refresh();
+    expect(catalog.reloaded, isTrue);
+    expect(catalog.admittedChange, isNull);
+    await repo.create(const DocumentRef('/repertoires/B/Main.pgn'), '*');
+    await catalog.synchronize();
+    expect(catalog.reloaded, isFalse);
+    expect(catalog.admittedChange?.path, '/repertoires/B/Main.pgn');
+  });
+
+  test('a closed catalog neither reads nor tells anyone', () async {
+    final files = ScriptedFiles(
+      listing: Repertoires([
+        folder('A', ['Main']),
+      ]),
+    );
+    final catalog = RepertoireCatalog(files: files, root: '/repertoires');
+    await catalog.refresh();
+    files.listing = Repertoires([
+      folder('B', ['Main']),
+    ]);
+    catalog.dispose();
+    await catalog.refresh();
+    expect(catalog.repertoires.single.name, 'A');
+  });
+
   test('failed catalog refresh retains the last good folders', () async {
     final files = ScriptedFiles(
       listing: Repertoires([
