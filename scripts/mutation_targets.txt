@@ -160,3 +160,4 @@ lib/chess/threat.dart|test/chess/threat_test.dart|test/workspace/engine_analysis
 lib/chess/tournament/config.dart|test/chess/tournament/config_test.dart|test/app/app_parts_test.dart test/chess/tournament/time_label_test.dart test/features/tournaments/engine_check_test.dart test/features/tournaments/game_runner_test.dart test/features/tournaments/setup_dialog_test.dart test/features/tournaments/tournament_run_test.dart test/storage/journal_format_test.dart test/storage/record_codec_laws_test.dart test/storage/tournaments_test.dart
 lib/chess/tournament/positions.dart|test/chess/tournament/positions_test.dart|
 lib/chess/tournament/result.dart|test/chess/tournament/result_test.dart|test/chess/tournament/standings_test.dart
+lib/chess/training/drill.dart|test/chess/training/drill_test.dart|test/features/trainer/trainer_test.dart

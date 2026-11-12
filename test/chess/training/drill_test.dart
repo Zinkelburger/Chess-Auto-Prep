@@ -86,6 +86,7 @@ void main() {
     expect(missed.lastMove, 'd2d4');
     d = missed.tick();
     expect((d.stage.runtimeType, d.lastMove), (Corrected, 'e2e4'));
+    expect(d.ply, 0, reason: 'the corrected move is the one asked for');
     d = _settle(d);
     expect((d.stage.runtimeType, d.expected), (Asking, 'Nf3'));
   });
@@ -102,6 +103,18 @@ void main() {
     d = _settle(replayed);
     expect(d.stage, isA<Finished>());
     expect((d.stage as Finished).clean, isFalse);
+  });
+
+  test('every missed move is replayed, one after another', () {
+    var d = Drill.start(_line(_white), learn: false);
+    d = _settle(_play(d, 'd2d4')); // wrong: e4
+    d = _settle(_play(d, 'b1c3')); // wrong: Nf3
+    d = _settle(_play(d, 'f1b5'));
+    expect(d.replaying, [0, 2]);
+    d = _settle(_play(d, 'e2e4'));
+    expect((d.stage.runtimeType, d.expected), (Asking, 'Nf3'));
+    d = _settle(_play(d, 'g1f3'));
+    expect(d.stage, isA<Finished>());
   });
 
   test('a move reaching the same position counts, however it is spelled', () {
