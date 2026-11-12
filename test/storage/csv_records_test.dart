@@ -14,4 +14,34 @@ void main() {
     ]);
     expect(records.map((r) => '${r.source}${r.terminator}').join(), text);
   });
+
+  List<CsvRecord> records(String text) =>
+      (readCsvRecords(text) as CsvParsed).records;
+
+  test('a quoted field that opens the file may hold a line feed', () {
+    final read = records('"first\nline",x\nnext,y\n');
+    expect(read.map((r) => r.fields), [
+      ['first\nline', 'x'],
+      ['next', 'y'],
+    ]);
+  });
+
+  test('a quote inside an unquoted field is an ordinary character', () {
+    final read = records('a,My "KID line.pgn\nb,c\n');
+    expect(read.map((r) => r.source), ['a,My "KID line.pgn', 'b,c']);
+  });
+
+  test('a quoted field may end the text with no line feed', () {
+    final read = records('a,"b"');
+    expect(read.single.fields, ['a', 'b']);
+    expect(read.single.terminator, '');
+  });
+
+  test('a doubled quote inside a quoted field does not close it', () {
+    final read = records('"say ""hi""\nthen",x\nnext,y\n');
+    expect(read.map((r) => r.fields), [
+      ['say "hi"\nthen', 'x'],
+      ['next', 'y'],
+    ]);
+  });
 }

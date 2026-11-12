@@ -86,4 +86,25 @@ void main() {
     await File(p.join(folder!.path, 'app.log')).writeAsBytes([255, 10, 79, 75]);
     expect(await report().read(), endsWith('\nOK'));
   });
+
+  test('the report copies at most 32 KiB of the log', () async {
+    expect(await report().read(), contains('up to 160 lines / 32768 bytes'));
+  });
+
+  test('one byte over the bound drops the line it cuts into', () async {
+    await write('AB\n${'c' * (DiagnosticReport.maxBytes - 2)}');
+    final text = await report().read();
+    expect(text, isNot(contains('B')));
+    expect(text, endsWith('c'));
+  });
+
+  test(
+    'a cut that lands just before a line feed keeps the line after it',
+    () async {
+      await write('A\n${'z' * (DiagnosticReport.maxBytes - 1)}');
+      final text = await report().read();
+      expect(text, endsWith('z'));
+      expect(text, isNot(contains('No complete recent log lines.')));
+    },
+  );
 }
