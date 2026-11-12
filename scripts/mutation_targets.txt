@@ -73,6 +73,8 @@
 #     puzzle game's first header is always its Event.
 #   lib/chess/tactics/puzzle_run.dart:83 the `-1` place of no current
 #     puzzle: anything below 0 reads the same.
+#   lib/chess/training/sitting.dart:56 the epoch a due line with no date
+#     sorts by, 1 ms later or in local time: no line is due before 1970.
 #   lib/chess/tournament/standings.dart:107 the top clamp of the low bound
 #     (mean less a band never reaches 1), :117 the 9 cut-off and `>` -> `>=`
 #     (the quadrature gives the same 0 or 1 there, and z is never 0).
