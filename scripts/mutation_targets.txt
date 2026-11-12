@@ -81,6 +81,16 @@
 #   lib/chess/training/line_order.dart:31 the `-1` of a line with no
 #     likelihood (every likelihood is at least 0), :54 the last band's 4.
 # Listed with equivalent mutants a --max 30 sample can draw:
+#   lib/storage/master_games_import.dart:174 the Windows disk-full codes,
+#     which a Linux run never reads.
+#   lib/storage/master_games_import.dart:232 `.first` -> `.last`: a pragma
+#     answers one row.
+#   lib/storage/master_corpus.dart:131, :134 `.first` -> `.last` (a count
+#     is one row), :201 `> 0` -> `>= 0` (every rating is at least 0), :224
+#     the offset's upper clamp, :231 and :254 the page limits (one row
+#     past the page is all `more` needs; extra rows are dropped).
+#   lib/storage/master_book.dart:212, :270, :283 `.first` -> `.last`: each
+#     lookup is by a primary key, so it finds one row at most.
 #   lib/storage/line_progress.dart:172 `< 2` -> `<= 2`: every training
 #     row the reader accepts has more than two cells.
 #   lib/storage/log_file.dart:21 the byte count's first value: `open`
@@ -334,3 +344,7 @@ lib/storage/generation_trees.dart|test/storage/generation_trees_test.dart|test/s
 lib/storage/edit_scope.dart|test/storage/edit_scope_test.dart test/storage/edit_scope_laws_test.dart|test/storage/reorder_scope_test.dart test/storage/outside_root_test.dart test/storage/compound_write_test.dart test/storage/faults/save_faults_test.dart
 lib/storage/journal_records.dart|test/storage/journal_records_test.dart|test/storage/faults/faulty_disk_test.dart test/storage/operation_journal_test.dart
 lib/storage/lichess_token.dart|test/storage/lichess_account_test.dart|test/storage/lichess_account_persistence_test.dart test/features/settings/lichess_account_test.dart test/features/settings/settings_dialog_test.dart
+lib/storage/log_file.dart|test/storage/log_file_test.dart|
+lib/storage/line_progress.dart|test/storage/line_progress_test.dart test/storage/compound_mapping_property_test.dart|test/storage/compound_follow_process_test.dart
+lib/storage/master_book.dart|test/storage/master_book_test.dart|test/storage/master_corpus_test.dart test/storage/master_games_import_test.dart test/workspace/explorer_databases_test.dart test/workspace/explorer_pane_test.dart test/workspace/explorer_test.dart
+lib/storage/master_corpus.dart|test/storage/master_corpus_test.dart|test/features/database_library_test.dart test/features/database_storage_test.dart
