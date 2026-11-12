@@ -89,4 +89,30 @@ void main() {
         .firstWhere((e) => p.basename(e.path) == 'compound-writes-torn.json');
     expect(await File(torn.path).readAsString(), '{"id": "to');
   });
+
+  test('a linked journal folder is not read', () async {
+    final elsewhere = await Directory(
+      p.join(support.path, 'elsewhere'),
+    ).create();
+    await File(
+      p.join(elsewhere.path, 'a.json'),
+    ).writeAsString(jsonEncode({'id': 'a'}));
+    await journal.delete();
+    await Link(journal.path).create(elsewhere.path);
+    expect(await read(), isEmpty);
+  });
+
+  test('a linked record is set aside, not read through', () async {
+    final outside = File(p.join(support.path, 'outside.json'))
+      ..writeAsStringSync(jsonEncode({'id': 'a'}));
+    await Link(p.join(journal.path, 'a.json')).create(outside.path);
+    expect(await read(), isEmpty);
+    expect(outside.readAsStringSync(), jsonEncode({'id': 'a'}));
+  });
+
+  test('a folder in a journal is set aside whole', () async {
+    final folder = await Directory(p.join(journal.path, 'folder')).create();
+    expect(await quarantineRecord(support, folder, 'test'), isTrue);
+    expect(folder.existsSync(), isFalse);
+  });
 }

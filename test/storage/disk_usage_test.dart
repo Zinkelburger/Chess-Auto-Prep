@@ -129,4 +129,43 @@ void main() {
     expect(formatBytes(1894039552), '1.8 GB');
     expect(formatBytes(3 * 1024 * 1024 * 1024 + 1), '3.0 GB');
   });
+
+  test('sizes step up at exactly 1024, drop the decimal from 100, and stop '
+      'at terabytes', () {
+    expect(formatBytes(1023), '1023 B');
+    expect(formatBytes(1024), '1.0 KB');
+    expect(formatBytes(100 * 1024), '100 KB');
+    expect(formatBytes(99 * 1024 + 512), '99.5 KB');
+    expect(formatBytes(1024 * 1024 * 1024 * 1024), '1.0 TB');
+    expect(formatBytes(1024 * 1024 * 1024 * 1024 * 1024), '1024 TB');
+  });
+
+  test(
+    'a link named like a leftover copy is not offered for removal',
+    () async {
+      final target = p.join(documents.path, 'mine.db');
+      await bytes(target, 10);
+      Link(
+        p.join(support.path, 'master_games.db.pre-v3.bak'),
+      ).createSync(target);
+      final usage = await measureStorage(
+        const [],
+        support: support.path,
+        derived: _derived,
+      );
+      expect(usage, isEmpty);
+    },
+  );
+
+  test('a delete the disk refuses is reported at once, not retried', () async {
+    final locked = Directory(p.join(support.path, 'locked'))..createSync();
+    final path = p.join(locked.path, 'master_games.db');
+    await bytes(path, 10);
+    await Process.run('chmod', ['555', locked.path]);
+    addTearDown(() => Process.run('chmod', ['755', locked.path]));
+    final clock = Stopwatch()..start();
+    expect(await deleteDerivedFile(path), isNotNull);
+    expect(clock.elapsed, lessThan(const Duration(milliseconds: 1500)));
+    expect(File(path).existsSync(), isTrue);
+  }, skip: Platform.isLinux ? false : 'Linux permissions');
 }

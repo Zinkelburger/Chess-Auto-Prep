@@ -327,6 +327,66 @@ void main() {
     await files.list();
     expect(Directory(p.join(root.path, '.import-abc')).existsSync(), isTrue);
   });
+
+  group('a chapter and a listing, as values', () {
+    test('a chapter of a course file is called by its section, its file by '
+        'the file', () {
+      final whole = ChapterRef.at('/r/KID/Main.pgn');
+      expect((whole.name, whole.fileName), ('Main', 'Main'));
+      final section = ChapterRef.at('/r/Course.pgn', section: 'Najdorf');
+      expect((section.name, section.fileName), ('Najdorf', 'Course'));
+    });
+
+    test('a bounded listing covers its boundaries, what is under them, and '
+        'the folders above them only as intersecting', () {
+      const listing = Repertoires(
+        [],
+        boundaries: {'/r/KID/Main.pgn', '/r/Benko'},
+      );
+      expect(listing.includesPath('/r/KID/Main.pgn'), isTrue);
+      expect(listing.includesPath('/r/Benko/Main.pgn'), isTrue);
+      expect(listing.includesPath('/r/KID/Other.pgn'), isFalse);
+      expect(listing.intersectsPath('/r/Benko/Main.pgn'), isTrue);
+      expect(listing.intersectsPath('/r/KID'), isTrue);
+      expect(listing.intersectsPath('/r/Grunfeld'), isFalse);
+    });
+
+    test('a listing narrowed to one chapter keeps that chapter\'s folder', () {
+      final listing = Repertoires([
+        RepertoireFolder(
+          name: 'KID',
+          path: '/r/KID',
+          modified: DateTime.utc(2026),
+          chapters: [ChapterRef.at('/r/KID/Main.pgn')],
+        ),
+        RepertoireFolder(
+          name: 'Benko',
+          path: '/r/Benko',
+          modified: DateTime.utc(2026),
+          chapters: [ChapterRef.at('/r/Benko/Main.pgn')],
+        ),
+      ]);
+      final narrowed = listing.within({'/r/KID/Main.pgn'});
+      expect(narrowed.folders.map((f) => f.name), ['KID']);
+    });
+
+    test('one chapter revision is another only with the same bytes from the '
+        'same file', () {
+      const a = Revision('ab12', nativeIdentity: '1:2');
+      expect(
+        sameChapterRevision(a, const Revision('ab12', nativeIdentity: '1:2')),
+        isTrue,
+      );
+      expect(
+        sameChapterRevision(a, const Revision('ab12', nativeIdentity: '1:3')),
+        isFalse,
+      );
+      expect(
+        sameChapterRevision(a, const Revision('cd34', nativeIdentity: '1:2')),
+        isFalse,
+      );
+    });
+  });
 }
 
 final Object _needsAPlainUser =

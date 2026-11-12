@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/storage/atomic_write.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/generation_trees.dart';
 import 'package:chess_auto_prep/storage/recovery_gate.dart';
+import 'package:document_file_io/document_file_io.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -293,4 +294,72 @@ void main() {
     );
     expect(await artifact.exists(), isFalse);
   });
+
+  test(
+    'a path spelled with .. is refused for keeping and for reading',
+    () async {
+      final dotted = ChapterRef.at(
+        p.join(p.dirname(chapter.path), '..', 'Main', 'Chapter.pgn'),
+      );
+      await expectLater(
+        owner().keep(dotted, 'tree', runId: 'fixed-id'),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(await artifact.exists(), isFalse);
+      await expectLater(
+        owner().startingAt(dotted, const Fen('x')).toList(),
+        throwsA(isA<FileSystemException>()),
+      );
+    },
+  );
+
+  test(
+    'a chapter whose folder is gone is refused without making it again',
+    () async {
+      final gone = ChapterRef.at(
+        p.join(documents.path, 'repertoires', 'Gone', 'Chapter.pgn'),
+      );
+      await expectLater(
+        owner().keep(gone, 'tree', runId: 'fixed-id'),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(
+        Directory(p.join(documents.path, 'repertoires', 'Gone')).existsSync(),
+        isFalse,
+      );
+    },
+  );
+
+  test(
+    'a folder that is not one of the app\'s runs is never read as one',
+    () async {
+      const fen = '4k3/8/8/8/8/8/4P3/4K3 w - - 0 1';
+      final legacy = File(
+        p.join(artifact.parent.parent.path, 'legacy', 'tree.json'),
+      );
+      await legacy.create(recursive: true);
+      await legacy.writeAsString(treeAt(fen, 9));
+      expect(
+        await owner().startingAt(chapter, const Fen(fen)).toList(),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'a run gone by the time it is read is a failure, not made again',
+    () async {
+      const fen = '4k3/8/8/8/8/8/4P3/4K3 w - - 0 1';
+      await owner().keep(chapter, treeAt(fen, 0), runId: 'fixed-id');
+      final reading = runWithNativeCalls(
+        <T>(call, paths, real) async =>
+            call == NativeCall.observeDirectory &&
+                paths.single.endsWith('${p.separator}v2-fixed-id')
+            ? (status: 1, identity: null, volume: null) as T
+            : await real(),
+        () => owner().startingAt(chapter, const Fen(fen)).toList(),
+      );
+      await expectLater(reading, throwsA(isA<FileSystemException>()));
+    },
+  );
 }
