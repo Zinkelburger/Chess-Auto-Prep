@@ -88,4 +88,29 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getKeys(), isEmpty);
   });
+
+  test('an empty token is no account', () async {
+    SharedPreferences.setMockInitialValues({lichessTokenKey: ''});
+    expect(await readLichessAccount(), isNull);
+  });
+
+  test(
+    'any one key of the wrong type signs out and removes the keys',
+    () async {
+      for (final (key, value) in <(String, Object)>[
+        (lichessUsernameKey, 7),
+        (lichessExpiryKey, 'soon'),
+        (lichessPersonalKey, 'yes'),
+      ]) {
+        SharedPreferences.setMockInitialValues({
+          lichessTokenKey: 'lip_t',
+          key: value,
+        });
+        expect(await readLichessAccount(), isNull, reason: key);
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.get(lichessTokenKey), isNull, reason: key);
+        expect(prefs.get(key), isNull, reason: key);
+      }
+    },
+  );
 }

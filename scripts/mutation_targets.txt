@@ -81,6 +81,10 @@
 #   lib/chess/training/line_order.dart:31 the `-1` of a line with no
 #     likelihood (every likelihood is at least 0), :54 the last band's 4.
 # Listed with equivalent mutants a --max 30 sample can draw:
+#   lib/storage/line_progress.dart:172 `< 2` -> `<= 2`: every training
+#     row the reader accepts has more than two cells.
+#   lib/storage/log_file.dart:21 the byte count's first value: `open`
+#     sets it before anything is written.
 #   lib/storage/edit_scope.dart:151 `?? -1` -> `?? 0`: reached only when
 #     the other scope is a whole document, so the pair is one either way.
 #   lib/storage/generation_trees.dart:116 `create: false` -> `true`: the
@@ -329,3 +333,4 @@ lib/storage/file_lock.dart|test/storage/file_lock_test.dart|test/features/librar
 lib/storage/generation_trees.dart|test/storage/generation_trees_test.dart|test/storage/faults/derived_faults_test.dart test/workspace/fill_anchored_test.dart test/workspace/fill_gaps_test.dart test/workspace/fill_mirror_test.dart test/workspace/fill_resume_test.dart
 lib/storage/edit_scope.dart|test/storage/edit_scope_test.dart test/storage/edit_scope_laws_test.dart|test/storage/reorder_scope_test.dart test/storage/outside_root_test.dart test/storage/compound_write_test.dart test/storage/faults/save_faults_test.dart
 lib/storage/journal_records.dart|test/storage/journal_records_test.dart|test/storage/faults/faulty_disk_test.dart test/storage/operation_journal_test.dart
+lib/storage/lichess_token.dart|test/storage/lichess_account_test.dart|test/storage/lichess_account_persistence_test.dart test/features/settings/lichess_account_test.dart test/features/settings/settings_dialog_test.dart
