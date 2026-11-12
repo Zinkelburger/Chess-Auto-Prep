@@ -46,6 +46,8 @@ void main() {
     expect(parseStudyLink('chessgames.com/perl/chesscollection?cid=1'), isNull);
     expect(parseStudyLink('lichess.org/study/short'), isNull);
     expect(parseStudyLink('example.com/study/abcd1234'), isNull);
+    expect(parseStudyLink('lichess.org/study'), isNull);
+    expect(parseStudyLink('lichess.org/broadcast/abcd1234'), isNull);
   });
 
   test('recognising a link: says what it recognised', () {
@@ -88,6 +90,16 @@ void main() {
     expect(await stub.api.fetch(_link), isA<StudyFetched>());
     expect((await stub.api.fetch(_link) as StudyFetched).pgn, '{é}');
   });
+
+  test(
+    'downloading: a byte that is not UTF-8 does not lose the study',
+    () async {
+      final stub = client((_) => http.Response.bytes([0x7b, 0xe9, 0x7d], 200));
+      final pgn = (await stub.api.fetch(_link) as StudyFetched).pgn;
+      expect(pgn, startsWith('{'));
+      expect(pgn, endsWith('}'));
+    },
+  );
 
   test('downloading: signs the request when the user has a token, and says '
       'who is asking', () async {

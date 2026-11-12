@@ -192,4 +192,57 @@ void main() {
     expect(lichess.path, '/game/export/efgh5678');
     expect(lichess.queryParameters['clocks'], '0');
   });
+
+  test(
+    'each 429 doubles how long the door stays shut, up to four minutes',
+    () async {
+      final stub = _Stub((_) => http.Response('', 429));
+      await stub.api.fetch(_masters);
+      for (final shut in [60, 120, 240, 240]) {
+        final asked = stub.asked.length;
+        stub.now = stub.now.add(Duration(seconds: shut - 1));
+        await stub.api.fetch(_masters);
+        expect(stub.asked, hasLength(asked), reason: 'shut for $shut s');
+        stub.now = stub.now.add(const Duration(seconds: 2));
+        await stub.api.fetch(_masters);
+        expect(stub.asked, hasLength(asked + 1), reason: 'open after $shut s');
+      }
+    },
+  );
+
+  test('a 403 asks for the token too', () async {
+    final stub = _Stub((_) => http.Response('', 403));
+    final refusal = await stub.api.fetch(_masters) as ExplorerNotFetched;
+    expect(refusal.problem, ExplorerProblem.rejected);
+  });
+
+  test('a 429 to a game shuts the door to positions as well', () async {
+    final stub = _Stub((_) => http.Response('', 429));
+    expect(await stub.api.gamePgn('abcd1234', masters: true), isNull);
+    final next = await stub.api.fetch(_masters) as ExplorerNotFetched;
+    expect(next.problem, ExplorerProblem.rateLimited);
+    expect(stub.asked, hasLength(1));
+  });
+
+  test('a game with a byte that is not UTF-8 still comes back', () async {
+    final stub = _Stub(
+      (_) => http.Response.bytes([
+        ...utf8.encode('[Event "Caf'),
+        0xE9,
+        ...utf8.encode('"]\n\n1. e4 *'),
+      ], 200),
+    );
+    final pgn = await stub.api.gamePgn('abcd1234', masters: true);
+    expect(pgn, startsWith('[Event "Caf'));
+    expect(pgn, endsWith('1. e4 *'));
+  });
+
+  test('a count the answer leaves out is none', () {
+    final answer = parseExplorerAnswer(
+      '{"moves": [{"uci": "e2e4", "san": "e4", "white": 3}]}',
+    );
+    expect(answer.moves.single.white, 3);
+    expect(answer.moves.single.draws, 0);
+    expect(answer.moves.single.black, 0);
+  });
 }
