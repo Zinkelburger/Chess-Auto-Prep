@@ -241,6 +241,36 @@ void main() {
       expect(restored.accounts[GameSite.lichess]!.username, 'Old');
     },
   );
+
+  test('the revision moves only when the accounts change', () async {
+    SharedPreferences.setMockInitialValues({'lichess_username': 'Me'});
+    final source = PreferencesAccounts();
+    final first = await source.snapshot() as AccountsSnapshot;
+    final again = await source.snapshot() as AccountsSnapshot;
+    expect(again.revision, first.revision);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('lichess_username');
+    final gone = await source.snapshot() as AccountsSnapshot;
+    expect(gone.accounts, isEmpty);
+    expect(gone.revision, isNot(first.revision));
+  });
+
+  test('a username the preferences throw on is reported unsaved', () async {
+    SharedPreferences.setMockInitialValues({});
+    SharedPreferencesStorePlatform.instance = _Throwing();
+    addTearDown(() => SharedPreferences.setMockInitialValues({}));
+    expect(
+      await PreferencesAccounts().setUsername(GameSite.lichess, 'Alice'),
+      isFalse,
+    );
+  });
+}
+
+class _Throwing extends InMemorySharedPreferencesStore {
+  _Throwing() : super.empty();
+  @override
+  Future<bool> setValue(String type, String key, Object value) =>
+      throw StateError('the disk refused');
 }
 
 class _Backend extends InMemorySharedPreferencesStore {
