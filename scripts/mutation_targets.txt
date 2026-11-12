@@ -80,7 +80,10 @@
 #     (the quadrature gives the same 0 or 1 there, and z is never 0).
 #   lib/chess/training/line_order.dart:31 the `-1` of a line with no
 #     likelihood (every likelihood is at least 0), :54 the last band's 4.
-# Listed with one equivalent mutant a --max 30 sample can draw:
+# Listed with equivalent mutants a --max 30 sample can draw:
+#   lib/chess/typed_move.dart:102 `>` -> `>=` (a castling king never lands
+#     on its own square), :187 `.first` -> `.last` (every candidate is then
+#     checked against the same four characters).
 #   lib/chess/game_filter.dart:168 `> 32` -> `>= 32`: when the pattern cache
 #     is emptied, which no result shows.
 #   lib/chess/pgn/game_review.dart:73 `was > 0` -> `> 1`: a mate is
