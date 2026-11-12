@@ -235,6 +235,34 @@ void main() {
     });
   });
 
+  group('the engine\'s word', () {
+    test('a mate is packed as 10000 less its distance, being mated as less '
+        'than nothing, mate 0 included', () {
+      expect(const Verdict(mate: 3).packed, 9997);
+      expect(const Verdict(mate: -3).packed, -9997);
+      expect(const Verdict(mate: 0).packed, -10000);
+    });
+
+    test('a score is written in pawns', () {
+      expect(evalText(const Verdict(cp: 150)), '+1.5');
+      expect(evalText(const Verdict(cp: 150), negate: true), '-1.5');
+      expect(evalText(const Verdict(cp: 1000)), '+10.0');
+    });
+
+    test('a position nothing can read counts as over', () {
+      expect(isOver(const Fen('not a position')), isTrue);
+    });
+
+    test('a forcing line stops where the engine\'s line does', () {
+      expect(trainableLine(const ['Qxf7+', 'Kxf7']), ['Qxf7+']);
+      expect(trainableLine(const ['Qxf7+', 'Kxf7', 'Bxe6+']), [
+        'Qxf7+',
+        'Kxf7',
+        'Bxe6+',
+      ]);
+    });
+  });
+
   group('a mined puzzle written', () {
     MinedPuzzle copied(
       MinedPuzzle p, {
