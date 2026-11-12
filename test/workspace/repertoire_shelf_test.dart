@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
@@ -159,4 +162,93 @@ void main() {
     expect(shelf.refs, [italian, ruy]);
     expect(linesAt(ruy), {'f1b5': 3});
   });
+
+  test('forgetting the files says so to whoever listens', () {
+    var heard = 0;
+    shelf.addListener(() => heard++);
+    shelf.forget();
+    expect(heard, 1);
+    expect(shelf.stale, isTrue);
+  });
+
+  test('a read that ends says so to whoever listens', () async {
+    var heard = 0;
+    shelf.addListener(() => heard++);
+    await shelf.read(gone: () => false);
+    expect(heard, 1);
+    expect(shelf.stale, isFalse);
+  });
+
+  test('a closed shelf is never fresh and reads nothing', () async {
+    shelf.dispose();
+    expect(shelf.stale, isTrue);
+    await shelf.read(gone: () => false);
+    expect(files.listings, 0);
+    expect(shelf.refs, isEmpty);
+    shelf.forget();
+  });
+
+  group('a listing taken before the files changed', () {
+    late _ListedAtStart listed;
+    late RepertoireShelf watched;
+    setUp(() {
+      listed = _ListedAtStart(const Repertoires([]));
+      watched = RepertoireShelf(files: listed, documents: store);
+      addTearDown(watched.dispose);
+    });
+
+    test('is read again, not believed', () async {
+      final gate = listed.gate = Completer<void>();
+      final reading = watched.read(gone: () => false);
+      await pumpEventQueue();
+      listed
+        ..gate = null
+        ..listing = files.listing;
+      watched.forget();
+      gate.complete();
+      await reading;
+      expect(watched.refs, [italian, ruy]);
+      expect(watched.stale, isFalse);
+    });
+
+    test('that failed is read again, not reported', () async {
+      listed.failing = true;
+      final gate = listed.gate = Completer<void>();
+      final reading = watched.read(gone: () => false);
+      await pumpEventQueue();
+      listed
+        ..gate = null
+        ..failing = false
+        ..listing = files.listing;
+      watched.forget();
+      gate.complete();
+      await reading;
+      expect(watched.problem, isNull);
+      expect(watched.refs, [italian, ruy]);
+    });
+  });
+}
+
+/// Files listed as they stood when the listing began, as a real folder
+/// listing is, answering when [gate] opens. The shelf only lists.
+final class _ListedAtStart implements ChapterFiles {
+  _ListedAtStart(this.listing);
+
+  RepertoireListing listing;
+  Completer<void>? gate;
+
+  /// Whether a listing begun now throws, as one cut off by the disk does.
+  bool failing = false;
+
+  @override
+  Future<RepertoireListing> list() async {
+    final seen = listing;
+    final fails = failing;
+    await gate?.future;
+    if (fails) throw const FileSystemException('busy');
+    return seen;
+  }
+
+  @override
+  Object? noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

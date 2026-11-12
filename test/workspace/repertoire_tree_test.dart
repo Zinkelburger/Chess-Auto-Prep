@@ -258,7 +258,74 @@ void main() {
   test('says so where the repertoires have no move', () async {
     walk(['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Bc5', 'c3']);
     await pumpEventQueue();
-    expect(tree.state, isA<TreeNothing>());
+    expect(
+      (tree.state as TreeNothing).sentence,
+      'Your book has no White move here.',
+    );
+  });
+
+  test('a book without chapters of the side says which side', () async {
+    RepertoireTree treeOf(Set<String> repertoires) {
+      final other = RepertoireTree(
+        session: fixture.session,
+        shelf: shelf,
+        books: booksWith(repertoires),
+      )..watch();
+      addTearDown(other.dispose);
+      return other;
+    }
+
+    final blackOnly = treeOf({'Sicilian'});
+    await pumpEventQueue();
+    expect(
+      (blackOnly.state as TreeNothing).sentence,
+      'Your book has no White chapters.',
+    );
+    fixture.session.flip();
+    final whiteOnly = treeOf({'e4'});
+    await pumpEventQueue();
+    expect(
+      (whiteOnly.state as TreeNothing).sentence,
+      'Your book has no Black chapters.',
+    );
+  });
+
+  test('a row shows the fullest file eight plies on', () async {
+    walk(['e4', 'e5', 'Nf3', 'Nc6']);
+    final afterNc6 = fixture.session.cursor.value;
+    walk(['Bc4', 'Bc5', 'c3']);
+    for (final uci in [
+      'g8f6',
+      'd2d4',
+      'e5d4',
+      'c3d4',
+      'c5b4',
+      'c1d2',
+      'b4d2',
+    ]) {
+      fixture.session.playMove(uci);
+    }
+    fixture.session.cursor.goTo(afterNc6);
+    await pumpEventQueue();
+    final bc4 = rows().firstWhere((row) => row.san == 'Bc4');
+    expect(bc4.goesOn, '3...Bc5 4.c3 Nf6 5.d4 exd4 6.cxd4 Bb4+ 7.Bd2 …');
+  });
+
+  test('the tree is watched while any pane showing it is up', () {
+    final other = RepertoireTree(
+      session: fixture.session,
+      shelf: shelf,
+      books: booksWith({'e4'}),
+    );
+    addTearDown(other.dispose);
+    expect(other.watching, isFalse);
+    other.watch();
+    expect(other.watching, isTrue);
+    other.watch();
+    other.unwatch();
+    expect(other.watching, isTrue);
+    other.unwatch();
+    expect(other.watching, isFalse);
   });
 
   test('draft chapters are not lines the user plays', () async {
