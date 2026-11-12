@@ -85,6 +85,8 @@
 #     thousands of centipawns either way.
 #   lib/storage/file_relocation.dart:434 `create: true` for a source's parents,
 #     which exist; :123 `$1` -> `$2`: admission refuses the same changes.
+#   lib/chess/training/records.dart:53 `_capped`'s `>` -> `>=`: a streak
+#     of three is capped to three.
 #   lib/chess/generation/search.dart:241 `> _deepest` -> `>=`, :400 the
 #     snapshot interval's `>` -> `>=`, :638 the 16 ms yield: timing only.
 #   lib/workspace/search/fill_gaps.dart:165 (read only while a run is
@@ -163,3 +165,4 @@ lib/chess/tournament/config.dart|test/chess/tournament/config_test.dart|test/app
 lib/chess/tournament/positions.dart|test/chess/tournament/positions_test.dart|
 lib/chess/tournament/result.dart|test/chess/tournament/result_test.dart|test/chess/tournament/standings_test.dart
 lib/chess/training/drill.dart|test/chess/training/drill_test.dart|test/features/trainer/trainer_test.dart
+lib/chess/training/records.dart|test/chess/training/records_test.dart|test/chess/training/drill_test.dart
