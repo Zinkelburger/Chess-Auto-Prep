@@ -34,6 +34,23 @@ void main() {
     },
   );
 
+  test('showing the answer of a decided puzzle changes nothing', () {
+    final decided = const PuzzleRun(
+      queue: [a, b],
+    ).shown(a).decided(a, Outcome.solved, 3);
+    final after = decided.revealedAt(a);
+    expect(after.revealed, isEmpty);
+    expect(after.outcomes[a], Outcome.solved);
+    expect(const PuzzleRun(queue: [a, b]).counts(b), isTrue);
+    expect(decided.counts(a), isFalse);
+    expect(const PuzzleRun(queue: [a]).revealedAt(a).counts(a), isFalse);
+  });
+
+  test('a puzzle from outside the queue, every one shown, ends the run', () {
+    final run = const PuzzleRun(queue: [a]).shown(a);
+    expect(run.after(c), isNull);
+  });
+
   test('the first attempt decides a puzzle', () {
     final run = const PuzzleRun(
       queue: [a],

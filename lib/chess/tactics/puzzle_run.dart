@@ -82,13 +82,14 @@ final class PuzzleRun {
   Fen? after(Fen? current) {
     final shown = current == null ? -1 : seen.indexOf(current);
     if (shown >= 0 && shown + 1 < seen.length) return seen[shown + 1];
+    // A puzzle put up from the list rather than the queue has no place in
+    // it (indexOf is -1), so what comes after it is the first the run has
+    // not shown.
     final from = current == null ? 0 : queue.indexOf(current) + 1;
     for (final fen in queue.skip(from)) {
       if (!seen.contains(fen)) return fen;
     }
-    // A puzzle put up from the list rather than the queue has no place in
-    // it; what comes after it is the first the run has not shown.
-    return current != null && !queue.contains(current) ? after(null) : null;
+    return null;
   }
 
   /// What the run came to.

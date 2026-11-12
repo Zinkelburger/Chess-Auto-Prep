@@ -71,6 +71,8 @@
 #     `< 1`: the newline follows the prefix, so it is never at 0.
 #   lib/chess/tactics/puzzle_edits.dart:143, :155 a header found at 0: a
 #     puzzle game's first header is always its Event.
+#   lib/chess/tactics/puzzle_run.dart:83 the `-1` place of no current
+#     puzzle: anything below 0 reads the same.
 # Listed with one equivalent mutant a --max 30 sample can draw:
 #   lib/chess/game_filter.dart:168 `> 32` -> `>= 32`: when the pattern cache
 #     is emptied, which no result shows.
