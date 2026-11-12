@@ -3,8 +3,10 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/book_references.dart';
+import 'package:chess_auto_prep/storage/operation_participants.dart';
 import 'package:chess_auto_prep/storage/reference_change.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 const root = '/Documents/repertoires';
 const chapter = '$root/Course/Main.pgn';
@@ -551,5 +553,79 @@ void main() {
       throwsFormatException,
     );
     expect(BookList.decode('{"books":[]}').books, isEmpty);
+  });
+
+  test('a newer books version is left as it is by a move, not rewritten', () {
+    final told = <FormatException>[];
+    const newer =
+        '{"version":2,"books":[{"id":"b","name":"B","repertoires":["Course"]}]}';
+    expect(
+      relocateBookReferences(
+        newer,
+        repertoireRoot: root,
+        from: '$root/Course',
+        to: '$root/Moved',
+        directory: true,
+        unreadable: told.add,
+      ),
+      newer,
+    );
+    expect(told, hasLength(1));
+  });
+
+  group('books.json on disk', () {
+    late Directory folder;
+    late String path;
+    setUp(() async {
+      folder = await Directory.systemTemp.createTemp('book-references-');
+      path = p.join(folder.path, 'books.json');
+    });
+    tearDown(() => folder.delete(recursive: true));
+
+    test('changed by another program since a move was planned keeps that '
+        'change and still follows the move', () async {
+      final before = jsonEncode(fixture());
+      final after = relocate(
+        before,
+        '$root/Course',
+        '$root/Moved',
+        directory: true,
+      );
+      final changed = fixture();
+      books(changed).add({
+        'id': 'added',
+        'name': 'Added',
+        'repertoires': ['Course'],
+        'chapters': [],
+      });
+      File(path).writeAsStringSync(jsonEncode(changed));
+      await BookSelectors.moved(
+        path,
+        before: before,
+        after: after,
+        repertoireRoot: root,
+        from: '$root/Course',
+        to: '$root/Moved',
+        directory: true,
+        synchronize: (_) async {},
+      ).follow();
+      final written = decoded(File(path).readAsStringSync());
+      expect(books(written), hasLength(3));
+      expect((books(written).last as Map)['repertoires'], ['Moved']);
+      expect(firstBook(written)['repertoires'], ['Moved']);
+    });
+
+    test('a section rename finds no books.json it never saw and does not '
+        'wait for one', () async {
+      final before = jsonEncode(fixture());
+      final references = RenamedSections(
+        path,
+        before: before,
+        after: rename(before),
+        repertoireRoot: root,
+        synchronize: (_) async {},
+      );
+      await expectLater(references.follow(), throwsA(isA<NotFollowed>()));
+    });
   });
 }
