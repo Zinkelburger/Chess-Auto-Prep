@@ -262,6 +262,16 @@
 #     `isRunning`'s `&&` (a search's predecessor has always begun by its turn).
 #   lib/engines/uci_process.dart:113 the 5 s wait after a kill (timing), :116
 #     its `-1` (no caller reads it).
+#   lib/workspace/review/solitaire.dart:173, :174 the first counts (every start
+#     sets them), :296 `_moving` left set after stop (the next start's first
+#     move clears it before anything reads it), :341 `ticket.overtaken ||`
+#     -> `&&` (every cancel of a check also ends the run, moves the board on
+#     or replaces the evaluator, which the other tests catch), :392 `.first`
+#     -> `.last` of one move, :476 the move number of a FEN with fewer than
+#     six fields (a FEN tag is read whole).
+#   lib/engines/maia/maia_model.dart:187 `.first` -> `.last` (the shipped
+#     model has one output), :247 the intra-op thread count (speed only), :261
+#     the options release (a native leak no test or user sees).
 lib/chess/pgn/game_review.dart|test/workspace/game_review_test.dart|test/chess/pgn/edit_laws_test.dart test/app
 lib/chess/pgn/line_edits.dart|test/chess/pgn/line_edits_test.dart|test/chess/pgn test/workspace
 lib/chess/pgn/chapter_edits.dart|test/chess/pgn/chapter_edits_test.dart|test/chess/pgn test/workspace
@@ -432,3 +442,5 @@ lib/storage/log_file.dart|test/storage/log_file_test.dart|
 lib/storage/line_progress.dart|test/storage/line_progress_test.dart test/storage/compound_mapping_property_test.dart|test/storage/compound_follow_process_test.dart
 lib/storage/master_book.dart|test/storage/master_book_test.dart|test/storage/master_corpus_test.dart test/storage/master_games_import_test.dart test/workspace/explorer_databases_test.dart test/workspace/explorer_pane_test.dart test/workspace/explorer_test.dart
 lib/storage/master_corpus.dart|test/storage/master_corpus_test.dart|test/features/database_library_test.dart test/features/database_storage_test.dart
+lib/workspace/review/solitaire.dart|test/workspace/solitaire_test.dart|test/workspace/solitaire_engine_test.dart test/workspace/solitaire_pane_test.dart
+lib/engines/maia/maia_model.dart|test/engines/maia/maia_model_test.dart|test/engines/maia/move_shares_test.dart

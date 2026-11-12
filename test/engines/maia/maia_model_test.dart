@@ -80,4 +80,57 @@ void main() {
         ? 'needs the ONNX Runtime the onnxruntime package ships for Linux'
         : false,
   );
+
+  test(
+    'the shipped model answers a position with shares over its legal moves, '
+    'for either side to move',
+    () async {
+      final load = await MaiaModel.load(
+        model: File('assets/maia3_simplified.onnx').readAsBytesSync(),
+        moveVocabulary: File(
+          'assets/data/all_moves_maia3.json',
+        ).readAsStringSync(),
+      );
+      final model = switch (load) {
+        MaiaReady(:final model) => model,
+        MaiaUnavailable(:final reason) => fail(reason),
+      };
+      addTearDown(model.dispose);
+      const patience = Duration(seconds: 60);
+      for (final (fen, legal) in [
+        (Fen.initial, 20),
+        (
+          const Fen(
+            'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+          ),
+          20,
+        ),
+      ]) {
+        final answer = await model.policy(fen, 1500).timeout(patience);
+        final shares = switch (answer) {
+          MaiaPolicy(:final shares) => shares,
+          MaiaFailed(:final reason) => fail(reason),
+        };
+        expect(shares, hasLength(legal), reason: fen.value);
+        final total = shares.values.fold<double>(0, (a, b) => a + b);
+        expect(total, closeTo(1, 1e-3));
+        expect(shares.values, everyElement(inInclusiveRange(0, 1)));
+      }
+      final white = await model.policy(Fen.initial, 1500) as MaiaPolicy;
+      expect(white.shares.keys, containsAll(['e2e4', 'd2d4']));
+      final black =
+          await model.policy(
+                const Fen(
+                  'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+                ),
+                1500,
+              )
+              as MaiaPolicy;
+      expect(black.shares.keys, containsAll(['e7e5', 'c7c5']));
+    },
+    skip: runtime == null || !File('assets/maia3_simplified.onnx').existsSync()
+        ? 'needs the ONNX Runtime and the shipped Maia model'
+        : false,
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
 }
