@@ -152,3 +152,5 @@ lib/chess/tactics/mining.dart|test/chess/tactics/mining_test.dart|test/features/
 lib/chess/tactics/mistake_counts.dart|test/chess/tactics/mistake_counts_test.dart|test/features/my_games/game_book_test.dart test/features/tactics/my_games_test.dart
 lib/chess/tactics/puzzle.dart|test/chess/tactics/puzzle_test.dart|test/chess/tactics/mining_test.dart test/chess/tactics/mistake_counts_test.dart test/chess/tactics/puzzle_edits_test.dart test/chess/tactics/puzzle_queue_test.dart test/chess/tactics/source_game_test.dart test/features/tactics/mining_native_checkpoint_test.dart test/features/tactics/my_games_test.dart test/features/tactics/set_additions_test.dart
 lib/chess/tactics/puzzle_queue.dart|test/chess/tactics/puzzle_queue_test.dart|test/app/puzzle_shutdown_test.dart test/features/tactics/puzzle_trainer_test.dart test/features/tactics/tactics_set_test.dart
+lib/chess/tactics/source_game.dart|test/chess/tactics/source_game_test.dart|
+lib/chess/threat.dart|test/chess/threat_test.dart|test/workspace/engine_analysis_test.dart
