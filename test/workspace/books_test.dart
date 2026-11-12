@@ -187,6 +187,94 @@ void main() {
   );
 
   test(
+    'a refresh that fails after a newer edit leaves the books writable',
+    () async {
+      final held = _HeldBooks();
+      final owner = Books(store: held, root: '/repertoires');
+      addTearDown(owner.dispose);
+      await owner.load();
+      final gate = held.readGate = Completer<void>();
+      final oldRead = owner.load();
+      owner.create('Newer');
+      await owner.settled;
+      held.failRead = true;
+      gate.complete();
+      await oldRead;
+      expect(owner.problem, isNull);
+      expect(owner.current, isTrue);
+      expect(owner.create('Later'), isNotNull);
+      await owner.settled;
+      expect(held.value.books.map((book) => book.name), ['Newer', 'Later']);
+    },
+  );
+
+  test('an edit the file took is not made again when the books are read '
+      'after a reference change', () async {
+    final held = _HeldBooks()
+      ..value = const BookList(
+        books: [Book(id: 'a', name: 'Mine')],
+        active: 'a',
+      );
+    final owner = Books(store: held, root: '/repertoires');
+    addTearDown(owner.dispose);
+    await owner.load();
+    owner.rename(owner.chosen!, 'Renamed');
+    await owner.settled;
+    expect(held.value.activeBook?.name, 'Renamed');
+    held.value = const BookList(
+      books: [Book(id: 'a', name: 'Theirs')],
+      active: 'a',
+    );
+    await owner.changeReferences(() async => true, failed: (_) => false);
+    expect(owner.chosen?.name, 'Theirs');
+    expect(held.value.activeBook?.name, 'Theirs');
+  });
+
+  test('an edit the file has not taken is kept over a reference change and '
+      'written once the file takes writes again', () async {
+    final held = _HeldBooks()..fail = true;
+    final owner = Books(store: held, root: '/repertoires');
+    addTearDown(owner.dispose);
+    await owner.load();
+    owner.create('Pending');
+    await owner.settled;
+    expect(owner.canRetry, isTrue);
+    await owner.changeReferences(() async {
+      held.value = const BookList(
+        books: [Book(id: 'x', name: 'Moved')],
+      );
+      return true;
+    }, failed: (_) => false);
+    expect(owner.books.map((book) => book.name), ['Moved', 'Pending']);
+    held.fail = false;
+    await owner.retry();
+    expect(held.value.books.map((book) => book.name), ['Moved', 'Pending']);
+  });
+
+  test('an edit made as a failed save comes through is written too', () async {
+    final held = _HeldBooks()..fail = true;
+    final owner = Books(store: held, root: '/repertoires');
+    addTearDown(owner.dispose);
+    await owner.load();
+    owner.create('First');
+    await owner.settled;
+    expect(owner.problem, isNotNull);
+    held.fail = false;
+    var made = false;
+    owner.addListener(() {
+      if (owner.problem == null && !made) {
+        made = true;
+        owner.create('Second');
+      }
+    });
+    await owner.retry();
+    await owner.settled;
+    expect(made, isTrue);
+    expect(held.value.books.map((book) => book.name), ['First', 'Second']);
+    expect(owner.current, isTrue);
+  });
+
+  test(
     'structural reference publication is not current before reread completes',
     () async {
       final held = _HeldBooks();
@@ -334,6 +422,47 @@ void main() {
     books.delete(book);
     expect(books.chosen, isNull);
     expect(books.books, isEmpty);
+  });
+
+  test('a name is taken by another book whatever its case and spaces', () {
+    final spring = books.create('Spring')!;
+    books.create('Summer');
+    expect(books.nameTaken(' spring '), isTrue);
+    expect(books.nameTaken('SUMMER'), isTrue);
+    expect(books.nameTaken('Autumn'), isFalse);
+    expect(books.nameTaken('Spring', except: spring), isFalse);
+  });
+
+  test('the book chosen is the one used; choosing none uses every '
+      'repertoire', () async {
+    final spring = books.create('Spring')!;
+    final summer = books.create('Summer')!;
+    expect(books.chosen?.id, spring.id);
+    books.activate(summer);
+    expect(books.chosen?.id, summer.id);
+    await books.settled;
+    expect(store.books.active, summer.id);
+    var heard = 0;
+    books.addListener(() => heard++);
+    books.activate(summer);
+    expect(heard, 0, reason: 'the book in use again changes nothing');
+    books.activate(null);
+    expect(books.chosen, isNull);
+    expect(books.active, same(Book.everything));
+    await books.settled;
+    expect(store.books.active, isNull);
+  });
+
+  test('the Books mode opens the book asked for', () {
+    final spring = books.create('Spring')!;
+    final summer = books.create('Summer')!;
+    expect(books.editing?.id, summer.id, reason: 'a new book opens');
+    books.edit(spring);
+    expect(books.editing?.id, spring.id);
+    var heard = 0;
+    books.addListener(() => heard++);
+    books.edit(spring);
+    expect(heard, 0, reason: 'the open book again changes nothing');
   });
 
   test('a file that cannot be read is never written over', () async {
