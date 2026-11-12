@@ -24,6 +24,38 @@ void main() {
     expect(countText(2100000000), '2.1G');
   });
 
+  test('each unit starts at a thousand of the one before, and one decimal '
+      'is shown below ten', () {
+    expect(speedText(999000), '999 kN/s');
+    expect(speedText(1000000), '1.0 MN/s');
+    expect(speedText(10000000), '10 MN/s');
+    expect(countText(999), '999');
+    expect(countText(1000), '1.0k');
+    expect(countText(10000), '10k');
+    expect(countText(1000000), '1.0M');
+    expect(countText(1000000000), '1.0G');
+  });
+
+  test('a depth from one to ninety-nine is shown, and any speed or count '
+      'above none', () {
+    expect(engineRunningStatus('SF', best(depth: 1)), 'Depth 1 · SF');
+    expect(engineRunningStatus('SF', best(depth: 99)), 'Depth 99 · SF');
+    expect(engineRunningStatus('SF', best(depth: 100)), 'SF');
+    expect(engineRunningStatus('SF', best(nodes: 0, nps: 0)), 'Depth 20 · SF');
+    expect(
+      engineRunningStatus('SF', best(nodes: 1, nps: 1)),
+      'Depth 20 · 0 kN/s · 1 nodes · SF',
+    );
+  });
+
+  test('a pane narrowed past the name keeps the speed when there is no '
+      'depth', () {
+    expect(engineStatusChoices('SF', best(depth: 0, nps: 2000000)), [
+      '2.0 MN/s · SF',
+      '2.0 MN/s',
+    ]);
+  });
+
   test('the status says only what the engine has said', () {
     expect(engineRunningStatus('Stockfish 19', null), 'Stockfish 19');
     expect(

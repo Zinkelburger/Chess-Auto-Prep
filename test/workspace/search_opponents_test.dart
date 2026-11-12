@@ -1,10 +1,14 @@
+import 'package:chess_auto_prep/chess/explorer_answer.dart';
 import 'package:chess_auto_prep/chess/fen.dart';
+import 'package:chess_auto_prep/chess/generation/eval.dart';
 import 'package:chess_auto_prep/chess/generation/legal_moves.dart';
 import 'package:chess_auto_prep/chess/generation/played_policy.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/chess/generation/sources.dart';
 import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/engines/maia/move_policy.dart';
+import 'package:chess_auto_prep/storage/master_book.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
 import 'package:chess_auto_prep/workspace/search/fill_gaps.dart';
@@ -15,6 +19,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../chess/generation/scripted_sources.dart';
 import '../support/scripted_engine.dart';
+import '../support/scripted_explorer.dart';
 import '../support/session_fixture.dart';
 
 /// White king and pawn against a bare king: few moves, so a run is small.
@@ -281,4 +286,138 @@ void main() {
       reason: 'Maia has nothing to fall back to',
     );
   });
+
+  group('the opponent a request names', () {
+    final start = positionOf(
+      'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+    );
+    late ScriptedBook book;
+    setUp(() {
+      // 300 games at the start, none anywhere else.
+      book = ScriptedBook(
+        present: true,
+        answer: (fen, _) => BookFound(
+          fen.position == Fen(start.fen).position
+              ? startAnswer
+              : ExplorerAnswer.empty,
+        ),
+      );
+    });
+
+    OpponentPolicy twicWith(int? fallbackUnder) => opponentFor(
+      FillRequest(
+        elo: 1500,
+        replies: ReplySource.twic,
+        fallbackUnder: fallbackUnder,
+      ),
+      maia: const _Maia({'g1f3': 1}),
+      explorer: ScriptedExplorerApi(),
+      book: book,
+    );
+
+    test('leaves a position with fewer games than asked to Maia, and takes '
+        'the games from exactly that many', () async {
+      final few = await twicWith(301).policyFor(start);
+      expect((few as PolicyFound).from, RepliesFrom.maia);
+      final enough = await twicWith(300).policyFor(start);
+      expect((enough as PolicyFound).from, RepliesFrom.games);
+    });
+
+    test(
+      'with no fallback asked for, stops where the games have none',
+      () async {
+        final opponent = twicWith(null);
+        expect(
+          (await opponent.policyFor(start) as PolicyFound).from,
+          RepliesFrom.games,
+        );
+        final afterE4 = afterUci(start, 'e2e4');
+        expect(await opponent.policyFor(afterE4), isA<PolicyUnavailable>());
+      },
+    );
+
+    test('counts every game on this machine, over the board or not', () async {
+      await twicWith(null).policyFor(start);
+      expect(book.asked.single.$2, isFalse);
+      final masters = await MastersPlayed(book).at(Fen(start.fen));
+      expect(masters.map((move) => move.uci), ['e2e4', 'd2d4']);
+      expect(book.asked.last.$2, isFalse);
+      book.answer = (_, _) => const BookAbsent();
+      expect(await MastersPlayed(book).at(Fen(start.fen)), isEmpty);
+    });
+  });
+
+  test('the engine is asked again for a ranking it failed, not for one it '
+      'gave', () async {
+    final start = positionOf(kingAndPawn);
+    final afterE4Here = afterUci(start, 'e2e4');
+    final source = _Ranking({
+      start.fen: null,
+      afterE4Here.fen: ['e8d8'],
+    });
+    final answers = CandidateAnswers(source);
+    expect(await answers.candidates(afterE4Here, 1), ['e8d8']);
+    expect(await answers.candidates(start, 1), isNull);
+    source.ranked[start.fen] = ['e2e4'];
+    expect(await answers.candidates(start, 1), ['e2e4']);
+    await answers.candidates(start, 1);
+    await answers.candidates(afterE4Here, 1);
+    expect(source.asked, [afterE4Here.fen, start.fen, start.fen]);
+  });
+
+  test('the engine\'s line is kept only where it gave one', () async {
+    final start = positionOf(kingAndPawn);
+    final afterE4Here = afterUci(start, 'e2e4');
+    final depths = <String, int>{};
+    final lines = <String, List<String>>{};
+    final answers = EngineAnswers(
+      _Lines({
+        start.fen: const Evaluated(Eval(30), depth: 12, pv: ['e2e4']),
+        afterE4Here.fen: const Evaluated(Eval(-30), depth: 12),
+      }),
+      depths: depths,
+      lines: lines,
+    );
+    await answers.evaluate(start);
+    await answers.evaluate(afterE4Here);
+    expect(lines, {
+      Fen(start.fen).position: ['e2e4'],
+    });
+    expect(depths.length, 2);
+  });
+}
+
+/// A Maia that answers every position with [shares].
+final class _Maia implements MovePolicy {
+  const _Maia(this.shares);
+
+  final Map<String, double> shares;
+
+  @override
+  Future<MaiaAnswer> policy(Fen fen, int elo) async => MaiaPolicy(shares);
+}
+
+/// An engine shortlist the test writes by FEN; null fails the ranking.
+final class _Ranking implements CandidateSource {
+  _Ranking(this.ranked);
+
+  final Map<String, List<String>?> ranked;
+  final asked = <String>[];
+
+  @override
+  Future<List<String>?> candidates(Position position, int count) async {
+    asked.add(position.fen);
+    return ranked[position.fen];
+  }
+}
+
+/// An engine whose answers the test writes by FEN.
+final class _Lines implements PositionEvaluator {
+  const _Lines(this.answers);
+
+  final Map<String, Evaluated> answers;
+
+  @override
+  Future<EvaluationResult> evaluate(Position position) async =>
+      answers[position.fen]!;
 }
