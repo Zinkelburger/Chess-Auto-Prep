@@ -261,6 +261,45 @@ void main() {
       expect(said.last, '2 games downloaded');
     });
 
+    test('a game is counted once when a chunk ends on its tag, and only a '
+        'chunk with games says how many', () async {
+      final clock = FakeAsync();
+      final said = <String>[];
+      final first = utf8.encode('[Event ');
+      final rest = utf8.encode(scholarsMate.substring('[Event '.length));
+      final fetched = _sixMonths(
+        clock,
+        _streaming(
+          (_) async =>
+              http.StreamedResponse(Stream.fromIterable([first, rest]), 200),
+        ),
+        progress: said.add,
+      );
+      await _elapse(clock, const Duration(seconds: 2));
+
+      expect((fetched.single as GamesFetched).games, hasLength(1));
+      expect(said, ['1 games downloaded']);
+    });
+
+    test('a span of months asks for every game in it; a number of games '
+        'asks for that many', () async {
+      final api = _lichess([() => _pgn('$scholarsMate\n')]);
+      await api.range(
+        'me',
+        const PlayerDownloadRange(months: 3),
+        cancelled: () => false,
+        progress: (_) {},
+      );
+      expect(_asked.single.url.queryParameters.containsKey('max'), isFalse);
+      await api.range(
+        'me',
+        const PlayerDownloadRange(max: 50),
+        cancelled: () => false,
+        progress: (_) {},
+      );
+      expect(_asked.last.url.queryParameters['max'], '50');
+    });
+
     test('cancel while the export is quiet aborts it promptly', () async {
       final clock = FakeAsync();
       var cancel = false, asked = 0, aborted = false;
@@ -373,6 +412,46 @@ void main() {
         quietChesscomGame,
         scholarsMate,
       ]);
+    });
+
+    test('a number of games asked for is as many as come back', () async {
+      final fetched =
+          await _chesscom({
+            '$_archives/archives': () => _archiveList(['2026/08']),
+            '$_archives/2026/08/pgn': () => http.Response(
+              [scholarsMate, quietChesscomGame].join('\n\n'),
+              200,
+            ),
+          }).range(
+            'Me',
+            const PlayerDownloadRange(max: 1),
+            cancelled: () => false,
+            progress: (_) {},
+          );
+      expect((fetched as GamesFetched).games, hasLength(1));
+    });
+
+    test('a span of months stops at the first month before it', () async {
+      final now = DateTime.now();
+      final thisMonth = '${now.year}/${now.month.toString().padLeft(2, '0')}';
+      final asked = <String>[];
+      http.Response Function() page(String month, String body) => () {
+        asked.add(month);
+        return http.Response(body, 200);
+      };
+      final said = <String>[];
+      await _chesscom({
+        '$_archives/archives': () => _archiveList(['2000/01', thisMonth]),
+        '$_archives/$thisMonth/pgn': page(thisMonth, ''),
+        '$_archives/2000/01/pgn': page('2000/01', ''),
+      }).range(
+        'Me',
+        const PlayerDownloadRange(months: 1),
+        cancelled: () => false,
+        progress: said.add,
+      );
+      expect(asked, [thisMonth]);
+      expect(said.single, endsWith('${now.year}-${now.month}'));
     });
 
     test('an unknown player is said so', () async {

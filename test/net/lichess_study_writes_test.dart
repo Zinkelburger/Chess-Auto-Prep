@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:chess_auto_prep/net/lichess_study_writes.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
@@ -169,6 +171,115 @@ void main() {
       (made as LichessNotWritten).problem,
       LichessWriteProblem.unreachable,
     );
+  });
+
+  test('a chapter added to a study that has chapters says nothing of the '
+      'first one', () async {
+    final w = writer(
+      (_) => http.Response('{"chapters":[{"id":"bbbb2222"}]}', 200),
+    );
+    await w.api.addChapter(
+      'wxyz9876',
+      pgn: '1. d4 *',
+      name: 'Second',
+      orientation: Side.white,
+    );
+    expect(w.asked.single.bodyFields.containsKey('initial'), isFalse);
+  });
+
+  test('signed in means a token that says something', () async {
+    expect(await writer((_) => http.Response('', 200)).api.signedIn, isTrue);
+    expect(
+      await writer((_) => http.Response('', 200), token: null).api.signedIn,
+      isFalse,
+    );
+    expect(
+      await writer((_) => http.Response('', 200), token: '').api.signedIn,
+      isFalse,
+    );
+  });
+
+  test('tags follow only moves that were written, and only when there are '
+      'tags', () async {
+    final refused = writer((_) => http.Response('', 404));
+    await refused.api.replaceChapter(
+      'wxyz9876',
+      'aaaa1111',
+      pgn: '1. e4 *',
+      tags: const {'White': 'Morphy'},
+    );
+    expect(refused.asked, hasLength(1), reason: 'no tags after a refusal');
+    final bare = writer((_) => http.Response('{}', 200));
+    await bare.api.replaceChapter(
+      'wxyz9876',
+      'aaaa1111',
+      pgn: '1. e4 *',
+      tags: const {},
+    );
+    expect(bare.asked, hasLength(1), reason: 'no tags to send');
+  });
+
+  test('only a 2xx answer is a write; a 300 is not', () async {
+    final w = writer((_) => http.Response('{}', 300));
+    final result = await w.api.replaceChapter(
+      'wxyz9876',
+      'aaaa1111',
+      pgn: '1. e4 *',
+      tags: const {},
+    );
+    expect((result as LichessNotWritten).problem, LichessWriteProblem.http);
+    final ok = writer((_) => http.Response('{}', 299));
+    expect(
+      await ok.api.replaceChapter(
+        'wxyz9876',
+        'aaaa1111',
+        pgn: '1. e4 *',
+        tags: const {},
+      ),
+      isA<LichessWritten>(),
+    );
+  });
+
+  test('Lichess\'s own words come only with a 400: a sentence, or the first '
+      'field error there is', () async {
+    Future<LichessNotWritten> answer(int status, String body) async {
+      final w = writer((_) => http.Response(body, status));
+      return await w.api.replaceChapter(
+            'wxyz9876',
+            'aaaa1111',
+            pgn: '1. e4 *',
+            tags: const {},
+          )
+          as LichessNotWritten;
+    }
+
+    expect(
+      (await answer(400, '{"error":"Illegal move e5"}')).detail,
+      'Illegal move e5',
+    );
+    expect(
+      (await answer(400, '{"error":{"name":[],"pgn":["Bad PGN"]}}')).detail,
+      'Bad PGN',
+    );
+    expect((await answer(500, '{"error":"Down"}')).detail, isNull);
+    expect((await answer(401, '{"error":"No"}')).detail, isNull);
+  });
+
+  test('an answer with a byte that is not UTF-8 is still read', () async {
+    final w = writer(
+      (_) => http.Response.bytes([
+        ...utf8.encode('{"error":"Caf'),
+        0xE9,
+        ...utf8.encode('"}'),
+      ], 400),
+    );
+    final result = await w.api.replaceChapter(
+      'wxyz9876',
+      'aaaa1111',
+      pgn: '1. e4 *',
+      tags: const {},
+    );
+    expect((result as LichessNotWritten).detail, startsWith('Caf'));
   });
 }
 

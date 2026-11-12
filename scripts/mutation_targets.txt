@@ -168,6 +168,33 @@
 #     and :33, :67 `<` -> `<=` (where a build runs), :56 the 4 ms turn and
 #     :105 its clock's `<`: timing only.
 #   lib/workspace/latest.dart:9 the ticket counter's start (only compared).
+#   lib/engines/alternative_answer.dart:28 the 30 s patience, :42 whether a
+#     cancelled check logs: timing and logging only.
+#   lib/net/chessdb_moves.dart:71 `at > 0` -> `>= 0` or `> 1`: an empty or
+#     one-letter key names nothing read (`move`, `score`).
+#   lib/net/github_releases.dart:112, :115, :116 the 20, 30 and 45 s
+#     limits: timing only.
+#   lib/workspace/action_layout.dart:677 the three-split depth of a saved
+#     layout: a fourth split needs a fifth pane, which the count refuses.
+#   lib/net/lichess_explorer.dart:80 the 15 s limit, :212 `<` -> `<=` on the
+#     100 ms gap (a wait of nothing).
+#   lib/net/player_ratings.dart:21, :22 the 700 ms pacing, :30 the 20 s limit:
+#     timing only.
+#   lib/net/lichess_login.dart:110 the port tried first (any free one serves),
+#     :126 the 20 s limit, :160 the verifier's 64 bytes (PKCE takes 43-128
+#     characters), :184 a log line, :370 a forced close of a server with no
+#     connection left.
+#   lib/net/lichess_studies.dart:133 the 20 s limit: timing only.
+#   lib/net/lichess_study_writes.dart:83 the interface's `initial = false`
+#     (a call takes the implementation's default).
+#   lib/net/remote_queue.dart:24 the 3 s wait (timing), :100 `_closed ||
+#     _dropped` -> `&&` (the queue's stillWanted refuses a closed or dropped
+#     run all the same).
+#   lib/net/recent_games.dart:66 the 60 s limit (timing), :210 `< 6` -> `<= 6`
+#     (six characters kept either way), :392 the two-segment floor (Chess.com's
+#     archive paths are six segments).
+#   lib/net/search_evaluator.dart:102, :103 `.first` -> `.last`: the cloud is
+#     asked for one line.
 lib/chess/pgn/game_review.dart|test/workspace/game_review_test.dart|test/chess/pgn/edit_laws_test.dart test/app
 lib/chess/pgn/line_edits.dart|test/chess/pgn/line_edits_test.dart|test/chess/pgn test/workspace
 lib/chess/pgn/chapter_edits.dart|test/chess/pgn/chapter_edits_test.dart|test/chess/pgn test/workspace
@@ -286,3 +313,21 @@ lib/workspace/latest.dart|test/workspace/latest_test.dart|
 lib/storage/book_references.dart|test/storage/book_references_test.dart|test/storage/books_codec_laws_test.dart test/storage/compound_mapping_property_test.dart test/storage/record_codec_laws_test.dart
 lib/storage/chapter_directory.dart|test/storage/chapter_files_test.dart test/features/library_import_test.dart test/features/library_on_disk_test.dart|test/features/course_chapters_test.dart test/storage/profile_snapshot_test.dart test/features/library_import_recovery_test.dart test/storage/scoped_repertoire_snapshot_test.dart test/features/library_open_course_test.dart
 lib/workspace/workspace_tabs.dart|test/workspace/workspace_tabs_test.dart|test/app/viewer_books_test.dart test/app/layout_memory_test.dart test/app/shell_doors_test.dart test/workspace/action_panes_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/reading/comment_line.dart|test/workspace/comment_line_test.dart|test/workspace/document_session_test.dart test/workspace/move_note_test.dart
+lib/engines/alternative_answer.dart|test/engines/alternative_answer_test.dart|test/features/tactics/puzzle_trainer_test.dart
+lib/engines/tournament_launch.dart|test/engines/tournament_launch_test.dart|
+lib/net/chessdb_moves.dart|test/net/chessdb_moves_test.dart|test/workspace/fill_lines_test.dart
+lib/net/github_releases.dart|test/net/github_releases_test.dart|test/features/settings/app_updates_test.dart test/features/settings/update_offer_test.dart test/features/settings/update_prompt_test.dart
+lib/engines/analysis_launch.dart|test/engines/analysis_launch_test.dart|
+lib/workspace/action_layout.dart|test/workspace/action_layout_test.dart|test/app/layout_memory_test.dart test/app/tool_panes_fit_test.dart test/workspace/action_panes_test.dart test/workspace/workspace_view_test.dart
+lib/workspace/workspace.dart|test/workspace/workspace_test.dart|test/workspace/workspace_view_test.dart
+lib/net/lichess_explorer.dart|test/net/lichess_explorer_test.dart|test/app/cross_mode_window_test.dart test/net/credential_diagnostics_test.dart test/workspace/explorer_databases_test.dart test/workspace/explorer_pane_test.dart test/workspace/explorer_test.dart
+lib/net/lichess_http.dart|test/net/lichess_studies_test.dart test/net/lichess_explorer_test.dart test/net/lichess_login_test.dart|test/net/recent_games_test.dart
+lib/net/player_ratings.dart|test/features/players/player_download_test.dart test/features/players/players_owner_test.dart|
+lib/net/lichess_login.dart|test/net/lichess_login_test.dart|test/features/settings/lichess_account_test.dart test/features/settings/settings_dialog_test.dart
+lib/net/lichess_studies.dart|test/net/lichess_studies_test.dart|test/features/study/studies_test.dart test/features/study/study_recovery_test.dart test/net/credential_diagnostics_test.dart test/storage/pgn_file_import_test.dart
+lib/net/lichess_study_writes.dart|test/net/lichess_study_writes_test.dart|test/features/study/study_sender_test.dart
+lib/net/remote_queue.dart|test/net/remote_queue_test.dart|test/net/chessdb_moves_test.dart test/net/search_evaluator_test.dart test/workspace/audit_pane_test.dart test/workspace/chapter_audit_test.dart test/workspace/engine_jobs_test.dart test/workspace/fill_lines_test.dart
+lib/engines/engine_line.dart|test/engines/engine_line_test.dart|test/app/shell_players_test.dart test/engines/fixed_depth_test.dart test/engines/solitaire_evaluator_test.dart test/engines/uci_engine_test.dart test/features/players/player_hunt_test.dart test/features/players/practical_probe_test.dart test/features/tactics/alternative_answers_test.dart test/features/tactics/my_games_test.dart test/features/tournaments/game_runner_test.dart test/workspace/engine_analysis_test.dart test/workspace/engine_pane_test.dart test/workspace/engine_status_test.dart test/workspace/game_review_test.dart test/workspace/solitaire_engine_test.dart
+lib/net/recent_games.dart|test/net/recent_games_test.dart|test/features/players/player_analysis_test.dart test/features/players/player_download_test.dart test/features/tactics/my_games_test.dart test/net/credential_diagnostics_test.dart
+lib/net/search_evaluator.dart|test/net/search_evaluator_test.dart|
