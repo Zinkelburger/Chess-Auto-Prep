@@ -166,6 +166,11 @@ void main() {
     expect(await files.removeUnused(indian, of('// Indian\n')), isTrue);
     expect(await files.removeUnused(edited, of('// Edited\n')), isFalse);
     expect(
+      await files.removeUnused(indian, of('// Indian\n')),
+      isTrue,
+      reason: 'already gone is removed',
+    );
+    expect(
       await files.removeUnused(
         DocumentRef(p.join(profile.path, 'Elsewhere.pgn')),
         of(''),
@@ -271,6 +276,47 @@ void main() {
       isTrue,
     );
     expect(File(p.join(root.path, 'KID', 'Main.pgn')).existsSync(), isTrue);
+  });
+
+  test('import staging an hour and a half old is swept', () async {
+    await put('.import-abc/X.pgn', '[Event "Line"]\n\n1. e4 *');
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final files = ChapterDirectory(
+      root,
+      recovery: recovery,
+      now: () => DateTime.now().add(const Duration(minutes: 90)),
+    );
+    await files.list();
+    expect(Directory(p.join(root.path, '.import-abc')).existsSync(), isFalse);
+  });
+
+  test('import staging is swept once a run: one too young at the first '
+      'listing waits for the next run', () async {
+    await put('.import-abc/X.pgn', '[Event "Line"]\n\n1. e4 *');
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    var later = Duration.zero;
+    final files = ChapterDirectory(
+      root,
+      recovery: recovery,
+      now: () => DateTime.now().add(later),
+    );
+    await files.list();
+    later = const Duration(hours: 2);
+    await files.list();
+    expect(Directory(p.join(root.path, '.import-abc')).existsSync(), isTrue);
+  });
+
+  test('only a staging folder directly in the repertoires folder is '
+      'removed as one', () async {
+    final outside = Directory(p.join(profile.path, '.import-abc'))
+      ..createSync(recursive: true);
+    final unstaged = Directory(p.join(root.path, 'KID'))
+      ..createSync(recursive: true);
+    final files = ChapterDirectory(root, recovery: recovery);
+    await files.removeStaging(outside.path);
+    await files.removeStaging(unstaged.path);
+    expect(outside.existsSync(), isTrue);
+    expect(unstaged.existsSync(), isTrue);
   });
 
   test('import staging from the last hour is left for another copy of the '

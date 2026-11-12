@@ -81,6 +81,9 @@
 #   lib/chess/training/line_order.dart:31 the `-1` of a line with no
 #     likelihood (every likelihood is at least 0), :54 the last band's 4.
 # Listed with equivalent mutants a --max 30 sample can draw:
+#   lib/storage/chapter_directory.dart:176 `.first` -> `.last` (either
+#     names an unreadable file the snapshot needs), :550 the off-thread
+#     parse threshold.
 #   lib/storage/book_references.dart:239 `||` -> `&&`: planning the move
 #     again from what it planned from, or wrote, gives what it wrote.
 #   lib/storage/backup_relocation.dart:275 the two-second retry window.
@@ -228,3 +231,4 @@ lib/workspace/book/repertoire_tree.dart|test/workspace/repertoire_tree_test.dart
 lib/workspace/book/board_book.dart|test/workspace/board_book_test.dart|test/app/viewer_books_test.dart
 lib/workspace/search/finds.dart|test/workspace/finds_test.dart|test/workspace/fill_gaps_test.dart test/workspace/fill_resume_test.dart test/workspace/fill_stops_test.dart test/workspace/workspace_view_test.dart
 lib/storage/book_references.dart|test/storage/book_references_test.dart|test/storage/books_codec_laws_test.dart test/storage/compound_mapping_property_test.dart test/storage/record_codec_laws_test.dart
+lib/storage/chapter_directory.dart|test/storage/chapter_files_test.dart test/features/library_import_test.dart test/features/library_on_disk_test.dart|test/features/course_chapters_test.dart test/storage/profile_snapshot_test.dart test/features/library_import_recovery_test.dart test/storage/scoped_repertoire_snapshot_test.dart test/features/library_open_course_test.dart
