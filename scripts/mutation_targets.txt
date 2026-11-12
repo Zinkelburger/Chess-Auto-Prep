@@ -110,6 +110,8 @@
 #   lib/workspace/book/repertoire_shelf.dart:45 the version counter's start
 #     (only its changes are read), :169 `.first` -> `.last` (the chapters
 #     of one file share its path), :226 `<` -> `<=` on the off-thread size.
+#   lib/workspace/search/finds.dart:302 `<` -> `<=` in the node count:
+#     only which isolate reads the tree.
 lib/chess/pgn/game_review.dart|test/workspace/game_review_test.dart|test/chess/pgn/edit_laws_test.dart test/app
 lib/chess/pgn/line_edits.dart|test/chess/pgn/line_edits_test.dart|test/chess/pgn test/workspace
 lib/chess/pgn/chapter_edits.dart|test/chess/pgn/chapter_edits_test.dart|test/chess/pgn test/workspace
@@ -192,3 +194,4 @@ lib/workspace/book/repertoire_catalog.dart|test/features/trainer/training_worksp
 lib/workspace/book/repertoire_shelf.dart|test/workspace/repertoire_shelf_test.dart|test/features/my_games/game_book_test.dart test/storage/repertoire_snapshot_test.dart test/workspace/explorer_pane_test.dart test/workspace/repertoire_tree_test.dart test/workspace/tree_pane_test.dart test/workspace/workspace_view_test.dart
 lib/workspace/book/repertoire_tree.dart|test/workspace/repertoire_tree_test.dart|test/app/catalog_propagation_test.dart test/workspace/explorer_pane_test.dart test/workspace/tree_pane_test.dart test/workspace/workspace_view_test.dart
 lib/workspace/book/board_book.dart|test/workspace/board_book_test.dart|test/app/viewer_books_test.dart
+lib/workspace/search/finds.dart|test/workspace/finds_test.dart|test/workspace/fill_gaps_test.dart test/workspace/fill_resume_test.dart test/workspace/fill_stops_test.dart test/workspace/workspace_view_test.dart
