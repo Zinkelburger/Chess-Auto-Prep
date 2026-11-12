@@ -135,9 +135,14 @@ void main() {
       () async {
         final exe = p.join(root.path, 'chess_auto_prep');
         expect(await installer(executable: exe).detect(), InstallKind.manual);
-        File(
-          p.join(root.path, UpdateInstaller.portableMarker),
-        ).writeAsStringSync('1\n');
+        final marker = File(p.join(root.path, UpdateInstaller.portableMarker))
+          ..writeAsStringSync('0\n');
+        expect(
+          await installer(executable: exe).detect(),
+          InstallKind.manual,
+          reason: 'only the release zip\'s marker counts',
+        );
+        marker.writeAsStringSync('1\n');
         expect(
           await installer(executable: exe).detect(),
           InstallKind.linuxPortable,
@@ -324,6 +329,32 @@ void main() {
         reason: 'no helper holds the lock, so none is running',
       );
       expect(leftover.existsSync(), isFalse);
+    });
+
+    test('a cancel that cannot remove a killed helper\'s ready file says '
+        'so', () async {
+      final installer = portableInstaller(root, helper: StandInHelper());
+      final payload = payloadIn(root);
+      File(p.join(payload.folder, helperReadyName)).writeAsStringSync('ready');
+      final folder = Directory(payload.folder);
+      await Process.run('chmod', ['555', folder.path]);
+      addTearDown(() => Process.run('chmod', ['755', folder.path]));
+      expect(
+        await installer.cancel(p.join(payload.folder, armedName)),
+        isFalse,
+      );
+    });
+
+    test('on Windows a lock nobody holds is no running helper', () async {
+      final windows = UpdateInstaller(
+        readHelper: (_) async => '',
+        executable: p.join(root.path, 'chess_auto_prep.exe'),
+        environment: const {},
+        abi: Abi.windowsX64,
+      );
+      expect(await windows.helperRunning(root.path), isFalse);
+      File(p.join(root.path, 'install.lock')).writeAsStringSync('');
+      expect(await windows.helperRunning(root.path), isFalse);
     });
 
     test('a folder whose helper still runs is not armed again', () async {

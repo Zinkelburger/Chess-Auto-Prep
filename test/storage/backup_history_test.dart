@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/storage/backup_history.dart';
 import 'package:chess_auto_prep/storage/backups.dart';
+import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -76,4 +77,56 @@ void main() {
       expect(await File(ref.path).readAsString(), oneGame('1. e4'));
     },
   );
+
+  test('retention keeps everything from the last 90 days', () async {
+    final ref = disk.ref('repertoires/Main/Main.pgn');
+    await disk.put(ref, oneGame('1. e4'));
+    final folder = disk.backupFolder(ref);
+    await folder.create(recursive: true);
+    final now = DateTime.now().toUtc();
+    final versions = [
+      for (final (i, time) in [
+        now.subtract(const Duration(days: 90, hours: 12)),
+        now.subtract(const Duration(days: 89, hours: 12)),
+        for (var minutes = 100; minutes > 0; minutes--)
+          now.subtract(Duration(minutes: minutes)),
+      ].indexed)
+        BackupVersion(
+          file: 'version-$i.pgn',
+          time: time,
+          size: 1,
+          hash: 'a' * 64,
+        ),
+    ];
+    for (final v in versions) {
+      await File(p.join(folder.path, v.file)).writeAsString('x');
+    }
+    await File(p.join(folder.path, 'index.json')).writeAsString(
+      jsonEncode({
+        'versions': [for (final v in versions) v.toJson()],
+      }),
+    );
+    final history = BackupHistory(disk.store.recovery);
+    expect(await history.prune(ref), 1);
+    expect((await history.versions(ref)).last.file, 'version-1.pgn');
+  });
+
+  test('a file outside Documents, or a path spelled with .., has no '
+      'history', () async {
+    final history = BackupHistory(disk.store.recovery);
+    final outside = DocumentRef(
+      p.join(p.dirname(disk.documents.path), 'Elsewhere.pgn'),
+    );
+    await expectLater(
+      history.versions(outside),
+      throwsA(isA<FileSystemException>()),
+    );
+    final dotted = DocumentRef(
+      p.join(disk.documents.path, 'repertoires', '..', 'Main.pgn'),
+    );
+    await expectLater(
+      history.versions(dotted),
+      throwsA(isA<FileSystemException>()),
+    );
+  });
 }

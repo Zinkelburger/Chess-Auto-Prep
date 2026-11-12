@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/storage/audit_store.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
+import 'package:sqlite3/sqlite3.dart';
 
 void main() {
   test('kept lines come back only when deep and wide enough', () {
@@ -66,5 +68,28 @@ void main() {
     addTearDown(healthy.close);
     expect(healthy.dismiss('weak|x|e2e4'), isTrue);
     expect(healthy.restore(['weak|x|e2e4']), isTrue);
+  });
+
+  test('a support folder not made yet is made, parents and all', () async {
+    final root = await Directory.systemTemp.createTemp('audit_store');
+    addTearDown(() => root.delete(recursive: true));
+    final store = AuditStore.open(Directory(p.join(root.path, 'a', 'b')));
+    addTearDown(store.close);
+    expect(store.available, isTrue);
+    expect(store.dismiss('weak|x|e2e4'), isTrue);
+  });
+
+  test('a dismissal another program\'s lock refuses says so', () async {
+    final support = await Directory.systemTemp.createTemp('audit_store');
+    addTearDown(() => support.delete(recursive: true));
+    final store = AuditStore.open(support);
+    addTearDown(store.close);
+    final other = sqlite3.open(p.join(support.path, 'audit_dismissed.db'))
+      ..execute('BEGIN EXCLUSIVE');
+    addTearDown(other.close);
+    expect(store.dismiss('weak|x|e2e4'), isFalse);
+    expect(store.restore(['weak|x|e2e4']), isFalse);
+    other.execute('COMMIT');
+    expect(store.dismiss('weak|x|e2e4'), isTrue);
   });
 }
