@@ -173,6 +173,50 @@ void main() {
     expect(copies.map((copy) => File(copy).readAsStringSync()), written);
   });
 
+  test('an absent database searches as one empty page', () async {
+    final page =
+        await corpus.search(database, const CorpusFilter())
+            as CorpusRead<CorpusPage>;
+    expect(page.value.games, isEmpty);
+    expect(page.value.more, isFalse);
+  });
+
+  test('an empty corpus is nothing at all', () {
+    expect(emptyCorpus, (
+      games: 0,
+      bytes: 0,
+      firstDate: '',
+      lastDate: '',
+      firstIssue: 0,
+      lastIssue: 0,
+      imports: 0,
+    ));
+  });
+
+  test('the size on disk counts the database and its journal files', () async {
+    await source.writeAsString(game(1));
+    importMasterPgn(database, source.path);
+    final size = await corpus.size(database) as CorpusRead<CorpusSize>;
+    var bytes = 0;
+    for (final suffix in ['', '-wal', '-shm']) {
+      final file = File('$database$suffix');
+      if (file.existsSync()) bytes += file.lengthSync();
+    }
+    expect(size.value.bytes, bytes);
+  });
+
+  test('an unrated game is listed by default, rated nothing', () async {
+    await source.writeAsString(
+      game(1).replaceAll(RegExp(r'\[(White|Black)Elo "\d+"\]\n'), ''),
+    );
+    importMasterPgn(database, source.path);
+    final page =
+        await corpus.search(database, const CorpusFilter())
+            as CorpusRead<CorpusPage>;
+    final only = page.value.games.single;
+    expect((only.whiteElo, only.blackElo), (0, 0));
+  });
+
   group('undated games', () {
     List<String> dates(CorpusResult<CorpusPage> result) => [
       for (final g in (result as CorpusRead<CorpusPage>).value.games) g.date,

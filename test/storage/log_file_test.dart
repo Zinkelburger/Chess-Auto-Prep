@@ -104,4 +104,41 @@ void main() {
     final lines = await file.file.readAsLines();
     expect(lines.last, endsWith(' W log capped for this session'));
   });
+
+  test('a log rotates past two megabytes by default', () {
+    expect(LogFile(root).rotateAt, 2 * 1024 * 1024);
+  });
+
+  test('a logs folder not made yet is made, parents and all', () async {
+    final file = LogFile(Directory(p.join(root.path, 'a', 'logs')));
+    (await file.open())(entry('first'));
+    await file.close();
+    expect(await file.file.readAsLines(), hasLength(1));
+  });
+
+  test('a log of exactly the rotation size is kept as it is', () async {
+    final logs = await Directory(p.join(root.path, 'logs')).create();
+    await File(p.join(logs.path, 'app.log')).writeAsString('${'x' * 99}\n');
+    final file = LogFile(logs, rotateAt: 100);
+    await file.open();
+    await file.close();
+    expect(File('${file.file.path}.1').existsSync(), isFalse);
+  });
+
+  test('a session stops once it has written the rotation size', () async {
+    final logs = Directory(p.join(root.path, 'logs'));
+    // 34 bytes a line.
+    for (final (rotateAt, kept) in [(35, 2), (68, 2), (69, 3)]) {
+      final file = LogFile(logs, rotateAt: rotateAt);
+      if (file.file.existsSync()) file.file.deleteSync();
+      final write = await file.open();
+      for (var i = 0; i < 5; i++) {
+        write(entry('entry $i'));
+      }
+      await file.close();
+      final lines = await file.file.readAsLines();
+      expect(lines, hasLength(kept + 1), reason: '$rotateAt');
+      expect(lines.last, endsWith(' W log capped for this session'));
+    }
+  });
 }
