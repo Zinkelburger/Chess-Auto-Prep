@@ -73,6 +73,9 @@
 #     puzzle game's first header is always its Event.
 #   lib/chess/tactics/puzzle_run.dart:83 the `-1` place of no current
 #     puzzle: anything below 0 reads the same.
+#   lib/chess/tournament/standings.dart:107 the top clamp of the low bound
+#     (mean less a band never reaches 1), :117 the 9 cut-off and `>` -> `>=`
+#     (the quadrature gives the same 0 or 1 there, and z is never 0).
 # Listed with one equivalent mutant a --max 30 sample can draw:
 #   lib/chess/game_filter.dart:168 `> 32` -> `>= 32`: when the pattern cache
 #     is emptied, which no result shows.
