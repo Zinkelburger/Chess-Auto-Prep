@@ -51,7 +51,7 @@ from pathlib import Path
 from typing import Any
 
 from . import expectimax_chapters as chapters
-from .engine_tournament import documents_dir
+from .engine_tournament import documents_dir, process_names, write_json_atomic
 from .paths import REPO_ROOT, data_dir
 from .tools import ToolError
 
@@ -497,15 +497,20 @@ def _read_run(directory: Path) -> dict:
     if not isinstance(state, dict):
         raise ToolError(f"{directory.name} has an unreadable {RUN_FILE}.")
     pid = state.get("pid")
-    state["running"] = bool(pid) and _pid_alive(int(pid))
+    # The builder (or its supervisor) has the run directory on its command
+    # line; a live pid without it is another process that reused the number,
+    # which stop would otherwise interrupt.
+    state["running"] = (
+        bool(pid)
+        and _pid_alive(int(pid))
+        and process_names(int(pid), str(directory))
+    )
     return state
 
 
 def _write_run(directory: Path, state: dict) -> None:
     state = {k: v for k, v in state.items() if k != "running"}
-    (directory / RUN_FILE).write_text(
-        json.dumps(state, indent=2), encoding="utf-8"
-    )
+    write_json_atomic(directory / RUN_FILE, state)
 
 
 def _dirs(root: Path) -> list[Path]:
@@ -577,7 +582,7 @@ def _has_expectimax(tree_path: Path) -> bool:
             data = json.load(fh)
     except (OSError, json.JSONDecodeError):
         return False
-    root = data.get("tree")
+    root = data.get("tree") if isinstance(data, dict) else None
     return isinstance(root, dict) and root.get("expectimax_value") is not None
 
 
@@ -589,6 +594,9 @@ def _tree_summary(directory: Path) -> dict:
         with path.open(encoding="utf-8") as fh:
             data = json.load(fh)
     except (OSError, json.JSONDecodeError):
+        return {"tree_saved": False}
+    if not isinstance(data, dict):
+        # One run's odd file must not fail expectimax_list for every run.
         return {"tree_saved": False}
     # Named for what it is: the builder rewrites the tree at checkpoints and
     # on the way out, so a running build's count is behind. `nodes_last_batch`
@@ -665,6 +673,9 @@ def root_engine_shortlist(directory: Path, fen: str | None) -> list[dict] | None
     stride = len(blob) // count
 
     board = chess.Board(fen)
+    # The cache scores from the side to move; reported from White's side,
+    # like the candidates' eval_cp.
+    sign = 1 if board.turn == chess.WHITE else -1
     out: list[dict] = []
     for i in range(count):
         entry = blob[i * stride : (i + 1) * stride]
@@ -676,13 +687,13 @@ def root_engine_shortlist(directory: Path, fen: str | None) -> list[dict] | None
             return None
         if move not in board.legal_moves:
             return None  # Stride guessed wrong; a partial table would mislead.
-        out.append({"move": board.san(move), "eval_cp": cp, "depth": depth})
+        out.append({"move": board.san(move), "eval_cp": sign * cp, "depth": depth})
     if not out:
         return None
 
     best = out[0]["eval_cp"]
     for r in out:
-        r["cp_behind_best"] = r["eval_cp"] - best
+        r["cp_behind_best"] = sign * (r["eval_cp"] - best)
     return out
 
 
@@ -724,7 +735,7 @@ def root_table(tree_path: Path) -> dict:
                 "expectimax": value,
                 "selected": child.get("is_repertoire_move", False),
                 "bounds": [child.get("value_lower", 0), child.get("value_upper", 1)],
-                "eval_cp": child.get("engine_eval_cp"),
+                "eval_cp": _white_cp(child, data, root),
                 "nodes": _subtree_size(child),
                 "max_ply": max(plies),
                 "avg_leaf_ply": round(sum(plies) / len(plies), 2),
@@ -760,6 +771,35 @@ def root_table(tree_path: Path) -> dict:
         "max_ply": data.get("max_depth"),
         "build_complete": data.get("build_complete"),
     }
+
+
+def _white_to_move(fen: Any) -> bool | None:
+    fields = fen.split() if isinstance(fen, str) else []
+    return {"w": True, "b": False}.get(fields[1]) if len(fields) > 1 else None
+
+
+def _white_cp(child: dict, data: dict, root: dict) -> Any:
+    """A root candidate's engine eval from White's side.
+
+    The builder stores `engine_eval_cp` from the side to move at that node,
+    which after our move is the opponent: for a White build a +40 there is
+    Black's +40. Read raw it said the opposite of the result's note.
+    """
+    cp = child.get("engine_eval_cp")
+    if not isinstance(cp, (int, float)) or isinstance(cp, bool):
+        return cp
+    white = _white_to_move(child.get("fen"))
+    if white is None:
+        root_white = _white_to_move(root.get("fen"))
+        if root_white is None:
+            play_as_white = (data.get("config") or {}).get("play_as_white")
+            # Not the opponent's root (that table has no eval column), so
+            # the root is the builder's own side.
+            root_white = play_as_white if isinstance(play_as_white, bool) else None
+        if root_white is None:
+            return cp
+        white = not root_white
+    return cp if white else -cp
 
 
 def _opponent_to_move(data: dict) -> bool:
@@ -1039,9 +1079,17 @@ def register_expectimax_tools(registry: Any) -> None:
     def _new_run_dir(label: str) -> Path:
         root = _root()
         root.mkdir(parents=True, exist_ok=True)
-        directory = root / f"{_slug(label)}-{time.strftime('%Y%m%d-%H%M%S')}"
-        directory.mkdir(parents=True, exist_ok=False)
-        return directory
+        base = f"{_slug(label)}-{time.strftime('%Y%m%d-%H%M%S')}"
+        # Two runs on the same line in the same second (both sides, or two
+        # agents) must not collide: the second one used to fail outright.
+        for n in range(1000):
+            directory = root / (base if n == 0 else f"{base}-{n + 1}")
+            try:
+                directory.mkdir(exist_ok=False)
+            except FileExistsError:
+                continue
+            return directory
+        raise ToolError(f"Too many runs called {base} in {root}.")
 
     def _chapter_info(state: dict, directory: Path) -> dict | None:
         chapter = state.get("chapter")
