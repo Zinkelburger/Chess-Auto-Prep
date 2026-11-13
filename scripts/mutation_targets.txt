@@ -147,6 +147,39 @@
 #     threshold (the same bytes either side), :146-148 `||` -> `&&` (a
 #     field of the wrong type then fails its cast, and `find` sets the
 #     record aside the same way).
+#   lib/storage/pending_writes.dart:34 the version counter's start: only
+#     compared for equality.
+#   lib/storage/recovery_quarantine.dart:53 `exclusive: true`: each copy's
+#     folder is stamped to the microsecond, so no name is claimed twice.
+#   lib/storage/pgn_file_import.dart:107 the 64 KiB off-thread threshold.
+#   lib/storage/training_records.dart:312 `||` -> `&&` (planning again from
+#     the planned text gives the planned text), :528 `||` -> `&&` (an
+#     unreadable row that names neither path is kept as it is either way).
+#   lib/storage/recovery_files.dart:207 `||` -> `&&`: the native read gives
+#     bytes only with status 0.
+#   lib/storage/recovery_ledger.dart:121 following links while listing a
+#     journal: only the names are read.
+#   lib/storage/recovery_gate.dart:206 a lock failure's growing wait (a
+#     lock another copy holds is waited on for two minutes first), :211 the
+#     wait after a pass that threw outside its steps.
+#   lib/storage/player_files.dart:240 `recursive: true` on `.removed`: its
+#     parent holds the group being removed.
+#   lib/storage/relocation_record.dart:564 `||` -> `&&` on Support itself:
+#     every participant lies inside it, so the overlap check refuses it too.
+#   lib/storage/settings_store.dart:43, :48 the edit counter's and dirty
+#     flag's starts (only compared; set before any write), :86-94 the
+#     Windows sharing-violation retry (a Linux run never retries), :177
+#     following a link when moving aside (the link is renamed either way).
+#   lib/storage/tournament_inbox.dart:46 the Windows path-not-found code,
+#     :66 `>` -> `>=` at exactly a day, :109, :118, :121, :131 watch
+#     bookkeeping (a watch cancelled and attached again, a second watch of
+#     one folder, an extra refresh, the closed flag after every watch is
+#     cancelled): the same changes are seen.
+#   lib/storage/moved_path.dart:51 `unapplied` (only a stop of guarding
+#     reads it, after a pass), :117 `||` -> `&&` (a taken target leaves its
+#     parent non-empty), :197, :198 (a replaced folder fails its snapshot,
+#     a taken target its rename, either way), :215 the flush's nearest
+#     existing folder: durability only.
 #   lib/chess/typed_move.dart:102 `>` -> `>=` (a castling king never lands
 #     on its own square), :187 `.first` -> `.last` (every candidate is then
 #     checked against the same four characters).
@@ -453,3 +486,30 @@ lib/storage/mutation_guards.dart|test/storage/mutation_guards_test.dart|test/sto
 lib/storage/training_payload.dart|test/storage/training_payload_test.dart|test/storage/training_store_test.dart test/storage/training_retry_test.dart test/storage/training_records_test.dart test/storage/training_codec_laws_test.dart
 lib/storage/my_accounts.dart|test/storage/my_accounts_test.dart|test/app/app_parts_test.dart test/app/corpus_invalidation_test.dart test/app/shell_my_games_test.dart test/app/shell_players_test.dart test/features/players/saved_games_test.dart test/features/tactics/account_persistence_test.dart test/features/tactics/my_games_test.dart test/features/tactics/source_games_test.dart test/workspace/explorer_pane_test.dart test/workspace/my_games_tree_test.dart
 lib/storage/my_games_files.dart|test/storage/my_games_files_test.dart test/storage/my_games_keep_test.dart|test/features/players/player_analysis_test.dart test/features/players/player_hunt_test.dart test/features/players/saved_games_test.dart test/features/tactics/account_persistence_test.dart test/features/tactics/my_games_test.dart test/workspace/explorer_pane_test.dart test/workspace/my_games_tree_test.dart
+lib/storage/master_games_import.dart|test/storage/master_games_import_test.dart|test/features/twic_download_test.dart test/storage/master_corpus_test.dart test/storage/master_games_process_test.dart
+lib/storage/pgn_export.dart|test/storage/pgn_export_test.dart|
+lib/storage/pending_writes.dart|test/storage/pending_writes_test.dart|test/workspace/document_saver_test.dart
+lib/storage/player_reports.dart|test/storage/player_reports_test.dart|
+lib/storage/recent_pgn_files.dart|test/storage/recent_pgn_files_test.dart|
+lib/storage/study_files.dart|test/storage/study_files_test.dart|test/features/study/study_recovery_test.dart
+lib/storage/saved_place.dart|test/storage/saved_place_test.dart|test/app/app_parts_test.dart test/storage/settings_store_test.dart
+lib/storage/section_reference_check.dart|test/storage/section_reference_check_test.dart|
+lib/storage/settings.dart|test/storage/settings_test.dart|test/workspace/reply_model_test.dart test/workspace/builder_guidance_test.dart
+lib/storage/recovery_quarantine.dart|test/storage/recovery_quarantine_test.dart|test/storage/viewer_drafts_test.dart test/storage/journal_records_test.dart
+lib/storage/pgn_file_import.dart|test/storage/pgn_file_import_test.dart|
+lib/storage/operation_id.dart|test/storage/operation_id_test.dart|
+lib/storage/operation_participants.dart|test/storage/operation_journal_test.dart|
+lib/storage/operation_journal.dart|test/storage/operation_journal_unit_test.dart test/storage/operation_journal_test.dart|test/storage/file_relocation_test.dart test/storage/compound_write_test.dart
+lib/storage/training_rows.dart|test/storage/training_rows_test.dart|test/storage/training_during_move_test.dart test/storage/folder_relocation_test.dart
+lib/storage/training_records.dart|test/storage/training_records_test.dart|
+lib/storage/training_progress.dart|test/features/trainer/trainer_test.dart|test/storage/faults/training_faults_test.dart
+lib/storage/recovery_files.dart|test/storage/recovery_files_test.dart|test/storage/recovery_file_system_test.dart test/storage/compound_alias_test.dart
+lib/storage/recovery_ledger.dart|test/storage/recovery_ledger_test.dart|
+lib/storage/recovery_gate.dart|test/storage/recovery_ledger_test.dart|test/storage/recovery_domain_test.dart test/features/study/study_recovery_test.dart
+lib/storage/player_files.dart|test/storage/player_files_test.dart|
+lib/storage/settings_store.dart|test/storage/settings_store_test.dart|
+lib/storage/relocation_record.dart|test/storage/relocation_record_test.dart test/storage/journal_format_test.dart|test/storage/record_codec_laws_test.dart
+lib/storage/tournaments.dart|test/storage/tournaments_test.dart|test/storage/journal_format_test.dart test/features/tournaments/tournament_run_test.dart
+lib/storage/tournament_inbox.dart|test/storage/tournament_inbox_test.dart|
+lib/storage/moved_path.dart|test/storage/moved_path_test.dart test/storage/file_relocation_test.dart test/storage/folder_relocation_test.dart|test/storage/file_relocation_recovery_test.dart test/storage/folder_relocation_recovery_test.dart
+lib/storage/text_export.dart|test/storage/text_export_test.dart|
