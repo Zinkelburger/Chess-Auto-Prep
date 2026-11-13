@@ -74,6 +74,29 @@ void main() {
     ]);
   });
 
+  test('an import measures the storage again, so the total is not the size '
+      'from before it', () async {
+    final databases = DatabaseLibrary(
+      path: master,
+      corpus: _GrowingCorpus(master),
+      picker: ScriptedPicker('/games.pgn'),
+      documents: ScriptedDocumentStore(),
+      collections: p.join(support.path, 'collections'),
+      pending: PendingWrites(),
+      places: (
+        support: support.path,
+        derived: const ['master_games.db'],
+        stores: [(name: 'Master games', path: master, removable: true)],
+      ),
+    );
+    addTearDown(databases.dispose);
+    await databases.measure();
+    expect(databases.storage.first.bytes, 3100);
+    await databases.importFile();
+    await pumpEventQueue();
+    expect(databases.storage.first.bytes, 3100 + 4000);
+  });
+
   test('a running download keeps its database from being deleted', () async {
     final download = TwicDownload(master)..running = true;
     final databases = library(download: download);
@@ -133,4 +156,28 @@ void main() {
       expect(find.textContaining('Deleted Master games'), findsOneWidget);
     },
   );
+}
+
+/// A database that reads as empty, with an import that adds 4,000 bytes to
+/// its file.
+final class _GrowingCorpus implements MasterCorpus {
+  _GrowingCorpus(this.master);
+  final String master;
+
+  @override
+  Future<CorpusResult<CorpusSize>> size(String path) async =>
+      const CorpusRead(emptyCorpus);
+  @override
+  Future<CorpusResult<CorpusPage>> search(
+    String path,
+    CorpusFilter filter,
+  ) async => const CorpusRead((games: [], more: false));
+  @override
+  Future<CorpusResult<String>> game(String path, int id) async =>
+      const CorpusFailure('no games');
+  @override
+  Future<CorpusResult<(int, int)>> importPgn(String source, String path) async {
+    File(master).writeAsBytesSync(List.filled(4000, 1), mode: FileMode.append);
+    return const CorpusRead((1, 0));
+  }
 }

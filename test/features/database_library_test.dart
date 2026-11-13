@@ -7,6 +7,7 @@ import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:path/path.dart' as p;
 
 import '../support/scripted_store.dart';
 import '../support/viewer_fixture.dart';
@@ -101,6 +102,11 @@ void main() {
       expect(again, first);
       expect(documents.documents.length, 1);
       expect(library.opening, isNull);
+      // Named for the game, with no word or bracket cut short.
+      expect(
+        p.basenameWithoutExtension(first!.path),
+        matches(RegExp(r'^Alice - Bob \(database [0-9a-f]{12}\)$')),
+      );
     },
   );
 
