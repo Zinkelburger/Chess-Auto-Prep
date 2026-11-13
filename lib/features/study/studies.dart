@@ -528,6 +528,12 @@ final class Studies extends ChangeNotifier {
     final StudyResult result;
     try {
       result = await body();
+    } on Object catch (error) {
+      // A store failure that is nobody's typed result — a lock that will
+      // not open, say — is said like any other, not left to end the flow
+      // without a word.
+      log.e(action, error);
+      result = const StudyProblem('Could not finish the change.');
     } finally {
       _busy = false;
       if (!_disposed) notifyListeners();
