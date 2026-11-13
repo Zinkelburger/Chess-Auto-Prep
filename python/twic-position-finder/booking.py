@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 import sqlite3
 from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
@@ -25,7 +26,8 @@ TAGLINE = os.getenv(
     "BOOKING_TAGLINE",
     "Pick a time to meet the incredibly handsome, funny, wannabe chess master",
 )
-API_KEY = os.getenv("BOOKING_API_KEY", "change-me-in-production")
+# No default: an unset key turns the admin listing off instead of opening it.
+API_KEY = os.getenv("BOOKING_API_KEY", "")
 
 
 def _env_date(name: str, default: str) -> date:
@@ -230,7 +232,7 @@ router = APIRouter(tags=["booking"])
 
 
 def require_api_key(x_api_key: str | None = Header(None, alias="X-API-Key")) -> None:
-    if not x_api_key or x_api_key != API_KEY:
+    if not API_KEY or not x_api_key or not secrets.compare_digest(x_api_key, API_KEY):
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 

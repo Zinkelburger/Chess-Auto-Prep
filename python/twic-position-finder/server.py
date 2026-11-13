@@ -3,18 +3,19 @@
 import logging
 import os
 import sqlite3
+import re
 import time
-from typing import cast
+from typing import Annotated, cast
 from pathlib import Path
+from urllib.parse import quote
 
 import requests as http_requests
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Path as PathParam, Query, Request
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 from models import (
@@ -23,7 +24,7 @@ from models import (
     delete_subscription, deactivate_subscription, validate_fen, rotate_auth_token,
     revoke_auth_token, count_user_subscriptions, create_email_token,
     consume_email_token, cleanup_expired_email_tokens, highest_twic_number,
-    record_notification, parse_fen_list,
+    record_notification, parse_fen_list, activate_subscription,
 )
 from email_sender import send_verification_email, send_login_email
 from booking import router as booking_router, init_booking_db
@@ -41,7 +42,8 @@ MAX_SUBSCRIPTIONS = 20
 if not TURNSTILE_SECRET:
     log.warning("TURNSTILE_SECRET_KEY is not set — CAPTCHA verification is disabled")
 
-limiter = Limiter(key_func=get_remote_address)
+# Keyed on the visitor, not the Cloudflare edge that connects to the origin.
+limiter = Limiter(key_func=bughousedb.client_ip)
 app = FastAPI(title="TWIC Position Finder", version="1.0.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]
@@ -107,14 +109,6 @@ def auth_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
 
 
 # ── Turnstile ─────────────────────────────────────────────────────────
-
-
-def _client_ip(request: Request) -> str | None:
-    return (
-        request.headers.get("CF-Connecting-IP")
-        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-        or (request.client.host if request.client else None)
-    ) or None
 
 
 def verify_turnstile(token: str, ip: str | None = None) -> bool:
@@ -188,36 +182,61 @@ def _match_latest_issue(conn, sub: dict) -> None:
 # ── Subscribe (landing page form) ────────────────────────────────────
 
 
-class SubscribeRequest(BaseModel):
-    email: EmailStr
-    cf_turnstile_token: str = ""
-    label: str = ""
+# Bounds keep one alert's matching cheap: each FEN is a query and each word of
+# `player` two LIKE parameters, run on save and for every weekly issue.
+MAX_FENS = 50
+_Text = Annotated[str | None, Field(default=None, max_length=200)]
+_Elo = Annotated[int | None, Field(default=None, ge=0, le=4000)]
+
+
+class AlertFields(BaseModel):
+    label: str = Field(default="", max_length=200)
     fen: str | list[str] | None = None
-    player: str | None = None
-    white: str | None = None
-    black: str | None = None
-    exclude_site: str | None = None
-    site: str | None = None
-    min_elo: int | None = None
-    max_elo: int | None = None
-    eco: str | None = None
-    time_control: str | None = None
-    result: str | None = None
-    event: str | None = None
+    player: _Text = None
+    white: _Text = None
+    black: _Text = None
+    exclude_site: _Text = None
+    site: _Text = None
+    min_elo: _Elo = None
+    max_elo: _Elo = None
+    eco: _Text = None
+    time_control: _Text = None
+    result: _Text = None
+    event: _Text = None
+
+    @field_validator("label")
+    @classmethod
+    def _one_line_label(cls, v: str) -> str:
+        # The label is the weekly email's subject line.
+        if re.search(r"[\x00-\x1f\x7f]", v):
+            raise ValueError("The label must be one line of text.")
+        return v
 
     @field_validator("fen", mode="before")
     @classmethod
     def _normalize_fen(cls, v):
         if isinstance(v, list):
             parts = [s.strip() for s in v if isinstance(s, str) and s.strip()]
-            return "\n".join(parts) if parts else None
-        return v
+        elif isinstance(v, str):
+            parts = parse_fen_list(v)
+        else:
+            return v
+        if len(parts) > MAX_FENS:
+            raise ValueError(f"Use up to {MAX_FENS} positions per alert.")
+        if any(len(p) > 120 for p in parts):
+            raise ValueError("A FEN is at most 120 characters.")
+        return "\n".join(parts) if parts else None
+
+
+class SubscribeRequest(AlertFields):
+    email: EmailStr
+    cf_turnstile_token: str = Field(default="", max_length=4096)
 
 
 @app.post("/api/subscribe")
 @limiter.limit("5/minute")
 def subscribe(req: SubscribeRequest, request: Request, conn=Depends(db)):
-    if TURNSTILE_SECRET and not verify_turnstile(req.cf_turnstile_token, _client_ip(request)):
+    if TURNSTILE_SECRET and not verify_turnstile(req.cf_turnstile_token, bughousedb.client_ip(request)):
         raise HTTPException(400, "CAPTCHA verification failed. Please try again.")
 
     _require_subscription_filters(req)
@@ -229,19 +248,22 @@ def subscribe(req: SubscribeRequest, request: Request, conn=Depends(db)):
         if count_user_subscriptions(conn, existing["id"]) >= MAX_SUBSCRIPTIONS:
             raise HTTPException(400, f"Maximum of {MAX_SUBSCRIPTIONS} subscriptions reached. "
                                      "Manage existing ones on your alerts page.")
-        add_subscription(
+        # Anyone can type this address, so the alert stays off until its
+        # owner opens the emailed link, which turns on this alert alone.
+        sub = add_subscription(
             conn, existing["id"],
             label=req.label, fen=_fen_text(req), player=req.player,
             white=req.white, black=req.black,
             exclude_site=req.exclude_site, site=req.site,
             min_elo=req.min_elo, max_elo=req.max_elo, eco=req.eco,
             time_control=req.time_control, result=req.result,
-            event=req.event, active=True,
+            event=req.event, active=False,
         )
-        login_token = create_email_token(conn, existing["id"], "login")
-        send_login_email(existing["email"], login_token)
+        login_token = create_email_token(conn, existing["id"], "login",
+                                         subscription_id=sub["id"])
+        send_login_email(existing["email"], login_token, new_alert=True)
         return {"status": "subscription_added",
-                "message": "Subscription added! Check your email for a link to manage all your subscriptions."}
+                "message": "Check your email: the alert turns on when you open the link."}
 
     user = create_user(conn, req.email)
     add_subscription(
@@ -307,6 +329,9 @@ def exchange_token(req: ExchangeTokenRequest, request: Request, conn=Depends(db)
                         (result["user_id"],)).fetchone()
     if not user:
         raise HTTPException(401, "User not found or not verified")
+    pending = result["subscription_id"]
+    if pending is not None and count_user_subscriptions(conn, user["id"]) < MAX_SUBSCRIPTIONS:
+        activate_subscription(conn, pending, user["id"])
     new_token = rotate_auth_token(conn, user["id"])
     return {"auth_token": new_token}
 
@@ -327,28 +352,13 @@ def get_me(user=Depends(auth_user), conn=Depends(db)):
     }
 
 
-class SubscriptionCreate(BaseModel):
-    label: str = ""
-    fen: str | list[str] | None = None
-    player: str | None = None
-    white: str | None = None
-    black: str | None = None
-    exclude_site: str | None = None
-    site: str | None = None
-    min_elo: int | None = None
-    max_elo: int | None = None
-    eco: str | None = None
-    time_control: str | None = None
-    result: str | None = None
-    event: str | None = None
+class SubscriptionCreate(AlertFields):
+    pass
 
-    @field_validator("fen", mode="before")
-    @classmethod
-    def _normalize_fen(cls, v):
-        if isinstance(v, list):
-            parts = [s.strip() for s in v if isinstance(s, str) and s.strip()]
-            return "\n".join(parts) if parts else None
-        return v
+
+# SQLite integers are 64-bit; a larger id would fail inside the query.
+SubId = Annotated[int, PathParam(ge=1, le=2**62)]
+Twic = Annotated[int, Query(ge=0, le=2**31)]
 
 
 @app.get("/api/subscriptions")
@@ -393,7 +403,7 @@ def create_subscription(req: SubscriptionCreate, user=Depends(auth_user),
 
 
 @app.put("/api/subscriptions/{sub_id}")
-def replace_subscription(sub_id: int, req: SubscriptionCreate,
+def replace_subscription(sub_id: SubId, req: SubscriptionCreate,
                          user=Depends(auth_user), conn=Depends(db)):
     _require_subscription_filters(req)
     _validate_request_fens(req.fen)
@@ -413,7 +423,7 @@ def replace_subscription(sub_id: int, req: SubscriptionCreate,
 
 
 @app.delete("/api/subscriptions/{sub_id}")
-def remove_subscription(sub_id: int, user=Depends(auth_user), conn=Depends(db)):
+def remove_subscription(sub_id: SubId, user=Depends(auth_user), conn=Depends(db)):
     ok = delete_subscription(conn, sub_id, user["id"])
     if not ok:
         raise HTTPException(404, "Subscription not found")
@@ -421,7 +431,7 @@ def remove_subscription(sub_id: int, user=Depends(auth_user), conn=Depends(db)):
 
 
 @app.get("/api/subscriptions/{sub_id}/games")
-def list_subscription_games(sub_id: int, twic: int,
+def list_subscription_games(sub_id: SubId, twic: Twic,
                             user=Depends(auth_user), conn=Depends(db)):
     from lichess import view_lichess_url
 
@@ -449,8 +459,14 @@ def list_subscription_games(sub_id: int, twic: int,
 
 
 @app.get("/api/subscriptions/{sub_id}/pgn")
-def download_subscription_pgn(sub_id: int, twic: int | None = None,
+def download_subscription_pgn(sub_id: SubId, twic: Annotated[int | None, Query(ge=0, le=2**31)] = None,
                               user=Depends(auth_user), conn=Depends(db)):
+    sub = conn.execute(
+        "SELECT label FROM subscriptions WHERE id = ? AND user_id = ?",
+        (sub_id, user["id"]),
+    ).fetchone()
+    if not sub:
+        raise HTTPException(404, "Subscription not found")
     if twic is None:
         latest_week = conn.execute(
             "SELECT MAX(twic_number) as tw FROM notifications_sent "
@@ -461,24 +477,25 @@ def download_subscription_pgn(sub_id: int, twic: int | None = None,
             raise HTTPException(404, "No matched games found for this subscription")
         twic = int(latest_week["tw"])
 
-    games = get_matched_games(conn, sub_id, user["id"], twic)
-    if games is None:
-        raise HTTPException(404, "Subscription not found")
+    games = get_matched_games(conn, sub_id, user["id"], twic) or []
     if not games:
         raise HTTPException(404, "No matched games found for this subscription")
 
     pgn_content = "\n\n".join(g["pgn_text"] for g in games if g.get("pgn_text"))
-    sub = conn.execute(
-        "SELECT label FROM subscriptions WHERE id = ?", (sub_id,),
-    ).fetchone()
-    label = (sub["label"] if sub else None) or f"subscription_{sub_id}"
-    filename = f"{label.replace(' ', '_')}_twic{twic}.pgn"
-
+    label = sub["label"] or f"subscription_{sub_id}"
     return Response(
         content=pgn_content,
         media_type="application/x-chess-pgn",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": _attachment(f"{label}_twic{twic}.pgn")},
     )
+
+
+def _attachment(filename: str) -> str:
+    """A download header for any label: headers are Latin-1 and a quote or a
+    line break would end the field, so the plain name keeps safe ASCII and
+    the full name travels percent-encoded (RFC 6266)."""
+    plain = re.sub(r"[^A-Za-z0-9.-]+", "_", filename).strip("_") or "alert.pgn"
+    return f"attachment; filename=\"{plain}\"; filename*=UTF-8''{quote(filename, safe='')}"
 
 
 class UnsubscribeRequest(BaseModel):
