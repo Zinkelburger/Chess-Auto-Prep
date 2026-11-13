@@ -197,10 +197,7 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
               ? ListMessage('Nothing matches "$query".')
               : ListView.builder(
                   itemCount: shown.length,
-                  // As tall as the row makes itself with larger text.
-                  itemExtent: MediaQuery.textScalerOf(
-                    context,
-                  ).scale(twoLineRowHeight),
+                  itemExtent: rowExtent(context, twoLineRowHeight),
                   itemBuilder: (context, at) => _GameRow(
                     checked: shown[at],
                     mistakes: widget.book.mistakesOf(shown[at]),
