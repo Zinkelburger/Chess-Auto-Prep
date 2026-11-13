@@ -334,4 +334,20 @@ void main() {
       contains('External'),
     );
   });
+
+  test('a registry another program deleted is not written over from a stale '
+      'list', () async {
+    final engine = TournamentEngine.bundled();
+    expect(
+      await store.saveEngines([engine], [engine, engine]),
+      isA<TournamentFailed<void>>(),
+    );
+    expect(File(p.join(root.path, 'engines.json')).existsSync(), isFalse);
+  });
+
+  test('a tournament id that is a path is refused', () {
+    for (final id in ['a/b', r'a\b']) {
+      expect(() => store.games(id), throwsFormatException, reason: id);
+    }
+  });
 }

@@ -71,7 +71,11 @@ final class TournamentInbox implements TournamentNotifications {
       log.w('open tournament request', 'Unreadable request ignored.');
       return null;
     } finally {
-      await claimed.delete();
+      // What was claimed may be a link, even one to nothing: it goes as one.
+      await (await FileSystemEntity.isLink(claimed.path)
+              ? Link(claimed.path)
+              : claimed)
+          .delete();
     }
   }
 }

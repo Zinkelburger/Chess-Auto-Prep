@@ -613,12 +613,11 @@ final class _ExactText implements Pivot {
   }
 
   @override
-  Future<bool> putBack() async {
-    if (_unchanged || await look() is! HoldsAfter) return false;
+  Future<void> putBack() async {
+    if (_unchanged || await look() is! HoldsAfter) return;
     await keep?.call(_path, document.after);
     await discardLeftoverStage(_path);
     await replaceFile(_path, utf8.encode(document.before));
     await putBackHook?.call();
-    return true;
   }
 }

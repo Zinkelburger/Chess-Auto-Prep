@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:chess_auto_prep/storage/recovery_files.dart';
 import 'package:chess_auto_prep/storage/tournament_inbox.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -86,6 +87,63 @@ void main() {
       expect(count, stopped);
     },
   );
+
+  test('a request just over a day old is ignored', () async {
+    await write(
+      'old',
+      at: DateTime.now().subtract(const Duration(hours: 24, minutes: 1)),
+    );
+    expect(await TournamentInbox(root).takeRequest(), isNull);
+  });
+
+  test('a dangling link at the request name is taken and removed, and said '
+      'to be unreadable', () async {
+    Link(
+      p.join(root.path, 'open_request.json'),
+    ).createSync(p.join(root.path, 'gone.json'));
+    await expectLater(
+      TournamentInbox(root).takeRequest(),
+      throwsA(isA<RecoveryRequired>()),
+    );
+    expect(await root.list().toList(), isEmpty);
+  });
+
+  test('watching a folder that is not there yet makes it', () async {
+    final missing = Directory(p.join(root.path, 'engine_tournaments'));
+    final changes = StreamIterator(TournamentInbox(missing).changes());
+    addTearDown(changes.cancel);
+    expect(
+      await changes.moveNext().timeout(const Duration(seconds: 3)),
+      isTrue,
+    );
+    expect(missing.existsSync(), isTrue);
+  });
+
+  test('a watched path that is a file is reported, not hung on', () async {
+    final file = File(p.join(root.path, 'engine_tournaments'))
+      ..writeAsStringSync('');
+    final changes = TournamentInbox(Directory(file.path)).changes();
+    await expectLater(
+      changes.first.timeout(const Duration(seconds: 3)),
+      throwsA(isNot(isA<TimeoutException>())),
+    );
+  });
+
+  test('a hidden folder is not watched', () async {
+    final hidden = await Directory(p.join(root.path, '.claims')).create();
+    var count = 0;
+    final ready = Completer<void>();
+    final sub = TournamentInbox(root).changes().listen((_) {
+      count++;
+      if (!ready.isCompleted) ready.complete();
+    });
+    addTearDown(sub.cancel);
+    await ready.future.timeout(const Duration(seconds: 3));
+    final baseline = count;
+    await File(p.join(hidden.path, 'request.json')).writeAsString('{}');
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(count, baseline);
+  });
 }
 
 Future<void> _until(bool Function() condition) async {

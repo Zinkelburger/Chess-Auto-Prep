@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/storage/recent_pgn_files.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 void main() {
   late Directory folder;
@@ -47,4 +48,17 @@ void main() {
       expect(await recent.save(const ['/x.pgn']), isFalse);
     },
   );
+
+  test('a write the preferences refuse is reported unsaved', () async {
+    SharedPreferences.setMockInitialValues({});
+    SharedPreferencesStorePlatform.instance = _Refusing();
+    addTearDown(() => SharedPreferences.setMockInitialValues({}));
+    expect(await PreferencesRecentFiles().save(const ['/x.pgn']), isFalse);
+  });
+}
+
+class _Refusing extends InMemorySharedPreferencesStore {
+  _Refusing() : super.empty();
+  @override
+  Future<bool> setValue(String type, String key, Object value) async => false;
 }

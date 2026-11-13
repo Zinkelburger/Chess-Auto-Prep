@@ -849,11 +849,10 @@ final class _Part implements Pivot, Reference {
   Future<void> settle() async => log.add('settle');
 
   @override
-  Future<bool> putBack() async {
-    if (holds is! HoldsAfter) return false;
+  Future<void> putBack() async {
+    if (holds is! HoldsAfter) return;
     log.add('putBack');
     holds = const HoldsBefore();
-    return true;
   }
 
   @override

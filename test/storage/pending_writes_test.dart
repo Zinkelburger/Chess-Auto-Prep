@@ -37,6 +37,27 @@ void main() {
     },
   );
 
+  test('only a failed save may be discarded, and only once', () async {
+    final writes = PendingWrites();
+    final resource = Object();
+    var ok = true;
+    PendingObligation<bool> save() => writes.accept<bool>(
+      resource: resource,
+      label: 'Save',
+      work: () async => ok,
+      problem: (done) => done ? null : 'refused',
+    );
+    final idle = save();
+    expect(idle.discard(), isFalse, reason: 'never run, so nothing failed');
+    expect(await idle.run(), isTrue);
+    expect(idle.discard(), isFalse, reason: 'it saved');
+    ok = false;
+    final failed = save();
+    expect(await failed.run(), isFalse);
+    expect(failed.discard(), isTrue);
+    expect(failed.discard(), isFalse, reason: 'already discarded');
+  });
+
   test(
     'an old snapshot completion cannot clear a newer snapshot failure',
     () async {

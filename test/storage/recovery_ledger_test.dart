@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/storage/compound_write.dart';
+import 'package:chess_auto_prep/storage/file_relocation.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/recovery_gate.dart';
 import 'package:chess_auto_prep/storage/recovery_ledger.dart';
@@ -247,5 +248,131 @@ void main() {
     expect(ledger.receipt<int>('compound-writes', 'edit-0'), 0);
     expect(ledger.receipt<int>('compound-writes', 'edit-256'), 256);
     expect(ledger.receipt<String>('relocation-writes', 'move'), 'kept');
+  });
+
+  test('an owed operation in a journal that could not be listed is kept', () {
+    ledger.deferred(
+      CompoundWrites.journal,
+      'edit',
+      paths: const {'/a'},
+      detail: 'held',
+      now: now,
+    );
+    ledger.listed((records: const {}, unlisted: {CompoundWrites.journal}));
+    expect(ledger.owing(CompoundWrites.journal, 'edit'), isNotNull);
+  });
+
+  test('nothing is owed only after a pass ran with nothing left', () async {
+    final none = await ledger.list(const [CompoundWrites.journal]);
+    ledger.passRan(none);
+    expect(ledger.nothingOwed, isTrue);
+    ledger.passCouldNotRun(now, const Duration(seconds: 30), locked: false);
+    expect(ledger.nothingOwed, isFalse);
+    ledger.passRan(none);
+    ledger.deferred(
+      CompoundWrites.journal,
+      'edit',
+      paths: const {'/a'},
+      detail: 'held',
+      now: now,
+    );
+    expect(ledger.nothingOwed, isFalse);
+  });
+
+  test(
+    'a pass that ran forgets the locks that kept earlier ones out',
+    () async {
+      const base = Duration(seconds: 30);
+      ledger
+        ..passCouldNotRun(now, base, locked: true)
+        ..passCouldNotRun(now, base, locked: true)
+        ..passRan(await ledger.list(const [CompoundWrites.journal]))
+        ..passCouldNotRun(now, base, locked: true);
+      expect(ledger.waiting(now.add(base)), isFalse);
+    },
+  );
+
+  test('a journal folder that is a link is not listed', () async {
+    final elsewhere = await Directory(
+      p.join(fixture.root.path, 'elsewhere'),
+    ).create();
+    await File(p.join(elsewhere.path, 'edit.json')).writeAsString('{}');
+    await fixture.support.create(recursive: true);
+    Link(
+      p.join(fixture.support.path, CompoundWrites.journal),
+    ).createSync(elsewhere.path);
+    final listed = await ledger.list(const [CompoundWrites.journal]);
+    expect(listed.records, isEmpty);
+  });
+
+  group('the gate', () {
+    test('waits half a minute after a pass that could not run, and lets an '
+        'owed operation keep a write waiting five minutes', () {
+      final gate = RecoveryGate(
+        documents: fixture.documents,
+        support: fixture.support,
+      );
+      expect(gate.retryDelay, const Duration(seconds: 30));
+      expect(gate.escalateAfter, const Duration(minutes: 5));
+    });
+
+    test('a pass whose journal cannot be read waits the base delay each time, '
+        'never longer', () async {
+      var clock = now;
+      final gate = RecoveryGate(
+        documents: fixture.documents,
+        support: fixture.support,
+        clock: () => clock,
+      );
+      final journal = await Directory(
+        p.join(fixture.support.path, CompoundWrites.journal),
+      ).create(recursive: true);
+      await Process.run('chmod', ['000', journal.path]);
+      addTearDown(() => Process.run('chmod', ['755', journal.path]));
+      await gate.run(() async {});
+      expect(ledger.waiting(clock), isTrue);
+      clock = clock.add(const Duration(seconds: 31));
+      await gate.run(() async {});
+      expect(ledger.waiting(clock.add(const Duration(seconds: 29))), isTrue);
+      expect(ledger.waiting(clock.add(const Duration(seconds: 30))), isFalse);
+    });
+
+    test('a write over an owed move tries it once more and goes ahead when it '
+        'finishes', () async {
+      var armed = true;
+      final gate = RecoveryGate(
+        documents: fixture.documents,
+        support: fixture.support,
+        relocationHook: (step) async {
+          if (armed && step == FileRelocationStep.document) {
+            throw const FileSystemException('held open by another program');
+          }
+        },
+      );
+      final a = fixture.ref('repertoires/Course/A.pgn');
+      final b = fixture.ref('repertoires/Course/B.pgn');
+      final revision = await fixture.put(a, oneGame('1. e4'));
+      await gate.run(() async {});
+      await gate.relocations.move(
+        a,
+        b,
+        expected: revision,
+        operationId: 'first',
+      );
+      final owed = ledger.naming([a.path]).single;
+      // Tried often enough that no pass is due for a while.
+      for (var i = 0; i < 3; i++) {
+        ledger.deferred(
+          owed.journal,
+          owed.id,
+          paths: owed.paths,
+          detail: owed.detail,
+          now: DateTime.now(),
+        );
+      }
+      armed = false;
+      expect(await save(gate, b.path), 'saved');
+      expect(ledger.naming([a.path, b.path]), isEmpty);
+    });
   });
 }

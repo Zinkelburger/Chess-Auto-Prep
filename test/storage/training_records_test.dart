@@ -183,7 +183,7 @@ void main() {
       kid,
       fixture.ref('repertoires/KID/Classical.pgn'),
     );
-    expect(result, isA<Malformed>());
+    expect((result as Malformed).line, 1);
   });
 
   test('a review row that does not read as one is refused', () async {

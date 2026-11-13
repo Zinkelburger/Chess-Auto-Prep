@@ -441,7 +441,7 @@ final class _Games implements Pivot {
   Future<void> settle() async {}
 
   @override
-  Future<bool> putBack() async => false;
+  Future<void> putBack() async {}
 }
 
 /// `tournament.json`, exactly as the record has it before and after.
@@ -493,13 +493,12 @@ final class _Metadata implements Pivot {
   Future<void> settle() async {}
 
   @override
-  Future<bool> putBack() async {
+  Future<void> putBack() async {
     final before = record['before'];
     if (before is! String || await recoveryText(path) != record['after']) {
-      return false;
+      return;
     }
     await _publish(path, before);
-    return true;
   }
 }
 

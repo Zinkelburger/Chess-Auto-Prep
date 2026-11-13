@@ -288,6 +288,7 @@ void main() {
   }
 
   _relocations(() => fixture, () => root);
+  _fileMoveVersion();
   _tournaments(() => fixture);
 
   test('every fixture is plain JSON as jsonEncode writes it', () async {
@@ -521,4 +522,28 @@ void _tournamentRecords(
       expect(fixture().quarantined(), hasLength(1));
     },
   );
+}
+
+/// A record read as a file move names its own version: any other is refused
+/// before anything in it is believed.
+void _fileMoveVersion() {
+  test('a file move record at another version is refused', () async {
+    final json =
+        (jsonDecode(await _fixture('relocation_v1_move').readAsString()) as Map)
+            .cast<String, Object?>();
+    expect(
+      () => FileRelocationRecord.fromJson(
+        {...json, 'version': 2},
+        id: 'move-1',
+        documents: Directory(p.join(_placeholder, 'Documents')),
+      ),
+      throwsA(
+        isA<RecoveryRequired>().having(
+          (e) => e.detail,
+          'detail',
+          'Unsupported relocation version or id.',
+        ),
+      ),
+    );
+  }, skip: Platform.isWindows ? _posixOnly : false);
 }

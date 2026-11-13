@@ -57,9 +57,9 @@ abstract interface class Pivot {
   /// Makes the after state durable, whichever attempt applied it.
   Future<void> settle();
 
-  /// After to before, only while it holds exactly its after state; false
-  /// when it holds anything else.
-  Future<bool> putBack();
+  /// After to before, only while it holds exactly its after state; it
+  /// leaves anything else as it is.
+  Future<void> putBack();
 }
 
 /// The disk refused a pivot for good: its name was taken meanwhile.

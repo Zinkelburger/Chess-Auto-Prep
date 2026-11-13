@@ -244,7 +244,11 @@ void main() {
 
   test('progress that cannot be read is said, and read again on asking', () {
     fakeAsync((async) {
-      files.readAs = const ProgressUnreadable('repertoire_reviews.csv', 3);
+      files.readAs = const ProgressUnreadable(
+        'repertoire_reviews.csv',
+        3,
+        wholeFile: false,
+      );
       final trainer = trainerOver()..show();
       async.flushMicrotasks();
       expect(trainer.state, isA<TrainerFailed>());
