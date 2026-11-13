@@ -282,10 +282,10 @@ def _run_state(directory: Path) -> dict:
     if not isinstance(state, dict):
         return {"running": False}
     pid = state.get("pid")
-    running = isinstance(pid, int) and pid > 0 and _pid_alive(pid)
-    root = _argv_root(state.get("argv"))
-    if running and root is not None:
-        running = process_names(pid, root)
+    running = False
+    if isinstance(pid, int) and pid > 0 and _pid_alive(pid):
+        root = _argv_root(state.get("argv"))
+        running = root is None or process_names(pid, root)
     state["running"] = running
     return state
 
