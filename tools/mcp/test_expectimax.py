@@ -16,6 +16,8 @@ Requires python-chess (see tools/mcp/requirements.txt).
 
 from __future__ import annotations
 
+import errno
+import io
 import json
 import os
 import sys
@@ -86,6 +88,11 @@ class PositionTest(unittest.TestCase):
         out = ex.resolve_position(["d2d4", "g8f6"])
         self.assertEqual(out["line"], "d4 Nf6")
 
+    def test_move_numbers_without_a_space(self):
+        # "1.d4" used to be read as one token and refused as an illegal move.
+        out = ex.resolve_position("1.d4 Nf6 2.Nf3 g6 3.Bf4 Bg7 4.e3 d6 5.h3")
+        self.assertEqual(out["fen"], LONDON_FEN)
+
     def test_illegal_move_names_where_it_went_wrong(self):
         with self.assertRaises(ToolError) as caught:
             ex.resolve_position("1. d4 Nf6 2. Qh8")
@@ -144,6 +151,30 @@ class RootTableTest(unittest.TestCase):
         self.assertEqual(rows["c5"]["max_ply"], 2)
         self.assertEqual(rows["a5"]["nodes"], 1)
         self.assertEqual(rows["a5"]["avg_leaf_ply"], 1.0)
+
+    def test_eval_cp_is_from_whites_side_for_a_white_build(self):
+        # The builder stores a child's eval for its side to move — Black,
+        # after a White move — so +40 there is good for Black. The result's
+        # note says eval_cp is from White's side, so it must read -40.
+        data = _tree([_node("e4", 0.55, 40), _node("d4", 0.54, -10)])
+        data["tree"]["fen"] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+        data["config"] = {"play_as_white": True}
+        rows = {r["move"]: r["eval_cp"] for r in ex.root_table(self._write(data))["candidates"]}
+        self.assertEqual(rows, {"e4": -40, "d4": 10})
+
+    def test_eval_cp_without_a_root_fen_uses_the_builders_side(self):
+        data = _tree([_node("e4", 0.55, 40)])
+        data["config"] = {"play_as_white": True}
+        (row,) = ex.root_table(self._write(data))["candidates"]
+        self.assertEqual(row["eval_cp"], -40)
+
+    def test_eval_cp_is_unchanged_for_a_black_build(self):
+        # After Black's move White is to move: the stored eval is White's.
+        data = _tree([_node("c5", 0.52, 40)])
+        data["tree"]["fen"] = LONDON_FEN
+        data["config"] = {"play_as_white": False}
+        (row,) = ex.root_table(self._write(data))["candidates"]
+        self.assertEqual(row["eval_cp"], 40)
 
     def test_unscored_candidates_sort_last(self):
         path = self._write(_tree([_node("a5", None, 45), _node("c5", 0.52, 4)]))
@@ -460,8 +491,40 @@ class RunDirectoryTest(unittest.TestCase):
         rows = Registry().call("expectimax_list", {})["runs"]
         self.assertEqual([r["id"] for r in rows], ["second", "first"])
 
+    def _live_builder(self, directory: Path) -> int:
+        """A live process with the run on its command line, as a builder has."""
+        import subprocess
+
+        process = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(60)", str(directory / ex.BASE)]
+        )
+        self.addCleanup(process.wait)
+        self.addCleanup(process.kill)
+        return process.pid
+
+    def test_a_reused_pid_is_not_the_build(self):
+        # A run file outlives its build; after a reboot its pid can be any
+        # process (here: this test), which stop would have sent SIGINT.
+        directory = self._run("old", pid=os.getpid())
+        self.assertFalse(ex._read_run(directory)["running"])
+
+    def test_the_builder_itself_reads_as_running(self):
+        directory = self._run("live")
+        self._run("live", pid=self._live_builder(directory))
+        self.assertTrue(ex._read_run(directory)["running"])
+
+    def test_a_failed_write_leaves_run_json_whole(self):
+        directory = self._run("x", pid=999_999_999)
+        before = (directory / ex.RUN_FILE).read_text(encoding="utf-8")
+        state = ex._read_run(directory)
+        state["pid"] = 12345
+        with _failing_writes(), self.assertRaises(OSError):
+            ex._write_run(directory, state)
+        self.assertEqual((directory / ex.RUN_FILE).read_text(encoding="utf-8"), before)
+
     def test_result_refuses_to_interrupt_when_told_not_to(self):
-        self._run("live", pid=os.getpid(), tree=_tree([_node("c5", 0.52, 4)]))
+        directory = self._run("live", tree=_tree([_node("c5", 0.52, 4)]))
+        self._run("live", pid=self._live_builder(directory))
         with self.assertRaises(ToolError) as caught:
             Registry().call("expectimax_result", {"stop_first": False})
         self.assertIn("still building", str(caught.exception))
@@ -486,10 +549,38 @@ class RunDirectoryTest(unittest.TestCase):
         self.assertNotIn("running", json.loads((directory / ex.RUN_FILE).read_text()))
 
     def test_resume_refuses_while_running(self):
-        self._run("live", pid=os.getpid())
+        directory = self._run("live")
+        self._run("live", pid=self._live_builder(directory))
         with self.assertRaises(ToolError) as caught:
             Registry().call("expectimax_resume", {})
         self.assertIn("already building", str(caught.exception))
+
+
+def _failing_writes(real_open=io.open):
+    """io.open whose files opened for writing fail on the first write, as a
+    full disk does: shows whether a write could truncate what was there."""
+
+    class Failing:
+        def __init__(self, fh):
+            self._fh = fh
+
+        def write(self, data):
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self._fh.close()
+
+        def __getattr__(self, name):
+            return getattr(self._fh, name)
+
+    def opener(file, mode="r", *args, **kwargs):
+        fh = real_open(file, mode, *args, **kwargs)
+        return Failing(fh) if "w" in mode else fh
+
+    return mock.patch("io.open", opener)
 
 
 class LivenessTest(unittest.TestCase):
@@ -617,6 +708,18 @@ class EngineShortlistTest(unittest.TestCase):
         self.assertEqual([r["move"] for r in rows], ["e5", "exd5", "Ne2"])
         self.assertEqual([r["eval_cp"] for r in rows], [71, 29, 23])
         self.assertEqual([r["cp_behind_best"] for r in rows], [0, -42, -48])
+
+    def test_black_to_move_reads_from_whites_side_too(self):
+        # The cache scores for the side to move; the result's eval_cp is
+        # White's, so Black's best (+71 for Black) reads -71.
+        fen = "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2"
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            self._write(d, [("b8c6", 71), ("g8f6", 29)], " ".join(fen.split()[:4]))
+            rows = ex.root_engine_shortlist(d, fen)
+        self.assertEqual([r["move"] for r in rows], ["Nc6", "Nf6"])
+        self.assertEqual([r["eval_cp"] for r in rows], [-71, -29])
+        self.assertEqual([r["cp_behind_best"] for r in rows], [0, -42])
 
     def test_a_full_fen_key_also_matches(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -924,6 +1027,16 @@ class StartupFailureTest(unittest.TestCase):
     def tearDown(self):
         os.environ.pop("CHESS_PREP_EXPECTIMAX_DIR", None)
         self.dir.cleanup()
+
+    def test_two_runs_in_the_same_second_get_their_own_folders(self):
+        # The folder is named to the second; the second run used to die on
+        # FileExistsError instead of starting.
+        self.builder.write_text("#!/bin/sh\nexit 0\n")
+        with mock.patch.object(ex.time, "strftime", return_value="20260901-130000"):
+            first = Registry().call("expectimax_run", {"moves": LONDON, "plies": 2})
+            second = Registry().call("expectimax_run", {"moves": LONDON, "plies": 2})
+        self.assertNotEqual(first["id"], second["id"])
+        self.assertTrue(Path(second["directory"], ex.RUN_FILE).is_file())
 
     def test_the_error_line_is_reported(self):
         with self.assertRaises(ToolError) as caught:
