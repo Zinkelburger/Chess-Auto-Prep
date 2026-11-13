@@ -233,6 +233,7 @@ def lookup_person(
     people: PeopleStore | None = None,
     otb_dbs: Sequence[tuple[str, Any]] = (),
     use_uscf: bool = True,
+    otb_skipped: Sequence[str] = (),
 ) -> dict[str, Any]:
     """Everything the sources say about one person, and what is still open.
 
@@ -245,7 +246,7 @@ def lookup_person(
         report["uscf_id"] = uscf_id
     confirmed: list[dict] = []
     candidates: list[dict] = []
-    notes: list[str] = []
+    notes: list[str] = list(otb_skipped)
 
     # 1. What the user already has.
     row = None
@@ -457,33 +458,62 @@ def _combine_otb(picks: list[tuple[str, dict]]) -> dict[str, Any]:
     return {k: v for k, v in out.items() if v is not None}
 
 
-def otb_databases(twic_path: str | None = None, twic: bool = True, broadcasts: bool = True) -> list[tuple[str, Any]]:
+def otb_databases(
+    twic_path: str | None = None,
+    twic: bool = True,
+    broadcasts: bool = True,
+    skipped: list[str] | None = None,
+) -> list[tuple[str, Any]]:
     """Open handles on TWIC and every broadcast collection that exists.
 
     Collections live under `Documents/lichess_broadcasts/` (override with
     CHESS_PREP_BROADCASTS_DIR), one `<name>/<name>.db` each, built by
     `tools/master_import_pgn.dart` from the collection's merged PGN.
+
+    A file that is not a readable games database is left alone and named in
+    [skipped]: one broken collection must not stop the lookup of everyone
+    in every other source.
     """
     import os
+    import sqlite3
+    import sys
     from pathlib import Path
 
     from .master_games import MasterGamesDb
     from .people import documents_dir
     from .tools import ToolError
 
+    def open_db(label: str, path: Any) -> None:
+        db = None
+        try:
+            db = MasterGamesDb(path)
+            # What find_players reads, so a file without it fails here.
+            db._conn.execute(
+                "SELECT white, black, white_fide, black_fide, date FROM games LIMIT 1"
+            ).fetchall()
+        except ToolError:
+            return  # no such file: nothing to search
+        except sqlite3.Error as e:
+            if db is not None:
+                db.close()
+            where = path or "the default master_games.db"
+            message = f"{label}: {where} could not be read ({e}) and was skipped."
+            print(f"player_lookup: {message}", file=sys.stderr)
+            if skipped is not None:
+                skipped.append(message)
+            return
+        out.append((label, db))
+
     out: list[tuple[str, Any]] = []
     if twic:
-        try:
-            out.append(("twic", MasterGamesDb(twic_path)))
-        except ToolError:
-            pass
+        open_db("twic", twic_path)
     if broadcasts:
         root = Path(
             os.environ.get("CHESS_PREP_BROADCASTS_DIR") or documents_dir() / "lichess_broadcasts"
         ).expanduser()
         for db in sorted(root.glob("*/*.db")):
             if db.stem == db.parent.name:
-                out.append((f"broadcasts:{db.stem}", MasterGamesDb(db)))
+                open_db(f"broadcasts:{db.stem}", db)
     return out
 
 
@@ -638,11 +668,12 @@ def register_people_tools(registry: Any) -> None:
     from .roster import load_roster
     from .tools import ToolError, _b, _i, _obj, _s, _text
 
-    def _otb(args: dict) -> list[tuple[str, Any]]:
+    def _otb(args: dict, skipped: list[str]) -> list[tuple[str, Any]]:
         return otb_databases(
             args.get("db"),
             twic=args.get("twic") is not False,
             broadcasts=args.get("broadcasts") is not False,
+            skipped=skipped,
         )
 
     def _close(dbs: list[tuple[str, Any]]) -> None:
@@ -665,7 +696,8 @@ def register_people_tools(registry: Any) -> None:
         name = _text(args, "name")
         if not name:
             raise ToolError("name is required.")
-        dbs = _otb(args)
+        skipped: list[str] = []
+        dbs = _otb(args, skipped)
         try:
             return lookup_person(
                 registry,
@@ -677,6 +709,7 @@ def register_people_tools(registry: Any) -> None:
                 probe=args.get("probe_handles", True) is not False,
                 people=_store(),
                 otb_dbs=dbs,
+                otb_skipped=skipped,
             )
         finally:
             _close(dbs)
@@ -794,7 +827,8 @@ def register_people_tools(registry: Any) -> None:
             if not e.is_me and (not wanted or e.id in wanted)
         ]
         store = _store()
-        dbs = _otb(args)
+        skipped: list[str] = []
+        dbs = _otb(args, skipped)
         probe = args.get("probe_handles", True) is not False
         summary: dict[str, list[str]] = {
             "account": [], "candidates": [], "otb_only": [], "not_found": []
@@ -815,6 +849,7 @@ def register_people_tools(registry: Any) -> None:
                     people=store,
                     otb_dbs=dbs,
                     use_uscf=args.get("uscf", True) is not False,
+                    otb_skipped=skipped,
                 )
                 # What the user confirmed on the roster counts as confirmed.
                 if entry.is_actionable:
