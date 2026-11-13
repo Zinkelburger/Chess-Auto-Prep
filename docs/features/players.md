@@ -161,11 +161,17 @@ counted.
 Correspondence; default all but bullet) → `New games are added to the ones
 already saved.` The choice is stored on the person (`download`). Per-site
 failures (`username not found`, `download limit reached; try again later`) show
-under `Some games could not be updated. Showing saved games.`
+under `Some games could not be updated. Showing saved games.` A Chess.com month
+that cannot be read, or a Lichess export that keeps breaking off, does not
+cost the rest: the games that came down are saved and the line names what was
+not (`Chess.com: could not read 2026-08; the other games were saved.`). It
+does not change when the games last came down; the next download reads the
+gap again.
 
 **Filters** — `Dates` (`All dates`, last 30/90/180/365 days), `Time controls`
 (none chosen = all; `Other` for an unreadable time control), `Minimum games`
-(default 1), `From move` (default 1). They narrow Positions, Games, Findings and
+(default 1), `From move` (default 1; move N lists both sides' positions at
+move N and later). They narrow Positions, Games, Findings and
 both tabs.
 
 **Analyze with engine** — Findings button or Actions → a finite, cancellable
