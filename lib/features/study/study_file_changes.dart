@@ -111,7 +111,7 @@ final class StudyFileChanges {
         for (final player in data.players)
           if (p.equals(player.text('prep_file'), study.path)) player.name,
         for (final group in data.groups)
-          if (group.fields['study'] == study.path) group.name,
+          if (group.study == study.path) group.name,
       ];
       return names.isEmpty
           ? null

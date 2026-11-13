@@ -17,8 +17,8 @@ Future<String> prepSheet(
   final text = StringBuffer('# ${group.name}\n\n');
   text.writeln(
     [
-      if (group.fields['date'] != null) group.fields['date'],
-      if (group.fields['rounds'] != null) '${group.fields['rounds']} rounds',
+      ?group.date,
+      if (group.rounds case final rounds?) '$rounds rounds',
       '${people.length} players',
       '${people.where((e) => group.prepared(e.id)).length} prepared',
     ].join(' · '),

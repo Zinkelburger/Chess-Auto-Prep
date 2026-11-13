@@ -354,6 +354,8 @@ and its references back. Draft undo changes only the draft; committed undo is
 a new guarded operation, refused when a participant changed since. Undo
 history is built from store receipts (before-content and committed revision),
 never from controller memory; a failed or uncertain undo never pops history.
+A document tab put aside keeps its receipts and gives them back to the saver
+only when the file reads again at the revision the last of them committed.
 
 ### Derived views and background work
 

@@ -223,6 +223,26 @@ void main() {
       );
     });
 
+    test('part of a download is kept without saying the games came down '
+        'then', () async {
+      final when = DateTime(2026, 9, 1, 8);
+      await cache.keep(GameSite.chesscom, 'jdoe', [scholarsMate], when);
+      final kept = await cache.keep(
+        GameSite.chesscom,
+        'jdoe',
+        [quietChesscomGame],
+        DateTime(2026, 9, 2, 8),
+        complete: false,
+      );
+      expect(kept, isA<GamesKept>());
+      final ref = cache.refFor(GameSite.chesscom, 'jdoe');
+      expect(
+        await File(ref.path).readAsString(),
+        '$scholarsMate\n\n$quietChesscomGame\n',
+      );
+      expect(await cache.fetchedAt(GameSite.chesscom, 'jdoe'), when);
+    });
+
     test('says when the games came down, and a delete moves them to the '
         'recovery folder with their note', () async {
       final when = DateTime(2026, 9, 1, 8);

@@ -412,9 +412,12 @@ final class MyGames extends ChangeNotifier {
     }
     List<String>? fetchedGames;
     switch (fetched) {
-      case GamesFetched(:final games):
+      case GamesFetched(:final games, :final unread, :final complete):
         fetchedGames = games;
-        await _keep(site, username, games, _now());
+        if (!complete) {
+          log.w('download ${site.label} games', 'not read: $unread');
+        }
+        await _keep(site, username, games, _now(), complete: complete);
       case final GamesNotFetched failed:
         problems[site] = failed;
     }
@@ -452,14 +455,23 @@ final class MyGames extends ChangeNotifier {
     GameSite site,
     String username,
     List<String> games,
-    DateTime when,
-  ) async {
+    DateTime when, {
+    required bool complete,
+  }) async {
     try {
-      final kept = await _cache.keep(site, username, games, when);
+      final kept = await _cache.keep(
+        site,
+        username,
+        games,
+        when,
+        complete: complete,
+      );
       if (kept case GamesNotKept(:final detail)) {
         log.w('save the ${site.label} download', detail);
         return;
       }
+      // Part of a download is kept but not recorded as one.
+      if (!complete) return;
       if (await _store.setDownloaded(site, when, expectedUsername: username) &&
           _accounts[site]?.username == username) {
         _accounts = {..._accounts, site: Account(username, downloaded: when)};

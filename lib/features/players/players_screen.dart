@@ -277,7 +277,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
           () => widget.onExport(group),
           icon: AppIcons.saveCopy,
         ),
-        if (group.fields['study'] case final String study when study.isNotEmpty)
+        if (group.study.isNotEmpty)
           rowAction(
             'Unlink group study',
             () => owner.unlinkGroupStudy(group),
@@ -375,10 +375,10 @@ class _PlayersScreenState extends State<PlayersScreen> {
 String groupLine(PlayerGroup group) {
   final players = group.entries.length;
   final prepared = group.entries.where((e) => e['prepared'] == true).length;
-  final rounds = group.fields['rounds'];
+  final rounds = group.rounds;
   return [
-    if (group.fields['date'] case final String date when date.isNotEmpty) date,
-    if (rounds is int) '$rounds ${rounds == 1 ? 'round' : 'rounds'}',
+    if (group.date case final date? when date.isNotEmpty) date,
+    if (rounds != null) '$rounds ${rounds == 1 ? 'round' : 'rounds'}',
     '$players ${players == 1 ? 'player' : 'players'}',
     '$prepared prepared',
   ].join(' · ');
