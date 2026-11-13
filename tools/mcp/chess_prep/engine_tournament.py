@@ -151,11 +151,15 @@ def process_names(pid: int, path: str) -> bool:
         raw = Path(f"/proc/{pid}/cmdline").read_bytes()
     except OSError:
         return True
-    prefix = path.rstrip(os.sep) + os.sep
-    return any(
-        arg == path or arg.startswith(prefix)
-        for arg in raw.decode("utf-8", errors="replace").split("\0")
-    )
+    # The same folder can be spelled through a symlink (a linked Documents).
+    targets = {path.rstrip(os.sep), os.path.realpath(path)}
+    for arg in raw.decode("utf-8", errors="replace").split("\0"):
+        spellings = {arg, os.path.realpath(arg)} if os.path.isabs(arg) else {arg}
+        for spelled in spellings:
+            for target in targets:
+                if spelled == target or spelled.startswith(target + os.sep):
+                    return True
+    return False
 
 
 # ── Reading what is on disk ────────────────────────────────────────────────

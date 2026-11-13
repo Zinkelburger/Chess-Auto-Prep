@@ -513,6 +513,17 @@ class RunDirectoryTest(unittest.TestCase):
         self._run("live", pid=self._live_builder(directory))
         self.assertTrue(ex._read_run(directory)["running"])
 
+    def test_the_builder_reads_as_running_through_a_linked_folder(self):
+        # Documents reached through a symlink: the builder was started with
+        # one spelling of the run folder and is looked up with the other.
+        directory = self._run("live")
+        link = Path(self.dir.name + "-link")
+        link.symlink_to(self.root)
+        self.addCleanup(link.unlink)
+        pid = self._live_builder(link / "live")
+        self._run("live", pid=pid)
+        self.assertTrue(ex._read_run(directory)["running"])
+
     def test_a_failed_write_leaves_run_json_whole(self):
         directory = self._run("x", pid=999_999_999)
         before = (directory / ex.RUN_FILE).read_text(encoding="utf-8")
