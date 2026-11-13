@@ -23,7 +23,7 @@ import { Material } from 'chessops/setup';
 import type { Color, Role, SquareName } from 'chessops/types';
 import { CrazyBoard, ROLE_LETTER, type Brush } from './board';
 import { CevalView, formatEval } from './ceval';
-import { boardScore, Engine, seatKey, type EngineResult, type EngineStatus, type HandRole, type PieceValues, type SearchSettings, type Seat } from './engine';
+import { boardScore, Engine, seatKey, type EngineLine, type EngineResult, type EngineStatus, type HandRole, type PieceValues, type SearchSettings, type Seat } from './engine';
 import { renderHand } from './hand';
 import { liveGlyph, type Glyph } from './judge';
 import { openHelp, renderMenu } from './menu';
@@ -62,6 +62,7 @@ function arrowUci(node: TreeNode): string {
 }
 
 const opposite = (c: Color): Color => (c === 'white' ? 'black' : 'white');
+const scored = (line: EngineLine) => line.cp !== undefined || line.mate !== undefined;
 
 export class BughouseApp {
   private boards: [BoardState, BoardState];
@@ -78,6 +79,8 @@ export class BughouseApp {
   private values = new Map<string, PieceValues>();
   /** The piece-value measure running or queued, by seatKey. */
   private measuring = new Set<string>();
+  /** Counts cancellations of background work: a measure settled by one no longer owns its `measuring` mark. */
+  private backgroundRun = 0;
   private partnerCg: CgApi | null = null;
   private engineStatus: EngineStatus = { kind: 'off' };
   private readonly engine: Engine;
@@ -442,8 +445,7 @@ export class BughouseApp {
   // ── Engine ──────────────────────────────────────────────────────
   private analyse() {
     // Background work belongs to the positions it was asked for.
-    this.engine.cancelBackground();
-    this.measuring.clear();
+    this.cancelBackground();
     this.search();
     this.partner?.update();
     this.renderPartner();
@@ -480,7 +482,7 @@ export class BughouseApp {
       // the engine's time then goes to the partner board and the piece values.
       const kept = this.evalOf(fen);
       const search = this.searchSettings();
-      if (kept?.complete && kept.budget >= search.searchMs && kept.lines.length >= Math.min(search.multiPv, 2)) { this.engine.stop(); this.background(); }
+      if (kept?.complete && kept.budget >= search.searchMs && kept.multiPv >= search.multiPv) { this.engine.stop(); this.background(); }
       else this.engine.analyse(this.seatFor(fen), search);
     }
     this.engine.load().catch(() => { /* Shown in the engine header. */ });
@@ -488,6 +490,12 @@ export class BughouseApp {
 
   private searchSettings(): SearchSettings {
     return { multiPv: this.settings.multiPv, searchMs: (this.settings.searchSeconds || 10) * 1000 };
+  }
+
+  private cancelBackground() {
+    this.engine.cancelBackground();
+    this.measuring.clear();
+    this.backgroundRun++;
   }
 
   /**
@@ -499,8 +507,7 @@ export class BughouseApp {
     if (this.practice || this.threat || this.mode !== 'analysis' || !this.settings.engineOn) return;
     const fen = this.current.fen;
     if (outcomeOf(fen)) return;
-    this.engine.cancelBackground();
-    this.measuring.clear();
+    this.cancelBackground();
     const here = this.seatFor(fen);
     if (this.twoBoards) {
       const partner = this.seatFor(this.other.current.fen, this.active === 0 ? 1 : 0);
@@ -510,7 +517,10 @@ export class BughouseApp {
     const key = seatKey(here);
     if (this.values.get(key)?.source !== 'board') {
       this.measuring.add(key);
+      const run = this.backgroundRun;
       void this.engine.values(here, valuesSecondsFor(this.settings) * 1000).then(() => {
+        // Settled by a later cancellation, which cleared the marks and may have set this one again for new work.
+        if (run !== this.backgroundRun) return;
         this.measuring.delete(key);
         this.partner.update();
       });
@@ -564,7 +574,8 @@ export class BughouseApp {
     const best = before.lines[0];
     if (!best || this.sameMove(parent.fen, best.pv[0], node)) return undefined;
     const after = before.lines.find((l) => this.sameMove(parent.fen, l.pv[0], node)) ?? this.evalOf(node.fen)?.lines[0];
-    if (!after) return undefined;
+    // A move HypeBeast did not score has nothing to judge by.
+    if (!after || !scored(best) || !scored(after)) return undefined;
     return liveGlyph(positionOf(parent.fen).turn, best, after);
   }
 
