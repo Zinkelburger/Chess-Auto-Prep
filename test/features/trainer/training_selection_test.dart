@@ -51,32 +51,35 @@ void main() {
     documents.dispose();
   });
 
-  test('a renamed repertoire stays the trainer\'s choice, pauses and all', () async {
-    selection.pauseScope(true, chapter: ref('KID', 'Other'));
-    expect(selection.chapterPaused(ref('KID', 'Other')), isTrue);
+  test(
+    'a renamed repertoire stays the trainer\'s choice, pauses and all',
+    () async {
+      selection.pauseScope(true, chapter: ref('KID', 'Other'));
+      expect(selection.chapterPaused(ref('KID', 'Other')), isTrue);
 
-    files.listing = Repertoires([
-      folder('King\'s Indian', ['Main', 'Other']),
-    ]);
-    await documents.moveFolder(
-      '/repertoires/KID',
-      '/repertoires/King\'s Indian',
-    );
-    await catalog.synchronize();
+      files.listing = Repertoires([
+        folder('King\'s Indian', ['Main', 'Other']),
+      ]);
+      await documents.moveFolder(
+        '/repertoires/KID',
+        '/repertoires/King\'s Indian',
+      );
+      await catalog.synchronize();
 
-    expect(selection.root, '/repertoires/King\'s Indian');
-    expect(selection.repertoire?.name, 'King\'s Indian');
-    expect(
-      settings.value.training.repertoirePath,
-      '/repertoires/King\'s Indian',
-    );
-    expect(
-      selection.chapterPaused(ref('King\'s Indian', 'Other')),
-      isTrue,
-      reason: 'a paused chapter stays paused under its new folder',
-    );
-    expect(selection.chapterPaused(ref('King\'s Indian', 'Main')), isFalse);
-  });
+      expect(selection.root, '/repertoires/King\'s Indian');
+      expect(selection.repertoire?.name, 'King\'s Indian');
+      expect(
+        settings.value.training.repertoirePath,
+        '/repertoires/King\'s Indian',
+      );
+      expect(
+        selection.chapterPaused(ref('King\'s Indian', 'Other')),
+        isTrue,
+        reason: 'a paused chapter stays paused under its new folder',
+      );
+      expect(selection.chapterPaused(ref('King\'s Indian', 'Main')), isFalse);
+    },
+  );
 
   test('a paused chapter renamed or moved stays paused', () async {
     selection.pauseScope(true, chapter: ref('KID', 'Other'));

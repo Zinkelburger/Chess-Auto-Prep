@@ -130,9 +130,7 @@ void main() {
       final text = newStudyText(study: 'Openings', chapter: 'Intro');
       study.store.documents[other] = Opened(text, scriptedRevision(text));
       study.store.throwOnSave = StateError('the lock database will not open');
-      final result = await study.studies.addChapters(IntoStudy(other), [
-        _game,
-      ]);
+      final result = await study.studies.addChapters(IntoStudy(other), [_game]);
       expect(result, isA<StudyProblem>());
       expect(study.studies.busy, isFalse);
       expect((study.store.documents[other]! as Opened).text, text);

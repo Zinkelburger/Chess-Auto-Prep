@@ -96,7 +96,8 @@ final class TrainingSelection extends ChangeNotifier {
     };
     final before = (root, chapter, line, {...picked});
     root = moved(root) ?? root;
-    if (chapter case final ref?) chapter = ref.inFile(moved(ref.path) ?? ref.path);
+    if (chapter case final ref?)
+      chapter = ref.inFile(moved(ref.path) ?? ref.path);
     if (line case final key?) line = followed(key);
     picked
       ..clear()
