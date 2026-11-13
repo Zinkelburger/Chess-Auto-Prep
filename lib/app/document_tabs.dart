@@ -98,9 +98,10 @@ final class DocumentTabs {
   }
 
   /// The document on the board now belongs to [mode]: a request put it up
-  /// for that mode before the mode came on screen.
+  /// for that mode before the mode came on screen. A tab being brought
+  /// back keeps its own mode ([select]).
   void carry(Mode mode) {
-    if (_disposed || !mode.showsBoard) return;
+    if (_disposed || !mode.showsBoard || _shown == _selecting) return;
     final page = _pages[_shown];
     if (page == null || page.mode == mode) return;
     page.mode = mode;
@@ -167,6 +168,7 @@ final class DocumentTabs {
     final cursor = page.cursor;
     final side = page.side;
     final draft = page.draft;
+    final from = requests.here;
     _selecting = id;
     try {
       if (page.source case final source?) {
@@ -184,7 +186,7 @@ final class DocumentTabs {
     } finally {
       if (_selecting == id) _selecting = null;
     }
-    requests.switchTo(mode);
+    requests.switchTo(mode, from: from);
     session.cursor.goTo(cursor);
     if (session.orientation != side) session.flip();
   }

@@ -276,15 +276,26 @@ final class AppParts {
     tournaments?.stop();
     workspace.fill.cancel();
     training.myGames.pause();
-    training.lines.leave();
+    _sittingPaused = training.lines.lesson?.suspended == false;
+    training.lines.suspend();
     training.puzzles.suspend();
     labs.engine.close();
     unawaited(account.cancel());
   }
 
-  /// Restore the puzzle's delayed turn when the window stays open.
+  /// Whether closing paused a sitting that was running, so a close the
+  /// window stays open after resumes it; one already paused stays paused.
+  bool _sittingPaused = false;
+
+  /// The window stays open: the puzzle's delayed turn and the Train tab's
+  /// sitting carry on where they were, and Hivemind starts again while
+  /// Bughouse is the mode on screen.
   void resumeAfterClose() {
-    if (!_disposed) training.puzzles.resume();
+    if (_disposed) return;
+    training.puzzles.resume();
+    if (_sittingPaused) training.lines.resume();
+    _sittingPaused = false;
+    if (requests.mode == Mode.bughouse) labs.engine.open();
   }
 
   /// The parts in the reverse of the order they are declared in, so each

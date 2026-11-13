@@ -217,6 +217,22 @@ void main() {
     expect(w.analysis.pausedFor, isNull);
   });
 
+  testWidgets('a close the window stays open after gives the engine back', (
+    tester,
+  ) async {
+    await toBughouse(tester);
+    await engineOn(tester);
+    final first = w.bughouse.engine;
+    w.parts.prepareToClose();
+    await tester.pumpAndSettle();
+    expect(first.gone, isTrue, reason: 'quit while the window closes');
+    w.parts.resumeAfterClose();
+    await tester.pumpAndSettle();
+    expect(w.bughouse.engine, isNot(same(first)));
+    expect(w.bughouse.engine.gone, isFalse);
+    expect(w.analysis.pausedFor, isNotNull, reason: 'Bughouse is still up');
+  });
+
   testWidgets('the arrow keys step the board', (tester) async {
     await toBughouse(tester);
     w.lab.play(BoardNumber.one, 'e2e4');

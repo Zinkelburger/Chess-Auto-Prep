@@ -318,6 +318,45 @@ void main() {
       },
     );
 
+    test('staying with a frozen draft keeps the mode it was asked from, '
+        'and Back as it was', () async {
+      await freezeKid();
+      w.question.answer = DraftChoice.keepWaiting;
+      final modes = <Mode>[];
+      w.requests.addListener(() => modes.add(w.requests.mode));
+      expect(await w.requests.openFile(games), isA<RequestDropped>());
+      expect(w.requests.mode, Mode.repertoires);
+      expect(modes, everyElement(Mode.repertoires));
+      expect(w.requests.backTo, isNull);
+      expect(w.session.source, kid);
+    });
+
+    test(
+      'a file that cannot be read leaves the mode it was asked from',
+      () async {
+        await w.requests.open(kid);
+        w.store.documents.remove(games);
+        expect(await w.requests.openFile(games), isA<RequestRefused>());
+        expect(w.requests.mode, Mode.repertoires);
+        expect(w.requests.backTo, isNull);
+        expect(w.session.source, kid);
+      },
+    );
+
+    test('a study a draft is stayed with does not bring Study up', () async {
+      final study = studyRef('Openings');
+      w.store.documents[study] = Opened(
+        twoChapterStudy,
+        scriptedRevision(twoChapterStudy),
+      );
+      await freezeKid();
+      w.question.answer = DraftChoice.keepWaiting;
+      expect(await w.requests.openStudy(study), isA<RequestDropped>());
+      expect(w.requests.mode, Mode.repertoires);
+      expect(w.requests.backTo, isNull);
+      expect(w.session.source, kid);
+    });
+
     test('a file that could not be read is not remembered', () async {
       w.store.documents.remove(games);
       final result = await w.requests.openFile(games);
