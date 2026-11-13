@@ -52,7 +52,9 @@ Top to bottom, left to right:
   board, which travels with the user rather than multiplying. Picking another
   mode's tab goes to that mode; closing a tab brings up the next one of the same
   mode. The builder and the trainer share their documents (one repertoire
-  list); modes with a screen of their own leave the board as it is.
+  list), so a shared tab is named for whichever of the two is up (`Builder ·
+  Main`, `Trainer · Main`); modes with a screen of their own leave the board
+  as it is.
 - **List column** (`«` in its corner hides it) — the mode's own list,
   or `Positions`, the searches' finds (Actions ▸ View ▸ `Positions`,
   or the list button on the Expectimax bar).
@@ -72,10 +74,11 @@ Top to bottom, left to right:
   the move note: the
   current move with its glyph and note (`14. Nf5!  Good move`), the game's
   introduction and first move (muted, clickable) at the start; fixed height, a
-  long note scrolls; no card when there is nothing to say. In a window so
+  long note scrolls; no card when there is nothing to say, nor when less
+  than 120 px is left under the engine (`moveNoteMinHeight`). In a window so
   short that the board would be under 300 px (`boardCrampedSide`), the board
-  takes the note's room and the note is written in the `Notes` tab or the
-  edit strip.
+  takes the note's room; wherever the note card is not shown, the note is
+  written in the `Notes` tab or the edit strip.
 - **Engine pane** — a labelled sliding switch (`Engine`), the status
   (`Off`, `Starting…`, `Depth 24 · 12 MN/s · 345M nodes · Stockfish 19`,
   shortened to fit; no depth shown past 100), the threat crosshair (`Show
@@ -122,14 +125,16 @@ Top to bottom, left to right:
   [books](books.md)); every repertoire while none is chosen. For the board's position,
   every move any chapter of the book for the board's side plays, matched by
   position: `Move` · `Lines` · `Goes on` · `Found in` (a click opens that
-  file there). While it is up the board is free: a move the file does not play
+  file there); a pane too narrow for all four drops `Goes on`. While it is up the board is free: a move the file does not play
   is shown, never written, and the header reads `Off the file: …` with a
   take-back and `Back to the file`; the engine follows the free board, while
   Replies, Expectimax and the other explorer sources stay on the file's
   position (they read `DocumentCursor.fen`, not `RepertoireTree.fen`).
-- **Panes** — the pane's `+` (Tools) lists the mode's tabs, a few actions with
-  their keys, `More room` / `Less room` (with several panes), `New pane`,
-  `Close pane`, `Join all panes`. Up to four panes. Dragging a tab shows `Move
+- **Panes** — the pane's `+` (`Open tools and arrange panes`) lists the
+  mode's tabs, then in the viewer and Study `Engine on` / `Engine off` with
+  its key, then `More room` / `Less room` (with several panes), `New pane`,
+  `Close pane` (any pane but the first) and `Join all panes` (with several).
+  Up to four panes. Dragging a tab shows `Move
   here` / `Split right` / `Split below` targets; releasing elsewhere cancels.
   Right-click a tab (or Shift+F10) to close it (`Close tab`, also
   middle-click), move it to a named pane, split or join. A secondary pane's

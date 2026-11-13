@@ -232,7 +232,8 @@ final class Library extends ChangeNotifier {
   /// A chapter takes the side of the repertoire it is added to, read from a
   /// chapter already in it, so a Black repertoire does not grow a White one.
   /// [rootMoves] is where its lines start when that is not the start: the
-  /// position the user had on the board when they asked for it.
+  /// position the user had on the board when they asked for it. Made, it
+  /// is [LibraryAdded], naming the chapter to open.
   Future<LibraryResult> createChapter(
     RepertoireFolder into,
     String name, {
@@ -240,7 +241,9 @@ final class Library extends ChangeNotifier {
   }) => _run('create the chapter $name in ${into.name}', () async {
     final ref = DocumentRef(p.join(into.path, '$name.pgn'));
     final side = await _sideOf(into);
-    return _create(ref, name, side, rootMoves: rootMoves);
+    final result = await _create(ref, name, side, rootMoves: rootMoves);
+    if (result is! LibraryDone) return result;
+    return LibraryAdded(ChapterRef.at(ref.path), chapters: 1, lines: 0);
   });
 
   /// [board] — the analysis board — as a new chapter [name] of [into]. It
