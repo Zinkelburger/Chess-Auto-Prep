@@ -409,12 +409,12 @@ class EngineStartup(unittest.TestCase):
                 started.append(real_popen(*args, **kwargs))
                 return started[-1]
 
-            engine_mod.subprocess.Popen = popen  # type: ignore[assignment]
+            setattr(engine_mod.subprocess, "Popen", popen)
             try:
                 with self.assertRaises(EngineError):
                     HivemindEngine(EngineFiles(fake, fake, None, "test"))
             finally:
-                engine_mod.subprocess.Popen = real_popen  # type: ignore[assignment]
+                setattr(engine_mod.subprocess, "Popen", real_popen)
                 for proc in started:
                     if proc.poll() is None:
                         proc.kill()

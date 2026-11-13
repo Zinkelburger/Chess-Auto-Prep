@@ -383,7 +383,7 @@ class ToolInputs(TempCache):
             return {"username": "x"}
 
         original = chesscom.fetch_json
-        chesscom.fetch_json = fetch
+        setattr(chesscom, "fetch_json", fetch)
         self.addCleanup(setattr, chesscom, "fetch_json", original)
 
     def files_outside_archives(self) -> list[str]:
