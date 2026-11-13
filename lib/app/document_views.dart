@@ -189,6 +189,7 @@ abstract base class _LibraryView extends _DocumentModeView {
                 _modes.library,
                 _modes.outline,
                 workspace.session,
+                (ref) => unawaited(requests.open(ref)),
               ),
             ),
       icon: AppIcons.add,

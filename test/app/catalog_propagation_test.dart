@@ -215,7 +215,7 @@ void main() {
       ]);
       expect(
         await app.library.createChapter(folder('Club', ['Najdorf']), 'Dragon'),
-        isA<LibraryDone>(),
+        isA<LibraryAdded>(),
       );
       await app.parts.catalog.synchronize();
       await pumpEventQueue();
