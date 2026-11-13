@@ -17,7 +17,8 @@ games cache and usernames in `lib/storage/my_games_files.dart` and
 
 ## Screen
 
-Reached from the mode menu (`Tactics`, before `My games`). The shared
+Reached from the mode menu (`Tactics`, last under `Study & games`, after `My
+games`). The shared
 workspace: puzzle column left, board middle, reading card right. The mode
 starts with the engine off, no card heading and no game counter.
 
@@ -30,8 +31,9 @@ starts with the engine off, no card heading and no game counter.
 - **Play** — `Play ({n})`, `Resume` while a sitting is parked, or
   `Show puzzle` while one is up. The only filled button in the column once
   the set has puzzles; the accounts buttons are outlined then.
-- **Count line** — `{queued} of {total}`, the kinds it holds (`14 blunders,
-  12 mistakes`, or `none`), and a `Filters` fold beside it.
+- **Count line** — `{queued} of {total}` with the `Filters` fold beside it,
+  and under it the kinds the set holds (`14 blunders, 12 mistakes`, or
+  `none`).
 - **Filters** (inline, saved at once) — kind chips `Blunders ??`, `Mistakes
   ?`, `Inaccuracies ?!`, `Custom`; `Order`: `Newest first`, `Least reviewed`,
   `Worst success rate`, `Random`; `Group by game`, `Unreviewed only`, `Hide
@@ -65,8 +67,9 @@ starts with the engine off, no card heading and no game counter.
   (filled) and `Done`.
 - **Game tab** — the source game: `White (Elo) – Black (Elo)`, result and date,
   the review's counts for that game, then the moves as the reading card sets
-  them with the puzzle's move bold and marked, scrolled into view; `Analyze
-  game`. `Play a puzzle to see its game.` / `This puzzle has no game.`
+  them with the puzzle's move bold and marked, scrolled into view; `Open on
+  analysis board` at the foot of the tab. `Play a puzzle to see its game.` /
+  `This puzzle has no game.`
 
 ## Actions
 

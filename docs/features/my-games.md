@@ -18,7 +18,8 @@ book chip `lib/workspace/book/book_chip.dart` and the games cache
 
 ## Screen
 
-Reached from the mode menu (`My games`, after `Tactics`). Games column left,
+Reached from the mode menu (`My games`, under `Study & games`, after `Study`
+and before `Tactics`). Games column left,
 board middle, reading card right. No game counter under the board; ↑/↓ walk
 the list instead.
 
