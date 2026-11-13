@@ -70,6 +70,16 @@ void main() {
       expect(gameAfterUndo(shorter, null).game, 2);
     });
 
+    test('a game past a one-game file\'s end becomes its only game', () {
+      final two = parseChapter(
+        name: 'Main',
+        text: _game('1. e4') + _game('1. d4'),
+        game: 1,
+      );
+      final one = withLines(two, [two.lines.first]);
+      expect(gameAfterUndo(one, null).game, 0);
+    });
+
     test('a chapter still named is kept as it is', () {
       final view = sectionView(file, 'B');
       expect(chapterAfterUndo(file, view, const []).view, same(view));

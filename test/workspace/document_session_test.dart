@@ -185,6 +185,14 @@ void main() {
     expect(session.cursor.value, NodePath.of([0]));
   });
 
+  test('flipping a chapter turns the board over and back', () {
+    final side = session.orientation;
+    session.flip();
+    expect(session.orientation, side.opposite);
+    session.flip();
+    expect(session.orientation, side);
+  });
+
   test('moving in the file puts the board back on it', () {
     final from = NodePath.of([0]);
     final line = pvMoves(session.tree!.fenAt(from), ['c2c3']);

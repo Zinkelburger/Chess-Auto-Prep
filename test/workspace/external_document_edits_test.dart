@@ -168,6 +168,30 @@ void main() {
     );
   });
 
+  test(
+    'a landed edit whose file cannot be read back is not taken as shown',
+    () async {
+      final command = await prepare();
+      final before = f.session.chapter;
+      final gate = Completer<void>();
+      final result = await f.session.externalEdits.commit(command, (
+        primary,
+      ) async {
+        final saved = await publish(primary);
+        f.store.readEarly = gate;
+        unawaited(
+          Future<void>.delayed(
+            const Duration(milliseconds: 10),
+            () => gate.completeError(const FileSystemException('read failed')),
+          ),
+        );
+        return saved;
+      });
+      expect(result, isA<store.Saved>());
+      expect(f.session.chapter, isNot(same(command.landing.chapter)));
+    },
+  );
+
   test('giving up an unconfirmed edit lets the editor go', () async {
     final command = await prepare();
     await f.session.externalEdits.commit(
