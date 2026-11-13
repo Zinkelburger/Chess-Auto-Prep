@@ -10,8 +10,9 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('a finding row in the 300 px column says its kind in full and '
-      'the whole reply on hover', (tester) async {
+  testWidgets('a finding row in the 300 px column says its kind in full', (
+    tester,
+  ) async {
     final position = PlayerPosition(
       fen: Fen.initial,
       side: Side.white,
@@ -52,14 +53,6 @@ void main() {
     );
     expect(title.didExceedMaxLines, isFalse);
     expect(find.text('+0.26'), findsOneWidget);
-    final reply = find.byWidgetPredicate(
-      (w) => w is Tooltip && (w.message ?? '').startsWith('0 games · '),
-    );
-    expect(reply, findsOneWidget);
-    expect(
-      tester.widget<Tooltip>(reply).message,
-      contains('Bb5'),
-      reason: 'the hover text holds the whole reply',
-    );
+    expect(find.text('0 games · 1. Nf3 Nc6'), findsOneWidget);
   });
 }

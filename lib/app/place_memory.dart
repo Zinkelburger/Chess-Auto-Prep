@@ -46,6 +46,20 @@ final class PlaceMemory {
     requests.addListener(_changed);
     session.anyChange.addListener(_changed);
     playerChanges?.addListener(_changed);
+    // A player found gone before the watch began is let go now; the rest of
+    // the place stays as the last run left it.
+    final kept = _kept;
+    final player = this.player?.call();
+    if (kept != null && kept.player != player) {
+      _kept = SavedPlace(
+        mode: kept.mode,
+        path: kept.path,
+        section: kept.section,
+        game: kept.game,
+        player: player,
+      );
+      unawaited(settings.update(settings.value.copyWith(lastPlace: _kept)));
+    }
   }
 
   /// Where the window is now.

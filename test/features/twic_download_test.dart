@@ -237,11 +237,14 @@ void main() {
     expect(find.widgetWithText(TextButton, 'Cancel'), findsOneWidget);
     await tester.enterText(find.byType(TextField), '1');
     await tester.tap(find.widgetWithText(FilledButton, 'Download'));
-    await tester.runAsync(() async {
-      while (run.running || !run.finished) {
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-      }
-    });
+    // The run's isolates answer in real time, and what follows each answer
+    // runs in the test's own time: both are let on in turn.
+    for (var i = 0; i < 500 && (run.running || !run.finished); i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
     await tester.pump();
     expect(find.text('TWIC database ready.'), findsOneWidget);
     expect(find.text('Cancel'), findsNothing);

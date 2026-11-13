@@ -79,9 +79,8 @@ Lists:
 - **Findings** — `Analyze with engine` (`Stop · done / total` while running),
   `Analysis settings` fold, progress words, `Dismissed (n)` / `Back to findings`,
   then the finding rows: the kind in full (`Strong reply absent from these
-  games` or `Unfavourable position`, on two lines in a narrow column) with the
-  score at its end, the moves to the position, and `n games · <reply>`, all
-  of it on hover when the reply is longer than the column.
+  games` or `Unfavourable position`, wrapping in a narrow column) with the
+  score at its end, the moves to the position, and `n games · <reply>`.
 
 Tabs:
 

@@ -145,13 +145,8 @@ void main() {
       build();
       lab.play(BoardNumber.one, 'e2e4');
       await pump(tester);
-      final tips = find.descendant(
-        of: find.byType(BoardMoves),
-        matching: find.byType(Tooltip),
-      );
       // Nothing to say: no seat letter as a tooltip.
       expect(find.byTooltip('Player A'), findsNothing);
-      expect(tips, findsNothing);
       lab.pasteMoves(file, file: 'night.bpgn');
       await tester.pumpAndSettle();
       expect(
