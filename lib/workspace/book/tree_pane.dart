@@ -130,23 +130,47 @@ class _TreePaneState extends State<TreePane> with ListeningState<TreePane> {
       inset: Space.m,
     ),
     TreeNothing(:final sentence) => ListMessage(sentence, inset: Space.m),
-    TreeShown(:final rows) => ListView.builder(
-      itemCount: rows.length + 1,
-      itemBuilder: (context, index) => index == 0
-          ? const _Header()
-          : _MoveRow(
-              key: ValueKey(rows[index - 1].uci),
-              row: rows[index - 1],
-              onHover: (anchor) => _hover(rows[index - 1], anchor),
-              onLeave: _leave,
-              onTap: () => _play(rows[index - 1]),
-              onOpen: widget.onOpen == null
-                  ? null
-                  : () => _open(rows[index - 1].places.first),
-            ),
+    // A pane too narrow for every column drops `Goes on` whole rather
+    // than squeezing it to a sliver.
+    TreeShown(:final rows) => LayoutBuilder(
+      builder: (context, size) {
+        final goesOn = size.maxWidth >= _goesOnFrom;
+        return ListView.builder(
+          itemCount: rows.length + 1,
+          itemBuilder: (context, index) => index == 0
+              ? _Header(goesOn: goesOn)
+              : _MoveRow(
+                  key: ValueKey(rows[index - 1].uci),
+                  row: rows[index - 1],
+                  goesOn: goesOn,
+                  onHover: (anchor) => _hover(rows[index - 1], anchor),
+                  onLeave: _leave,
+                  onTap: () => _play(rows[index - 1]),
+                  onOpen: widget.onOpen == null
+                      ? null
+                      : () => _open(rows[index - 1].places.first),
+                ),
+        );
+      },
     ),
   };
 }
+
+/// The narrowest table that shows `Goes on`: the fixed columns and their
+/// gaps, and room for a few moves of the line.
+const _goesOnFrom =
+    explorerMoveWidth + treeLinesWidth + treeFilesWidth + Space.m * 4 + 120;
+
+/// The `Goes on` column and the gap after it, then `Found in`, which takes
+/// the room `Goes on` leaves when it is dropped.
+List<Widget> _lastColumns(bool goesOn, Widget line, Widget files) => [
+  if (goesOn) ...[
+    Expanded(child: line),
+    const SizedBox(width: Space.m),
+    SizedBox(width: treeFilesWidth, child: files),
+  ] else
+    Expanded(child: files),
+];
 
 /// One muted line saying which side of the book is shown and how many
 /// chapters,
@@ -201,7 +225,9 @@ class _Summary extends StatelessWidget {
 }
 
 class _Header extends StatelessWidget {
-  const _Header();
+  const _Header({required this.goesOn});
+
+  final bool goesOn;
 
   @override
   Widget build(BuildContext context) {
@@ -221,11 +247,10 @@ class _Header extends StatelessWidget {
             child: Text('Lines', style: style, textAlign: TextAlign.right),
           ),
           const SizedBox(width: Space.m),
-          Expanded(child: Text('Goes on', style: style)),
-          const SizedBox(width: Space.m),
-          SizedBox(
-            width: treeFilesWidth,
-            child: Text('Found in', style: style),
+          ..._lastColumns(
+            goesOn,
+            Text('Goes on', style: style),
+            Text('Found in', style: style),
           ),
           const SizedBox(width: Space.m),
         ],
@@ -238,6 +263,7 @@ class _MoveRow extends StatelessWidget {
   const _MoveRow({
     super.key,
     required this.row,
+    required this.goesOn,
     required this.onHover,
     required this.onLeave,
     required this.onTap,
@@ -245,6 +271,7 @@ class _MoveRow extends StatelessWidget {
   });
 
   final TreeRow row;
+  final bool goesOn;
   final ValueChanged<Offset> onHover;
   final VoidCallback onLeave;
   final VoidCallback onTap;
@@ -277,16 +304,16 @@ class _MoveRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: Space.m),
-              Expanded(
-                child: Text(
+              ..._lastColumns(
+                goesOn,
+                Text(
                   row.goesOn,
                   style: muted,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+                _files(context),
               ),
-              const SizedBox(width: Space.m),
-              SizedBox(width: treeFilesWidth, child: _files(context)),
               const SizedBox(width: Space.m),
             ],
           ),
