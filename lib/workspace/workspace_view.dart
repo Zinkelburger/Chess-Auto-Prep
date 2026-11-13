@@ -144,8 +144,7 @@ class _NoteRoomScope extends InheritedWidget {
   final ValueNotifier<bool> shown;
 
   @override
-  bool updateShouldNotify(_NoteRoomScope oldWidget) =>
-      shown != oldWidget.shown;
+  bool updateShouldNotify(_NoteRoomScope oldWidget) => shown != oldWidget.shown;
 }
 
 /// The board, or whatever has claimed it, with the view's margin.

@@ -43,7 +43,9 @@ Top to bottom, left to right:
   tab it runs in; the settings gear alone at the right end.
 - **Document tabs** — one per open file or analysis board, with close buttons
   and a `+` that opens an empty analysis board. Closing the last one leaves an
-  empty analysis board. Each tab keeps its place, held edits and undo.
+  empty analysis board. Each tab keeps its place and its held edits with
+  their undo; a file's tab coming back reads the file again (`DocumentTabs`,
+  `lib/app/document_tabs.dart`), so edits already written have no undo then.
   Each tab belongs to a mode, named first (`Viewer · Classic games`): the mode
   its document came up in, or the one a handoff (`Open in builder`, a pasted
   board, `Open study`) sent it to. Going to a mode never renames a tab and never

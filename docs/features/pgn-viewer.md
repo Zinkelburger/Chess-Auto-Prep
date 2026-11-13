@@ -40,33 +40,34 @@ move list, engine and explorer are described in [workspace](workspace.md).
   while the engine is on, the move field while typed in, the
   move-note card when the move has a note. On Edit the engine row and the move
   field are always there.
-- **Reading card** — opens on `Moves` alone: no tab strip, no frame, a `+` in
-  its corner. The game's heading (players, result · event · year, opening
+- **Reading card** — opens on `Moves` alone: no tab strip, no frame, `+
+  Tools` in its corner. The game's heading (players, result · event · year, opening
   name) is the top of the move text and scrolls with it. Where the game left
   the user's book, one line under the heading says so, e.g. `You left book:
   3...Nf6 (book 3...cxd4) · Main`, with `Show my line`. Its foot is `Read |
   Edit`, then the four move arrows; the viewer opens on Read.
 - **`+` menu** — the viewer's tabs (`Moves`, `Notes`, `Explorer`, `Filter`, `Analysis`,
-  `Game review`, `Solitaire`, `My books`), then `Engine on` with its key, then
-  `New pane`. A tab picked while Moves is alone opens under it.
+  `Game review`, `Solitaire`, `My books`), then `Engine on` / `Engine off`,
+  then `New pane`. A tab picked while Moves is alone opens under it.
 - **Tabs** — `Explorer` starts on `This file` here (other modes keep their
   remembered source); for a followed player it offers `All n` / `White n` /
   `Black n`. `Filter`, `Analysis` (a scratch copy of the whole game at the
   cursor, engine on; Ctrl+N), `Game review`, `Solitaire`, `My books` (what the
   book in use says about the game, from the side the board is seen from).
-- **Edit strip** (under the moves on Edit, or while edits are held) — Undo,
-  the save state (`Saved`, `Unsaved changes`, `Unsaved changes · this file is
+- **Edit strip** (under the moves on Edit, or while edits are held) — Undo
+  (on Edit), the save state (`Saved`, `Unsaved changes`, `Unsaved changes · this file is
   read-only`, `Edits stay unsaved until you save them`), `Discard` and `Save`
   while edits are held, then on Edit the glyphs and the comment field. `Read`
   closes it; there is no `Done`.
-- **Actions menu** — Document: `Edit` / `Done editing`, `Undo`,
-  `Save changes` and `Discard changes` while edits are held; Board: `Flip
-  board`, `Engine on`/`off`, `Play through` / `Stop playing`; Game: `Analyze
-  game` / `Stop analysis`, `Analyze all games` (the review's `Analyze all N
-  games`), `Solitaire chess` / `Stop
-  solitaire`, `Add game to study…`; File: `Open in Study` (a study's file),
-  `Close file`, `Filter games`, `Export games…`, `Add
-  games to study…`; Copy: `Copy game PGN`, `Copy FEN`.
+- **Actions menu** — Document: `Edit` / `Done editing`, `Undo`, `Save`
+  (Ctrl+S) and `Discard changes` while edits are held; Board: `Flip board`,
+  `Engine on`/`off`, `Paste PGN or FEN`, `Edit position…`, `Play through` /
+  `Stop playing`; Game: `Analyze game` / `Stop analysis`, `Analyze all games`
+  (the review's `Analyze all N games`), `Solitaire chess` / `Stop
+  solitaire`, `Add game to study…`; File: `Open PGN file…`, `Close file`,
+  `Open in Study` (on only for a study's file), `Filter games`, `Export
+  games…`, `Add games to study…`; then `View` and `Copy` (`Copy game PGN`,
+  `Copy FEN`).
 
 ## Actions
 
@@ -124,8 +125,9 @@ what Read held first; Ctrl+Z undoes either way (100 steps held). Coming to the
 mode, or to a document tab that held edits, never writes them. A read-only
 file holds edits on Read and Edit alike, and Save asks `Save your moves` →
 `Copy into Documents…` (a file name, checked as every name is, then a copy in
-`pgn_collections` that opens) or `Add to a study…`. Document tabs keep each file's held edits and undo
-while another is up. Failures go to the top bar's status line with one way
+`pgn_collections` that opens) or `Add to a study…`. Document tabs keep each file's held edits and their undo
+while another is up; coming back reads the file again at the tab's game and
+cursor, with its saved order, filter rules and followed player. Failures go to the top bar's status line with one way
 out (`Retry save`, Reload).
 
 **Open in Study** — a file from `Documents/studies` read here goes to Study
