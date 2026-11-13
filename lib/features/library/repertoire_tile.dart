@@ -71,7 +71,7 @@ class _RepertoireRow extends StatelessWidget {
   final bool expanded;
   final VoidCallback onToggle;
 
-  /// Opens a chapter made here, as soon as it is made.
+  /// Opens a chapter made from the row, as the list's own rows do.
   final ValueChanged<ChapterRef> onOpen;
 
   String get _subtitle {
@@ -113,8 +113,7 @@ class _RepertoireRow extends StatelessWidget {
       name: name,
       failed: 'Could not create the chapter.',
     );
-    if (!context.mounted || result is! LibraryAdded) return;
-    onOpen(result.first);
+    if (context.mounted && result is LibraryAdded) onOpen(result.first);
   }
 
   Future<void> _delete(BuildContext context) async {

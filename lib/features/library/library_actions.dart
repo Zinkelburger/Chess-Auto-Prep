@@ -38,7 +38,8 @@ Future<void> newRepertoire(
 }
 
 /// A chapter in the open repertoire, starting from the moves on the board
-/// when they are asked for. It opens at once, as a new repertoire does.
+/// when they are asked for. It opens at once, so the next move played goes
+/// into it rather than into the chapter the user just left.
 Future<void> newChapter(
   BuildContext context,
   Library library,

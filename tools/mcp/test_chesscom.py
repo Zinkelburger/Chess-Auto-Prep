@@ -208,6 +208,21 @@ class IndexBehaviour(TempCache):
         self.assertEqual(list(index.matches(clue)), ["the_root_beer_float"])
         self.assertEqual(index.stats()["archives"], 2)
 
+    def test_an_unreadable_archive_is_set_aside_not_indexed_as_empty(self):
+        index = Index(self.root)
+        self.addCleanup(index.close)
+        torn = '{"games": [{"rules": "chess", "time_class": "blitz", "end_ti'
+        (self.root / "archives" / "bob_2026-06.json").write_text(torn)
+        for path in index.pending_files():
+            index.index_file(path)
+        # Not "cached with no games": the month is fetched again next time.
+        self.assertFalse(index.has_archive("bob", "2026-06"))
+        self.assertEqual(index.pending_files(), [])
+        kept = [p for p in (self.root / "archives").iterdir() if p.name != "bob_2026-06.json"]
+        self.assertEqual([p.read_text() for p in kept], [torn])
+        fetch = FakeFetch({archive_url("bob", "2026-06"): {"games": []}})
+        self.assertTrue(index.ensure_archive("bob", "2026-06", fetch))
+
     def test_leaderboard_band_bisects_then_reads_forward(self):
         index = Index(self.root)
         self.addCleanup(index.close)
@@ -343,6 +358,116 @@ class Tools(TempCache):
         self.addCleanup(registry.close)
         out = registry.call("chesscom_who_plays", {"opening": "1. e4 e5 2. Nf3", "side": "black"})
         self.assertEqual([p["username"] for p in out["players"]], ["bob"])
+
+
+class ToolInputs(TempCache):
+    """What an agent passes in is a name, never a path."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from chess_prep.tools import Registry
+
+        # Two levels down, so a `../..` escape still lands inside the temp dir.
+        self.cache = self.root / "deep" / "cache"
+        os.environ["CHESS_PREP_CHESSCOM_DIR"] = str(self.cache)
+        self.registry = Registry()
+        self.addCleanup(self.registry.close)
+        self.fetched: list[str] = []
+
+        def fetch(url: str):
+            self.fetched.append(url)
+            if url.endswith("/stats"):
+                return {}
+            if "/games/" in url:
+                return {"games": []}
+            return {"username": "x"}
+
+        from unittest import mock
+
+        patch = mock.patch.object(chesscom, "fetch_json", fetch)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def files_outside_archives(self) -> list[str]:
+        archives = self.cache / "archives"
+        return sorted(
+            str(p.relative_to(self.root))
+            for p in self.root.rglob("*.json")
+            if archives not in p.parents and (self.cache / "searches") not in p.parents
+        )
+
+    def test_a_username_with_path_parts_is_refused(self):
+        from chess_prep.tools import ToolError
+
+        for name in ("../../escape", "a/b", "..\\x", "a b"):
+            with self.subTest(username=name):
+                with self.assertRaises(ToolError):
+                    self.registry.call(
+                        "chesscom_rating_on", {"username": name, "date": "2026-06-13"}
+                    )
+                with self.assertRaises(ToolError):
+                    self.registry.call("chesscom_profile", {"username": name})
+        self.assertEqual(self.files_outside_archives(), [])
+        self.assertEqual(self.fetched, [])
+
+    def test_a_real_username_still_works(self):
+        out = self.registry.call(
+            "chesscom_rating_on", {"username": "@Some_Player-1", "date": "2026-06-13"}
+        )
+        self.assertEqual(out["username"], "Some_Player-1")
+
+    def test_a_search_id_with_path_parts_is_refused(self):
+        from chess_prep.tools import ToolError
+
+        outside = self.cache / "elsewhere"
+        outside.mkdir(parents=True)
+        (outside / chesscom.SEARCH_FILE).write_text(json.dumps({"clues": []}))
+        (self.cache / "searches").mkdir()
+        for tool in ("chesscom_search_status", "chesscom_search_stop"):
+            with self.subTest(tool=tool):
+                with self.assertRaises(ToolError):
+                    self.registry.call(tool, {"id": "../elsewhere"})
+
+
+class StoppingAJob(TempCache):
+    """The server started the job, so a finished job is the server's own
+    unreaped child until somebody waits for it."""
+
+    def test_stop_reports_a_stopped_job_as_stopped(self):
+        import subprocess
+        import time
+
+        from chess_prep.tools import Registry
+
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        self.addCleanup(lambda: child.poll() is None and child.kill())
+        job = self.root / "searches" / "20260613-000000-test"
+        job.mkdir(parents=True)
+        (job / chesscom.SEARCH_FILE).write_text(json.dumps({"clues": []}))
+        (job / chesscom.PROGRESS_FILE).write_text(
+            json.dumps({"state": "scanning", "pid": child.pid})
+        )
+        registry = Registry()
+        self.addCleanup(registry.close)
+        started = time.monotonic()
+        out = registry.call("chesscom_search_stop", {"id": job.name})
+        self.assertTrue(out["stopped"], out)
+        self.assertLess(time.monotonic() - started, 5)
+
+    def test_a_killed_job_does_not_block_the_next_search(self):
+        import signal
+        import subprocess
+        import time
+
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        os.kill(child.pid, signal.SIGKILL)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:  # dead, but not yet reaped
+            with open(f"/proc/{child.pid}/stat") as stat:
+                if stat.read().split()[2] == "Z":
+                    break
+            time.sleep(0.05)
+        self.assertFalse(chesscom._pid_alive(child.pid))
 
 
 if __name__ == "__main__":

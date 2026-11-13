@@ -22,6 +22,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -624,6 +625,17 @@ class PairingTools(TempRosterCase):
         with_pairing = [e for e in saved["entries"] if e.get("pairing")]
         self.assertEqual(len(with_pairing), len(result["opponents"]))
 
+    def test_a_draw_rate_and_seed_of_zero_are_used(self):
+        # `draw_rate or 0.30` turned "no draws" into the default 30%.
+        self._load_field()
+        import chess_prep.tools as tools_module
+
+        with mock.patch.object(tools_module, "simulate", wraps=simulate) as spy:
+            self.call("pairing_simulate", trials=20, draw_rate=0, seed=0)
+        config = spy.call_args.args[1]
+        self.assertEqual(config.draw_rate, 0.0)
+        self.assertEqual(config.seed, 0)
+
     def test_export_only_includes_confirmed_accounts(self):
         self._load_field()
         self.call("roster_resolve")  # andrewb is me; alpha/beta not on the list
@@ -754,6 +766,16 @@ class Protocol(TempRosterCase):
         self.assertEqual(out[0]["error"]["code"], -32700)
         self.assertEqual(out[1]["id"], 2)
 
+    def test_json_that_is_not_an_object_does_not_stop_the_loop(self):
+        # A bare number, string or array is valid JSON but no request; the
+        # error handler used to call .get on it and end the server.
+        stdin = io.StringIO('5\n"x"\n[1, 2]\n{"jsonrpc":"2.0","id":2,"method":"ping"}\n')
+        stdout = io.StringIO()
+        Server(stdin=stdin, stdout=stdout).serve_forever()
+        out = [json.loads(l) for l in stdout.getvalue().splitlines() if l]
+        self.assertEqual([o.get("error", {}).get("code") for o in out[:3]], [-32600] * 3)
+        self.assertEqual(out[3], {"jsonrpc": "2.0", "id": 2, "result": {}})
+
     def test_non_ascii_survives_the_wire(self):
         # The Dart bridge shipped a latin1 bug that broke exactly this.
         out = self._run([{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}])
@@ -807,6 +829,50 @@ class Subprocess(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         response = json.loads(proc.stdout.splitlines()[0])
         self.assertGreater(len(response["result"]["tools"]), 5)
+
+
+    def test_a_byte_that_is_not_utf8_does_not_stop_the_server(self):
+        # The real stdin, as a client starts it: one undecodable byte inside
+        # a request used to raise out of the read loop and end the process.
+        entry = Path(__file__).resolve().parent / "chess_prep" / "__main__.py"
+        bad = b'{"jsonrpc":"2.0","id":1,"method":"ping","params":{"x":"\xc5"}}\n'
+        ping = b'{"jsonrpc":"2.0","id":2,"method":"ping"}\n'
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "CHESS_PREP_ROSTER": str(Path(tmp) / "r.json")}
+            proc = subprocess.run(
+                [sys.executable, str(entry)],
+                input=bad + ping,
+                capture_output=True,
+                timeout=60,
+                env=env,
+            )
+        self.assertEqual(proc.returncode, 0, proc.stderr.decode(errors="replace"))
+        ids = [json.loads(line)["id"] for line in proc.stdout.splitlines() if line]
+        self.assertEqual(ids, [1, 2])
+
+    def test_a_name_in_utf8_is_read_as_utf8_whatever_the_locale(self):
+        # MCP is UTF-8; under a non-UTF-8 locale (cp1252 on Windows) the
+        # server decoded "Ł" as two Latin-1 characters.
+        entry = Path(__file__).resolve().parent / "chess_prep" / "__main__.py"
+        request = {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "no_such_tool_Ł", "arguments": {}},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {
+                **os.environ,
+                "CHESS_PREP_ROSTER": str(Path(tmp) / "r.json"),
+                "PYTHONIOENCODING": "latin-1",
+            }
+            proc = subprocess.run(
+                [sys.executable, str(entry)],
+                input=(json.dumps(request, ensure_ascii=False) + "\n").encode("utf-8"),
+                capture_output=True,
+                timeout=60,
+                env=env,
+            )
+        text = json.loads(proc.stdout.splitlines()[0])["result"]["content"][0]["text"]
+        self.assertIn("no_such_tool_Ł", text)
 
 
 class LiveUscf(unittest.TestCase):

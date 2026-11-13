@@ -90,14 +90,13 @@ class _OutlinePanelState extends State<OutlinePanel> {
   /// A chapter made with the board on a position can start there: that is
   /// how a chapter for one opening is set up, and its root is what the
   /// outline then prints under its name.
-  Future<void> _newChapter() =>
-      newChapter(
-        context,
-        widget.library,
-        widget.outline,
-        widget.session,
-        widget.onOpen,
-      );
+  Future<void> _newChapter() => newChapter(
+    context,
+    widget.library,
+    widget.outline,
+    widget.session,
+    widget.onOpen,
+  );
 
   Future<void> _rename(OutlineLine line) async {
     final name = await showNameDialog(

@@ -231,9 +231,9 @@ final class Library extends ChangeNotifier {
 
   /// A chapter takes the side of the repertoire it is added to, read from a
   /// chapter already in it, so a Black repertoire does not grow a White one.
+  /// The answer names it, for the caller to open.
   /// [rootMoves] is where its lines start when that is not the start: the
-  /// position the user had on the board when they asked for it. Made, it
-  /// is [LibraryAdded], naming the chapter to open.
+  /// position the user had on the board when they asked for it.
   Future<LibraryResult> createChapter(
     RepertoireFolder into,
     String name, {

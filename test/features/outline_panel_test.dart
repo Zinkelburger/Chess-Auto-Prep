@@ -562,9 +562,7 @@ void main() {
     expect(find.text('No lines yet.'), findsOneWidget);
   });
 
-  testWidgets('a new chapter made from the column opens at once', (
-    tester,
-  ) async {
+  testWidgets('a new chapter can be made from the column', (tester) async {
     await show(tester);
 
     await tester.tap(find.byTooltip('New chapter…'));
@@ -574,6 +572,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(fixture.textAt('/repertoires/KID/Advance.pgn'), isNotNull);
-    expect(opened.single.path, '/repertoires/KID/Advance.pgn');
+    expect(opened.map((chapter) => chapter.path), [
+      '/repertoires/KID/Advance.pgn',
+    ], reason: 'the new chapter opens, so the next move goes into it');
   });
 }

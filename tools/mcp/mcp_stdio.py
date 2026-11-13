@@ -10,6 +10,7 @@ server broke".
 
 from __future__ import annotations
 
+import io
 import json
 import sys
 import traceback
@@ -21,6 +22,20 @@ DEFAULT_PROTOCOL = "2024-11-05"
 class ToolRegistry(Protocol):
     def definitions(self) -> list[dict]: ...
     def call(self, name: str, args: dict) -> Any: ...
+
+
+def _utf8_stdin() -> TextIO:
+    """The process's stdin decoded as UTF-8, whatever the locale says.
+
+    MCP messages are UTF-8 by definition. Decoding them with the locale's
+    codec (cp1252 on Windows) garbles names, and a byte it cannot decode
+    raised out of the read loop and ended the server; a bad byte now
+    becomes U+FFFD inside that one message instead.
+    """
+    buffer = getattr(sys.stdin, "buffer", None)
+    if buffer is None:
+        return sys.stdin
+    return io.TextIOWrapper(buffer, encoding="utf-8", errors="replace")
 
 
 class StdioServer:
@@ -38,7 +53,7 @@ class StdioServer:
         self.name = name
         self.version = version
         self.tool_error = tool_error
-        self.stdin = stdin or sys.stdin
+        self.stdin = stdin or _utf8_stdin()
         self.stdout = stdout or sys.stdout
 
     # ── Wire ───────────────────────────────────────────────────────────────
@@ -142,6 +157,11 @@ class StdioServer:
                             "error": {"code": -32700, "message": "Parse error"},
                         }
                     )
+                    continue
+                if not isinstance(message, dict):
+                    # Valid JSON but not a request object (a number, a
+                    # string, a batch array): answer it, do not die on it.
+                    self._error(None, -32600, "Invalid Request")
                     continue
 
                 try:
