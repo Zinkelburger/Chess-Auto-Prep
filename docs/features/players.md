@@ -204,7 +204,10 @@ No chapter for that colour in the book: `Your book has no white repertoire to ch
   is skipped with one warning (`1 player in people.json could not be read. It
   is kept in the file as it is.`) and a log line, and every save writes it back
   where it was; a `people.json` that cannot be read at all shows no players and
-  refuses saves. One unreadable group file is reported and skipped.
+  refuses saves. One unreadable group file is reported and skipped. A field of
+  the wrong type in a readable row or group (a `date` that is a number, a
+  `studies` that is not a list, a `chapter` that is not text) reads as absent,
+  is named in the log, and stays in the file: edits write only what they change.
 - `lookup` (`status`, `confirmed`, `candidates` with `evidence`, `next_steps`)
   is written by the chess-prep MCP tools; the row shows the candidates and
   `Use account` adds one to the person and marks it `confirmed_by: user`.
