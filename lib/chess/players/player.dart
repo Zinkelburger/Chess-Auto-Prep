@@ -91,7 +91,12 @@ List<Player> readPlayerList(String text) => _looksJson(text.trim())
     : _tablePlayers(text.trim());
 bool _looksJson(String text) => text.startsWith('{') || text.startsWith('[');
 List<Player> _jsonPlayers(String text) {
-  final json = jsonDecode(text);
+  final Object? json;
+  try {
+    json = jsonDecode(text);
+  } on FormatException {
+    throw const FormatException('That JSON cannot be read.');
+  }
   final rows = json is Map
       ? json['people'] ?? json['opponents'] ?? json['players']
       : json;

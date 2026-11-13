@@ -135,4 +135,46 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('a later comparison that fails says so over the last one, '
+      'with Try again', (tester) async {
+    await pumpPanel(tester);
+    expect(find.text('5 games, newest first'), findsOneWidget);
+    fixture.accounts.unavailable = true;
+    fixture.book.recheck();
+    await tester.pumpAndSettle();
+    expect(find.text('5 games, newest first'), findsOneWidget);
+    expect(find.text('Could not compare your games.'), findsOneWidget);
+    fixture.accounts.unavailable = false;
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not compare your games.'), findsNothing);
+    expect(find.text('5 games, newest first'), findsOneWidget);
+  });
+
+  testWidgets('with larger text the two-line rows grow rather than cut '
+      'their words', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(1.5)),
+          child: Scaffold(
+            body: MyGamesPanel(
+              book: fixture.book,
+              session: session,
+              accounts: const Text('accounts'),
+              bookChip: const SizedBox.shrink(),
+              onOpen: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('5 games, newest first'), findsOneWidget);
+  });
 }

@@ -22,7 +22,7 @@ Reached from the mode menu (`Databases`, in the `Data & engines` group of
   (filled; only where the
   environment has a master games path), `Import PGN…`, `Storage · 4.1 GB`
   (`Storage · measuring…` before the first measurement) and a refresh button
-  (`Refresh database counts and storage`).
+  (`Refresh`) that reads the counts and measures the storage again.
 - **Summary line** — `Master games · 1,944,320 games · 2.0 GB · Sep 2020 – Sep
   2026 · TWIC issues 1340–1612 · 2 PGN files imported`, or `Master games ·
   empty`; under it a sentence (`databaseAbout`) saying the games come from The

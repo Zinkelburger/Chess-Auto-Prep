@@ -95,7 +95,9 @@ survive. A row that cannot be read (not an object, no ID, a name that is not
 text, or a second row under one ID) is left out with one warning and a log line,
 and every save writes it back where it was. A `people.json` that cannot be read
 at all shows no players and refuses saves, so nothing writes over it; the
-groups still read.
+groups still read. The chess-prep MCP tools write the same files under the same
+folder lock and keep the same rules (see
+[Shared files](OPPONENT_PREP.md#shared-files)).
 
 ## Recovery files
 
