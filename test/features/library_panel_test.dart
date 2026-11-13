@@ -203,6 +203,19 @@ void main() {
     expect(opened.single.path, '/repertoires/Benoni/Main.pgn');
   });
 
+  testWidgets('a chapter made from a repertoire row opens', (tester) async {
+    await show(tester, [benko]);
+    await tester.tap(find.byIcon(Icons.more_horiz).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New chapter…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Volga');
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+    expect(fixture.textAt('/repertoires/benko/Volga.pgn'), isNotNull);
+    expect(opened.single.path, '/repertoires/benko/Volga.pgn');
+  });
+
   testWidgets('a name the filesystem would refuse never leaves the dialog', (
     tester,
   ) async {
