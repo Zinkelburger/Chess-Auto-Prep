@@ -110,4 +110,13 @@ void main() {
     expect(await analysis.show(), isTrue);
     expect(mainLine(), ['Nf3']);
   });
+
+  test(
+    'a game changed on screen before it was ever shown changes nothing',
+    () async {
+      await fixture.session.open(chapterRef('KID', 'Other'));
+      analysis.hide();
+      expect(analysis.active, isFalse);
+    },
+  );
 }

@@ -180,6 +180,21 @@
 #     parent non-empty), :197, :198 (a replaced folder fails its snapshot,
 #     a taken target its rename, either way), :215 the flush's nearest
 #     existing folder: durability only.
+#   lib/workspace/document/document_access.dart:12 the clock's start, :18
+#     `>` -> `>=` (one clock: no two versions are equal).
+#   lib/workspace/document/document_actions.dart:93 `<` -> `<=`: a viewed
+#     game is always one of its file's.
+#   lib/workspace/document/study_picker.dart:96, :118, :134 the dialog's
+#     height and dense rows: layout only.
+#   lib/workspace/document/study_drafts.dart:58 `>=` -> `>`: as above.
+#   lib/workspace/document/draft_keeper.dart:224 the off-thread size.
+#   lib/workspace/document/document_session.dart:104 the document counter's
+#     start, :918 the saver's ref after a chapter rename (the store writes
+#     the file whatever chapter the ref names).
+#   lib/workspace/document/collection_analysis.dart:68, :72-75, :109-110 the
+#     checks after each await (the tab's own session refuses only when
+#     overtaken or disposed, and the next check catches that too), :133
+#     the disposed flag (a disposed session shows nothing either way).
 #   lib/chess/typed_move.dart:102 `>` -> `>=` (a castling king never lands
 #     on its own square), :187 `.first` -> `.last` (every candidate is then
 #     checked against the same four characters).
@@ -513,3 +528,21 @@ lib/storage/tournaments.dart|test/storage/tournaments_test.dart|test/storage/jou
 lib/storage/tournament_inbox.dart|test/storage/tournament_inbox_test.dart|
 lib/storage/moved_path.dart|test/storage/moved_path_test.dart test/storage/file_relocation_test.dart test/storage/folder_relocation_test.dart|test/storage/file_relocation_recovery_test.dart test/storage/folder_relocation_recovery_test.dart
 lib/storage/text_export.dart|test/storage/text_export_test.dart|
+lib/workspace/document/document_access.dart|test/workspace/document_access_test.dart|
+lib/workspace/document/document_actions.dart|test/workspace/document_actions_test.dart|
+lib/workspace/document/parsed_files.dart|test/workspace/parsed_files_test.dart|
+lib/workspace/document/generated_draft.dart|test/workspace/generated_draft_test.dart|
+lib/workspace/document/study_picker.dart|test/workspace/study_picker_test.dart|
+lib/workspace/document/external_document_edits.dart|test/workspace/external_document_edits_test.dart|
+lib/workspace/document/draft_keeper.dart|test/workspace/draft_keeper_test.dart|
+lib/workspace/document/study_drafts.dart|test/workspace/study_drafts_test.dart|test/app/workspace_requests_test.dart
+lib/workspace/document/save_queue.dart|test/workspace/document_saver_test.dart|
+lib/workspace/document/save_copy.dart|test/workspace/save_copy_test.dart|test/workspace/document_save_test.dart
+lib/workspace/document/save_clock.dart|test/workspace/document_saver_test.dart|
+lib/workspace/document/session_results.dart|test/workspace/save_copy_test.dart|test/workspace/document_session_test.dart
+lib/workspace/document/undo_history.dart|test/workspace/undo_history_test.dart|test/workspace/document_saver_test.dart
+lib/workspace/document/document_history.dart|test/workspace/document_history_test.dart test/workspace/held_edits_test.dart|
+lib/workspace/document/document_cursor.dart|test/workspace/document_session_test.dart|
+lib/workspace/document/document_projection.dart|test/workspace/document_projection_test.dart|test/storage/catalog_lifecycle_test.dart
+lib/workspace/document/collection_analysis.dart|test/workspace/collection_analysis_test.dart|test/workspace/analysis_board_test.dart test/workspace/analysis_tab_test.dart
+lib/workspace/document/document_session.dart|test/workspace/document_session_test.dart test/workspace/held_edits_test.dart|test/workspace/document_switch_test.dart test/workspace/document_save_test.dart test/workspace/document_undo_test.dart test/workspace/read_only_document_test.dart test/workspace/stopped_save_test.dart test/workspace/chapter_on_disk_test.dart test/workspace/compound_undo_retry_test.dart test/features/compound_rename_test.dart
