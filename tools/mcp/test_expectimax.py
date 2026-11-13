@@ -522,6 +522,15 @@ class RunDirectoryTest(unittest.TestCase):
             ex._write_run(directory, state)
         self.assertEqual((directory / ex.RUN_FILE).read_text(encoding="utf-8"), before)
 
+    def test_one_odd_tree_file_does_not_fail_the_list(self):
+        self._run("good", pid=999_999_999, tree=_tree([_node("c5", 0.52, 4)]))
+        odd = self._run("odd", pid=999_999_999)
+        (odd / f"{ex.BASE}.tree.json").write_text("[]", encoding="utf-8")
+        rows = {r["id"]: r for r in Registry().call("expectimax_list", {})["runs"]}
+        self.assertEqual(set(rows), {"good", "odd"})
+        self.assertFalse(rows["odd"]["tree_saved"])
+        self.assertTrue(rows["good"]["tree_saved"])
+
     def test_result_refuses_to_interrupt_when_told_not_to(self):
         directory = self._run("live", tree=_tree([_node("c5", 0.52, 4)]))
         self._run("live", pid=self._live_builder(directory))

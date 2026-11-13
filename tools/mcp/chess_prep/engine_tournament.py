@@ -295,6 +295,14 @@ def _argv_root(argv: Any) -> str | None:
 
 
 def _pid_alive(pid: int) -> bool:
+    # tournament_run is the runner's parent, so a finished runner is a
+    # zombie until reaped, and kill(pid, 0) succeeds on a zombie.
+    try:
+        reaped, _ = os.waitpid(pid, os.WNOHANG)
+        if reaped == pid:
+            return False
+    except (ChildProcessError, OSError, AttributeError):
+        pass  # not our child, or no waitpid on this platform
     try:
         os.kill(pid, 0)
     except ProcessLookupError:

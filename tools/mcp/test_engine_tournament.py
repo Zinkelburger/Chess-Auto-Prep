@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -221,6 +222,23 @@ class ProcessIdentity(TournamentDirCase):
         )
         self.assertFalse(et._run_state(directory)["running"])
         self.assertFalse(self.registry.call("tournament_stop", {"id": "match"})["stopped"])
+
+    def test_a_finished_runner_this_server_started_is_not_running(self):
+        # tournament_run is the runner's parent: once the match ends the pid
+        # is a zombie until reaped, and kill(pid, 0) still succeeded on it.
+        directory = self.write("match", status="completed")
+        runner = subprocess.Popen([sys.executable, "-c", "pass", "--root", str(self.root)])
+        for _ in range(200):
+            stat = Path(f"/proc/{runner.pid}/stat")
+            if not stat.exists() or stat.read_text().rpartition(")")[2].split()[0] == "Z":
+                break
+            time.sleep(0.05)
+        self.addCleanup(runner.wait)
+        (directory / et.RUN_FILE).write_text(
+            json.dumps({"pid": runner.pid, "argv": ["dart", "run", "x.dart", "--root", str(self.root)]}),
+            encoding="utf-8",
+        )
+        self.assertFalse(et._run_state(directory)["running"])
 
     def test_the_recorded_runner_still_reads_as_running(self):
         directory = self.write("match", status="running")

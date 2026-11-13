@@ -582,7 +582,7 @@ def _has_expectimax(tree_path: Path) -> bool:
             data = json.load(fh)
     except (OSError, json.JSONDecodeError):
         return False
-    root = data.get("tree")
+    root = data.get("tree") if isinstance(data, dict) else None
     return isinstance(root, dict) and root.get("expectimax_value") is not None
 
 
@@ -594,6 +594,9 @@ def _tree_summary(directory: Path) -> dict:
         with path.open(encoding="utf-8") as fh:
             data = json.load(fh)
     except (OSError, json.JSONDecodeError):
+        return {"tree_saved": False}
+    if not isinstance(data, dict):
+        # One run's odd file must not fail expectimax_list for every run.
         return {"tree_saved": False}
     # Named for what it is: the builder rewrites the tree at checkpoints and
     # on the way out, so a running build's count is behind. `nodes_last_batch`
