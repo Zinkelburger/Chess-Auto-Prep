@@ -426,7 +426,7 @@ void main() {
       expect(await fixture.library.retryLineMove(), isA<LibraryStale>());
       expect(fixture.library.hasPendingLineMove, isFalse);
       expect(await writes.settle() ?? '', isNot(contains('Move repertoire')));
-      expect(await newChapter(), isA<LibraryDone>());
+      expect(await newChapter(), isA<LibraryAdded>());
     });
 
     test('settles when its retry meets a changed file while the source '
@@ -456,7 +456,7 @@ void main() {
       expect(fixture.saver.referencesPending, isFalse);
       expect(fixture.saver.settled, isTrue);
       expect(await writes.settle() ?? '', isNot(contains('Move repertoire')));
-      expect(await newChapter(), isA<LibraryDone>());
+      expect(await newChapter(), isA<LibraryAdded>());
     });
 
     test('a discarded move releases the open source', () async {
@@ -571,7 +571,7 @@ void main() {
         fixture.textAt('/repertoires/KID/Sidelines.pgn'),
         contains("[Event \"Queen's\"]"),
       );
-      expect(await newChapter(), isA<LibraryDone>());
+      expect(await newChapter(), isA<LibraryAdded>());
       expect(await writes.settle() ?? '', isNot(contains('Move repertoire')));
     });
 
@@ -606,7 +606,7 @@ void main() {
         fixture.textAt('/repertoires/KID/Sidelines.pgn'),
         contains("[Event \"Queen's\"]"),
       );
-      expect(await newChapter(), isA<LibraryDone>());
+      expect(await newChapter(), isA<LibraryAdded>());
     });
   });
 }

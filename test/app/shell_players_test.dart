@@ -1,7 +1,11 @@
 import 'dart:async';
 import 'dart:io' show FileSystemException;
+import 'dart:isolate' show ReceivePort;
 
 import 'package:chess_auto_prep/app/mode.dart';
+import 'package:chess_auto_prep/chess/pgn/chapter_sections.dart'
+    show chapterNameTag;
+import 'package:chess_auto_prep/chess/pgn/game_text.dart' show tagValue;
 import 'package:chess_auto_prep/chess/players/player.dart';
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/engines/engine_line.dart';
@@ -96,6 +100,52 @@ void main() {
     await tester.pumpAndSettle();
     expect(w.requests.mode, Mode.players);
     expect(tester.takeException(), isNull);
+  });
+
+  test('Check my book reads the games against the book on another isolate, '
+      'whatever the app holds besides', () async {
+    const white =
+        '// Color: White\n\n[Event "Sicilian"]\n[Result "*"]\n\n'
+        '1. e4 c5 2. Nf3 *\n';
+    w.store.documents[benkoMain] = Opened(white, scriptedRevision(white));
+    await w.library.refresh();
+    final analysis = w.parts.players.analysis;
+    await analysis.select(player);
+    analysis.setSide(Side.black);
+    final book = w.parts.players.book;
+    // The app's owners hold things no isolate can be sent, as the real
+    // Maia launcher's pending load is: a port stands in for them here.
+    final port = ReceivePort();
+    addTearDown(port.close);
+    void holdsAPort() => port.hashCode;
+    book.addListener(holdsAPort);
+    addTearDown(() => book.removeListener(holdsAPort));
+    await book.check();
+    expect(book.status, '1 games against your white book · 0 reach a gap');
+  });
+
+  testWidgets('a pasted table it cannot read says why in plain words', (
+    tester,
+  ) async {
+    await w.pumpShell(tester);
+    w.requests.switchTo(Mode.players);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Paste players…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Jane Doe 1800');
+    await tester.tap(find.text('Preview players'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Include column headings, such as Name, Rating, Chess.com and Lichess.',
+      ),
+      findsOneWidget,
+    );
+    await tester.enterText(find.byType(TextField).last, '[{"name": ');
+    await tester.tap(find.text('Preview players'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('FormatException'), findsNothing);
+    expect(find.text('That JSON cannot be read.'), findsOneWidget);
   });
 
   testWidgets('directory to analysis, colour, game and retained mode context', (
@@ -271,6 +321,11 @@ void main() {
       await w.parts.players.saveLine();
       expect(w.requests.mode, Mode.study);
       expect(w.session.chapter!.lines, hasLength(3));
+      // Named like the study's own chapters, `As White` / `As Black`.
+      expect(
+        tagValue(w.session.chapter!.lines.last.tags, chapterNameTag),
+        'Alex · As Black',
+      );
       expect(w.session.tree!.children.first.san, 'e4');
       expect(w.session.tree!.children.first.children.first.san, 'c5');
       final group = PlayerGroup.create('Club Open').member(player.id);

@@ -24,8 +24,9 @@ Shared: `lib/chess/players/` (`Player`, `PlayerGroup`, `readPlayerList`,
 
 A full page (no board), capped at `playersPageWidth`.
 
-- **`All players` / `Groups`** switch; inside a group, `← Groups`, the group
-  name and `2026-10-10 · 5 rounds · 18 players · 5 prepared` instead.
+- **`All players` / `Groups`** switch; inside a group, a back arrow (`Back to
+  groups`), the group name and `2026-10-10 · 5 rounds · 18 players · 5
+  prepared` instead.
 - **Toolbar** — search (`Search name, ID or account` / `Search groups`), the one
   filled button (`Add player…`, `Add players…` in a group, `New group…` over
   the groups), `Paste players…`, and in a group `Open group study` and
@@ -50,10 +51,12 @@ A full page (no board), capped at `playersPageWidth`.
 ### Player analysis
 
 The column (`AnalysisPanel`) beside the shared board; pane tabs
-`Player openings` (pinned), `Game`, `My book`, `Explorer`, `Expectimax`.
+`Player openings` (pinned), `Game`, `My book` and `Explorer` open, `Expectimax`
+from the pane's `+`.
 
-- **Header** — the player's name and one `⋯` (`Change player…`, `Get games…`
-  when they have an account, `Add PGN…`, `Reload saved games`, `Players & prep`).
+- **Header** — the player's name and one `⋯` (`Player actions`: `Change
+  player…`, `Get games…` when they have an account, `Add PGN…`, `Refresh`,
+  `Players & prep`).
 - **Status** — `412 games · Chess.com (jdoe) · downloaded 3d ago`, plus
   `n unmatched` / `n unreadable or nonstandard`; while busy, the step with
   `Cancel` and a bar; errors with `Try again` and `Details`.
@@ -76,8 +79,8 @@ Lists:
 
 Tabs:
 
-- **Player openings** — `<name> as White · n games` with
-  `Add line to prep study`, a move table (`Move`, `Games`,
+- **Player openings** — `<name> as White · n games`, then `Add line to prep
+  study` once the board is past the start, a move table (`Move`, `Games`,
   `White / Draw / Black` bar) for the board position, then the games reaching
   it. Off their games: `None of these games reached the position on the board.`
   with `Go to the first move`.
