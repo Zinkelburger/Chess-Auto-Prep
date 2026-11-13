@@ -239,13 +239,13 @@ class _StudyChapterListState extends State<StudyChapterList> {
                   scrollController: _scroll,
                   buildDefaultDragHandles: false,
                   itemCount: chapters.length,
-                  itemExtent: listRowHeight,
+                  itemExtent: rowExtent(context, listRowHeight),
                   itemBuilder: (_, index) => row(index),
                   onReorderItem: (from, to) => widget.onReorder(from, to),
                 )
               : ListView.builder(
                   controller: _scroll,
-                  itemExtent: listRowHeight,
+                  itemExtent: rowExtent(context, listRowHeight),
                   itemCount: chapters.length,
                   itemBuilder: (_, index) => row(index),
                 ),

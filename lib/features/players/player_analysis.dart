@@ -139,6 +139,7 @@ final class PlayerAnalysis extends ChangeNotifier {
         line: at.line,
         game: included.first,
         ply: at.ply,
+        start: at.start,
       );
       for (final index in included) {
         filtered.addGame(index, data.games[index].result);

@@ -257,14 +257,27 @@ final class BughouseLab extends ChangeNotifier {
   }
 
   /// [board]'s pieces, side to move and castling from [setup], its hands
-  /// kept, as the start of a new line. Refused when no game could go on from
-  /// there.
+  /// kept, as the start of a new line. A promoted piece left where it stood
+  /// stays promoted, so taking it still gives a pawn; the editor shows no
+  /// such marks. Refused when no game could go on from there.
   void editBoard(BoardNumber board, Setup setup) {
-    final hands = _position.board(board).pockets;
+    final before = _position.board(board);
+    final hands = before.pockets;
+    var promoted = SquareSet.empty;
+    for (final square in before.board.promoted.squares) {
+      final was = before.board.pieceAt(square);
+      final now = setup.board.pieceAt(square);
+      if (was != null &&
+          now != null &&
+          was.color == now.color &&
+          was.role == now.role) {
+        promoted = promoted.withSquare(square);
+      }
+    }
     try {
       final edited = Crazyhouse.fromSetup(
         Setup(
-          board: setup.board,
+          board: setup.board.withPromoted(promoted),
           pockets: hands,
           turn: setup.turn,
           castlingRights: setup.castlingRights,

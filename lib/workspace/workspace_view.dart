@@ -82,12 +82,14 @@ class WorkspaceView extends StatelessWidget {
     // Rebuilt when the Notes tab comes up or goes, not on every drag or tab
     // switch the layout tells of: the panes and the split follow the layout
     // themselves.
-    return ValueListenableBuilder<bool>(
-      valueListenable: _Changes(layout ?? tabs, () => _notesUp),
-      builder: (context, _, _) => BoardAndCard(
-        board: (_) => _BoardSide(view: this),
-        card: (_) => _ReadingCard(view: this),
-        layout: layout,
+    return _NoteRoom(
+      child: ValueListenableBuilder<bool>(
+        valueListenable: _Changes(layout ?? tabs, () => _notesUp),
+        builder: (context, _, _) => BoardAndCard(
+          board: (_) => _BoardSide(view: this),
+          card: (_) => _ReadingCard(view: this),
+          layout: layout,
+        ),
       ),
     );
   }
@@ -105,6 +107,44 @@ class WorkspaceView extends StatelessWidget {
                 layout.pane(i).selected == WorkspaceTab.notes,
           );
   }
+}
+
+/// Whether the move's note fits under the board, told by the board column
+/// after each layout and read by the edit strip, which writes the note
+/// itself when it does not.
+class _NoteRoom extends StatefulWidget {
+  const _NoteRoom({required this.child});
+
+  final Widget child;
+
+  static ValueNotifier<bool> of(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_NoteRoomScope>()!.shown;
+
+  @override
+  State<_NoteRoom> createState() => _NoteRoomState();
+}
+
+class _NoteRoomState extends State<_NoteRoom> {
+  final _shown = ValueNotifier(true);
+
+  @override
+  void dispose() {
+    _shown.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      _NoteRoomScope(shown: _shown, child: widget.child);
+}
+
+class _NoteRoomScope extends InheritedWidget {
+  const _NoteRoomScope({required this.shown, required super.child});
+
+  final ValueNotifier<bool> shown;
+
+  @override
+  bool updateShouldNotify(_NoteRoomScope oldWidget) => shown != oldWidget.shown;
 }
 
 /// The board, or whatever has claimed it, with the view's margin.
@@ -128,6 +168,7 @@ class _BoardSide extends StatelessWidget {
                 editing: hooks.noteEditing && !view._notesUp ? editing : null,
                 quiet: hooks.quietBoard,
                 engineInBoard: !hooks.trainingTools,
+                noteShown: _NoteRoom.of(context),
                 settings: workspace.settings,
                 analysis: workspace.analysis,
                 onMove: hooks.onBoardMove ?? workspace.session.playMove,
@@ -187,14 +228,20 @@ class _ReadingCard extends StatelessWidget {
                 layout: layout,
               ),
             ),
-            EditStrip(
-              session: workspace.session,
-              saver: workspace.saver,
-              editing: editing,
-              onSave: hooks.onSaveHeld,
-              commentInNote: hooks.noteEditing || view._notesUp,
-              studyTools: hooks.studyTools,
-              done: !hooks.editSwitch,
+            // The note is written under the board only where it fits
+            // there; in a short window the strip writes it.
+            ValueListenableBuilder<bool>(
+              valueListenable: _NoteRoom.of(context),
+              builder: (context, noteShown, _) => EditStrip(
+                session: workspace.session,
+                saver: workspace.saver,
+                editing: editing,
+                onSave: hooks.onSaveHeld,
+                commentInNote:
+                    (hooks.noteEditing && noteShown) || view._notesUp,
+                studyTools: hooks.studyTools,
+                done: !hooks.editSwitch,
+              ),
             ),
             // While part of the game is hidden the arrows would walk into it.
             _UnlessHidden(

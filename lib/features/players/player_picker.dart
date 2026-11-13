@@ -86,7 +86,7 @@ class _PlayerPickerState extends State<PlayerPicker> {
                 ? ListMessage('Nothing matches "${_search.text.trim()}".')
                 : ListView.builder(
                     itemCount: shown.length,
-                    itemExtent: twoLineRowHeight,
+                    itemExtent: rowExtent(context, twoLineRowHeight),
                     itemBuilder: (context, at) => _PlayerRow(
                       player: shown[at],
                       onChoose: () => widget.onChoose(shown[at]),

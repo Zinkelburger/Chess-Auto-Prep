@@ -126,7 +126,8 @@ variation.
 **Edit position…** — opens the shared board editor on board 1 (one board) or the
 board last clicked (two boards), without the hands → `Use this position` sets
 that board's pieces, side to move and castling, keeps both hands and starts a
-new line. A board no game can go on from: `That board cannot be played from.`
+new line. A promoted piece left on its square stays promoted, so taking it
+still gives a pawn. A board no game can go on from: `That board cannot be played from.`
 **Step a board** — its list, its buttons, or the mouse wheel over it, down
 forward and up back → that board is at the move, and the other board is
 where it was when that move was played, so both hands are as they were and

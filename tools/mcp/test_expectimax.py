@@ -741,6 +741,18 @@ class EngineShortlistTest(unittest.TestCase):
         self.assertEqual([r["eval_cp"] for r in rows], [-71, -29])
         self.assertEqual([r["cp_behind_best"] for r in rows], [0, -42])
 
+    def test_a_run_folder_with_uri_characters_is_read_not_created(self):
+        # Pasted into `file:...?mode=ro`, a '#' ended the path: the cache was
+        # missed and a writable empty database was created at the cut path.
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp) / "a#b"
+            d.mkdir()
+            self._write(d, self.ROWS, " ".join(self.FEN.split()[:4]))
+            rows = ex.root_engine_shortlist(d, self.FEN)
+            self.assertEqual(sorted(p.name for p in Path(tmp).iterdir()), ["a#b"])
+        assert rows is not None
+        self.assertEqual(len(rows), 3)
+
     def test_a_full_fen_key_also_matches(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)

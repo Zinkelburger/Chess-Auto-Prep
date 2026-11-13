@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../chess/book/book_check.dart';
+import '../../ui/list_row.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/progress_line.dart';
 import '../../ui/theme.dart';
@@ -79,7 +80,7 @@ class PlayerBookPane extends StatelessWidget {
           Expanded(
             child: ListView.builder(
               itemCount: book.gaps.length,
-              itemExtent: twoLineRowHeight,
+              itemExtent: rowExtent(context, twoLineRowHeight),
               itemBuilder: (context, i) =>
                   _GapRow(book: book, gap: book.gaps[i], onOpen: onOpen),
             ),
