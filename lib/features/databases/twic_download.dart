@@ -100,8 +100,7 @@ class TwicDownload extends ChangeNotifier {
       }
     } on Object catch (error) {
       log.w('download TWIC', error);
-      problem =
-          'Could not finish the TWIC download. ${describeImportFailure(error)}';
+      problem = 'Could not finish the TWIC download. ${_failure(error)}';
       status = 'Completed issues are saved. Try again to resume.';
     } finally {
       client.close();
@@ -109,6 +108,16 @@ class TwicDownload extends ChangeNotifier {
       _notify();
     }
   }
+
+  /// Why the run stopped, in words: no connection, TWIC's own answer, or
+  /// what the import says (a full disk among them).
+  static String _failure(Object error) => switch (error) {
+    http.ClientException() || TimeoutException() =>
+      'Could not reach theweekinchess.com; it needs a connection.',
+    StateError(:final message) => message,
+    FormatException(:final message) => message,
+    _ => describeImportFailure(error),
+  };
 
   /// Ends a run whose new file turned unreadable too: the disk is suspect,
   /// so both copies are kept and the run stops rather than start over again.

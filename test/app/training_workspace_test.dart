@@ -60,4 +60,22 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('a close the window stays open after keeps the sitting', (
+    tester,
+  ) async {
+    await open(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Learn'));
+    await tester.pumpAndSettle();
+    final lesson = w.lineTrainer.lesson!;
+    w.parts.prepareToClose();
+    await tester.pumpAndSettle();
+    expect(w.lineTrainer.board.value, isNull, reason: 'no moves while closing');
+    w.parts.resumeAfterClose();
+    await tester.pumpAndSettle();
+    expect(w.lineTrainer.lesson, same(lesson));
+    expect(lesson.suspended, isFalse);
+    expect(find.byType(LessonView), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
