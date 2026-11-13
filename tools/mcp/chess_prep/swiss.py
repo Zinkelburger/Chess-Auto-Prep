@@ -177,6 +177,11 @@ class _PlayerState:
 # same trade-off the rulebook's transposition limits encode.
 _COLOR_SEARCH_WINDOW = 4
 
+# Steps the fallback matcher may take before it gives up and lets the greedy
+# sheet (with its forced pairings) stand. A legal matching, when one exists,
+# is found in far fewer; the bound only stops a hopeless search from hanging.
+_MATCHING_BUDGET = 5000
+
 
 class SwissPairer:
     """Pairs one event round by round. Deterministic given its inputs."""
@@ -321,7 +326,63 @@ class SwissPairer:
             _sort_for_pairing(carried)
             board = self._force_pair(carried, pairings, board)
 
+        if any(p.forced for p in pairings):
+            # The greedy pass never revisits a board, so it can strand two
+            # players who have met although the round has a legal pairing —
+            # in an eight-player, five-round section about one round in six.
+            # A TD would find it; so does a full search over the pool.
+            matched = self._legal_matching(pool, rnd)
+            if matched is not None:
+                pairings = []
+                for board, (a, b) in enumerate(matched, start=1):
+                    white, black = self._assign_colors(a, b, board)
+                    pairings.append(Pairing(board, white.id, black.id))
+
         return pairings
+
+    def _legal_matching(
+        self, pool: list[_PlayerState], rnd: int
+    ) -> list[tuple[_PlayerState, _PlayerState]] | None:
+        """Pair the whole pool legally, keeping to score groups and the
+        top-half/bottom-half split as far as it allows; None when no legal
+        pairing exists (or the search runs out of budget)."""
+        score = {p.id: self._effective_score(p, rnd) for p in pool}
+        order = sorted(pool, key=lambda p: (-score[p.id], -p.rating, p.id))
+        groups: dict[float, list[str]] = {}
+        for p in order:
+            groups.setdefault(score[p.id], []).append(p.id)
+        place = {
+            pid: (i, len(members))
+            for members in groups.values()
+            for i, pid in enumerate(members)
+        }
+        budget = [_MATCHING_BUDGET]
+
+        def preference(a: _PlayerState, b: _PlayerState) -> tuple:
+            i, size = place[a.id]
+            ideal = i + size // 2
+            return (abs(score[a.id] - score[b.id]), abs(place[b.id][0] - ideal))
+
+        def solve(rest: list[_PlayerState]) -> list | None:
+            if not rest:
+                return []
+            budget[0] -= 1
+            if budget[0] < 0:
+                return None
+            a, others = rest[0], rest[1:]
+            candidates = sorted(
+                (b for b in others if self._is_legal(a, b)),
+                key=lambda b: preference(a, b),
+            )
+            for b in candidates:
+                found = solve([p for p in others if p is not b])
+                if found is not None:
+                    return [(a, b), *found]
+                if budget[0] < 0:
+                    return None
+            return None
+
+        return solve(order)
 
     def _force_pair(
         self, rest: list[_PlayerState], out: list[Pairing], start_board: int

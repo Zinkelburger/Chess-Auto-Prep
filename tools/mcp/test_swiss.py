@@ -16,10 +16,11 @@ Everything asserted below is a rule the implementation *intends* to enforce
 (its module docstring lists them). Four things it does **not** promise, and
 which are therefore not asserted:
 
-  * `forced=True` does not actually imply that no legal pairing existed. The
-    pairer is greedy and never revisits a board it has already emitted (see
-    `_cross_pair`), so it can strand the last player in a group and force a
-    rematch that a full matching would have avoided.
+  * `forced=True` implies no legal pairing existed only within the
+    matcher's step budget (`_MATCHING_BUDGET`): the greedy pass can strand
+    two players who have met, and a full search then replaces its sheet —
+    unless that search gives up first, which needs a far larger field than
+    any generated here. `ForcedMeansImpossible` checks it by brute force.
   * Colour *alternation* is not guaranteed. Equalization is: the imbalance
     stays within ±3 across every tournament generated here. But runs of five
     consecutive same-colour games occur, so USCF 29E5's "never three in a
@@ -779,6 +780,44 @@ class Acceleration(unittest.TestCase):
                 self.assertEqual(scores[p.white_id], scores[p.black_id], p)
 
 
+def _legal_matching_exists(players: list[str], met: dict[str, set[str]]) -> bool:
+    if not players:
+        return True
+    a, rest = players[0], players[1:]
+    return any(
+        b not in met[a] and _legal_matching_exists([p for p in rest if p != b], met)
+        for b in rest
+    )
+
+
+class ForcedMeansImpossible(unittest.TestCase):
+    """A rematch is emitted only when the round has no legal sheet at all.
+
+    The greedy pass alone forced one in about one round in six of an
+    eight-player, five-round section although a legal sheet existed — a
+    rematch no TD would make, and a distortion of P(face) in exactly the
+    small sections where it matters most."""
+
+    def test_small_sections_get_a_legal_sheet_whenever_one_exists(self):
+        for n, rounds in ((6, 5), (8, 5), (9, 4), (10, 5), (12, 5)):
+            for seed in range(60):
+                rng = random.Random(seed)
+                pairer = SwissPairer(_seeds(n), SwissRules(rounds=rounds))
+                met: dict[str, set[str]] = {f"p{i}": set() for i in range(1, n + 1)}
+                for rnd in range(1, rounds + 1):
+                    sheet = pairer.next_round()
+                    if sheet.forced_count:
+                        pool = [p for p in met if not sheet.has_bye(p)]
+                        self.assertFalse(
+                            _legal_matching_exists(pool, met),
+                            f"{n} players, seed {seed}, round {rnd}",
+                        )
+                    for p in sheet.pairings:
+                        met[p.white_id].add(p.black_id)
+                        met[p.black_id].add(p.white_id)
+                    pairer.record_results(sheet, _results(sheet, rng))
+
+
 class Determinism(unittest.TestCase):
     def test_two_pairers_on_the_same_inputs_agree_move_for_move(self):
         seeds, rules = CORPUS[3]
@@ -996,7 +1035,10 @@ class SimulationInvariants(unittest.TestCase):
         roster.constraints = [{"a": "p0", "b": "p1", "reason": "siblings"}]
         result = simulate(roster, SimulationConfig(trials=400, seed=23))
         by_id = {o.player_id: o for o in result.opponents}
-        self.assertLess(by_id["p1"].prob_any, by_id["p2"].prob_any)
+        # Six players, three rounds: a legal sheet always exists, so the
+        # withheld sibling is never faced (a forced pairing used to break it).
+        self.assertNotIn("p1", by_id)
+        self.assertGreater(by_id["p2"].prob_any, 0)
 
     def test_unrated_entrants_are_seeded_at_the_field_median(self):
         roster = _roster(8, rounds=4)
