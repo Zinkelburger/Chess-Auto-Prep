@@ -117,7 +117,7 @@ final class HivemindInstall {
       }
     } on Object catch (error) {
       log.e('install the bughouse engine', error);
-      return HivemindMissing('Could not install the bughouse engine: $error');
+      return const HivemindMissing('Could not install the bughouse engine.');
     }
     return HivemindReady((
       executable: p.join(folder.path, _binaryName),
@@ -170,7 +170,7 @@ final class HivemindInstall {
     final asset = await readAsset('$_assets/$name.gz');
     if (asset == null) return 'This build is missing $name.';
     log.i('install $name into ${folder.path}');
-    return Isolate.run(() => _unpack(asset, want, target));
+    return _unpackElsewhere(asset, want, target);
   }
 
   /// Copies the private VC++ runtime next to the engine, each DLL checked
@@ -202,7 +202,7 @@ final class HivemindInstall {
       if (await _matches(File(target), want)) continue;
       final source = File(p.join(archive.path, '$name.gz'));
       final bytes = await source.readAsBytes();
-      final problem = await Isolate.run(() => _unpack(bytes, want, target));
+      final problem = await _unpackElsewhere(bytes, want, target);
       if (problem != null) return problem;
     }
     return null;
@@ -253,6 +253,14 @@ Future<bool> _matches(File file, _Integrity want) {
     return digest.toString() == want.sha256;
   });
 }
+
+/// [_unpack] on another isolate. Top level, so the closure sent carries
+/// only these values, never the installer.
+Future<String?> _unpackElsewhere(
+  Uint8List compressed,
+  _Integrity want,
+  String target,
+) => Isolate.run(() => _unpack(compressed, want, target));
 
 /// Inflates [compressed] and checks it before it replaces [target]; runs in
 /// its own isolate, since the network alone is 54 MB. Answers the problem,

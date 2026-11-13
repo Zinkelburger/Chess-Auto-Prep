@@ -5,7 +5,8 @@ app; production code lives under `lib/`, tests under `test/`.
 `scripts/check_architecture.py` enforces the mechanical parts (import table, size caps,
 write ownership, theme literals, symbols only from `ui/app_icons.dart`, raw
 Material dialogs, progress indicators, segmented buttons, checkbox tiles,
-chips and icon buttons only inside `ui/`); `scripts/ci.sh lint` runs it. What each mode
+chips and icon buttons only inside `ui/`, `Isolate.run` only outside instance
+members); `scripts/ci.sh lint` runs it. What each mode
 does is in [the mode specs](features/README.md); where the code is, in
 [the component map](COMPONENT_MAP.md); stores and recovery files, in
 [DATA_INTEGRITY.md](DATA_INTEGRITY.md).
@@ -459,6 +460,11 @@ disappear, or a changed `//` heading, refuses the save and names the game.
 A revision is the SHA-256 of the exact bytes on disk. Reading, hashing,
 encoding, decoding large files and the game-by-game comparison run off the UI
 isolate (`packages/document_file_io`); parsing large chapters does too.
+Work goes to another isolate through a top-level or static function that
+takes only plain data. A closure shares its context with every closure in
+the same member, so one made inside an instance member sends `this` along
+whenever a neighbour uses it, and an owner holding a future, port or socket
+cannot be sent at all.
 
 **Reading and writing a game.** `chess/pgn/` owns the PGN grammar; dartchess
 is used for legality and positions, never text. Reading a game yields its

@@ -35,7 +35,7 @@ final class OpeningNames extends ChangeNotifier {
     try {
       final volumes = await _read();
       if (volumes.isEmpty) return Openings.none;
-      final book = await Isolate.run(() => Openings.parse(volumes));
+      final book = await _parsedElsewhere(volumes);
       if (_disposed) return book;
       _book = book;
       notifyListeners();
@@ -52,3 +52,8 @@ final class OpeningNames extends ChangeNotifier {
     super.dispose();
   }
 }
+
+/// [Openings.parse] on another isolate. Top level, so the closure sent
+/// carries only [volumes], never the notifier and its listeners.
+Future<Openings> _parsedElsewhere(List<String> volumes) =>
+    Isolate.run(() => Openings.parse(volumes));

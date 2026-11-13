@@ -285,9 +285,7 @@ final class LineRows implements Reference {
     final String moved;
     final List<String> kept;
     try {
-      (text: moved, :kept) = await Isolate.run(
-        () => _remap(now, file.name, moves, again: true),
-      );
+      (text: moved, :kept) = await _remapAgain(now, file.name, moves);
     } on FormatException catch (error) {
       return '$path: ${error.message}';
     }
@@ -298,6 +296,14 @@ final class LineRows implements Reference {
     return null;
   }
 }
+
+/// [_remap] of a move already recorded, on another isolate. Top level, so
+/// the closure sent carries only these values, never the owner.
+Future<({String text, List<String> kept})> _remapAgain(
+  String before,
+  String name,
+  Map<LineKey, LineKey> moves,
+) => Isolate.run(() => _remap(before, name, moves, again: true));
 
 /// [before], the text of the training file [name], with the rows of each
 /// line [moves] names keyed at its new place. Rows of other lines keep

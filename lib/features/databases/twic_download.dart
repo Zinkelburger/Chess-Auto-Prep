@@ -60,7 +60,7 @@ class TwicDownload extends ChangeNotifier {
     try {
       final latest = await _latestIssue(client);
       final path = this.path;
-      final database = await Isolate.run(() => masterGamesIssues(path));
+      final database = await _issuesElsewhere(path);
       var kept = database.issues;
       setAside = database.setAside;
       String? firstCopy;
@@ -165,16 +165,11 @@ class TwicDownload extends ChangeNotifier {
     if (_stopping) return null;
     status = 'Importing TWIC $issue · ${done + 1} of $weeks';
     _notify();
-    final (path, bytes) = (this.path, response.bodyBytes);
-    final (counts, copy) = await Isolate.run(() {
-      String? copy;
-      final counts = withMasterGames(
-        path,
-        (db) => importTwicIssueInto(db, issue, bytes),
-        setAside: (value) => copy = value,
-      );
-      return (counts, copy);
-    });
+    final (counts, copy) = await _importElsewhere(
+      path,
+      issue,
+      response.bodyBytes,
+    );
     setAside = copy ?? setAside;
     skipped += counts.$2;
     return copy != null;
@@ -191,3 +186,29 @@ class TwicDownload extends ChangeNotifier {
     super.dispose();
   }
 }
+
+// The two below are top level, so the closure each sends carries only its
+// arguments: one made inside a [TwicDownload] method shares its context with
+// the closures there that hold `this`, and so would try to send the whole
+// download with it.
+
+/// [masterGamesIssues] on another isolate.
+Future<({Set<int> issues, String? setAside})> _issuesElsewhere(String path) =>
+    Isolate.run(() => masterGamesIssues(path));
+
+/// TWIC [issue] imported from [bytes] into the database at [path] on
+/// another isolate: the games added and skipped, and the copy the database
+/// was set aside as, if it could not be read.
+Future<((int, int), String?)> _importElsewhere(
+  String path,
+  int issue,
+  Uint8List bytes,
+) => Isolate.run(() {
+  String? copy;
+  final counts = withMasterGames(
+    path,
+    (db) => importTwicIssueInto(db, issue, bytes),
+    setAside: (value) => copy = value,
+  );
+  return (counts, copy);
+});
