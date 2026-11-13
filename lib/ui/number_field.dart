@@ -69,9 +69,13 @@ class _NumberFieldState extends State<NumberField>
     if (next != widget.value) widget.onChanged(next);
   }
 
+  /// Steps from the number the box shows, and shows the result: the box may
+  /// hold focus through the click, and leaving it later takes what it says.
   void _step(int by) {
     if (!mounted) return;
-    final next = (widget.value + by).clamp(widget.min, widget.max);
+    final shown = int.tryParse(_box.text.trim()) ?? widget.value;
+    final next = (shown + by).clamp(widget.min, widget.max);
+    _box.text = '$next';
     if (next != widget.value) widget.onChanged(next);
   }
 
