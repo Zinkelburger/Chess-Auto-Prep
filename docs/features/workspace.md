@@ -38,7 +38,9 @@ Top to bottom, left to right:
 - **Top bar** — `»` (only while the list column is hidden), Back / Forward
   (Alt+← / Alt+→; disabled when empty, the tooltip names the destination), the
   mode menu, `Actions`; the window's
-  status sentence in the middle; the settings gear alone at the right end.
+  status sentence in the middle; while a heavy engine job runs, its name with
+  `· running` (`Expectimax search · running`), which goes back to the mode and
+  tab it runs in; the settings gear alone at the right end.
 - **Document tabs** — one per open file or analysis board, with close buttons
   and a `+` that opens an empty analysis board. Closing the last one leaves an
   empty analysis board. Each tab keeps its place, held edits and undo.
@@ -267,8 +269,8 @@ focus: arrows, Enter/Space, Esc. A text field with focus keeps its keys.
 - **Lichess explorer** — `explorer.lichess.org` with the saved token (it
   answers 401 without one); 15 s timeout, 100 ms minimum gap, 3 attempts; a
   429 shuts the door for 60 s, then doubling to 240 s, during which every
-  position answers `Lichess is rate-limiting requests.` at once. Asked a
-  quarter second after the cursor rests; not past ply 50, nor deeper after
+  position answers `Lichess is rate-limiting requests.` at once. Asked only
+  while an Explorer tab shows it, a quarter second after the cursor rests; not past ply 50, nor deeper after
   three empty answers in a row on a line. Answers cached in memory only (2000
   entries); nothing on disk.
 - **Local sources** — TWIC reads `master_games.db` with no network; `This
