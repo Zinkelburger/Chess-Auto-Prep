@@ -172,7 +172,6 @@ void main() {
     'a landed edit whose file cannot be read back is not taken as shown',
     () async {
       final command = await prepare();
-      final before = f.session.chapter;
       final gate = Completer<void>();
       final result = await f.session.externalEdits.commit(command, (
         primary,
