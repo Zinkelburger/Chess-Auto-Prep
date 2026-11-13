@@ -86,8 +86,9 @@ final class PlayerBook extends ChangeNotifier {
           '${indexes.length} games against your ${side.name} book · ${gaps.length} reach a gap';
     } on Object catch (e) {
       log.w('check the player\'s games against the book', e);
-      if (ticket.current)
+      if (ticket.current) {
         status = 'Could not check the games against your book.';
+      }
     } finally {
       if (ticket.current) {
         busy = false;
