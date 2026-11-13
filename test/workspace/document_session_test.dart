@@ -165,6 +165,26 @@ void main() {
     expect(fixture.store.requestedSaves, isEmpty);
   });
 
+  test('a comment line the file plays as far as it is read follows the '
+      'file, however it goes on', () {
+    final from = NodePath.of([0]);
+    final next = NodePath.of([0, 0]);
+    session.cursor.goTo(next);
+    final played = session.cursor.currentMove!.uci;
+    session.cursor.goTo(from);
+    final line = pvMoves(session.tree!.fenAt(from), [played, 'h7h6']);
+    session.cursor.showCommentLine(from, line, 0);
+    expect(session.cursor.commentLine.value, isNull);
+    expect(session.cursor.value, next);
+  });
+
+  test('while part of the game is hidden, the moves before it can still be '
+      'gone to', () {
+    session.showOnlyTo(NodePath.of([0, 0]));
+    session.cursor.goTo(NodePath.of([0]));
+    expect(session.cursor.value, NodePath.of([0]));
+  });
+
   test('moving in the file puts the board back on it', () {
     final from = NodePath.of([0]);
     final line = pvMoves(session.tree!.fenAt(from), ['c2c3']);

@@ -30,7 +30,10 @@ final class _Run {
       session: session,
       saver: saver,
       drafts: drafts,
-      say: (sentence, {action, problem = true}) => said.add((sentence, action)),
+      say: (sentence, {action, problem = true}) {
+        said.add((sentence, action));
+        problems.add(problem);
+      },
       delay: delay,
     )..start();
   }
@@ -39,6 +42,9 @@ final class _Run {
   late final DocumentSession session;
   late final DraftKeeper keeper;
   final said = <(String?, StatusAction?)>[];
+
+  /// Whether each sentence [said] was said as a problem.
+  final problems = <bool>[];
 
   StatusAction? get offer => said.lastOrNull?.$2;
 
@@ -126,6 +132,44 @@ void main() {
     await until(() => drafts.kept.isEmpty);
     run.kill();
   });
+
+  test('a parked draft is kept only once its checkpoint is written', () async {
+    final run = _Run(store, _MemoryDrafts());
+    await run.session.open(ref, game: 0);
+    run.session.setComment(NodePath.of(const [0]), 'A note');
+    final parked = run.session.retainedDraft!;
+    await run.keeper.settle();
+    expect(await run.keeper.keeps(ref.path, parked), isTrue);
+    run.kill();
+
+    final refused = _Run(store, _RefusingDrafts());
+    await refused.session.open(ref, game: 0);
+    refused.session.setComment(NodePath.of(const [0]), 'A note');
+    final unkept = refused.session.retainedDraft!;
+    await refused.keeper.settle();
+    expect(await refused.keeper.keeps(ref.path, unkept), isFalse);
+    refused.kill();
+  });
+
+  test(
+    'a checkpoint is not offered over edits made before the offer came',
+    () async {
+      final drafts = _MemoryDrafts();
+      final first = _Run(store, drafts);
+      await first.session.open(ref, game: 0);
+      first.session.setComment(NodePath.of(const [0]), 'Old note');
+      await first.keeper.settle();
+      first.kill();
+
+      final second = _Run(store, drafts);
+      await second.session.open(ref, game: 0);
+      second.session.setComment(NodePath.of(const [0]), 'New note');
+      await second.keeper.settle();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(second.said.where((s) => s.$2 != null), isEmpty);
+      second.kill();
+    },
+  );
 
   test('new edits on a file with an offered draft set the old one aside, '
       'whole', () async {
@@ -361,6 +405,7 @@ void main() {
       expect(second.offer!.label, 'Save them as a copy');
       second.offer!.onPressed();
       await until(() => second.said.last.$1?.startsWith('Saved') ?? false);
+      expect(second.problems.last, isFalse, reason: 'the edits are safe');
       final copy = File(
         p.join(p.dirname(games.path), 'games unsaved edits.pgn'),
       );
