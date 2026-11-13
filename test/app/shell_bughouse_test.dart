@@ -219,6 +219,22 @@ void main() {
     expect(w.analysis.pausedFor, isNull);
   });
 
+  testWidgets('a close the window stays open after gives the engine back', (
+    tester,
+  ) async {
+    await toBughouse(tester);
+    await engineOn(tester);
+    final first = w.bughouse.engine;
+    w.parts.prepareToClose();
+    await tester.pumpAndSettle();
+    expect(first.gone, isTrue, reason: 'quit while the window closes');
+    w.parts.resumeAfterClose();
+    await tester.pumpAndSettle();
+    expect(w.bughouse.engine, isNot(same(first)));
+    expect(w.bughouse.engine.gone, isFalse);
+    expect(w.analysis.pausedFor, isNotNull, reason: 'Bughouse is still up');
+  });
+
   testWidgets('a launch that reopens on Bughouse pauses Stockfish there', (
     tester,
   ) async {
