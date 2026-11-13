@@ -495,12 +495,18 @@ final class WorkspaceRequests extends ChangeNotifier {
 
   /// A file from the viewer's recent list: brought inside Documents if it
   /// is not, then opened in the viewer. When no copy could be made the
-  /// viewer's list says why.
-  Future<RequestResult> openFile(ChapterRef ref, {int? game}) async {
+  /// viewer's list says why. A named [game] is a handoff and leaves the
+  /// saved reading place aside, unless [keepPlace]: a file's tab coming back
+  /// keeps its order, filter rules and followed player.
+  Future<RequestResult> openFile(
+    ChapterRef ref, {
+    int? game,
+    bool keepPlace = false,
+  }) async {
     final ticket = _nextRequest();
     final inside = await _viewer.fileFor(ref.path);
     if (ticket.overtaken || inside == null) return const RequestDropped();
-    return _inViewer(ticket, inside, game: game);
+    return _inViewer(ticket, inside, game: game, keepPlace: keepPlace);
   }
 
   /// A study's chapter read in the viewer, among the study's games. A study
@@ -870,8 +876,11 @@ final class WorkspaceRequests extends ChangeNotifier {
     Ticket ticket,
     ChapterRef ref, {
     int? game,
+    bool keepPlace = false,
   }) async {
-    final place = game == null ? await _viewer.savedPlace(ref) : null;
+    final place = game == null || keepPlace
+        ? await _viewer.savedPlace(ref)
+        : null;
     if (ticket.overtaken) return const RequestDropped();
     final result = await _openIn(Mode.pgnViewer, ticket, ref, game: game ?? 0);
     if (ticket.current && result is RequestDone) {

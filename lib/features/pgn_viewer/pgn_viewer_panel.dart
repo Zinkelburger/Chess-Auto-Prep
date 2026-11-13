@@ -242,7 +242,7 @@ class _PgnViewerPanelState extends State<PgnViewerPanel>
     if (chapters.isEmpty) {
       return ListView.builder(
         itemCount: rows.length,
-        itemExtent: listRowHeight,
+        itemExtent: rowExtent(context, listRowHeight),
         itemBuilder: (context, at) {
           final (index, game) = rows[at];
           return _gameRow(index, game, current, indented: false);
@@ -252,7 +252,7 @@ class _PgnViewerPanelState extends State<PgnViewerPanel>
     final items = _chapterItems(chapters, current);
     return ListView.builder(
       itemCount: items.length,
-      itemExtent: listRowHeight,
+      itemExtent: rowExtent(context, listRowHeight),
       itemBuilder: (context, at) => _chapterRow(items[at], current),
     );
   }

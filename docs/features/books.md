@@ -26,7 +26,7 @@ read.
   `In use`, and a `Book actions` menu: `Rename…`, `Stop using`, `Delete…`.
   Under it `Search repertoires and chapters`, then every repertoire: a
   tristate box, its name and `2 of 5` chapters; expanded, each chapter with a
-  box and `Open in the builder`. Draft chapters are not listed.
+  box and `Open in builder`. Draft chapters are not listed.
 - **Empty states** — `Reading opening books…`; `No opening books yet.` with
   `New opening book…`, top left in the list, the editor side blank;
   `Create or import a repertoire, then choose its chapters for this book.`
@@ -59,11 +59,11 @@ once.
 `Its repertoires and chapters stay where they are.` → `That book is no longer
 available.`, `Could not rename the book.`, `Could not delete the book.`
 
-**Open in the builder** — opens the chapter in the Repertoire builder.
+**Open in builder** — opens the chapter in the Repertoire builder.
 
 **Back / Forward** — the arrows in the top bar, Alt+← / Alt+→, or the mouse's
 back and forward buttons. A mode switch or a jump into the builder (`Open in
-the builder`, a book move's file, My games' open-in-builder) is remembered
+builder`, a book move's file, My games' open-in-builder) is remembered
 with its file and position; Back reopens them. Up to 30 places; the tooltip
 names the place.
 

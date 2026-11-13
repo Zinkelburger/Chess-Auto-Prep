@@ -38,7 +38,7 @@ void main() {
 
   /// The tree is made inside the test body, so the reads it starts run
   /// while the test pumps.
-  Future<void> show(WidgetTester tester) async {
+  Future<void> show(WidgetTester tester, {double width = 600}) async {
     final tree = RepertoireTree(
       session: fixture.session,
       shelf: RepertoireShelf(
@@ -57,7 +57,7 @@ void main() {
         theme: darkTheme(),
         home: Scaffold(
           body: SizedBox(
-            width: 600,
+            width: width,
             height: 400,
             child: TreePane(session: fixture.session, tree: tree),
           ),
@@ -66,6 +66,20 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('a pane too narrow for every column drops Goes on whole', (
+    tester,
+  ) async {
+    await show(tester);
+    expect(find.text('Goes on'), findsOneWidget);
+    expect(tester.getSize(find.text('Goes on')).width, greaterThan(100));
+
+    await show(tester, width: 280);
+    expect(find.text('Goes on'), findsNothing);
+    expect(find.text('Found in'), findsOneWidget);
+    expect(find.text('Italian'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('leaving the tab with moves on the free board gives the board '
       'back to the file once the frame is done', (tester) async {

@@ -287,6 +287,12 @@ final class Explorer extends ChangeNotifier {
   void _followTheSession() {
     if (_disposed) return;
     _rest?.cancel();
+    // No pane shows the table: nothing is sent to a database or built for
+    // it. The first pane to show it asks about the board then.
+    if (!hasListeners) {
+      _board = null;
+      return;
+    }
     // A line beside the rows is about the rows it came with; what is shown
     // next says its own.
     _notice = null;
@@ -435,6 +441,34 @@ final class Explorer extends ChangeNotifier {
   void _show(ExplorerState state) {
     _state = state;
     notifyListeners();
+  }
+
+  /// The first pane to show the table brings it to the board, once the
+  /// frame that built it is over: asked while no pane showed it, nothing
+  /// was sent.
+  @override
+  void addListener(VoidCallback listener) {
+    final first = !hasListeners;
+    super.addListener(listener);
+    if (!first) return;
+    scheduleMicrotask(() {
+      if (_disposed || !hasListeners) return;
+      _board = null;
+      _followTheBoard();
+    });
+  }
+
+  /// The last pane gone: a rest still running is not asked about, and what
+  /// was on show is not shown again for another board.
+  @override
+  void removeListener(VoidCallback listener) {
+    super.removeListener(listener);
+    if (_disposed || hasListeners) return;
+    _rest?.cancel();
+    _board = null;
+    _state = const ExplorerIdle();
+    _notice = null;
+    _recovery = null;
   }
 
   @override

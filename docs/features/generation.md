@@ -34,7 +34,7 @@ search.
   `Resume` or `Deeper` (`Build` for the mainline book) in the same place;
   `Depth` (empty is `No limit`; 1–64); a Positions button; a gear
   (`Expectimax settings` / `Show results`); and the typeable `Replies from`
-  field (`Maia`, `Lichess masters`, `Lichess players`, `TWIC games`), beside
+  field (`Maia`, `Masters`, `Lichess`, `TWIC`, as the Explorer names them), beside
   the depth when the pane is wide enough, else on its own line.
 - **Status line** — the side being prepared (`White` / `Black`) as a text
   button that turns the board (as F does; held while running), then what will

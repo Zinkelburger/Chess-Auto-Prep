@@ -173,7 +173,7 @@ final class DocumentTabs {
     try {
       if (page.source case final source?) {
         final result = page.viewedFile
-            ? await requests.openFile(source, game: page.game)
+            ? await requests.openFile(source, game: page.game, keepPlace: true)
             : await requests.open(source, game: page.game);
         if (_disposed || result is! RequestDone || session.source != source) {
           return;

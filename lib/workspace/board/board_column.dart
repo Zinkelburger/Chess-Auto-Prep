@@ -37,6 +37,7 @@ class BoardAndCounter extends StatefulWidget {
     this.editing,
     this.quiet = false,
     this.engineInBoard = true,
+    this.noteShown,
   });
 
   final DocumentSession session;
@@ -50,6 +51,10 @@ class BoardAndCounter extends StatefulWidget {
   /// not change size as that tab comes and goes.
   final bool? reserveNote;
   final ValueNotifier<bool>? editing;
+
+  /// Told, after the frame, whether the note fits under the board: in a
+  /// short window it does not, and the edit strip writes it instead.
+  final ValueNotifier<bool>? noteShown;
 
   /// Whether the engine's row, the move field and an empty note stay away
   /// until they are used ([WorkspaceHooks.quietBoard]).
@@ -143,6 +148,7 @@ class _BoardAndCounterState extends State<BoardAndCounter>
         // written in the Notes tab or the edit strip.
         if (side < boardCrampedSide) side = min(constraints.maxWidth, most);
         final below = constraints.maxHeight - side - room - Space.s;
+        _tellNoteShown(below >= moveNoteMinHeight);
         return Align(
           alignment: Alignment.topCenter,
           child: SizedBox(
@@ -171,6 +177,16 @@ class _BoardAndCounterState extends State<BoardAndCounter>
         );
       },
     );
+  }
+
+  /// Tells [BoardAndCounter.noteShown] once this layout is over, never
+  /// during it.
+  void _tellNoteShown(bool shown) {
+    final told = widget.noteShown;
+    if (told == null || told.value == shown) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.noteShown == told) told.value = shown;
+    });
   }
 
   /// The move's note in the room left under the row, [side] wide.

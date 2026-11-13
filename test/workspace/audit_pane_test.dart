@@ -72,12 +72,15 @@ void main() {
     fixture.dispose();
   });
 
-  Future<void> pump(WidgetTester tester) async {
+  Future<void> pump(WidgetTester tester, {double textScale = 1}) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: darkTheme(),
-        home: Scaffold(
-          body: AuditPane(audit: audit, session: fixture.session),
+        home: MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
+          child: Scaffold(
+            body: AuditPane(audit: audit, session: fixture.session),
+          ),
         ),
       ),
     );
@@ -114,6 +117,16 @@ void main() {
     await tester.pump();
     expect(find.textContaining('Strong reply'), findsOneWidget);
     expect(find.text('1 dismissed'), findsNothing);
+  });
+
+  testWidgets('with larger text each finding keeps both lines whole', (
+    tester,
+  ) async {
+    await pump(tester, textScale: 1.5);
+    await runAudit(tester);
+    expect(find.textContaining('Mistake'), findsOneWidget);
+    expect(find.textContaining('loses 1.3 · best Nf3'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('a dismissal that cannot be saved says it lasts only until '
