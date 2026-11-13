@@ -6,16 +6,80 @@ import '../tactics/game_ids.dart';
 String playerId() =>
     '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-${Random.secure().nextInt(1 << 32).toRadixString(36)}';
 
+/// A study linked to a person, or one chapter of it; [at] is where the link
+/// is in the person's `studies`.
+typedef StudyLink = ({String path, String? chapter, int at});
+
 /// The shared directory format, including fields written by other app versions.
-/// Edits replace only the explicitly changed fields.
+/// Edits replace only the explicitly changed fields. A field holding a value
+/// of the wrong type — hand edited, or written by another tool — reads as
+/// absent and is kept as it is; [unreadFields] names it for the log.
 final class Player {
   Player(Map<String, Object?> fields) : fields = Map.unmodifiable(fields);
   final Map<String, Object?> fields;
   String get id => fields['id'] as String;
-  String get name => fields['name'] as String? ?? '';
+  String get name => _string(fields['name']) ?? '';
   String text(String key) => fields[key]?.toString() ?? '';
-  List<String> strings(String key) =>
-      (fields[key] as List? ?? const []).whereType<String>().toList();
+  List<String> strings(String key) => switch (fields[key]) {
+    final List list => list.whereType<String>().toList(),
+    _ => const [],
+  };
+
+  /// The studies linked to the person. A link without a path is left out; a
+  /// chapter that is not text reads as the whole study.
+  List<StudyLink> get studies => [
+    if (fields['studies'] case final List links)
+      for (final (at, link) in links.indexed)
+        if (link case final Map map
+            when map['path'] is String && map['path'] != '')
+          (
+            path: map['path'] as String,
+            chapter: _string(map['chapter']),
+            at: at,
+          ),
+  ];
+
+  /// This person with [path] linked; whatever `studies` held is kept.
+  Player withStudy(String path) => edited({
+    'studies': [
+      ..._kept(fields['studies']),
+      {'path': path},
+    ],
+  });
+
+  /// This person without [link]; every other entry is kept as it was.
+  Player withoutStudy(StudyLink link) => edited({
+    'studies': [
+      for (final (at, other) in _kept(fields['studies']).indexed)
+        if (at != link.at) other,
+    ],
+  });
+
+  /// The fields that hold a value of a type this app does not read them as,
+  /// so read as absent.
+  List<String> get unreadFields => [
+    for (final key in const [
+      'aliases',
+      'pgn_files',
+      'dismissed_findings',
+      'studies',
+    ])
+      if (fields[key] case final value? when value is! List) key,
+    if (fields['studies'] case final List links)
+      for (final (at, link) in links.indexed)
+        if (link is! Map || link['path'] is! String)
+          'studies[$at]'
+        else if (link['chapter'] case final chapter? when chapter is! String)
+          'studies[$at].chapter',
+    for (final key in const ['download', 'lookup'])
+      if (fields[key] case final value? when value is! Map) key,
+    if (fields['download'] case final Map download) ...[
+      for (final key in const ['max', 'months'])
+        if (download[key] case final value? when value is! int) 'download.$key',
+      if (download['speeds'] case final value? when value is! List)
+        'download.speeds',
+    ],
+  ];
   List<String> get names => [
     name,
     ...strings('aliases'),
@@ -46,11 +110,31 @@ final class Player {
   }
 }
 
+/// A tournament or other group of people. As with [Player], a field of the
+/// wrong type reads as absent and is kept as it is.
 final class PlayerGroup {
   PlayerGroup(Map<String, Object?> fields) : fields = Map.unmodifiable(fields);
   final Map<String, Object?> fields;
   String get id => fields['id'] as String;
-  String get name => fields['name'] as String? ?? '';
+  String get name => _string(fields['name']) ?? '';
+
+  /// The event date as written (`YYYY-MM-DD`), or null.
+  String? get date => _string(fields['date']);
+  int? get rounds => switch (fields['rounds']) {
+    final int rounds => rounds,
+    _ => null,
+  };
+
+  /// The group's prep study, or empty.
+  String get study => _string(fields['study']) ?? '';
+
+  /// The fields that hold a value of a type this app does not read them as,
+  /// so read as absent.
+  List<String> get unreadFields => [
+    for (final key in const ['name', 'date', 'study'])
+      if (fields[key] case final value? when value is! String) key,
+    if (fields['rounds'] case final value? when value is! int) 'rounds',
+  ];
   List<Map<String, Object?>> get entries => [
     for (final e in fields['entries'] as List? ?? const [])
       Map<String, Object?>.from(e as Map),
@@ -83,6 +167,16 @@ final class PlayerGroup {
     'created_at': DateTime.now().toIso8601String(),
   });
 }
+
+String? _string(Object? value) => value is String ? value : null;
+
+/// [value] as list entries to keep: a list's entries, or a single value of
+/// another type as the only one, so an edit beside it loses nothing.
+List<Object?> _kept(Object? value) => switch (value) {
+  final List list => list,
+  null => const [],
+  final other => [other],
+};
 
 /// A pasted roster is previewed before anything is committed. JSON preserves
 /// the directory's extra metadata; tables require named columns.

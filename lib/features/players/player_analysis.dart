@@ -6,6 +6,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../../chess/fen.dart';
 import '../../chess/pgn/game_text.dart';
 import '../../chess/players/download_range.dart';
 import '../../chess/players/player.dart';
@@ -44,7 +45,13 @@ final class PlayerAnalysis extends ChangeNotifier {
   PositionOrder order = PositionOrder.frequent;
   PlayerList list = PlayerList.openings;
   String query = '';
-  int minGames = 1, minPly = 2;
+  int minGames = 1;
+
+  /// The first ply listed, numbered as from the standard starting position
+  /// (0 is White to play move 1, 1 is Black to play it); `From move N` is
+  /// ply `2 * (N - 1)`, so both sides' positions at move N are listed.
+  int minPly = 0;
+  int get fromMove => minPly ~/ 2 + 1;
   int? recentDays;
 
   /// The time controls the games are narrowed to; none is every game, and
@@ -86,11 +93,13 @@ final class PlayerAnalysis extends ChangeNotifier {
     PositionOrder? order,
     int? minGames,
     int? minPly,
+    int? fromMove,
   }) {
     this.list = list ?? this.list;
     this.order = order ?? this.order;
     this.minGames = minGames ?? this.minGames;
-    this.minPly = minPly ?? this.minPly;
+    this.minPly =
+        minPly ?? (fromMove == null ? this.minPly : (fromMove - 1) * 2);
     changed();
   }
 
@@ -130,7 +139,7 @@ final class PlayerAnalysis extends ChangeNotifier {
     final kept = gameIndexes.toSet();
     final result = <PlayerPosition>[];
     for (final at in data.positions) {
-      if (at.side != side || at.ply < minPly) continue;
+      if (at.side != side || _plyOf(at.fen) < minPly) continue;
       final included = at.games.where(kept.contains).toList();
       if (included.length < minGames) continue;
       final filtered = PlayerPosition(
@@ -159,6 +168,11 @@ final class PlayerAnalysis extends ChangeNotifier {
     });
     return result;
   }
+
+  /// The ply [fen] is at, so a game set up from a position counts its moves
+  /// by their numbers rather than from where it began.
+  static int _plyOf(Fen fen) =>
+      (fen.fullMove - 1) * 2 + (fen.whiteToMove ? 0 : 1);
 
   void cancel() {
     _selections.cancel();
@@ -287,8 +301,20 @@ final class PlayerAnalysis extends ChangeNotifier {
     List<String> notes,
   ) async {
     switch (fetched) {
-      case GamesFetched(:final games):
-        final keeping = cache.keep(site, username, games, DateTime.now());
+      case GamesFetched(:final games, :final unread, :final complete):
+        if (!complete) {
+          notes.add(
+            '${site.label}: could not read ${unread.join(', ')}; '
+            'the other games were saved.',
+          );
+        }
+        final keeping = cache.keep(
+          site,
+          username,
+          games,
+          DateTime.now(),
+          complete: complete,
+        );
         pending.watch(this, keeping);
         final kept = await keeping;
         if (kept is GamesNotKept) {

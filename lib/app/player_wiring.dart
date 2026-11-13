@@ -262,7 +262,7 @@ final class PlayerModes {
         path.isNotEmpty &&
         p.equals(path.toLowerCase(), ref.path.toLowerCase());
     return directory.players.any((person) => same(person.text('prep_file'))) ||
-        directory.groups.any((g) => same(g.fields['study']));
+        directory.groups.any((g) => same(g.study));
   }
 
   Future<void> openStudy(Player player) async {
@@ -286,17 +286,8 @@ final class PlayerModes {
         .firstOrNull;
     if (current == null) return;
     player = current;
-    final links = player.fields['studies'] as List? ?? const [];
-    if (links.any((e) => e is Map && e['path'] == inside)) return;
-    await directory.save(
-      player.edited({
-        'studies': [
-          ...links,
-          {'path': inside},
-        ],
-      }),
-      expected: player,
-    );
+    if (player.studies.any((link) => link.path == inside)) return;
+    await directory.save(player.withStudy(inside), expected: player);
   }
 
   Future<void> openLinkedStudy(String path, String? chapter) async {
@@ -396,7 +387,7 @@ final class PlayerModes {
   Future<({ChapterRef ref, List<String> leftOut})?> _groupStudy(
     PlayerGroup group,
   ) async {
-    final linked = group.fields['study'] as String? ?? '';
+    final linked = group.study;
     final usable = await _linked(linked, 'The group study');
     if (_disposed || usable == null) return null;
     if (usable) return (ref: ChapterRef.at(linked), leftOut: const <String>[]);

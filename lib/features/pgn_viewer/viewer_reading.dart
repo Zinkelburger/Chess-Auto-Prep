@@ -75,7 +75,7 @@ final class ViewerReading {
       final lines = chapter.lines;
       final game = lines.length < 500
           ? place.locate(lines)
-          : await Isolate.run(() => place.locate(lines));
+          : await _locateElsewhere(place, lines);
       if (_disposed ||
           !current() ||
           !identical(session.chapter, chapter) ||
@@ -189,3 +189,10 @@ final class ViewerReading {
     filter.removeListener(_filterChanged);
   }
 }
+
+/// [ReadingPlace.locate] on another isolate. Top level, so the closure sent
+/// carries only [place] and [games]: one made inside a [ViewerReading]
+/// method shares its context with the closures there that hold `this`, and
+/// so would try to send the session and everything it holds.
+Future<int> _locateElsewhere(ReadingPlace place, List<ChapterLine> games) =>
+    Isolate.run(() => place.locate(games));

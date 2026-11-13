@@ -223,7 +223,7 @@ final class DraftKeeper {
       final file = waiting.file;
       final text = file.lines.length < 200
           ? writeChapter(file)
-          : await Isolate.run(() => writeChapter(file));
+          : await _writtenElsewhere(file);
       await _drafts.keep(
         ViewerDraft(
           path: waiting.path,
@@ -374,3 +374,10 @@ final class DraftKeeper {
     _saver.removeListener(_changed);
   }
 }
+
+/// [writeChapter] on another isolate. Top level, so the closure sent carries
+/// only [file]: one made inside a [DraftKeeper] method shares its context
+/// with the closures there that hold `this`, and so would try to send the
+/// keeper and everything it holds.
+Future<String> _writtenElsewhere(Chapter file) =>
+    Isolate.run(() => writeChapter(file));

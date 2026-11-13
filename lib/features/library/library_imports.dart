@@ -79,19 +79,9 @@ final class LibraryImports {
     // A course of a thousand games is read where the screen does not wait
     // for it; a pasted line is not worth the trip.
     final created = _now();
-    ({ImportRead read, String? file}) course() {
-      final read = readImport(text, created: created);
-      return (
-        read: read,
-        file: read is ImportedChapters
-            ? courseText(read, created: created)
-            : null,
-      );
-    }
-
     final (:read, :file) = text.length < readOffThreadFrom
-        ? course()
-        : await Isolate.run(course);
+        ? _course(text, created)
+        : await _courseElsewhere(text, created);
     if (read is! ImportedChapters || file == null) {
       return const LibraryNothingToImport();
     }
@@ -166,3 +156,19 @@ List<String> chapterFileNames(List<ImportedChapter> chapters) {
   }
   return names;
 }
+
+typedef _Course = ({ImportRead read, String? file});
+
+/// [text] read as an import, and the course file its chapters make.
+_Course _course(String text, DateTime created) {
+  final read = readImport(text, created: created);
+  return (
+    read: read,
+    file: read is ImportedChapters ? courseText(read, created: created) : null,
+  );
+}
+
+/// [_course] on another isolate. Top level, so the closure sent carries
+/// only [text] and [created], never the library.
+Future<_Course> _courseElsewhere(String text, DateTime created) =>
+    Isolate.run(() => _course(text, created));

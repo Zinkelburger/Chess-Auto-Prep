@@ -9,11 +9,13 @@ import '../ui/pane_tabs.dart';
 import '../workspace/document/document_history.dart';
 import '../workspace/document/document_session.dart';
 import '../workspace/document/draft_keeper.dart';
+import '../workspace/document/undo_history.dart';
 import 'mode.dart';
 import 'workspace_requests.dart';
 
 /// Open files and temporary analyses. The session remains the active document;
-/// tabs retain navigation and drafts, while files are reread through its store.
+/// tabs retain navigation, drafts and the undo of saves, while files are
+/// reread through its store.
 ///
 /// Each tab belongs to one mode: the mode on screen when its document came
 /// up, or the one a request handed it to ([carry]). Going to a mode brings
@@ -78,6 +80,11 @@ final class DocumentTabs {
     final page = _pages[id] ?? _page();
     page.remember(session);
     if (id != _shown) {
+      _keepUndo(_pages[_shown]);
+      if (page.undo case final undo?) {
+        page.undo = null;
+        session.restoreUndo(undo);
+      }
       if (id != _selecting) page.mode = requests.mode;
       _shown = id;
       _recent
@@ -86,6 +93,16 @@ final class DocumentTabs {
     }
     _pages[id] = page;
     _show(page);
+  }
+
+  /// The saves [left], whose document was just put aside, can still take
+  /// back go with its tab, to be given back when it comes up again.
+  void _keepUndo(_DocumentPage? left) {
+    final undo = session.takeSetAsideUndo();
+    if (left == null || undo == null || left.source?.path != undo.path) {
+      return;
+    }
+    left.undo = undo;
   }
 
   void _show(_DocumentPage page) {
@@ -275,6 +292,9 @@ final class _DocumentPage {
   NodePath cursor = const NodePath.root();
   Side side = Side.white;
   RetainedDraft? draft;
+
+  /// The undo of saves this tab's file made, while another document is up.
+  SetAsideUndo? undo;
 
   /// Whether this is an analysis board, set aside, that nothing was done
   /// on: it is no mode's in particular.

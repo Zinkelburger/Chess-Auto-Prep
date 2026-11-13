@@ -153,7 +153,7 @@ class _ScreenState extends State<TournamentsScreen> {
             children: [
               _summary(t),
               if (positions case TournamentFailed(:final message))
-                Text('Final positions unavailable: $message'),
+                Text(message),
             ],
           ),
         ),

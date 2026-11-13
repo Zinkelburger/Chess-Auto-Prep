@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate' show ReceivePort;
 
 import 'package:chess_auto_prep/chess/tournament/config.dart';
 import 'package:chess_auto_prep/chess/tournament/result.dart';
@@ -379,5 +380,51 @@ void main() {
     for (final id in ['a/b', r'a\b']) {
       expect(() => store.games(id), throwsFormatException, reason: id);
     }
+  });
+  test('final positions are read on another isolate, whatever the store '
+      'holds besides', () async {
+    // The store holds things no isolate can be sent (the app's owners hold
+    // pending futures): a port stands in for them here. Only the PGN may
+    // cross.
+    final port = ReceivePort();
+    addTearDown(port.close);
+    store = FileTournaments(
+      root: root,
+      support: files.support,
+      documents: files.store,
+      afterPgn: () async => port.hashCode,
+    );
+    final before = initial();
+    await store.create(before);
+    await store.save(
+      before,
+      before.changed({'status': 'completed'}),
+      pgn,
+      expectedPgn: null,
+    );
+    final read = await store.positions('test');
+    expect(
+      read,
+      isA<TournamentSaved<List<String?>>>().having((r) => r.value, 'value', [
+        'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+      ]),
+    );
+  });
+
+  test('final positions that cannot be read say so in a sentence', () async {
+    await store.create(initial());
+    final games = await File(store.games('test').path).create(recursive: true);
+    await games.writeAsString(pgn);
+    await Process.run('chmod', ['000', games.path]);
+    addTearDown(() => Process.run('chmod', ['644', games.path]));
+    final read = await store.positions('test');
+    expect(
+      read,
+      isA<TournamentFailed<List<String?>>>().having(
+        (r) => r.message,
+        'message',
+        'Could not read the final positions.',
+      ),
+    );
   });
 }

@@ -286,6 +286,87 @@ void main() {
     expect(find.text('Export prep sheet…'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('a hand-edited group with a date and rounds of the wrong type '
+      'opens in Edit group, and a rename keeps them as they were', (
+    tester,
+  ) async {
+    final group = PlayerGroup.create(
+      'Club Open',
+    ).edited({'date': 20261010, 'rounds': '5'}).member(player.id);
+    await w.parts.players.directory.saveGroup(group);
+    await w.pumpShell(tester);
+    w.requests.switchTo(Mode.players);
+    w.parts.players.directory.showGroup(group.id);
+    await tester.pumpAndSettle();
+    expect(find.text('1 player · 0 prepared'), findsOneWidget);
+    await tester.tap(find.byTooltip('More actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit group…'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Edit group'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Club Open'),
+      'Club Open 2026',
+    );
+    await tester.tap(find.text('Save group'));
+    await tester.pumpAndSettle();
+    final saved = w.parts.players.directory.group!;
+    expect(saved.name, 'Club Open 2026');
+    expect(saved.fields['date'], 20261010);
+    expect(saved.fields['rounds'], '5');
+
+    // A field the player does change is written.
+    await tester.tap(find.byTooltip('More actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit group…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Event date (YYYY-MM-DD, optional)'),
+      '2026-10-10',
+    );
+    await tester.tap(find.text('Save group'));
+    await tester.pumpAndSettle();
+    final dated = w.parts.players.directory.group!;
+    expect(dated.fields['date'], '2026-10-10');
+    expect(dated.fields['rounds'], '5');
+  });
+  testWidgets('a person whose studies were hand edited still shows, with the '
+      'links that can be read, and unlinking one keeps the rest', (
+    tester,
+  ) async {
+    final odd = player.edited({
+      'studies': [
+        {'path': '$studiesRoot/najdorf.pgn', 'chapter': 7},
+        'not a link',
+        {'path': '$studiesRoot/dragon.pgn', 'chapter': 'Main line'},
+      ],
+    });
+    await w.parts.players.directory.save(odd, expected: player);
+    final other = Player.create('Bea').edited({'studies': 'najdorf.pgn'});
+    await w.parts.players.directory.save(other);
+    await w.pumpShell(tester);
+    w.requests.switchTo(Mode.players);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Bea'), findsOneWidget);
+    expect(find.text('najdorf'), findsOneWidget);
+    expect(find.text('Main line'), findsOneWidget);
+    await tester.tap(
+      find.descendant(
+        of: find.widgetWithText(InputChip, 'Main line'),
+        matching: find.byTooltip('Unlink study'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final saved = w.parts.players.directory.players.firstWhere(
+      (p) => p.id == player.id,
+    );
+    expect(saved.fields['studies'], [
+      {'path': '$studiesRoot/najdorf.pgn', 'chapter': 7},
+      'not a link',
+    ]);
+  });
   testWidgets('group prepared state survives leaving and reopening it', (
     tester,
   ) async {

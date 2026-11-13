@@ -183,8 +183,10 @@ final class StockfishInstall {
     final partial = File('$target.$pid.part');
     try {
       final expected = release.payloadSha256;
-      final problem = await Isolate.run(
-        () => _unpack(compressed, expected, partial.path),
+      final problem = await _unpackElsewhere(
+        compressed,
+        expected,
+        partial.path,
       );
       if (problem != null) return _missing(problem, _damaged);
       if (!Platform.isWindows) {
@@ -241,6 +243,14 @@ final class StockfishInstall {
     }
   }
 }
+
+/// [_unpack] on another isolate. Top level, so the closure sent carries
+/// only these values, never the installer.
+Future<String?> _unpackElsewhere(
+  Uint8List compressed,
+  String expectedSha256,
+  String partial,
+) => Isolate.run(() => _unpack(compressed, expectedSha256, partial));
 
 /// Inflates and hashes 80 MB, so it runs in its own isolate. The engine
 /// itself is checked, not its gzip container: the container's bytes depend

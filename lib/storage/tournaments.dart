@@ -77,13 +77,17 @@ final class FileTournaments
   final Future<void> Function()? afterPgn;
 
   @override
-  Future<TournamentResult<List<String?>>> positions(String id) =>
-      _guard('read tournament positions', () async {
-        final text = await _pgn(id);
-        return text == null
-            ? <String?>[]
-            : Isolate.run(() => tournamentPositions(text));
-      });
+  Future<TournamentResult<List<String?>>> positions(String id) async {
+    try {
+      final text = await _pgn(id);
+      return TournamentSaved(
+        text == null ? <String?>[] : await _positionsOffThread(text),
+      );
+    } on Object catch (error) {
+      log.w('read tournament positions', _reason(error));
+      return const TournamentFailed('Could not read the final positions.');
+    }
+  }
 
   @override
   Stream<void> changes() => TournamentInbox(root).changes();
@@ -343,6 +347,13 @@ final class FileTournaments
     });
   });
 }
+
+/// [tournamentPositions] on another isolate. Top level, so the closure sent
+/// carries only [text]: one made inside a [FileTournaments] method shares
+/// its context with the closures there that hold `this`, and so would try
+/// to send the store and everything it holds.
+Future<List<String?>> _positionsOffThread(String text) =>
+    Isolate.run(() => tournamentPositions(text));
 
 String? _text(DocumentRead read) => switch (read) {
   Opened(:final text) => text,

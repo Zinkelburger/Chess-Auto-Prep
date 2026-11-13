@@ -246,13 +246,15 @@ final class GamesCache {
   /// the downloaded input with the caller for exact retry, including lost acks.
   /// Another download of the same account landing first is merged with, up
   /// to [_keepAttempts] times: the merge skips games the file has, so doing
-  /// it again adds nothing twice.
+  /// it again adds nothing twice. A download that is only part of what was
+  /// asked for is kept without the note: it is not the time they came down.
   Future<GamesKeep> keep(
     GameSite site,
     String username,
     List<String> downloaded,
-    DateTime when,
-  ) async {
+    DateTime when, {
+    bool complete = true,
+  }) async {
     final frozen = List<String>.unmodifiable(downloaded);
     final ref = refFor(site, username);
     try {
@@ -271,7 +273,7 @@ final class GamesCache {
         if (outcome.failure case final failure?) return GamesNotKept(failure);
         break;
       }
-      await _stamp(ref, when);
+      if (complete) await _stamp(ref, when);
       return const GamesKept();
     } on Object catch (error) {
       log.w('keep the ${site.label} games of $username', error);
