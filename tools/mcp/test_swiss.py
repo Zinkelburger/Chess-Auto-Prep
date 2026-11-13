@@ -685,6 +685,30 @@ class ColorPreferenceRules(unittest.TestCase):
             self.assertTrue(_colors_compatible(_state("a"), _state("b", other)), other)
 
 
+class ColourAssignment(unittest.TestCase):
+    """Who gets White once two players are paired."""
+
+    def test_a_player_who_just_had_white_gets_black_against_a_newcomer(self):
+        # B then W for one; nothing yet for the other (two byes). Balances
+        # are level, so alternation decides on every board.
+        for board in (1, 2):
+            fresh = _state("fresh")
+            due_black = _state("due_black", balance=0, last=WHITE)
+            for a, b in ((fresh, due_black), (due_black, fresh)):
+                white, black = SwissPairer._assign_colors(a, b, board)
+                self.assertEqual(
+                    (white.id, black.id), ("fresh", "due_black"), f"board {board}"
+                )
+
+    def test_a_player_who_just_had_black_gets_white_against_a_newcomer(self):
+        for board in (1, 2):
+            fresh = _state("fresh")
+            due_white = _state("due_white", balance=0, last=BLACK)
+            for a, b in ((fresh, due_white), (due_white, fresh)):
+                white, _ = SwissPairer._assign_colors(a, b, board)
+                self.assertEqual(white.id, "due_white", f"board {board}")
+
+
 class CandidateSearch(unittest.TestCase):
     """`_find_partner` will pass over candidates whose colours clash, but only
     so far: past the window the rating distortion costs more than the colour

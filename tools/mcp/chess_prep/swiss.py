@@ -399,10 +399,13 @@ class SwissPairer:
             # The player who has had more Blacks is due White.
             return (a, b) if a.color_balance < b.color_balance else (b, a)
         if a.last_color != b.last_color:
-            if a.last_color == BLACK:
+            # One of them is due a colour (or both, opposite ones). A player
+            # with no game yet has no claim, so the other's alternation
+            # decides — the board-parity fallback would hand a player who
+            # just had White a second White half the time.
+            if a.last_color == BLACK or b.last_color == WHITE:
                 return (a, b)
-            if b.last_color == BLACK:
-                return (b, a)
+            return (b, a)
         return (a, b) if board % 2 == 1 else (b, a)
 
 
