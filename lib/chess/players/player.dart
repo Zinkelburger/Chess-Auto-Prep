@@ -182,18 +182,31 @@ List<String> _cells(String line, String delimiter) {
   return values;
 }
 
+/// The person in [people] that [incoming] is: the one with its US Chess ID,
+/// else one sharing an account, else one of the same name or alias. A
+/// person whose different US Chess ID rules them out is never it.
+Player? matchingPlayer(Iterable<Player> people, Player incoming) {
+  final candidates = people.where((p) => samePlayer(p, incoming)).toList();
+  final id = incoming.text('uscf_id');
+  return candidates
+          .where((p) => id.isNotEmpty && p.text('uscf_id') == id)
+          .firstOrNull ??
+      candidates.where((p) => _shareAccount(p, incoming)).firstOrNull ??
+      candidates.firstOrNull;
+}
+
+bool _shareAccount(Player a, Player b) => a.accounts.any(
+  (x) => b.accounts.any(
+    (y) =>
+        x.site == y.site &&
+        x.username.toLowerCase() == y.username.toLowerCase(),
+  ),
+);
+
 bool samePlayer(Player a, Player b) {
   final idA = a.text('uscf_id'), idB = b.text('uscf_id');
   if (idA.isNotEmpty && idB.isNotEmpty) return idA == idB;
-  if (a.accounts.any(
-    (x) => b.accounts.any(
-      (y) =>
-          x.site == y.site &&
-          x.username.toLowerCase() == y.username.toLowerCase(),
-    ),
-  )) {
-    return true;
-  }
+  if (_shareAccount(a, b)) return true;
   return a.id == b.id ||
       a.names.any(
         (x) => b.names.any((y) => x.toLowerCase() == y.toLowerCase()),
