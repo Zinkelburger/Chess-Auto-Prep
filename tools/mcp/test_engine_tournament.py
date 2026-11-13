@@ -14,13 +14,17 @@ Run:
 
 from __future__ import annotations
 
+import errno
+import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -146,6 +150,90 @@ class Locating(TournamentDirCase):
         (bad / et.METADATA_FILE).write_text("{ not json", encoding="utf-8")
         listed = self.registry.call("tournament_list", {})
         self.assertEqual([t["id"] for t in listed["tournaments"]], ["good"])
+
+
+class Confinement(TournamentDirCase):
+    def test_an_id_cannot_reach_outside_the_tournaments_folder(self):
+        # resolve_id joined the id onto the root, so "../x" or an absolute
+        # path read (and tournament_stop signalled) a run file elsewhere.
+        self.write("real-one")
+        outside = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, outside)
+        (outside / et.METADATA_FILE).write_text(
+            json.dumps(_metadata("outside", "2026-08-22T12:00:00", [])),
+            encoding="utf-8",
+        )
+        for wanted in (f"../{outside.name}", str(outside)):
+            with self.assertRaises(ToolError, msg=wanted):
+                self.registry.call("tournament_status", {"id": wanted})
+
+
+class FailOpen(TournamentDirCase):
+    def test_a_malformed_tournament_is_one_row_not_a_failed_list(self):
+        # Valid JSON of the wrong shape crashed _summary and so every list.
+        self.write("good")
+        bad = self.root / "bad"
+        bad.mkdir()
+        (bad / et.METADATA_FILE).write_text(
+            json.dumps({"config": "not an object", "games": []}), encoding="utf-8"
+        )
+        rows = {t["id"]: t for t in self.registry.call("tournament_list", {})["tournaments"]}
+        self.assertEqual(set(rows), {"good", "bad"})
+        self.assertTrue(rows["bad"]["error"])
+        self.assertIsNone(rows["good"]["error"])
+
+
+def _failing_writes(real_open=io.open):
+    """io.open whose files opened for writing fail on the first write, as a
+    full disk does: shows whether a write could truncate what was there."""
+
+    class Failing:
+        def __init__(self, fh):
+            self._fh = fh
+
+        def write(self, data):
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self._fh.close()
+
+        def __getattr__(self, name):
+            return getattr(self._fh, name)
+
+    def opener(file, mode="r", *args, **kwargs):
+        fh = real_open(file, mode, *args, **kwargs)
+        return Failing(fh) if "w" in mode else fh
+
+    return mock.patch("io.open", opener)
+
+
+class ProcessIdentity(TournamentDirCase):
+    def test_a_reused_pid_is_not_the_tournament(self):
+        # After a reboot the recorded pid can belong to anything; stop would
+        # have sent it SIGINT. This test process is alive but no runner.
+        directory = self.write("match", status="running")
+        (directory / et.RUN_FILE).write_text(
+            json.dumps({"pid": os.getpid(), "argv": ["dart", "run", "x.dart", "--root", str(self.root)]}),
+            encoding="utf-8",
+        )
+        self.assertFalse(et._run_state(directory)["running"])
+        self.assertFalse(self.registry.call("tournament_stop", {"id": "match"})["stopped"])
+
+    def test_the_recorded_runner_still_reads_as_running(self):
+        directory = self.write("match", status="running")
+        runner = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(60)", "--root", str(self.root)]
+        )
+        self.addCleanup(runner.wait)
+        self.addCleanup(runner.kill)
+        (directory / et.RUN_FILE).write_text(
+            json.dumps({"pid": runner.pid, "argv": ["dart", "run", "x.dart", "--root", str(self.root)]}),
+            encoding="utf-8",
+        )
+        self.assertTrue(et._run_state(directory)["running"])
 
 
 class Reading(TournamentDirCase):
@@ -328,6 +416,45 @@ class Engines(TournamentDirCase):
         )
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0]["executablePath"], "/bin/toy")
+
+
+class EngineRegistrySafety(TournamentDirCase):
+    """engines.json is the app's file: an add must never lose what is in it."""
+
+    def _add(self, path: str = "/bin/toy") -> dict:
+        original = et._dart_json
+        et._dart_json = lambda argv, timeout: {"ok": True, "name": "Toy 1.0"}
+        try:
+            return self.registry.call("tournament_add_engine", {"path": path})
+        finally:
+            et._dart_json = original
+
+    def test_an_unreadable_registry_is_set_aside_not_overwritten(self):
+        registry = self.root / et.ENGINES_FILE
+        registry.write_text('[{"id": "x", "name": "Xiphos", ', encoding="utf-8")
+        result = self._add()
+        self.assertTrue(result["added"])
+        kept = Path(result["unreadable_registry_set_aside_as"])
+        self.assertEqual(kept.read_text(encoding="utf-8"), '[{"id": "x", "name": "Xiphos", ')
+        entries = json.loads(registry.read_text(encoding="utf-8"))
+        self.assertEqual([e["executablePath"] for e in entries], ["/bin/toy"])
+
+    def test_rows_it_does_not_understand_are_kept(self):
+        registry = self.root / et.ENGINES_FILE
+        registry.write_text(json.dumps(["future-row", {"id": "x", "executablePath": "/bin/x"}]), encoding="utf-8")
+        self._add()
+        entries = json.loads(registry.read_text(encoding="utf-8"))
+        self.assertEqual(entries[0], "future-row")
+        self.assertEqual(len(entries), 3)
+
+    def test_a_failed_write_leaves_the_old_registry_whole(self):
+        registry = self.root / et.ENGINES_FILE
+        before = json.dumps([{"id": "x", "name": "Xiphos", "executablePath": "/bin/x"}])
+        registry.write_text(before, encoding="utf-8")
+        with _failing_writes(), self.assertRaises(OSError):
+            self._add()
+        self.assertEqual(registry.read_text(encoding="utf-8"), before)
+        self.assertEqual(sorted(p.name for p in self.root.iterdir()), [et.ENGINES_FILE])
 
 
 _FAKE_ENGINE = """#!/bin/sh
