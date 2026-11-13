@@ -113,11 +113,12 @@ def init_booking_db() -> None:
 def _parse_slot(iso: str) -> datetime:
     try:
         dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-    except ValueError as exc:
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=TIMEZONE)
+        # Converting a time at the edge of year 1 or 9999 leaves the range.
+        return dt.astimezone(TIMEZONE)
+    except (ValueError, OverflowError) as exc:
         raise HTTPException(status_code=400, detail="Invalid slot datetime") from exc
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=TIMEZONE)
-    return dt.astimezone(TIMEZONE)
 
 
 def _booked_slots(conn: sqlite3.Connection) -> set[str]:
@@ -247,6 +248,8 @@ def get_slots(week_start: str = Query(..., description="First day of week (YYYY-
         start = date.fromisoformat(week_start)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="week_start must be YYYY-MM-DD") from exc
+    if start > date.max - timedelta(days=6):  # the week must end inside the calendar
+        raise HTTPException(status_code=400, detail="week_start must be YYYY-MM-DD")
     return {
         "owner_name": OWNER_NAME,
         "tagline": TAGLINE,

@@ -151,6 +151,16 @@ class BookingKeyTests(unittest.TestCase):
                 self.assertEqual(r.status_code, 200)
 
 
+class BookingDateTests(unittest.TestCase):
+    def test_dates_at_the_calendar_edge_are_refused_not_crashed(self):
+        booking.init_booking_db()
+        with TestClient(server.app) as client:
+            self.assertEqual(client.get("/api/slots?week_start=9999-12-31").status_code, 400)
+            for slot in ("0001-01-01T00:00:00+14:00", "9999-12-31T23:00:00-12:00"):
+                r = client.post("/api/book", json={"slot": slot, "name": "x"})
+                self.assertEqual(r.status_code, 400, slot)
+
+
 class WeeklyTests(unittest.TestCase):
     def test_one_unmatchable_alert_does_not_stop_the_others(self):
         conn = models.get_db(Path(_TMP.name) / "weekly.db")
