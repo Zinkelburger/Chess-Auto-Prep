@@ -24,6 +24,10 @@ import server  # noqa: E402
 import weekly  # noqa: E402
 
 CLOUDFLARE_EDGE = ("173.245.48.10", 443)
+
+
+def tearDownModule():
+    _TMP.cleanup()
 START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
 
