@@ -107,6 +107,12 @@ final class LibraryFailure extends LibraryResult {
   final String detail;
 }
 
+/// The change was declined before anything was written, and [detail] is
+/// the reason in the app's own words, which the screen may say.
+final class LibraryRefused extends LibraryFailure {
+  const LibraryRefused(super.detail);
+}
+
 /// The change is recorded and was stopped by something passing; recovery
 /// finishes it on a later access, after a restart too. Told as a failure.
 final class LibraryUnfinished extends LibraryFailure {

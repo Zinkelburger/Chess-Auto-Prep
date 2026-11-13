@@ -419,10 +419,10 @@ final class Library extends ChangeNotifier {
     );
   }
 
-  static const _nothingOpen = LibraryFailure(
+  static const _nothingOpen = LibraryRefused(
     'there is no chapter open to move from',
   );
-  static const _sourceChanged = LibraryFailure(
+  static const _sourceChanged = LibraryRefused(
     'the chapter changed before its lines could move',
   );
 
@@ -490,7 +490,7 @@ final class Library extends ChangeNotifier {
   ) async {
     if (_busy) return const LibraryBusy();
     if (hasPendingLineMove && action != 'retry line move') {
-      return const LibraryFailure('Retry the unfinished line move first.');
+      return const LibraryRefused('Retry the unfinished line move first.');
     }
     _busy = true;
     notifyListeners();

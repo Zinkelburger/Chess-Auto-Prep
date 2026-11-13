@@ -80,7 +80,9 @@ Documents when opened` is on (default); `Could not copy <name> into your
 Documents: <detail>` otherwise. With copying off, or for a file whose
 encoding is not UTF-8, it opens read-only. The saved reading place for that
 path (game, cursor, variation, sort, filter rules, followed player) is
-restored unless the handoff names a game.
+restored unless the handoff names a game; when it cannot be looked for, the
+file stays on its first game, `Could not find your place in this file.` shows
+over the list, and the saved place is kept for the next opening.
 
 **Pick a game** — click a row, ↑/↓, the counter's arrows or number → the game
 goes on the board without re-reading the file; the list, grouped chapters,
@@ -128,7 +130,11 @@ file holds edits on Read and Edit alike, and Save asks `Save your moves` →
 `pgn_collections` that opens) or `Add to a study…`. Document tabs keep each file's held edits and their undo
 while another is up; coming back reads the file again at the tab's game and
 cursor, with its saved order, filter rules and followed player. Failures go to the top bar's status line with one way
-out (`Retry save`, Reload).
+out (`Retry save`, Reload). A failed save reads `Could not save.`, and a file
+that could not be opened `Could not read <name>.`, each followed by what the
+disk says when it says something (`The disk is full.`, `Permission was
+denied.`, `The disk is read-only.`, `The file or folder was not found.`); the
+error itself goes to the log, never on screen.
 
 **Open in Study** — a file from `Documents/studies` read here goes to Study
 on the same chapter; Study's `Read in PGN Viewer` comes back.
@@ -140,7 +146,10 @@ held edits closes only once its checkpoint is written. Opening the file again
 says `Unsaved edits to <file> from an earlier session.` with `Restore unsaved
 edits`; if the file changed since, `… The file has changed since.` with `Save
 them as a copy` (`<file> unsaved edits.pgn` beside it). A checkpoint edited
-past or unreadable is moved to the recovery quarantine.
+past, or that is not a draft at all, is moved to the recovery quarantine; one
+that cannot be read just now stays where it is for the next opening.
+`Unsaved edits to <file> were not kept.` (with what the disk says) when a
+checkpoint could not be written.
 
 **Game review** — `Analyze game` (Actions or the tab's button; `Stop` while
 running) → a depth-14 Stockfish pass over the main line: an evaluation graph

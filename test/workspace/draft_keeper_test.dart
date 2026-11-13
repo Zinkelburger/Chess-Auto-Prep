@@ -295,7 +295,10 @@ void main() {
       );
       await app.session.open(games, game: 0);
       app.session.setComment(NodePath.of(const [0]), 'Nowhere to go');
-      expect(await app.keeper.settle(), contains('games.pgn'));
+      expect(
+        await app.keeper.settle(),
+        'Unsaved edits to games.pgn were not kept. The disk is full.',
+      );
       app.kill();
     });
 
@@ -465,8 +468,11 @@ final class _MemoryDrafts implements ViewerDrafts {
 /// A disk that takes no checkpoint.
 final class _RefusingDrafts implements ViewerDrafts {
   @override
-  Future<void> keep(ViewerDraft draft) async =>
-      throw const FileSystemException('disk full');
+  Future<void> keep(ViewerDraft draft) async => throw FileSystemException(
+    'Cannot create file',
+    draft.path,
+    OSError('No space left on device', Platform.isWindows ? 112 : 28),
+  );
 
   @override
   Future<ViewerDraft?> find(String path) async => null;

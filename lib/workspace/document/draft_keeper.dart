@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../../chess/pgn/chapter.dart';
 import '../../diagnostics/log.dart';
+import '../../storage/disk_problems.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/edit_scope.dart';
 import '../../storage/viewer_drafts.dart';
@@ -237,8 +238,10 @@ final class DraftKeeper {
       // Derived from the draft on screen, which is still there: the next
       // edit tries again.
       log.w('keep unsaved viewer edits for ${waiting.path}', error);
-      _unkept[waiting.path] =
-          'Unsaved edits to ${p.basename(waiting.path)} were not kept: $error';
+      _unkept[waiting.path] = failedBecause(
+        'Unsaved edits to ${p.basename(waiting.path)} were not kept.',
+        error,
+      );
     }
   }
 

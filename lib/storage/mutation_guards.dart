@@ -14,6 +14,7 @@ import 'package:path/path.dart' as p;
 
 import '../diagnostics/log.dart';
 import 'backups.dart';
+import 'disk_problems.dart';
 import 'document_ref.dart';
 import 'file_lock.dart';
 import 'pgn_document_store.dart';
@@ -146,6 +147,10 @@ Future<IoFailure?> keepReplacedVersion({
   };
 }
 
-String failureDetail(Object error) => error is FileSystemException
-    ? error.osError?.message ?? error.message
-    : '$error';
+/// [error] for a result's detail: what the player can do about it in plain
+/// words when it says ([DiskProblem]), else the system's own words.
+String failureDetail(Object error) =>
+    diskProblemOf(error)?.sentence ??
+    (error is FileSystemException
+        ? error.osError?.message ?? error.message
+        : '$error');

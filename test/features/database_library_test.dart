@@ -110,6 +110,28 @@ void main() {
     },
   );
 
+  test(
+    'a storage measurement that fails says so and keeps the page usable',
+    () async {
+      final measuring = DatabaseLibrary(
+        path: '/master_games.db',
+        corpus: corpus,
+        picker: ScriptedPicker(),
+        documents: documents,
+        collections: '/collections',
+        pending: PendingWrites(),
+        places: (stores: const [], support: '/support', derived: const []),
+        measureWith: (_) async => throw StateError('Isolate exited'),
+      );
+      addTearDown(measuring.dispose);
+      await measuring.measure();
+      expect(measuring.problem, 'Could not measure the storage.');
+      expect(measuring.measuring, isFalse);
+      await measuring.refresh();
+      expect(measuring.page.games.single.white, 'Alice');
+    },
+  );
+
   group('one writer to master_games.db at a time', () {
     late ScriptedPicker picker;
     late Completer<void> answered;

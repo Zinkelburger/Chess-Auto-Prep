@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pv_text.dart';
@@ -101,6 +103,28 @@ void main() {
       reason: 'a failed read leaves the open chapter alone',
     );
   });
+
+  test(
+    'a read that throws is a sentence too, and the open chapter stays',
+    () async {
+      final ref = chapterRef('KID', 'Locked');
+      fixture.store.throwOnOpen = StateError('Internal: isolate exited');
+      expect(
+        (await session.open(ref) as OpenFailed).reason,
+        'Could not read Locked.',
+      );
+      fixture.store.throwOnOpen = FileSystemException(
+        'Cannot open file',
+        ref.path,
+        OSError('Permission denied', Platform.isWindows ? 5 : 13),
+      );
+      expect(
+        (await session.open(ref) as OpenFailed).reason,
+        'Could not read Locked. Permission was denied.',
+      );
+      expect(session.source, fixture.ref);
+    },
+  );
 
   test('a move already in the tree only moves the cursor', () async {
     session.playMove('c7c5');

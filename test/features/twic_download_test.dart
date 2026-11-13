@@ -100,6 +100,34 @@ void main() {
     );
   });
 
+  test('a failure that is neither the network nor TWIC says what the user '
+      'can act on and never the exception', () async {
+    Future<String?> failingWith(Object error) async {
+      final run = TwicDownload(
+        path,
+        client: () => MockClient((request) async => throw error),
+      );
+      addTearDown(run.dispose);
+      await run.start(4);
+      return run.problem;
+    }
+
+    expect(
+      await failingWith(ArgumentError('Internal: _Uint8ArrayView')),
+      'Could not finish the TWIC download.',
+    );
+    expect(
+      await failingWith(
+        FileSystemException(
+          'Cannot open file',
+          path,
+          OSError('Permission denied', Platform.isWindows ? 5 : 13),
+        ),
+      ),
+      'Could not finish the TWIC download. Permission was denied.',
+    );
+  });
+
   test('a run skips the issues already in the database', () async {
     final run = download();
     await run.start(4);

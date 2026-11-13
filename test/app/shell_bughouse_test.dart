@@ -348,6 +348,16 @@ void main() {
       );
       expect(w.lab.line.moves, isEmpty);
     });
+
+    testWidgets('a read that throws is said like any unreadable file', (
+      tester,
+    ) async {
+      await toBughouse(tester);
+      files().throws['/games/odd.bpgn'] = StateError('Isolate exited');
+      await open(tester, '/games/odd.bpgn');
+      expect(find.text('odd.bpgn could not be read.'), findsOneWidget);
+      expect(w.lab.line.moves, isEmpty);
+    });
   });
 }
 

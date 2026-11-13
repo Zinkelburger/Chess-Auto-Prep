@@ -25,6 +25,7 @@ final class ViewerReading {
     required this.setSort,
     required this.perspective,
     required this.changed,
+    this.locateElsewhere = _locateElsewhere,
   });
   final DocumentSession session;
   final FileFilter filter;
@@ -35,6 +36,10 @@ final class ViewerReading {
   final void Function(GameOrder) setSort;
   final Perspective Function() perspective;
   final void Function() changed;
+
+  /// Finds a place in a long file off the UI isolate; a test may fail it.
+  final Future<int> Function(ReadingPlace place, List<ChapterLine> games)
+  locateElsewhere;
   final _queued = <String, ReadingPlace>{};
   Future<void>? _writing;
   bool _disposed = false, _restoring = false;
@@ -71,11 +76,25 @@ final class ViewerReading {
     final sorting = sort();
     if (chapter == null) return;
     _restoring = true;
+    var lost = false;
     try {
       final lines = chapter.lines;
-      final game = lines.length < 500
-          ? place.locate(lines)
-          : await _locateElsewhere(place, lines);
+      final int game;
+      try {
+        game = lines.length < 500
+            ? place.locate(lines)
+            : await locateElsewhere(place, lines);
+      } on Object catch (error) {
+        // The file stays open where it opened; the place kept for it is
+        // left as it is for the next opening rather than overwritten.
+        log.w('find the viewer reading position', error);
+        lost = true;
+        if (!_disposed) {
+          problem = 'Could not find your place in this file.';
+          changed();
+        }
+        return;
+      }
       if (_disposed ||
           !current() ||
           !identical(session.chapter, chapter) ||
@@ -97,7 +116,7 @@ final class ViewerReading {
       }
     } finally {
       _restoring = false;
-      capture();
+      if (!lost) capture();
     }
     _filterChanged();
     capture();

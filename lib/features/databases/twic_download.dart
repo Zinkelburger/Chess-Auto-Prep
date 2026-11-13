@@ -100,7 +100,10 @@ class TwicDownload extends ChangeNotifier {
       }
     } on Object catch (error) {
       log.w('download TWIC', error);
-      problem = 'Could not finish the TWIC download. ${_failure(error)}';
+      problem = [
+        'Could not finish the TWIC download.',
+        ?_failure(error),
+      ].join(' ');
       status = 'Completed issues are saved. Try again to resume.';
     } finally {
       client.close();
@@ -110,8 +113,9 @@ class TwicDownload extends ChangeNotifier {
   }
 
   /// Why the run stopped, in words: no connection, TWIC's own answer, or
-  /// what the import says (a full disk among them).
-  static String _failure(Object error) => switch (error) {
+  /// what the import says (a full disk among them); null when the error
+  /// says nothing the user can use.
+  static String? _failure(Object error) => switch (error) {
     http.ClientException() || TimeoutException() =>
       'Could not reach theweekinchess.com; it needs a connection.',
     StateError(:final message) => message,

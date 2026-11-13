@@ -77,9 +77,17 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
     }
   }
 
+  /// Thrown by the next [open] instead of answering it: a read that failed
+  /// outside the store's typed answers.
+  Object? throwOnOpen;
+
   @override
   Future<DocumentRead> open(DocumentRef ref) async {
     opens++;
+    if (throwOnOpen case final thrown?) {
+      throwOnOpen = null;
+      throw thrown;
+    }
     if (readEarly case final gate?) {
       readEarly = null;
       final read = documents[_file(ref)] ?? const Absent();
