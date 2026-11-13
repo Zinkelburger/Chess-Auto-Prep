@@ -525,7 +525,7 @@ final class Studies extends ChangeNotifier {
     if (_busy) return const StudyProblem('Another change is still running.');
     _busy = true;
     notifyListeners();
-    final StudyResult result;
+    StudyResult result;
     try {
       result = await body();
     } on Object catch (error) {
