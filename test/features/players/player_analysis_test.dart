@@ -52,6 +52,26 @@ void main() {
     expect(black.unknown, 1);
     expect(black.score, isNull);
   });
+  test('a game from a set position numbers its moves from there', () {
+    const fromPosition =
+        '[Event "Club"]\n[White "Bob"]\n[Black "Alex"]\n[Result "*"]\n'
+        '[Variant "From Position"]\n[SetUp "1"]\n'
+        '[FEN "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"]'
+        '\n\n1... e5 2. Nf3 Nc6 *';
+    final corpus = buildPlayerCorpus(
+      {'alex'},
+      [
+        const PlayerGame(
+          file: DocumentRef('/a.pgn'),
+          index: 0,
+          text: fromPosition,
+        ),
+      ],
+    );
+    final labels = [for (final p in corpus.positions) p.label];
+    expect(labels, contains('1... e5 2. Nf3'));
+    expect(labels, contains('1... e5 2. Nf3 Nc6'));
+  });
   test('repetition counts a game at a position only once', () {
     final corpus = buildPlayerCorpus(
       {'alex'},
