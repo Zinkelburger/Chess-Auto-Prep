@@ -76,8 +76,8 @@ ready; legal move verified.` Failing shows the start failure, `<name> played an
 illegal move: <uci>`, `<name> crashed while searching`, or `<name> sent no
 bestmove within 20 s`, above the first 40 lines the process printed. Edits are
 refused while a run plays (`Wait for the tournament to finish.`).
-**Remove an engine** — confirm `Remove <name> from the registry? Saved runs
-retain their engine settings.`
+**Remove an engine** — the bin icon (`Remove <name>…`) → confirm `Remove
+“<name>”?` (`Saved runs keep their engine settings.`) / `Remove`.
 **Set up a run** — `New tournament…` (or `Run again…`, titled `Configure next
 run` and prefilled from that run) opens one dialog: `Name`; `Engines` (two
 seats default, `Stockfish A` and `Stockfish B`; each a typeable choice of the

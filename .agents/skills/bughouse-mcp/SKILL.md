@@ -88,6 +88,9 @@ explains the network, the search, and why `score` ≈ 2.8× `advantage`.
 
 * **`compare` needs no calibration.** Candidates share one seat and settings,
   so the offset cancels in `loss_vs_best`. The ranking is the answer.
+* **`time_advantage` is always about our team.** A search from the other
+  team's seat (`compare`'s answer, every other `playout` ply) runs with
+  their stance: if we may sit, they may not.
 * **Never compare raw `score`** across calls, `team`, budgets,
   `time_advantage` or Stockfish. `advantage` values are comparable only under
   the same settings.

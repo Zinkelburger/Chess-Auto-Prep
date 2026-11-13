@@ -72,6 +72,9 @@ class PlayerBookPane extends StatelessWidget {
                       ? 'No games match. Change the colour or filters in the left panel.'
                       : 'Compare this player’s replies with your book for the opposite colour.'),
               style: theme.textTheme.bodySmall,
+              // A long problem must not push the list off the pane.
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           Expanded(

@@ -16,9 +16,21 @@ _NON_LETTER = re.compile(r"[^a-z\s-]")
 _SPACES = re.compile(r"\s+")
 
 
+#: Letters that are not a base letter plus an accent, so NFKD leaves them
+#: whole and the letter filter then deleted them: `Radosław` became `rados aw`.
+_OWN_LETTERS = str.maketrans(
+    {
+        "ł": "l", "Ł": "l", "ø": "o", "Ø": "o", "æ": "ae", "Æ": "ae",
+        "œ": "oe", "Œ": "oe", "ß": "ss", "ẞ": "ss", "đ": "d", "Đ": "d",
+        "ð": "d", "Ð": "d", "þ": "th", "Þ": "th", "ı": "i", "ħ": "h",
+        "Ħ": "h", "ŧ": "t", "Ŧ": "t", "ŀ": "l", "Ŀ": "l",
+    }
+)
+
+
 def fold(text: str) -> str:
     """Lower case, accents dropped, punctuation gone: `Šmeļov` → `smelov`."""
-    decomposed = unicodedata.normalize("NFKD", text)
+    decomposed = unicodedata.normalize("NFKD", text.translate(_OWN_LETTERS))
     ascii_only = "".join(c for c in decomposed if not unicodedata.combining(c))
     return ascii_only.lower()
 

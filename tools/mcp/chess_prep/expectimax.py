@@ -52,6 +52,7 @@ from typing import Any
 
 from . import expectimax_chapters as chapters
 from .engine_tournament import documents_dir, process_names, write_json_atomic
+from .master_games import readonly_uri
 from .paths import REPO_ROOT, data_dir
 from .tools import ToolError
 
@@ -653,7 +654,7 @@ def root_engine_shortlist(directory: Path, fen: str | None) -> list[dict] | None
     # FEN fields, so the halfmove/fullmove counters have to come off first.
     key = " ".join(fen.split()[:4])
     try:
-        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        con = sqlite3.connect(readonly_uri(db), uri=True)
         try:
             row = con.execute(
                 "SELECT num_lines, lines_blob FROM multipv_cache "
