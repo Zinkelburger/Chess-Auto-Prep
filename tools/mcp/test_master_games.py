@@ -144,6 +144,85 @@ class AppGamesToolsTest(unittest.TestCase):
         self.assertEqual(none["count"], 0)
 
 
+class UriCharactersInPathTest(unittest.TestCase):
+    """A database path is a file name, not a URI: `#`, `?` and `%` in a
+    folder name must neither open another file nor drop `mode=ro`."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def _folder(self, name: str) -> Path:
+        folder = Path(self.tmp.name) / name
+        folder.mkdir()
+        return folder
+
+    def test_master_db_in_a_folder_with_uri_characters(self):
+        for name in ("a#b", "c?d", "e%41"):
+            with self.subTest(folder=name):
+                path = self._folder(name) / "master_games.db"
+                make_db(path)
+                before = sorted(p.name for p in Path(self.tmp.name).iterdir())
+                db = MasterGamesDb(path)
+                try:
+                    self.assertEqual(db.stats()["games"], 2)
+                finally:
+                    db.close()
+                # Nothing was created at a truncated path.
+                after = sorted(p.name for p in Path(self.tmp.name).iterdir())
+                self.assertEqual(before, after)
+
+    def test_master_db_stays_read_only_whatever_the_path(self):
+        path = self._folder("x#y") / "master_games.db"
+        make_db(path)
+        db = MasterGamesDb(path)
+        try:
+            with self.assertRaises(sqlite3.OperationalError):
+                db._conn.execute("DELETE FROM games")
+        finally:
+            db.close()
+
+    def test_app_games_db_in_a_folder_with_uri_characters(self):
+        from chess_prep.app_games import AppGamesDb
+
+        path = self._folder("g#h") / "app_games.db"
+        make_app_db(path)
+        db = AppGamesDb(path)
+        try:
+            self.assertEqual(db.collections()[0]["games"], 1)
+            with self.assertRaises(sqlite3.OperationalError):
+                db._conn.execute("DELETE FROM games")
+        finally:
+            db.close()
+
+
+class PlayerNameWildcardTest(unittest.TestCase):
+    """`_` and `%` in a searched name are letters, not LIKE wildcards."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name) / "master_games.db"
+        make_db(self.path)
+        c = sqlite3.connect(self.path)
+        c.execute(
+            "INSERT INTO games VALUES(3,NULL,'Online','chess.com','2025.03.01','1',"
+            "'axb','Giri,A','0-1',NULL,NULL,NULL,NULL,'',2,?)",
+            (_z("1. e4 e5"),),
+        )
+        c.commit()
+        c.close()
+
+    def test_an_underscore_matches_only_an_underscore(self):
+        db = MasterGamesDb(self.path)
+        try:
+            self.assertEqual(db.games_by_player("a_b"), [])
+            self.assertEqual(db.games_by_player("%iri"), [])
+            self.assertEqual(len(db.games_by_player("axb")), 1)
+        finally:
+            db.close()
+
+
 class PositionKeyTest(unittest.TestCase):
     def test_matches_dart_reference_values(self):
         # Pinned in test/services/master_games/master_games_db_test.dart too.

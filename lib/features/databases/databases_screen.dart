@@ -9,6 +9,7 @@ import '../../ui/app_icons.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/field_row.dart';
 import '../../ui/list_message.dart';
+import '../../ui/listening_state.dart';
 import '../../ui/number_field.dart';
 import '../../ui/problem_line.dart';
 import '../../ui/progress_line.dart';
@@ -220,7 +221,8 @@ class _CorpusFilters extends StatefulWidget {
   State<_CorpusFilters> createState() => _CorpusFiltersState();
 }
 
-class _CorpusFiltersState extends State<_CorpusFilters> {
+class _CorpusFiltersState extends State<_CorpusFilters>
+    with ListeningState<_CorpusFilters> {
   late final _player = TextEditingController(
     text: widget.library.filter.player,
   );
@@ -238,6 +240,31 @@ class _CorpusFiltersState extends State<_CorpusFilters> {
   }
 
   Timer? _timer;
+
+  @override
+  Listenable listenableOf(_CorpusFilters widget) => widget.library;
+
+  /// Shows the library's filter when it changed from outside, as an import
+  /// clearing it does; never while an edit here waits to be applied.
+  @override
+  void changed() {
+    if (_timer?.isActive ?? false) return;
+    final f = widget.library.filter;
+    for (final (box, text) in [
+      (_player, f.player),
+      (_event, f.event),
+      (_eco, f.eco),
+      (_since, f.since),
+    ]) {
+      if (box.text != text) box.text = text;
+    }
+    if (_elo != f.minimumElo || _strongest != f.strongestFirst) {
+      setState(() {
+        _elo = f.minimumElo;
+        _strongest = f.strongestFirst;
+      });
+    }
+  }
 
   void _changed([String? _]) {
     _timer?.cancel();
@@ -260,6 +287,7 @@ class _CorpusFiltersState extends State<_CorpusFilters> {
 
   @override
   void dispose() {
+    stopListening();
     _timer?.cancel();
     for (final controller in [_player, _event, _eco, _since]) {
       controller.dispose();

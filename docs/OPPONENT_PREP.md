@@ -72,7 +72,9 @@ claude mcp add chess-prep -- python3 /abs/path/to/tools/mcp/chess_prep/__main__.
 
 Working files live in `~/.local/share/chess-prep/` (macOS: `~/Library/
 Application Support/chess-prep/`; override with `CHESS_PREP_DATA_DIR`, or the
-roster alone with `CHESS_PREP_ROSTER`).
+roster alone with `CHESS_PREP_ROSTER`). A `roster.json` that cannot be read
+is moved aside to `roster.json.unreadable-<time>` and the roster starts
+empty, so a new import never writes over it.
 
 The tournament tools need the Flutter SDK's `dart` on PATH (or
 `CHESS_PREP_DART`), because they run the app's own tournament code rather than
@@ -220,6 +222,10 @@ players' post-game ratings, so a rating history can be rebuilt for any player
 `CHESS_PREP_CHESSCOM_DIR`; files are `<username>_<YYYY-MM>.json`, so an older
 cache can be linked in) and index them into `index.sqlite`: rating events and
 the first 20 plies of every game, for the archive owner and the opponent alike.
+An archive file that is not readable JSON is renamed `….unreadable-<time>`
+and its month is downloaded again rather than counted as empty. Usernames are
+checked against chess.com's alphabet (letters, digits, `_`, `-`) before they
+reach a URL or a file name.
 
 ```
 chesscom_search        {clues: [{category: "blitz", rating: 2701, date: "2026-06-13"},
@@ -349,7 +355,12 @@ The app and the MCP tools share `Documents/opponents/people.json`
 `Documents/opponents/tournaments/<id>.json` (`chess-auto-prep/tournament@1`,
 one per group). The app updates them under a folder lock, rereading before
 every edit (`lib/storage/player_files.dart`): a stale row is refused, and
-unrelated rows and unknown fields survive. People optionally carry
+unrelated rows and unknown fields survive. The MCP side takes the same folder
+lock and rereads `people.json` when it saves: rows it did not change go back
+exactly as they are on disk (including the app's edits since it read the file
+and rows nobody can read), the fields it changed are laid over a row the app
+edited meanwhile, and people that are not a list are refused rather than
+written over. People optionally carry
 `game_sets` (stable cached-corpus keys) and `studies` (path plus optional
 chapter name); groups optionally carry `study` (a PGN path). **Paste players**
 in the app accepts the `opponents@1` JSON above as well as tables.
