@@ -615,6 +615,18 @@ class Persistence(unittest.TestCase):
             path.write_text(junk)
             self.assertEqual(load_roster().entries, [], junk)
 
+    def test_a_corrupt_roster_is_moved_aside_not_overwritten(self):
+        path = Path(os.environ["CHESS_PREP_ROSTER"])
+        path.parent.mkdir(parents=True, exist_ok=True)
+        junk = '{"event_name": "Spring Open", "entries": [ {"name": "Ali'
+        path.write_text(junk)
+        self.assertEqual(load_roster().entries, [])
+        save_roster(parse("Name,Rating\nCarol,1500\n"))
+        kept = [p for p in path.parent.iterdir() if p.name.startswith("roster.json.unreadable")]
+        self.assertEqual(len(kept), 1, sorted(p.name for p in path.parent.iterdir()))
+        self.assertEqual(kept[0].read_text(), junk)
+        self.assertEqual([e.name for e in load_roster().entries], ["Carol"])
+
     def test_a_good_roster_still_loads_after_all_that(self):
         saved = parse("Name,Rating\nAlice,1700\n")
         save_roster(saved)

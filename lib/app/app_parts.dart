@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../diagnostics/log.dart';
 import '../features/databases/database_library.dart';
 import '../features/databases/twic_download.dart';
 import '../features/settings/app_updates.dart';
@@ -241,9 +242,20 @@ final class AppParts {
     unawaited(_startUpdates());
     await _workspace.start();
     if (_disposed) return;
-    await requests.resume(settings.value.lastPlace);
-    if (!_disposed) _place.start();
+    // The mode is put up at once; its file is read behind the window, so a
+    // large or unreachable file never holds the window back.
+    _resumed = requests
+        .resume(settings.value.lastPlace)
+        .catchError((Object error) => log.w('reopen the last place', error))
+        .whenComplete(() {
+          if (!_disposed) _place.start();
+        });
   }
+
+  /// The last run's file on the board, or found gone; starting does not
+  /// wait for it.
+  Future<void> get resumed => _resumed ?? Future.value();
+  Future<void>? _resumed;
 
   late final _place = PlaceMemory(
     settings: settings,
@@ -264,12 +276,14 @@ final class AppParts {
   /// might open the same file, so what waits for its clock is written now.
   void windowLeft() {
     unawaited(saver.flush());
+    _place.flush();
     if (_started) unawaited(_drafts?.settle());
   }
 
   /// Stops producers before the exit guard drains accepted durable work.
   /// Keeping the window open leaves these jobs paused and resumable.
   void prepareToClose() {
+    _place.flush();
     requests.cancelPending();
     players.stop();
     databases.download?.stop();
