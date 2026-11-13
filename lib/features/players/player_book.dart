@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../chess/book/book_check.dart';
 import '../../chess/book/played_game.dart';
+import '../../diagnostics/log.dart';
 import '../../workspace/book/books.dart';
 import '../../workspace/book/repertoire_shelf.dart';
 import '../../workspace/latest.dart';
@@ -57,9 +58,8 @@ final class PlayerBook extends ChangeNotifier {
     notifyListeners();
     try {
       if (!books.current || shelf.problem != null) {
-        throw StateError(
-          books.problem ?? shelf.problem ?? 'The book is not ready.',
-        );
+        status = books.problem ?? shelf.problem ?? 'The book is not ready.';
+        return;
       }
       final side = analysis.side.opposite;
       final files = <BookFile>[
@@ -79,13 +79,15 @@ final class PlayerBook extends ChangeNotifier {
       }
       final corpus = analysis.corpus!;
       final indexes = analysis.gameIndexes;
-      final results = await Isolate.run(() => _check(corpus, indexes, files));
+      final results = await _checkOffThread(corpus, indexes, files);
       if (ticket.overtaken) return;
       gaps = results;
       status =
           '${indexes.length} games against your ${side.name} book · ${gaps.length} reach a gap';
     } on Object catch (e) {
-      if (ticket.current) status = '$e';
+      log.w('check the player\'s games against the book', e);
+      if (ticket.current)
+        status = 'Could not check the games against your book.';
     } finally {
       if (ticket.current) {
         busy = false;
@@ -104,6 +106,16 @@ final class PlayerBook extends ChangeNotifier {
     super.dispose();
   }
 }
+
+/// [_check] on another isolate. Top level, so the closure sent carries only
+/// these three values: one made inside [PlayerBook.check] would share its
+/// context with the closures there that hold `this`, and so try to send the
+/// whole app with it.
+Future<List<PlayerBookGap>> _checkOffThread(
+  PlayerCorpus corpus,
+  List<int> indexes,
+  List<BookFile> files,
+) => Isolate.run(() => _check(corpus, indexes, files));
 
 List<PlayerBookGap> _check(
   PlayerCorpus corpus,
