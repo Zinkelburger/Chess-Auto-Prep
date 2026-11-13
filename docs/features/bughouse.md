@@ -100,7 +100,9 @@ panel on the right: 440–640 px beside board 1 alone, 440–480 px beside both.
   with a rule on its left right after the move it replaces, starting with
   its number (`2... d6 3. d4`), and the move the board is at tinted in the
   accent. A hand edit is a token of its own in muted ink (`+2n −P`, White's
-  pieces in upper case). Each list has `First move`, `Back`, `Forward` and
+  pieces in upper case), `Hands edited` on hover. A move from a game read
+  from a file names its player on hover; other moves have no hover text.
+  Each list has `First move`, `Back`, `Forward` and
   `Last move` under it, which step that board.
 
 ## Actions

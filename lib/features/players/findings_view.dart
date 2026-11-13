@@ -143,8 +143,7 @@ class _EngineRunState extends State<EngineRun> {
                 : '${hunt.done} positions checked · '
                       '$found ${found == 1 ? 'finding' : 'findings'}',
             style: theme.textTheme.labelSmall,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
           ),
         ),
         TextButton(
@@ -286,16 +285,7 @@ class FindingRow extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  Text(
-                    displaySan(
-                      context,
-                      '$games ${games == 1 ? 'game' : 'games'} · '
-                      '${finding.continuation}',
-                    ),
-                    style: theme.textTheme.labelSmall,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  _continuation(context, theme, games),
                 ],
               ),
             ),
@@ -311,14 +301,34 @@ class FindingRow extends StatelessWidget {
     );
   }
 
+  /// How often the position came up and the reply that punishes it, on
+  /// one line; a reply longer than the column is all there on hover.
+  Widget _continuation(BuildContext context, ThemeData theme, int games) {
+    final words = displaySan(
+      context,
+      '$games ${games == 1 ? 'game' : 'games'} · ${finding.continuation}',
+    );
+    return Tooltip(
+      message: words,
+      child: Text(
+        words,
+        style: theme.textTheme.labelSmall,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  /// The kind of finding in full, on a second line when the column is
+  /// narrow, and the score at the end of its first line.
   Widget _title(ThemeData theme) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Flexible(
+      Expanded(
         child: Text(
           finding.title,
           style: theme.textTheme.labelSmall,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+          maxLines: 2,
         ),
       ),
       const SizedBox(width: Space.s),

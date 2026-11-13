@@ -23,9 +23,10 @@ running-task button while a tournament holds the engine job, and from an open
 request. Without tournament storage the screen reads `Tournament storage is
 unavailable.`
 
-- **Top row**: `Engine tournament`, `New tournament…` (filled), `Engines…`, a
+- **Top row**: `New tournament…` (filled), `Engines…`, a
   refresh icon (`Refresh tournaments`), and while a run plays `Stop` (`Stopping
-  after this move…` once pressed). After a failed save, `Retry save`.
+  after this move…` once pressed). After a failed save, `Retry save`. The
+  mode's name is the top bar's, so the row repeats no heading.
   `New tournament…` is disabled while a run plays or a save waits for retry.
 - **Problem line**: the last failure in the error colour (all of it on
   hover), then one line per unreadable tournament (`Cannot read tournament

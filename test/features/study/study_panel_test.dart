@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/storage/pgn_file_import.dart';
 import 'package:chess_auto_prep/storage/study_files.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/status_host.dart';
@@ -228,6 +229,30 @@ void main() {
     await tester.tap(find.text('Endgames'));
     await tester.pumpAndSettle();
     expect(find.text('Pawn endings'), findsOneWidget);
+  });
+
+  testWidgets('the filled New study… fills an empty list; listed studies '
+      'leave it to the header\'s menu', (tester) async {
+    await pump(tester);
+    await tester.tap(find.byTooltip('Back to studies'));
+    await tester.pumpAndSettle();
+    expect(find.text('Endgames'), findsOneWidget);
+    final filled = find.byWidgetPredicate((w) => w is FilledButton);
+    expect(filled, findsNothing);
+    await tester.tap(find.byTooltip('Study actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('New study…'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    study.files.listing = const StudiesListed([]);
+    await study.studies.refresh();
+    await tester.pumpAndSettle();
+    expect(find.text('No studies yet.'), findsOneWidget);
+    expect(
+      find.ancestor(of: find.text('New study…'), matching: filled),
+      findsOneWidget,
+    );
   });
 
   testWidgets('move to position moves the selected chapter and its identity', (

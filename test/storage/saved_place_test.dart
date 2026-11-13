@@ -6,4 +6,13 @@ void main() {
     expect(SavedPlace.fromJson({'mode': 'viewer', 'game': 0})?.game, 0);
     expect(SavedPlace.fromJson({'mode': 'viewer', 'game': -1})?.game, isNull);
   });
+
+  test('the player under analysis is kept by id; an empty one is none', () {
+    const place = SavedPlace(mode: 'playerAnalysis', player: 'alex');
+    expect(SavedPlace.fromJson(place.toJson()), place);
+    expect(
+      SavedPlace.fromJson({'mode': 'playerAnalysis', 'player': ''})?.player,
+      isNull,
+    );
+  });
 }

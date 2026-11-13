@@ -25,12 +25,13 @@ Shared: `lib/chess/players/` (`Player`, `PlayerGroup`, `readPlayerList`,
 A full page (no board), capped at `playersPageWidth`.
 
 - **`All players` / `Groups`** switch; inside a group, a back arrow (`Back to
-  groups`), the group name and `2026-10-10 · 5 rounds · 18 players · 5
-  prepared` instead.
+  groups`), the group name with its `⋯` right after it, and `2026-10-10 · 5
+  rounds · 18 players · 5 prepared` instead.
 - **Toolbar** — search (`Search name, ID or account` / `Search groups`), the one
   filled button (`Add player…`, `Add players…` in a group, `New group…` over
   the groups), `Paste players…`, and in a group `Open group study` and
-  `Train group study`. The `⋯` (`More actions`) holds, in a group, `Edit group…`,
+  `Train group study`. The `⋯` (`More actions`) ends the toolbar, or follows
+  the group's name inside a group; it holds, in a group, `Edit group…`,
   `Copy prep sheet`, `Export prep sheet…`, `Unlink group study`; always
   `Update US Chess ratings`, `Refresh`.
 - **Notices** — a fixed-height progress line, the rating lookup status with
@@ -64,7 +65,9 @@ from the pane's `+`.
   `Filters` fold (`Filters (n)` when some are on).
 - **`Positions` / `Games` / `Findings`** switch, pinned while its list scrolls.
 - With nobody chosen: the searchable saved-player list (`PlayerPicker`), or
-  `Add player…` and `Players & prep` on first run.
+  `Add player…` and `Players & prep` on first run. After a restart the mode
+  opens on the player it was last on (kept in `lastPlace`), the picker only
+  when that player has been removed.
 - No game yet: `Get games…` (with an account) and `Add PGN…`.
 
 Lists:
@@ -75,7 +78,10 @@ Lists:
 - **Games** — a row per game naming the opponent, with ECO and event.
 - **Findings** — `Analyze with engine` (`Stop · done / total` while running),
   `Analysis settings` fold, progress words, `Dismissed (n)` / `Back to findings`,
-  then the finding rows.
+  then the finding rows: the kind in full (`Strong reply absent from these
+  games` or `Unfavourable position`, on two lines in a narrow column) with the
+  score at its end, the moves to the position, and `n games · <reply>`, all
+  of it on hover when the reply is longer than the column.
 
 Tabs:
 

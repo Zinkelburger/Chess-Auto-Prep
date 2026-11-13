@@ -45,7 +45,10 @@ class _ScreenState extends State<TournamentsScreen> {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: Listenable.merge([run, widget.settings]),
     builder: (context, _) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // The top bar already names the mode, so the row starts with its
+        // actions, at the left edge like every other mode's bar.
         Padding(
           padding: const EdgeInsets.all(Space.m),
           child: Wrap(
@@ -53,10 +56,6 @@ class _ScreenState extends State<TournamentsScreen> {
             runSpacing: Space.s,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Text(
-                'Engine tournament',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
               FilledButton.icon(
                 onPressed: run.running || run.canRetry
                     ? null

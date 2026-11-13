@@ -187,7 +187,10 @@ class _PlayersScreenState extends State<PlayersScreen> {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        const SizedBox(width: Space.m),
+        // The group's `⋯` sits right after its name, as on a column's
+        // header, which leaves the toolbar one line at a desktop width.
+        _more(group),
+        const SizedBox(width: Space.s),
         Flexible(
           child: Text(
             groupLine(group),
@@ -201,7 +204,8 @@ class _PlayersScreenState extends State<PlayersScreen> {
   }
 
   /// The search, the one filled button — adding to whatever is listed — and
-  /// the few things done to the list as a whole. The rest is behind `⋯`.
+  /// the few things done to the list as a whole. The rest is behind `⋯`,
+  /// which a group keeps beside its name.
   Widget _toolbar(PlayerGroup? group, bool groups) {
     final blocked = owner.busy || owner.needsRetry;
     return Wrap(
@@ -249,8 +253,8 @@ class _PlayersScreenState extends State<PlayersScreen> {
             onPressed: () => widget.onTrainGroup(group),
             child: const Text('Train group study'),
           ),
-        ],
-        _more(group),
+        ] else
+          _more(group),
       ],
     );
   }

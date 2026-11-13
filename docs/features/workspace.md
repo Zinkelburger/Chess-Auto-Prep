@@ -232,9 +232,12 @@ is a new analysis board. The same editor is embedded in Study's new-chapter
 dialog and the tournament's position dialog.
 
 **Where the app opens** — on the mode and the file the last run was left on
-(`lastPlace` in `settings.json`: mode, path, chapter, game; written when the
-place changes). A file gone since leaves that mode on an empty analysis
-board, with nothing said. The first launch opens the Repertoire builder.
+(`lastPlace` in `settings.json`: mode, path, chapter, game and the player
+under analysis; written when the place changes). A file gone since leaves
+that mode on an empty analysis board, with nothing said. Player analysis
+opens on its last player when the mode is first shown; a player removed
+since leaves its picker and is logged. The first launch opens the Repertoire
+builder.
 
 **Full screen** — F11 or Actions ▸ View ▸ `Full screen`, every mode.
 

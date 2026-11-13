@@ -243,7 +243,9 @@ final class AppParts {
     await _workspace.start();
     if (_disposed) return;
     // The mode is put up at once; its file is read behind the window, so a
-    // large or unreachable file never holds the window back.
+    // large or unreachable file never holds the window back. Player
+    // analysis reopens on its player once that mode is on screen.
+    players.resumePlayer(settings.value.lastPlace?.player);
     _resumed = requests
         .resume(settings.value.lastPlace)
         .catchError((Object error) => log.w('reopen the last place', error))
@@ -261,6 +263,8 @@ final class AppParts {
     settings: settings,
     requests: requests,
     session: session,
+    player: () => players.rememberedPlayer,
+    playerChanges: players.analysis,
   );
 
   /// Starts the update checks and says once when the last install failed.
