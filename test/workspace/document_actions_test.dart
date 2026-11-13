@@ -72,4 +72,46 @@ void main() {
     expect(gameText(viewed.session), contains('Ding, Liren'));
     expect(gameText(viewed.session), isNot(contains('Carlsen')));
   });
+
+  test('Edit turns editing on and off again', () {
+    final edit = documentActions(
+      session: fixture.session,
+      analysis: analysis,
+      editing: editing,
+      onSaveCopy: () {},
+    ).first;
+    edit.run!();
+    expect(editing.value, isTrue);
+    documentActions(
+      session: fixture.session,
+      analysis: analysis,
+      editing: editing,
+      onSaveCopy: () {},
+    ).first.run!();
+    expect(editing.value, isFalse);
+  });
+
+  test('a document holding its edits offers Undo only while editing', () {
+    fixture.session.holdsEdits = true;
+    expect(labels(fixture), isNot(contains('Undo (off)')));
+    editing.value = true;
+    expect(labels(fixture), contains('Undo (off)'));
+  });
+
+  test('Engine on asks for an engine', () async {
+    var asked = 0;
+    final counted = EngineAnalysis(fixture.session, () async {
+      asked++;
+      return const StartFailed('no engine in this test');
+    });
+    addTearDown(counted.dispose);
+    documentActions(
+      session: fixture.session,
+      analysis: counted,
+      editing: editing,
+      onSaveCopy: () {},
+    ).firstWhere((action) => action.label == 'Engine on').run!();
+    await Future<void>.delayed(Duration.zero);
+    expect(asked, 1);
+  });
 }

@@ -15,6 +15,7 @@ void main() {
     WidgetTester tester, {
     String? chapter = 'Carlsen – Nakamura',
     int count = 1,
+    List<ChapterRef>? among,
   }) async {
     late Future<StudyPick?> answer;
     await tester.pumpWidget(
@@ -24,7 +25,7 @@ void main() {
           builder: (context) => TextButton(
             onPressed: () => answer = showStudyPicker(
               context,
-              studies: studies,
+              studies: among ?? studies,
               chapter: chapter,
               count: count,
             ),
@@ -79,5 +80,26 @@ void main() {
     await tester.pumpAndSettle();
     final pick = (await answer)!;
     expect((pick.into as NewStudy).name, 'Prep');
+  });
+
+  Finder search() => find.descendant(
+    of: find.byTooltip('Type a study'),
+    matching: find.byType(EditableText),
+  );
+
+  testWidgets('the search is where typing goes, and says when nothing '
+      'matches', (tester) async {
+    await open(tester);
+    expect(tester.widget<EditableText>(search()).focusNode.hasFocus, isTrue);
+    expect(find.text('Endgames'), findsOneWidget);
+    await tester.enterText(search(), 'zzz');
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing matches "zzz".'), findsOneWidget);
+    expect(find.text('Endgames'), findsNothing);
+  });
+
+  testWidgets('with no studies it says so', (tester) async {
+    await open(tester, among: const []);
+    expect(find.text('No studies yet.'), findsOneWidget);
   });
 }

@@ -124,4 +124,11 @@ void main() {
       await access.changing('/repertoires/Course/Main.pgn', () async {});
     },
   );
+
+  test('a file command versions only its own path', () async {
+    final access = DocumentAccess();
+    await access.changing('/docs/repertoires/Course', () async {});
+    expect(access.versionOf('/docs/repertoires/Course'), isPositive);
+    expect(access.versionOf('/docs/repertoires/Course/Main.pgn'), 0);
+  });
 }
