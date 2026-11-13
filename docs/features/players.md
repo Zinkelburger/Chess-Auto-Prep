@@ -80,7 +80,8 @@ Lists:
   `Analysis settings` fold, progress words, `Dismissed (n)` / `Back to findings`,
   then the finding rows: the kind in full (`Strong reply absent from these
   games` or `Unfavourable position`, wrapping in a narrow column) with the
-  score at its end, the moves to the position, and `n games · <reply>`.
+  score at its end, the moves to the position and `n games · <engine line>`,
+  each on up to two lines; the whole engine line on hover.
 
 Tabs:
 

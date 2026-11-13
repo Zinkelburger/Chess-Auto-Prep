@@ -54,5 +54,6 @@ void main() {
     expect(title.didExceedMaxLines, isFalse);
     expect(find.text('+0.26'), findsOneWidget);
     expect(find.text('0 games · 1. Nf3 Nc6'), findsOneWidget);
+    expect(find.byTooltip('0 games · 1. Nf3 Nc6'), findsOneWidget);
   });
 }

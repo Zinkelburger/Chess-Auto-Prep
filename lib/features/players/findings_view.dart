@@ -285,16 +285,7 @@ class FindingRow extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  Text(
-                    displaySan(
-                      context,
-                      '$games ${games == 1 ? 'game' : 'games'} · '
-                      '${finding.continuation}',
-                    ),
-                    style: theme.textTheme.labelSmall,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  _continuation(context, theme, games),
                 ],
               ),
             ),
@@ -306,6 +297,24 @@ class FindingRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// How often the position came up and the engine's line from it, on two
+  /// lines as the moves above; a longer line is all there on hover.
+  Widget _continuation(BuildContext context, ThemeData theme, int games) {
+    final words = displaySan(
+      context,
+      '$games ${games == 1 ? 'game' : 'games'} · ${finding.continuation}',
+    );
+    return Tooltip(
+      message: words,
+      child: Text(
+        words,
+        style: theme.textTheme.labelSmall,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }
