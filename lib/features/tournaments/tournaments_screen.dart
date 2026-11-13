@@ -206,7 +206,8 @@ class _ScreenState extends State<TournamentsScreen> {
       const SizedBox(height: Space.m),
       if ((run.activeId == t.id ? run.live : null) case final live?) ...[
         Text(
-          'Game ${live.pairing.index + 1} · ${live.plies} plies · ${live.move}',
+          'Game ${live.pairing.index + 1} · ${live.plies} '
+          '${live.plies == 1 ? 'ply' : 'plies'} · ${live.move}',
         ),
         const SizedBox(height: Space.s),
         StaticChessboard(
