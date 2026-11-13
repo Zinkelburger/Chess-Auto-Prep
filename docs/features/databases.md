@@ -58,8 +58,9 @@ N unsupported or unfinished games.`). `Stop` ends after the current issue
 it runs; its buttons are `Stop` then, `Cancel` / `Download` otherwise, the
 dialog staying open on the last status. Failure: `Could not finish the TWIC
 download. <reason>` in the problem line over `Completed issues are saved. Try
-again to resume.`, and `Download` resumes; a
-full disk reads `The disk is full.` The explorer refreshes when the dialog
+again to resume.`, and `Download` resumes. The reason is `Could not reach
+theweekinchess.com; it needs a connection.`, TWIC's answer (`TWIC answered
+HTTP 503.`), or `The disk is full.` The explorer refreshes when the dialog
 closes.
 
 **Import PGN** — `Import PGN…` → file picker → the file's games are added to

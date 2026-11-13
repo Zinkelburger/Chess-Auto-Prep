@@ -160,8 +160,9 @@ counted.
 1–10000, default 500) or `Recent months` (1–120), and time controls (Bullet …
 Correspondence; default all but bullet) → `New games are added to the ones
 already saved.` The choice is stored on the person (`download`). Per-site
-failures (`username not found`, `download limit reached; try again later`) show
-under `Some games could not be updated. Showing saved games.`
+failures (`Lichess: username not found`, `download limit reached; try again
+later`, otherwise `could not download; showing saved games`) show under `Some
+games could not be updated. Showing saved games.`
 
 **Filters** — `Dates` (`All dates`, last 30/90/180/365 days), `Time controls`
 (none chosen = all; `Other` for an unreadable time control), `Minimum games`
