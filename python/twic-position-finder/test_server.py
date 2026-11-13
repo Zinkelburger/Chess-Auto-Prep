@@ -132,6 +132,7 @@ class ServerTests(unittest.TestCase):
 class BookingKeyTests(unittest.TestCase):
     def test_an_unset_key_is_not_a_published_default(self):
         spec = importlib.util.spec_from_file_location("fresh_booking", booking.__file__)
+        assert spec is not None and spec.loader is not None
         fresh = importlib.util.module_from_spec(spec)
         with mock.patch.dict(os.environ, {"BOOKING_API_KEY": ""}):
             os.environ.pop("BOOKING_API_KEY")
