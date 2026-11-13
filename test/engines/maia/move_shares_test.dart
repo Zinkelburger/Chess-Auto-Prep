@@ -47,6 +47,13 @@ void main() {
     expect(shares.values.reduce((a, b) => a + b), closeTo(1.0, 1e-9));
   });
 
+  test('logits too large for an exponential still share it out', () {
+    // e^800 is past the largest double; only the differences may be raised.
+    final shares = _shares([800.0, 799.0, 0.0], [1, 1, 0]);
+    expect(shares['e2e4'], closeTo(0.7311, 1e-4));
+    expect(shares['d2d4'], closeTo(0.2689, 1e-4));
+  });
+
   test('a position with no legal moves has no shares', () {
     expect(_shares([1.0, 2.0, 3.0], [0, 0, 0]), isEmpty);
   });
