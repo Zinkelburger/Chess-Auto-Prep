@@ -81,9 +81,20 @@ void main() {
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
     // The viewer's own empty list offers the file dialog too.
-    expect(find.text('Open PGN file…'), findsAtLeastNWidgets(1));
+    expect(
+      find.widgetWithText(MenuItemButton, 'Open PGN file…'),
+      findsOneWidget,
+    );
     expect(find.text('Paste PGN as repertoire'), findsNothing);
-    expect(find.text('Close file'), findsNothing);
+    expect(
+      tester
+          .widget<MenuItemButton>(
+            find.widgetWithText(MenuItemButton, 'Close file'),
+          )
+          .onPressed,
+      isNull,
+      reason: 'no file is open to close',
+    );
   });
 
   testWidgets('Ctrl+V in the builder makes a repertoire of the clipboard and '
