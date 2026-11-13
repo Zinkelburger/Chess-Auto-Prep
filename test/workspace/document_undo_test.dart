@@ -53,6 +53,37 @@ void main() {
     expect(saver.state, isA<Saved>());
   });
 
+  test('undo set aside goes back only to the same file at the revision it '
+      'left, and none is set aside while a draft is on its way', () async {
+    edit('B');
+    await pumpEventQueue();
+    final kept = saver.setAsideUndo()!;
+    expect(saver.canUndo, isFalse);
+    expect(
+      saver.restoreUndo((
+        path: 'elsewhere.pgn',
+        revision: kept.revision,
+        saves: kept.saves,
+      )),
+      isFalse,
+    );
+    expect(
+      saver.restoreUndo((
+        path: kept.path,
+        revision: scriptedRevision('written outside'),
+        saves: kept.saves,
+      )),
+      isFalse,
+    );
+    expect(saver.canUndo, isFalse);
+    expect(saver.restoreUndo(kept), isTrue);
+    expect(saver.canUndo, isTrue);
+    edit('C');
+    expect(saver.setAsideUndo(), isNull);
+    await pumpEventQueue();
+    expect(saver.canUndo, isTrue);
+  });
+
   test('an undo the document has left behind refuses and saves on', () async {
     edit('B');
     await pumpEventQueue();
