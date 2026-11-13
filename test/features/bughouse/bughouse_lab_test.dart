@@ -513,6 +513,14 @@ void main() {
       expect(lab.line.moves, hasLength(2));
     });
 
+    test('pasted, the first game is shown at its end, to go on from', () {
+      lab.pasteMoves(game(1, '1A. e4 1a. d5') + game(3, '1B. c4 1b. e5'));
+      expect((lab.gameCount, lab.gameAt), (2, 0));
+      expect(lab.line.applied, hasLength(2));
+      lab.showGame(1);
+      expect(lab.line.applied, isEmpty, reason: 'a step away is at its start');
+    });
+
     test('pasted, a first game that does not play takes nothing', () {
       lab.newGame();
       lab.play(BoardNumber.one, 'd2d4');

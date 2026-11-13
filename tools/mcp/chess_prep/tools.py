@@ -815,10 +815,17 @@ class Registry:
                 "Nobody is marked as you. Call roster_update with is_me: true "
                 "on your own entry first."
             )
+        # `is None`, not `or`: a seed of 0 and a draw rate of 0 are real
+        # values, and `or` replaced them with the defaults.
+        defaults = SimulationConfig()
         config = SimulationConfig(
-            trials=int(args.get("trials") or 2000),
-            seed=int(args.get("seed") or 20260806),
-            draw_rate=float(args.get("draw_rate") or 0.30),
+            trials=int(args.get("trials") or defaults.trials),
+            seed=int(args["seed"]) if args.get("seed") is not None else defaults.seed,
+            draw_rate=(
+                float(args["draw_rate"])
+                if args.get("draw_rate") is not None
+                else defaults.draw_rate
+            ),
             unrated_rating=(
                 int(args["unrated_rating"])
                 if args.get("unrated_rating") is not None

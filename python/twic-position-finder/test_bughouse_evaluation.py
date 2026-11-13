@@ -69,6 +69,19 @@ class EvaluationTests(unittest.TestCase):
         with self.assertRaises(HTTPException):
             ev.store(self.db, self.upload(required='B'), 'test')
 
+    def test_a_null_move_is_neither_a_move_nor_a_crash(self):
+        # '0000' parses as python-chess's null move; with a rook on a1 the
+        # capture bookkeeping used to raise AssertionError (a 500), and on an
+        # empty a1 it was stored as the best move '--'.
+        boards = bh.parse_dual(DUAL)
+        cleared = bh.dual_fen(bh.play_line(boards, 'A:a2a4 A:a7a5 A:a1a3 A:a8a6'))
+        for fen in (DUAL, cleared):
+            for move in ('(0000,pass)', '(0000,0000)'):
+                with self.subTest(fen=fen, move=move), self.assertRaises(HTTPException) as e:
+                    ev.store(self.db, self.upload(fen=fen, ticket=ev.ticket(self.db, fen, 'test')['ticket'],
+                                                  ours=bh.Search(q=0, nodes=800, best=move)), 'test')
+                self.assertEqual(e.exception.status_code, 422)
+
     def test_time_cap_does_not_publish_as_completed_budget(self):
         with self.assertRaises(HTTPException):
             ev.store(self.db, self.upload(ours=bh.Search(q=0, nodes=799, best='(e2e4,pass)')), 'test')
