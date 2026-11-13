@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/chess/fen.dart';
+import 'package:chess_auto_prep/chess/tournament/config.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/features/tournaments/engine_manager.dart';
 import 'package:chess_auto_prep/features/tournaments/setup_dialog.dart';
@@ -95,6 +96,31 @@ void main() {
     expect(run.engines, isEmpty);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Close'));
+    await closed;
+  });
+
+  testWidgets('an engine row counts one core as a core', (tester) async {
+    final store = ScriptedTournaments();
+    addTearDown(store.dispose);
+    final run = TournamentRun(
+      store: store,
+      pending: PendingWrites(),
+      jobs: await engineJobsFixture(),
+      launch: (spec, transcript) async => const StartFailed('not started'),
+    );
+    addTearDown(run.dispose);
+    await tester.runAsync(
+      () => run.keepEngines([
+        TournamentEngine({'id': 'weak', 'name': 'SF weak', 'threads': 1}),
+        TournamentEngine({'id': 'big', 'name': 'SF big', 'threads': 4}),
+      ]),
+    );
+    final context = await _host(tester);
+    final closed = manageTournamentEngines(context, run);
+    await tester.pumpAndSettle();
+    expect(find.text('1 core · 128 MB · Bundled Stockfish'), findsOneWidget);
+    expect(find.text('4 cores · 128 MB · Bundled Stockfish'), findsOneWidget);
     await tester.tap(find.text('Close'));
     await closed;
   });

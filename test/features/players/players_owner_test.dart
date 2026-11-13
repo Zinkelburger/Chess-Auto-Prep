@@ -103,6 +103,28 @@ void main() {
     );
     expect(await pending.settle(), isNull);
   });
+
+  test('an imported row goes to the person with its US Chess ID before one '
+      'who only shares its name', () async {
+    await files.savePlayer(
+      Player.create('Alex Kim').edited({'lichess': 'alexk'}),
+    );
+    await files.savePlayer(
+      Player.create('Alexander Kim').edited({
+        'uscf_id': '12345678',
+        'aliases': ['Alex Kim'],
+      }),
+    );
+    await owner.load();
+    final imported = Player.create(
+      'Alex Kim',
+    ).edited({'uscf_id': '12345678', 'notes': 'from the roster'});
+    expect(await owner.import([imported]), isTrue);
+    expect(named('Alexander Kim').text('notes'), 'from the roster');
+    expect(named('Alex Kim').text('notes'), isEmpty);
+    expect(named('Alex Kim').text('uscf_id'), isEmpty);
+    expect(owner.players, hasLength(4));
+  });
 }
 
 /// [PlayerFiles] whose next player save fails like a disk error.

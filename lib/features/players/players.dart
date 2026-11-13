@@ -233,7 +233,7 @@ final class Players extends ChangeNotifier {
           ? null
           : current.groups.where((g) => g.id == into.id).firstOrNull;
       for (final player in incoming) {
-        final existing = people.where((p) => samePlayer(p, player)).firstOrNull;
+        final existing = matchingPlayer(people, player);
         final next = existing == null
             ? player
             : existing.edited({

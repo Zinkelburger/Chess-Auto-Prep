@@ -38,7 +38,9 @@ Future<void> manageTournamentEngines(
                 ListTile(
                   title: Text(engine.name),
                   subtitle: Text(
-                    '${engine.threads} cores · ${engine.memory} MB · ${engine.executable ?? "Bundled Stockfish"}',
+                    '${engine.threads} ${engine.threads == 1 ? 'core' : 'cores'} · '
+                    '${engine.memory} MB · '
+                    '${engine.executable ?? "Bundled Stockfish"}',
                   ),
                   trailing: Wrap(
                     children: [

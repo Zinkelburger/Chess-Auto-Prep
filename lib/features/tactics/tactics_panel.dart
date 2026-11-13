@@ -228,7 +228,8 @@ class _TacticsPanelState extends State<TacticsPanel> {
     final current = widget.trainer.up?.puzzle.index;
     final outcomes = widget.trainer.run?.outcomes ?? const {};
     return SliverFixedExtentList(
-      itemExtent: twoLineRowHeight,
+      // As tall as each row makes itself with larger text.
+      itemExtent: rowExtent(context, twoLineRowHeight),
       delegate: SliverChildBuilderDelegate(childCount: shown.length, (
         context,
         at,

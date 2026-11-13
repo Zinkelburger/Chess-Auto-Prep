@@ -2,11 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
-import 'package:dartchess/dartchess.dart' show Side;
+import 'package:dartchess/dartchess.dart' show Move, Side;
 import 'package:flutter/foundation.dart';
 
 import '../../chess/fen.dart';
 import '../../chess/generation/eval.dart';
+import '../../chess/pgn/tree_edit.dart' show moveNode;
 import '../../chess/pv_text.dart';
 import '../../engines/engine.dart';
 import '../../engines/engine_line.dart';
@@ -291,7 +292,7 @@ final class PlayerHunt extends ChangeNotifier {
     final unseen =
         !ourTurn &&
         best.pv.isNotEmpty &&
-        !original.moves.containsKey(best.pv.first);
+        !original.moves.containsKey(_asPlayed(position.fen, best.pv.first));
     if (cp <= -50 || (unseen && cp <= 30)) {
       findings.add(PlayerWeakness(position, score, best.pv, unseen));
       findings.sort(
@@ -402,6 +403,13 @@ final class PlayerHunt extends ChangeNotifier {
     super.dispose();
   }
 }
+
+/// [uci] spelled as the games' moves are: castling king onto rook (`e8h8`)
+/// where the engine names it king to its square (`e8g8`).
+String _asPlayed(Fen fen, String uci) => switch (Move.parse(uci)) {
+  final move? => moveNode(fen, move)?.uci ?? uci,
+  null => uci,
+};
 
 Score scoreFromPacked(int cp) {
   if (cp.abs() < mateSaturationCp) return Centipawns(cp);

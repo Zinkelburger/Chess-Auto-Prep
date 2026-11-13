@@ -80,8 +80,10 @@ panel on the right: 440–640 px beside board 1 alone, 440–480 px beside both.
   Each move is its own token, as in the workspace's engine lines.
   Rows are 28 px, clip what does not fit, and keep their place and size
   whether the engine is on or off or a move is hovered; an empty row is
-  blank. Scores are A + B's, on Hivemind's scale (`+ is good for A + B:
-  White on board 1, Black on board 2. Hivemind's scale, not pawns.`).
+  blank. Scores are A + B's, on Hivemind's scale (tooltip `+ is good for A +
+  B: White on board 1, Black on board 2. Hivemind’s scale, not pawns.`, with
+  one board `+ is good for White on board 1 (A + B). Hivemind’s scale, not
+  pawns.`).
 - **Problem line** — one fixed line saying why a move, step or paste was
   refused.
 - **Game row** — only with a game read from a BPGN that has tags: who won
@@ -124,7 +126,8 @@ variation.
 **Edit position…** — opens the shared board editor on board 1 (one board) or the
 board last clicked (two boards), without the hands → `Use this position` sets
 that board's pieces, side to move and castling, keeps both hands and starts a
-new line. A board no game can go on from: `That board cannot be played from.`
+new line. A promoted piece left on its square stays promoted, so taking it
+still gives a pawn. A board no game can go on from: `That board cannot be played from.`
 **Step a board** — its list, its buttons, or the mouse wheel over it, down
 forward and up back → that board is at the move, and the other board is
 where it was when that move was played, so both hands are as they were and

@@ -148,6 +148,7 @@ final class DatabaseLibrary extends ChangeNotifier {
     if (_disposed) return;
     _notify();
     await refresh();
+    await measure();
   }
 
   Future<void> importFile() async {
@@ -187,6 +188,8 @@ final class DatabaseLibrary extends ChangeNotifier {
     // A failed import stays visible until the user retries or refreshes.
     if (problem == null) await refresh();
     _notify();
+    // The database grew: the Storage total was measured before it.
+    if (source != null) await measure();
   }
 
   Future<ChapterRef?> keep(CorpusGame game) async {
@@ -200,10 +203,12 @@ final class DatabaseLibrary extends ChangeNotifier {
     ChapterRef? kept;
     switch (result) {
       case CorpusRead(:final value):
-        final digest = sha256.convert(utf8.encode(value));
+        // Twelve hex digits tell games apart and keep the name under the
+        // length at which it would be cut mid-word.
+        final digest = '${sha256.convert(utf8.encode(value))}'.substring(0, 12);
         final name = gameFileName(
           ExplorerGame(
-            id: '$digest',
+            id: digest,
             white: game.white,
             black: game.black,
             result: game.result,
