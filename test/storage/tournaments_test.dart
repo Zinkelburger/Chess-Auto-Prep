@@ -265,6 +265,36 @@ void main() {
       expect(entries.any((e) => e.path.contains('quarantine')), isTrue);
     },
   );
+  for (final field in ['after', 'pgnAfter']) {
+    test('a record whose $field is not text is set aside', () async {
+      final before = initial();
+      await store.create(before);
+      await files.put(store.games('test'), '1. d4 *\n');
+      final record = File(p.join(root.path, 'test', '.v2-pending.json'));
+      await record.writeAsString(
+        jsonEncode({
+          'version': 2,
+          'before': File(
+            p.join(root.path, 'test', 'tournament.json'),
+          ).readAsStringSync(),
+          'after': jsonEncode(before.changed({'status': 'running'}).json),
+          'pgnBeforeSha256': sha256
+              .convert(utf8.encode('1. d4 *\n'))
+              .toString(),
+          'pgnAfter': pgn,
+          field: 5,
+        }),
+      );
+      await store.list();
+      expect(await File(store.games('test').path).readAsString(), '1. d4 *\n');
+      expect(await record.exists(), isFalse);
+      final entries = await files.support
+          .list(recursive: true)
+          .where((e) => e is File)
+          .toList();
+      expect(entries.any((e) => e.path.contains('quarantine')), isTrue);
+    });
+  }
   test(
     'conflicting recovery quarantines its complete record and preserves PGN',
     () async {

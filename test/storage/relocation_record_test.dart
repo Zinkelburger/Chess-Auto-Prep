@@ -49,6 +49,18 @@ void main() {
       );
     });
 
+    test('cannot take the reference history with it, wherever Support is', () {
+      expect(
+        () => validateFolderParticipantPaths(
+          documents,
+          Directory('/home/u/.local/share/chess-prep'),
+          documents.path,
+          '/home/u/Old Documents',
+        ),
+        _refused,
+      );
+    });
+
     test('cannot take a recovery folder with it', () {
       expect(
         () => validateFolderParticipantPaths(

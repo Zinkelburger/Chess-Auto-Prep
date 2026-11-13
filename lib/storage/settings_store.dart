@@ -62,10 +62,8 @@ final class SettingsStore extends ChangeNotifier {
     final edits = _edits;
     Settings value;
     try {
-      final text = await _read(_target(file));
-      value = Settings.fromJson(
-        text.startsWith('﻿') ? text.substring(1) : text,
-      );
+      // readAsString drops a leading byte-order mark itself.
+      value = Settings.fromJson(await _read(_target(file)));
     } on PathNotFoundException {
       value = Settings.defaults;
     } on Object catch (error) {

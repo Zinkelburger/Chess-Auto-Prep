@@ -289,6 +289,7 @@ void main() {
 
   _relocations(() => fixture, () => root);
   _fileMoveVersion();
+  _folderRecordChecks();
   _tournaments(() => fixture);
 
   test('every fixture is plain JSON as jsonEncode writes it', () async {
@@ -545,5 +546,55 @@ void _fileMoveVersion() {
         ),
       ),
     );
+  }, skip: Platform.isWindows ? _posixOnly : false);
+}
+
+/// A folder move record whose backups or training disagree with the rest
+/// of it is refused, each for its own reason.
+void _folderRecordChecks() {
+  Directory under(String name) => Directory(p.join(_placeholder, name));
+  Future<Map<String, Object?>> folder() async =>
+      (jsonDecode(await _fixture('relocation_v2_folder').readAsString()) as Map)
+          .cast<String, Object?>();
+  Map<String, Object?> plan(Map<String, Object?> json) =>
+      ((json['backups']! as List).single as Map)['plan']!
+          as Map<String, Object?>;
+  void refused(Map<String, Object?> json, String detail) => expect(
+    () => RelocationRecord.fromJson(
+      json,
+      id: 'folder-1',
+      documents: under('Documents'),
+    ).validate(documents: under('Documents'), support: under('Support')),
+    throwsA(isA<RecoveryRequired>().having((e) => e.detail, 'detail', detail)),
+  );
+
+  test('a folder move missing a chapter\'s backup is refused', () async {
+    refused({
+      ...await folder(),
+      'backups': <Object?>[],
+    }, 'Folder backup inventory is incomplete.');
+  }, skip: Platform.isWindows ? _posixOnly : false);
+
+  for (final (field, value) in [
+    ('documentPath', '/profile/Documents/repertoires/Other/A.pgn'),
+    ('fromId', '0000000000000000'),
+  ]) {
+    test(
+      'a folder move whose backup names another $field is refused',
+      () async {
+        final json = await folder();
+        plan(json)[field] = value;
+        refused(json, 'Folder backup ownership disagrees.');
+      },
+      skip: Platform.isWindows ? _posixOnly : false,
+    );
+  }
+
+  test('a folder move counting other training rows than it changes is '
+      'refused', () async {
+    refused({
+      ...await folder(),
+      'rowsChanged': 5,
+    }, 'Relocation training snapshots disagree.');
   }, skip: Platform.isWindows ? _posixOnly : false);
 }

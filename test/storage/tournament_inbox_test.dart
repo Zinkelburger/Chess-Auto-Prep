@@ -144,6 +144,24 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 200));
     expect(count, baseline);
   });
+
+  test('a folder reached through a link is not watched', () async {
+    final elsewhere = await Directory.systemTemp.createTemp('inbox-linked-');
+    addTearDown(() => elsewhere.delete(recursive: true));
+    Link(p.join(root.path, 'linked')).createSync(elsewhere.path);
+    var count = 0;
+    final ready = Completer<void>();
+    final sub = TournamentInbox(root).changes().listen((_) {
+      count++;
+      if (!ready.isCompleted) ready.complete();
+    });
+    addTearDown(sub.cancel);
+    await ready.future.timeout(const Duration(seconds: 3));
+    final baseline = count;
+    await File(p.join(elsewhere.path, 'tournament.json')).writeAsString('{}');
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(count, baseline);
+  });
 }
 
 Future<void> _until(bool Function() condition) async {

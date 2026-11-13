@@ -195,7 +195,6 @@ void main() {
   test('the first player or group saved makes the whole folder', () async {
     final root = Directory(p.join(dir.path, 'prep', 'players'));
     final files = PlayerFiles(root);
-    await files.savePlayer(Player.create('Cy'));
     await files.saveGroup(
       PlayerGroup({
         'format': 'chess-auto-prep/tournament@1',
@@ -204,8 +203,15 @@ void main() {
         'entries': <Object?>[],
       }),
     );
-    final read = await files.read();
-    expect(read.players.single.name, 'Cy');
-    expect(read.groups.single.id, 'open');
+    await PlayerFiles(
+      Directory(p.join(dir.path, 'other', 'players')),
+    ).savePlayer(Player.create('Cy'));
+    expect((await files.read()).groups.single.id, 'open');
+    expect(
+      (await PlayerFiles(
+        Directory(p.join(dir.path, 'other', 'players')),
+      ).read()).players.single.name,
+      'Cy',
+    );
   });
 }
