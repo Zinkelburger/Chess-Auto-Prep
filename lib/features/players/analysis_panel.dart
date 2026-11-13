@@ -8,6 +8,7 @@ import '../../chess/players/player.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/choice_dialog.dart';
 import '../../ui/list_message.dart';
+import '../../ui/list_row.dart';
 import '../../ui/listening_state.dart';
 import '../../ui/pane_header.dart';
 import '../../ui/problem_line.dart';
@@ -245,6 +246,7 @@ class _AnalysisPanelState extends State<AnalysisPanel>
             list: owner.list,
             onChanged: (list) => owner.configure(list: list),
             color: Theme.of(context).colorScheme.surface,
+            height: rowExtent(context, twoLineRowHeight),
           ),
         ),
         ...switch (owner.list) {
@@ -301,7 +303,7 @@ extension on _AnalysisPanelState {
       )
     else
       SliverFixedExtentList.builder(
-        itemExtent: twoLineRowHeight,
+        itemExtent: rowExtent(context, twoLineRowHeight),
         itemCount: indexes.length,
         itemBuilder: (context, i) => PlayerGameRow(
           game: owner.corpus!.games[indexes[i]],
@@ -539,19 +541,23 @@ class _ListSwitch extends SliverPersistentHeaderDelegate {
     required this.list,
     required this.onChanged,
     required this.color,
+    required this.height,
   });
 
   final PlayerList list;
+
+  /// Two rows' height at the text size in use, so larger text still fits.
+  final double height;
   final ValueChanged<PlayerList> onChanged;
 
   /// The column's own colour, so the rows pass under the switch unseen.
   final Color color;
 
   @override
-  double get minExtent => twoLineRowHeight;
+  double get minExtent => height;
 
   @override
-  double get maxExtent => twoLineRowHeight;
+  double get maxExtent => height;
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlaps) =>
@@ -593,5 +599,6 @@ class _ListSwitch extends SliverPersistentHeaderDelegate {
       );
 
   @override
-  bool shouldRebuild(_ListSwitch old) => old.list != list || old.color != color;
+  bool shouldRebuild(_ListSwitch old) =>
+      old.list != list || old.color != color || old.height != height;
 }
