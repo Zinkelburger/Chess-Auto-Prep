@@ -392,6 +392,7 @@ class EngineStartup(unittest.TestCase):
     def test_a_failed_handshake_does_not_leave_the_process_running(self):
         import stat
         import tempfile
+        from unittest import mock
 
         from bughouse import engine as engine_mod
         from bughouse.engine import EngineError
@@ -409,12 +410,11 @@ class EngineStartup(unittest.TestCase):
                 started.append(real_popen(*args, **kwargs))
                 return started[-1]
 
-            setattr(engine_mod.subprocess, "Popen", popen)
             try:
-                with self.assertRaises(EngineError):
-                    HivemindEngine(EngineFiles(fake, fake, None, "test"))
+                with mock.patch.object(engine_mod.subprocess, "Popen", popen):
+                    with self.assertRaises(EngineError):
+                        HivemindEngine(EngineFiles(fake, fake, None, "test"))
             finally:
-                setattr(engine_mod.subprocess, "Popen", real_popen)
                 for proc in started:
                     if proc.poll() is None:
                         proc.kill()

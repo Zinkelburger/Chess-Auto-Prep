@@ -382,9 +382,11 @@ class ToolInputs(TempCache):
                 return {"games": []}
             return {"username": "x"}
 
-        original = chesscom.fetch_json
-        setattr(chesscom, "fetch_json", fetch)
-        self.addCleanup(setattr, chesscom, "fetch_json", original)
+        from unittest import mock
+
+        patch = mock.patch.object(chesscom, "fetch_json", fetch)
+        patch.start()
+        self.addCleanup(patch.stop)
 
     def files_outside_archives(self) -> list[str]:
         archives = self.cache / "archives"
