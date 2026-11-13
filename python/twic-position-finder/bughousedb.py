@@ -29,6 +29,7 @@ Run `python3 bughousedb.py stats` or `purge --contributor HASH` on the server.
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import math
 import os
 import re
@@ -191,8 +192,12 @@ def parse_dual(fen: str) -> list[CrazyhouseBoard]:
     except ValueError as e:
         raise BadPosition(f"Not a valid position: {e}") from None
     for b in boards:
-        if b.king(chess.WHITE) is None or b.king(chess.BLACK) is None:
-            raise BadPosition("Each board needs both kings.")
+        if b.status() & (chess.STATUS_NO_WHITE_KING | chess.STATUS_NO_BLACK_KING
+                         | chess.STATUS_TOO_MANY_KINGS):
+            raise BadPosition("Each board needs one king of each colour.")
+        if b.status() & chess.STATUS_OPPOSITE_CHECK:
+            # The side to move could capture the king.
+            raise BadPosition("The side that just moved is still in check.")
     return boards
 
 
@@ -481,11 +486,41 @@ def import_expectimax(batch: ExpectimaxImport, x_api_key: str = Header(default="
 # ── Browser uploads ───────────────────────────────────────────────────
 
 
+# Cloudflare's published edge ranges (https://www.cloudflare.com/ips/). A peer
+# outside them reached the origin directly, so its CF-Connecting-IP is forged.
+# If the list goes stale, an edge reads as its own address: one rate-limit
+# bucket per edge, never a header anyone can set.
+CLOUDFLARE_NETWORKS = tuple(ipaddress.ip_network(n) for n in (
+    "173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22",
+    "141.101.64.0/18", "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20",
+    "197.234.240.0/22", "198.41.128.0/17", "162.158.0.0/15", "104.16.0.0/13",
+    "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22",
+    "2400:cb00::/32", "2606:4700::/32", "2803:f800::/32", "2405:b500::/32",
+    "2405:8100::/32", "2a06:98c0::/29", "2c0f:f248::/32",
+))
+
+
+def _is_cloudflare(host: str) -> bool:
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+        address = address.ipv4_mapped
+    return any(address in network for network in CLOUDFLARE_NETWORKS)
+
+
 def client_ip(request: Request) -> str:
-    """Cloudflare sets CF-Connecting-IP and overwrites any the client sent;
+    """The visitor's address: Cloudflare's CF-Connecting-IP when the request
+    came through a Cloudflare edge (which overwrites any the client sent),
+    otherwise the connecting peer. The site is behind Cloudflare, so the peer
+    alone would put every visitor of one edge in one rate-limit bucket.
     X-Forwarded-For keeps the client's own first entry, so it is not used."""
-    return (request.headers.get("CF-Connecting-IP")
-            or (request.client.host if request.client else "") or "unknown")
+    peer = request.client.host if request.client else ""
+    forwarded = request.headers.get("CF-Connecting-IP", "").strip()
+    if forwarded and _is_cloudflare(peer):
+        return forwarded
+    return peer or "unknown"
 
 
 def contributor_of(request: Request) -> str:

@@ -359,7 +359,7 @@ final class BughouseLab extends ChangeNotifier {
       }
       _games = games;
       _file = file;
-      _showGame(0, first);
+      _showGame(0, first, atEnd: file == null);
       return;
     }
     switch (readTableLineText(text)) {
@@ -386,7 +386,9 @@ final class BughouseLab extends ChangeNotifier {
     _showGame(index, readTableLineText(games[index]));
   }
 
-  void _showGame(int index, PastedMoves read) {
+  /// Shows game [index] at its start, or at its end when [atEnd]: the
+  /// first game of pasted text, to go on from as a pasted line is.
+  void _showGame(int index, PastedMoves read, {bool atEnd = false}) {
     _gameAt = index;
     _focus = BoardNumber.one;
     switch (read) {
@@ -394,7 +396,7 @@ final class BughouseLab extends ChangeNotifier {
         _game = game;
         _asPlayed = line;
         _bothBoardsFor(line);
-        showLine(line.atStart);
+        showLine(atEnd ? line : line.atStart);
       case PastedMovesRefused(:final token, :final game, :final start):
         _game = game;
         _asPlayed = null;

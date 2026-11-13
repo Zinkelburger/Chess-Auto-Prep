@@ -1,6 +1,7 @@
 """Weekly job: ingest latest TWIC, match subscriptions, import to Lichess, send emails."""
 
 import logging
+import sqlite3
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -104,8 +105,14 @@ def _run_match_and_notify(db, new_issues: list[int], dry_run: bool):
 
     for sub in subs:
         all_matches = []
-        for twic_num in new_issues:
-            all_matches.extend(match_subscription(db, sub, twic_num))
+        try:
+            for twic_num in new_issues:
+                all_matches.extend(match_subscription(db, sub, twic_num))
+        except (sqlite3.Error, ValueError) as e:
+            # One unreadable alert (a bad stored FEN, a query SQLite refuses)
+            # must not stop everyone else's email; it is retried next week.
+            log.error("  Sub #%d could not be matched, skipped: %s", sub["id"], e)
+            continue
         if all_matches:
             log.info("  Sub #%d (%s) -> %d game(s)",
                      sub["id"], sub.get("label", ""), len(all_matches))
