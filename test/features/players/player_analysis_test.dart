@@ -299,6 +299,66 @@ void main() {
       );
     },
   );
+  test('From move N lists both sides\' positions at move N', () {
+    final store = ScriptedDocumentStore();
+    final owner = PlayerAnalysis(
+      documents: store,
+      cache: GamesCache(store, folder: '/games'),
+      sites: const [],
+      pending: PendingWrites(),
+    );
+    addTearDown(owner.dispose);
+    const asBlack =
+        '[Event "Club"]\n[White "Bob"]\n[Black "Alex"]\n[Result "*"]\n\n'
+        '1. e4 c5 2. Nf3 d6 *';
+    owner.corpus = buildPlayerCorpus(
+      {'alex'},
+      [const PlayerGame(file: DocumentRef('/a.pgn'), index: 0, text: asBlack)],
+    );
+    owner.setSide(Side.black);
+    List<String> listed() => [for (final p in owner.positions) p.label];
+    // The default reads `From move 1`: Black's first decision is listed.
+    expect(owner.fromMove, 1);
+    expect(listed(), containsAll(['Starting position', '1. e4', '1. e4 c5']));
+    owner.configure(fromMove: 2);
+    expect(owner.fromMove, 2);
+    expect(listed(), isNot(contains('1. e4')));
+    expect(listed(), isNot(contains('Starting position')));
+    // White to play move 2 and Black to play it are both move 2.
+    expect(listed(), containsAll(['1. e4 c5', '1. e4 c5 2. Nf3']));
+  });
+  test('a download missing a month keeps the games it read and names the '
+      'month', () async {
+    final store = ScriptedDocumentStore();
+    final cache = GamesCache(store, folder: '/games');
+    final owner = PlayerAnalysis(
+      documents: store,
+      cache: cache,
+      sites: [
+        _AnsweredGames(
+          GameSite.chesscom,
+          const GamesFetched([game], unread: ['2026-08']),
+        ),
+      ],
+      pending: PendingWrites(),
+    );
+    addTearDown(owner.dispose);
+    await owner.select(
+      Player.create('Alex').edited({'chesscom': 'alex'}),
+      download: true,
+    );
+    final saved = store.documents[cache.refFor(GameSite.chesscom, 'alex')];
+    expect((saved! as Opened).text, contains('1. e4 e5'));
+    expect(owner.corpus!.games, hasLength(1));
+    expect(
+      owner.error,
+      'Some games could not be updated. Showing saved games.',
+    );
+    expect(
+      owner.errorDetail,
+      'Chess.com: could not read 2026-08; the other games were saved.',
+    );
+  });
   test('late download cannot change another selected player', () async {
     final api = _DelayedGames();
     final store = ScriptedDocumentStore();
@@ -421,4 +481,14 @@ class _DelayedGames implements RecentGames {
   @override
   Future<GamesFetch> recent(String username, {required int max}) =>
       answer.future;
+}
+
+class _AnsweredGames implements RecentGames {
+  _AnsweredGames(this.site, this.answer);
+  @override
+  final GameSite site;
+  final GamesFetch answer;
+  @override
+  Future<GamesFetch> recent(String username, {required int max}) async =>
+      answer;
 }

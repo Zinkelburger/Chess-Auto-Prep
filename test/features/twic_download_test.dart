@@ -69,6 +69,37 @@ void main() {
     return run;
   }
 
+  test('a run that cannot reach TWIC, or that TWIC turns away, says so in '
+      'words', () async {
+    final offline = TwicDownload(
+      path,
+      client: () => MockClient(
+        (request) async => throw http.ClientException(
+          'SocketException: Connection failed (OS Error: Network is '
+          'unreachable, errno = 101)',
+          request.url,
+        ),
+      ),
+    );
+    addTearDown(offline.dispose);
+    await offline.start(4);
+    expect(
+      offline.problem,
+      'Could not finish the TWIC download. Could not reach '
+      'theweekinchess.com; it needs a connection.',
+    );
+    final refused = TwicDownload(
+      path,
+      client: () => MockClient((request) async => http.Response('', 503)),
+    );
+    addTearDown(refused.dispose);
+    await refused.start(4);
+    expect(
+      refused.problem,
+      'Could not finish the TWIC download. TWIC answered HTTP 503.',
+    );
+  });
+
   test('a run skips the issues already in the database', () async {
     final run = download();
     await run.start(4);

@@ -146,7 +146,12 @@ class _PlayerLookupState extends State<PlayerLookup> {
             ...lookup,
             'status': 'account',
             'confirmed': [
-              ...?lookup['confirmed'] as List?,
+              ...switch (lookup['confirmed']) {
+                final List confirmed => confirmed,
+                null => const [],
+                // Kept, not dropped, beside the new one.
+                final other => [other],
+              },
               {...candidate, 'confirmed_by': 'user'},
             ],
             'candidates': [

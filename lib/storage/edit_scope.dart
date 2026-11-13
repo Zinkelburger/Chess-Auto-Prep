@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import '../chess/pgn/game_text.dart';
 import '../chess/pgn/games_written.dart';
 import '../chess/tactics/analyzed_games.dart';
+import '../chess/tactics/mistake_counts.dart' show mistakeCountsPrefix;
 import 'compound_commit.dart';
 import 'reference_change.dart';
 
@@ -226,7 +227,8 @@ String? _arrangedHeading(
 }
 
 /// An edit that declares the heading writes the playing side of a chapter
-/// or the analysed-games line of a tactics set, and those are the lines of
+/// or the analysed-games and mistake-count lines of a tactics set, which the
+/// review writes in the same save as a game's puzzles, and those are the lines of
 /// it it may write: everything else above the first game — the chapter's
 /// name, the date it was made, the root it was built from — has to come
 /// through as it was.
@@ -244,7 +246,8 @@ String? _headingBeyondTheSide(
 }
 
 /// The heading without its `// Color:` line and a tactics set's
-/// analysed-games line, which is the part a heading edit may not touch. A
+/// analysed-games and mistake-count lines, which is the part a heading edit
+/// may not touch. A
 /// byte-order mark at the start is kept apart, as [_cut] keeps it: the
 /// reader reads the line after it as it reads any other.
 String _besideTheSide(List<int> bytes, int heading) {
@@ -253,7 +256,8 @@ String _besideTheSide(List<int> bytes, int heading) {
     if (mark > 0) '\uFEFF',
     for (final line in latin1.decoder.convert(bytes, mark, heading).split('\n'))
       if (!line.trim().startsWith('// Color:') &&
-          !line.startsWith(analyzedGamesPrefix))
+          !line.startsWith(analyzedGamesPrefix) &&
+          !line.startsWith(mistakeCountsPrefix))
         line,
   ].join('\n');
 }

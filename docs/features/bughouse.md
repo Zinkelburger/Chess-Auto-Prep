@@ -80,8 +80,10 @@ panel on the right: 440–640 px beside board 1 alone, 440–480 px beside both.
   Each move is its own token, as in the workspace's engine lines.
   Rows are 28 px, clip what does not fit, and keep their place and size
   whether the engine is on or off or a move is hovered; an empty row is
-  blank. Scores are A + B's, on Hivemind's scale (`+ is good for A + B:
-  White on board 1, Black on board 2. Hivemind's scale, not pawns.`).
+  blank. Scores are A + B's, on Hivemind's scale (tooltip `+ is good for A +
+  B: White on board 1, Black on board 2. Hivemind’s scale, not pawns.`, with
+  one board `+ is good for White on board 1 (A + B). Hivemind’s scale, not
+  pawns.`).
 - **Problem line** — one fixed line saying why a move, step or paste was
   refused.
 - **Game row** — only with a game read from a BPGN that has tags: who won

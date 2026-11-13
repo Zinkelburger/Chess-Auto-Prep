@@ -64,7 +64,7 @@ starts with the engine off, no card heading and no game counter.
   and `Go to the next puzzle after a solve`. Nothing moves as feedback changes.
 - **Recap** — `Session complete`, `Solved` / `Failed` / `Skipped` figures,
   `Accuracy 78% · 4m 12s total · avg 21s per puzzle`, `Retry mistakes ({n})`
-  (filled) and `Done`.
+  (filled; plays the failed and skipped puzzles again) and `Done`.
 - **Game tab** — the source game: `White (Elo) – Black (Elo)`, result and date,
   the review's counts for that game, then the moves as the reading card sets
   them with the puzzle's move bold and marked, scrolled into view; `Open on
