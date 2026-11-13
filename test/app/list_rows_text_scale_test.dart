@@ -142,7 +142,7 @@ void main() {
       path: '/book.pgn',
       name: 'Book',
       index: RepertoireIndex.of(
-        const GameTree(rootFen: Fen.initial, children: []),
+        const GameTree(rootFen: Fen.initial),
         Side.black,
       ),
     );
