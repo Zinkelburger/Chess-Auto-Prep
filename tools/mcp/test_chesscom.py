@@ -208,6 +208,21 @@ class IndexBehaviour(TempCache):
         self.assertEqual(list(index.matches(clue)), ["the_root_beer_float"])
         self.assertEqual(index.stats()["archives"], 2)
 
+    def test_an_unreadable_archive_is_set_aside_not_indexed_as_empty(self):
+        index = Index(self.root)
+        self.addCleanup(index.close)
+        torn = '{"games": [{"rules": "chess", "time_class": "blitz", "end_ti'
+        (self.root / "archives" / "bob_2026-06.json").write_text(torn)
+        for path in index.pending_files():
+            index.index_file(path)
+        # Not "cached with no games": the month is fetched again next time.
+        self.assertFalse(index.has_archive("bob", "2026-06"))
+        self.assertEqual(index.pending_files(), [])
+        kept = [p for p in (self.root / "archives").iterdir() if p.name != "bob_2026-06.json"]
+        self.assertEqual([p.read_text() for p in kept], [torn])
+        fetch = FakeFetch({archive_url("bob", "2026-06"): {"games": []}})
+        self.assertTrue(index.ensure_archive("bob", "2026-06", fetch))
+
     def test_leaderboard_band_bisects_then_reads_forward(self):
         index = Index(self.root)
         self.addCleanup(index.close)

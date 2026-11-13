@@ -312,7 +312,22 @@ class Index:
 
     def index_file(self, path: Path) -> int:
         username, ym = path.name[: -len(".json")].rsplit("_", 1)
-        payload = _read_json(path)
+        try:
+            payload = json.loads(path.read_text())
+        except OSError:
+            return 0
+        except ValueError as e:
+            # Torn or garbled: indexing it as an empty month would mark the
+            # month cached and it would never be fetched again. Keep the
+            # bytes aside and leave the month to be downloaded.
+            aside = path.with_name(f"{path.name}.unreadable-{int(time.time())}")
+            try:
+                path.rename(aside)
+            except OSError:
+                pass
+            print(f"chesscom: {path.name} is unreadable ({e}); set aside as {aside.name}",
+                  file=sys.stderr)
+            return 0
         return self.index_archive(username, ym, payload)
 
     def store_archive(self, username: str, ym: str, payload: Any) -> int:
