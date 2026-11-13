@@ -44,6 +44,8 @@ from typing import Any, Callable
 from .paths import data_dir
 
 PUBLIC_API = "https://api.chess.com/pub"
+#: What chess.com allows in a username.
+USERNAME = re.compile(r"[A-Za-z0-9_-]{1,50}")
 LEADERBOARD_CALLBACK = "https://www.chess.com/callback/leaderboard/live"
 USER_AGENT = "chess-auto-prep/1.0 (+https://chessautoprep.com)"
 
@@ -310,7 +312,22 @@ class Index:
 
     def index_file(self, path: Path) -> int:
         username, ym = path.name[: -len(".json")].rsplit("_", 1)
-        payload = _read_json(path)
+        try:
+            payload = json.loads(path.read_text())
+        except OSError:
+            return 0
+        except ValueError as e:
+            # Torn or garbled: indexing it as an empty month would mark the
+            # month cached and it would never be fetched again. Keep the
+            # bytes aside and leave the month to be downloaded.
+            aside = path.with_name(f"{path.name}.unreadable-{int(time.time())}")
+            try:
+                path.rename(aside)
+            except OSError:
+                pass
+            print(f"chesscom: {path.name} is unreadable ({e}); set aside as {aside.name}",
+                  file=sys.stderr)
+            return 0
         return self.index_archive(username, ym, payload)
 
     def store_archive(self, username: str, ym: str, payload: Any) -> int:
@@ -925,8 +942,26 @@ def start_search_process(job: Path) -> int:
 
 
 def _pid_alive(pid: int | None) -> bool:
+    """Whether the job process still runs.
+
+    The server started the job, so once it exits it stays this process's
+    zombie until somebody waits for it, and `kill(pid, 0)` succeeds on a
+    zombie: a stopped job read as still running for the whole stop wait,
+    and a killed one blocked every new search until the server restarted.
+    Reap it first when it is our child.
+    """
     if not pid:
         return False
+    if hasattr(os, "WNOHANG"):
+        try:
+            reaped, _ = os.waitpid(pid, os.WNOHANG)
+        except ChildProcessError:
+            pass  # not our child (an older server started it): ask the kernel
+        except OSError:
+            pass
+        else:
+            if reaped == pid:
+                return False
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -973,6 +1008,12 @@ def register_chesscom_tools(registry: Any) -> None:
         username = (args.get("username") or "").strip().lstrip("@")
         if not username:
             raise ToolError("username is required.")
+        # The name becomes a URL path segment and an archive file name, so
+        # `../x` must never get that far.
+        if not USERNAME.fullmatch(username):
+            raise ToolError(
+                f'"{username}" is not a chess.com username (letters, digits, _ and -).'
+            )
         return username
 
     def chesscom_profile(args: dict) -> dict:
@@ -1127,6 +1168,8 @@ def register_chesscom_tools(registry: Any) -> None:
         ident = (args.get("id") or "").strip()
         if not ident:
             raise ToolError("id is required (chesscom_search_status with no id lists searches).")
+        if Path(ident).name != ident or ident in (".", "..") or "\\" in ident:
+            raise ToolError(f'No search "{ident}".')
         job = _jobs_root() / ident
         if not (job / SEARCH_FILE).exists():
             raise ToolError(f'No search "{ident}".')

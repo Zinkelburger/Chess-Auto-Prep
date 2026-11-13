@@ -17,20 +17,28 @@ Rules that keep that safe:
 * `chesscom` / `lichess` are what the app downloads. Only trusted evidence
   (the directory's USCF-event match, or the user's say-so) goes there;
   everything else waits in `lookup.candidates`.
-* Every file is written atomically (temp file + rename).
+* Every file is written atomically (temp file + rename), under the app's
+  own folder lock (`lib/storage/file_lock.dart`), and a save re-reads the
+  file first: rows this store did not change are written back exactly as
+  they are on disk — the app's edits since the load, rows nobody can read,
+  everything — and the fields this store changed are laid over the row as
+  it is now.
 """
 
 from __future__ import annotations
 
+import contextlib
+import copy
 import datetime as dt
 import json
 import os
 import random
 import re
+import sqlite3
 import sys
 import tempfile
 import time
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -129,30 +137,127 @@ def _write_atomic(path: Path, payload: Any) -> None:
         raise
 
 
+def _lock_name(key: str) -> str:
+    """The app's lock file name for a folder: FNV-1a of its path, printed as
+    Dart prints a signed 64-bit int in hex (`_stablePathHash`)."""
+    value = 0xCBF29CE484222325
+    for byte in key.encode("utf-8"):
+        value ^= byte
+        value = (value * 0x100000001B3) & ((1 << 64) - 1)
+    text = "-" + format((1 << 64) - value, "x") if value >= 1 << 63 else format(value, "x")
+    return text.rjust(16, "0")
+
+
+@contextlib.contextmanager
+def directory_lock(directory: Path, timeout: float = 120.0) -> Iterator[None]:
+    """The folder lock the app takes around every players-file edit
+    (`withDirectoryLock`): an open `BEGIN IMMEDIATE` on a shared, empty
+    SQLite file named after the folder, which the system releases if this
+    process dies. Without it an app save could land between this side's
+    read and its write, and be lost."""
+    directory.mkdir(parents=True, exist_ok=True)
+    key = os.path.normpath(os.path.realpath(directory))
+    locks = Path(tempfile.gettempdir()) / "chess-auto-prep-file-locks"
+    locks.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(str(locks / f"{_lock_name(key)}.sqlite3"), timeout=0, isolation_level=None)
+    try:
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                db.execute("BEGIN IMMEDIATE")
+                break
+            except sqlite3.OperationalError as e:
+                if "locked" not in str(e) and "busy" not in str(e):
+                    raise
+                if time.monotonic() > deadline:
+                    raise TimeoutError(f"{directory} stayed locked for {timeout:.0f} s") from e
+                time.sleep(0.01)
+        try:
+            yield
+        finally:
+            db.execute("ROLLBACK")
+    finally:
+        db.close()
+
+
+def _row_id(row: Any) -> str | None:
+    rid = row.get("id") if isinstance(row, dict) else None
+    return rid if isinstance(rid, str) and rid else None
+
+
 class PeopleStore:
-    """One load of `people.json`, edited in memory, saved whole."""
+    """One load of `people.json`, edited in memory, merged back on save."""
 
     def __init__(self, root: Path | None = None) -> None:
         self.root = root or opponents_dir()
         self.path = self.root / "people.json"
-        self.envelope: dict[str, Any] = {"format": PEOPLE_FORMAT}
-        self.people: list[dict[str, Any]] = []
-        if self.path.exists():
-            raw = json.loads(self.path.read_text(encoding="utf-8") or "null")
-            if isinstance(raw, dict):
-                fmt = raw.get("format")
-                if fmt and fmt != PEOPLE_FORMAT:
-                    raise ValueError(f'{self.path} has unknown format "{fmt}".')
-                self.envelope = {k: v for k, v in raw.items() if k != "people"}
-                rows = raw.get("people") or []
-            else:
-                rows = raw or []
-            self.people = [r for r in rows if isinstance(r, dict)]
+        self.envelope, rows = self._read()
+        self.people: list[dict[str, Any]] = [r for r in rows if isinstance(r, dict)]
+        #: Each readable row as loaded, to tell this store's edits from the
+        #: file's own changes at save time.
+        self._loaded = {
+            rid: copy.deepcopy(r) for r in self.people if (rid := _row_id(r)) is not None
+        }
+
+    def _read(self) -> tuple[dict[str, Any], list[Any]]:
+        """The envelope and every row of the file as it is now.
+
+        Rows that are not a list are no rows this side may write over (the
+        app refuses them too), so that raises rather than reading as empty.
+        """
+        if not self.path.exists():
+            return {"format": PEOPLE_FORMAT}, []
+        raw = json.loads(self.path.read_text(encoding="utf-8") or "null")
+        if isinstance(raw, dict):
+            fmt = raw.get("format")
+            if fmt and fmt != PEOPLE_FORMAT:
+                raise ValueError(f'{self.path} has unknown format "{fmt}".')
+            rows = raw.get("people")
+            envelope = {k: v for k, v in raw.items() if k != "people"}
+        else:
+            rows, envelope = raw, {"format": PEOPLE_FORMAT}
+        if rows is None:
+            rows = []
+        if not isinstance(rows, list):
+            raise ValueError(f"The people in {self.path} are not a list; it is left as it is.")
+        return envelope, rows
 
     def save(self) -> Path:
-        self.envelope["format"] = PEOPLE_FORMAT
-        self.people.sort(key=lambda r: str(r.get("name", "")).lower())
-        _write_atomic(self.path, {**self.envelope, "people": self.people})
+        """Write this store's added and edited rows into the file as it is
+        now. Every other row — the app's edits since the load, rows this
+        side cannot read — goes back exactly as it is on disk."""
+        with directory_lock(self.root):
+            envelope, current = self._read()
+            mine: dict[str, dict] = {}
+            for row in self.people:
+                rid = _row_id(row)
+                if rid is not None and row != self._loaded.get(rid):
+                    mine.setdefault(rid, row)
+            rows: list[Any] = []
+            for row in current:
+                rid = _row_id(row)
+                if rid is None or rid not in mine:
+                    rows.append(row)
+                    continue
+                ours = mine.pop(rid)
+                before = self._loaded.get(rid)
+                if before is None or row == before:
+                    rows.append(ours)
+                else:
+                    # The file changed this row too: keep its version and
+                    # lay over only the fields this store changed.
+                    rows.append(
+                        {**row, **{k: v for k, v in ours.items() if before.get(k) != v}}
+                    )
+            # New rows. A loaded row that is gone from the file was removed
+            # in the app meanwhile, and stays removed.
+            rows += [row for rid, row in mine.items() if rid not in self._loaded]
+            _write_atomic(self.path, {**envelope, "format": PEOPLE_FORMAT, "people": rows})
+        self.envelope = envelope
+        self.people = [r for r in rows if isinstance(r, dict)]
+        self._loaded = {
+            rid: copy.deepcopy(r) for r in self.people if (rid := _row_id(r)) is not None
+        }
         return self.path
 
     # ── Lookup ──────────────────────────────────────────────────────
@@ -347,6 +452,17 @@ class TournamentStore:
         """Add [entries] (`person`, optional `rating`) to the group called
         [name], creating it. Existing entries keep `prepared` and odds; a
         new rating fills only a blank. Returns (path, doc, entries added)."""
+        with directory_lock(self.dir):
+            return self._upsert(name, entries, date=date, rounds=rounds)
+
+    def _upsert(
+        self,
+        name: str,
+        entries: list[dict[str, Any]],
+        *,
+        date: str | None,
+        rounds: int | None,
+    ) -> tuple[Path, dict, int]:
         tid = tournament_id(name)
         doc = self.load(tid)
         now = _now()

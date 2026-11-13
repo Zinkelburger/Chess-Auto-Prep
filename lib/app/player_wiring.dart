@@ -462,7 +462,9 @@ final class PlayerModes {
     final ref = await _study(player);
     if (_disposed || ref == null) return;
     final added = await studies.addChapters(IntoStudy(ref), [
-      board.named('${player.name} · As ${side.name}'),
+      board.named(
+        '${player.name} · ${side == Side.white ? 'As White' : 'As Black'}',
+      ),
     ]);
     if (_disposed) return;
     switch (added) {

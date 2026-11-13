@@ -262,6 +262,13 @@ results in thread-finish order. Trees built this way record
 `maia_policy_version: 1`; older trees need a fresh build rather than mixing
 probabilities from the two inference configurations.
 
+`scripts/ci.sh test test/engines/maia/maia_model_test.dart` checks the app's
+inference against the shipped model and the Linux runtime from the
+`onnxruntime` package, and skips without them. Its shares must match what
+`tree_builder/src/maia.c` gives for the same positions to five decimals,
+building a session must start no runtime thread, and repeated builds and
+disposals must hand back their session options and weights.
+
 ## Interactive Expectimax (Search tab)
 
 The app's Expectimax uses a bounded candidate policy rather than an exhaustive
