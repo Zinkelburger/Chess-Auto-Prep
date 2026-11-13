@@ -207,6 +207,20 @@ void main() {
       await tester.pump();
       expect(fixture.session.hasHeldEdits, isTrue);
       await tester.pumpAndSettle();
+      // The title asks about the chapter by name; the message says what
+      // follows rather than asking again.
+      expect(
+        find.text(
+          'Discard unsaved changes to “${fixture.session.chapter!.name}”?',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'The file goes back to its last save. This cannot be undone.',
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(fixture.session.hasHeldEdits, isTrue);

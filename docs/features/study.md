@@ -16,9 +16,9 @@ the shared picker in `lib/workspace/document/study_picker.dart`.
 
 ## Navigate and organize
 
-The sidebar has two views. **Your studies**: `Search studies`, a filled
-**New study…** (while no study is open), **Import chapters…**, then the
-studies. A study: the back arrow (**Back to studies**, to the picker), its
+The sidebar has two views. **Your studies** (its `⋯` **Study actions**
+holds **New study…**): `Search studies`, **Import chapters…**, then the
+studies; with none yet, `No studies yet.` and the filled **New study…**. A study: the back arrow (**Back to studies**, to the picker), its
 name with the `⋯` **Study actions**, **Import chapters…** beside **Send to
 Lichess…** (wrapping in a narrow column), **Train study**, **New
 chapter…**, `Search chapters`, then the chapters by ordinal, each with its

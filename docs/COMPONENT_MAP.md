@@ -195,8 +195,10 @@ Bughouse mode is offered when its engine assets are present.
   orientation-aware arrow navigation, Enter/Space selection and keyboard promotion
   to the shared pointer board. Modified history shortcuts still pass through.
   Submitted notation errors use a stable feedback row below the board controls.
-- `PlaceMemory` keeps the mode and file on the board in Settings (`lastPlace`)
-  as they change; `WorkspaceRequests.resume` opens there at launch.
+- `PlaceMemory` keeps the mode, the file on the board and the analysed
+  player in Settings (`lastPlace`) as they change; `WorkspaceRequests.resume`
+  opens there at launch and `PlayerModes.resumePlayer` reopens the player
+  once Player analysis is shown.
 - `LayoutMemory` stores deliberate tool/split/board-width choices in Settings,
   per mode and, for document views, per file. Auxiliary modes keep their layout
   while browsing source games. Writes participate in exit settling. Actions ▸

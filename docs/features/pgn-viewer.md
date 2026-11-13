@@ -121,7 +121,7 @@ a manual flip stands until the next game.
 mode keeps its own side (the viewer starts on Read, Study on Edit). On Read,
 moves played, review annotations and the like show at once but are held in
 memory (`DocumentSession.holdsEdits`): the strip says `Unsaved changes` with
-`Discard` (asks `Discard unsaved changes?`) and `Save` / Ctrl+S. On Edit every
+`Discard` (asks `Discard unsaved changes to “<chapter>”?`) and `Save` / Ctrl+S. On Edit every
 change is written as it is made, as in the builder, and turning to Edit writes
 what Read held first; Ctrl+Z undoes either way (100 steps held). Coming to the
 mode, or to a document tab that held edits, never writes them. A read-only

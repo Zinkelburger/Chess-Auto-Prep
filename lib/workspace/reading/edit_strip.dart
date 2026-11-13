@@ -92,10 +92,11 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
     if (!session.hasHeldEdits) return;
     final yes = await confirmAction(
       context,
-      title: 'Discard unsaved changes?',
-      message:
-          'Discard all unsaved changes to “${chapter?.name ?? 'this document'}”? '
-          'This cannot be undone.',
+      title: switch (chapter?.name) {
+        final name? => 'Discard unsaved changes to “$name”?',
+        null => 'Discard unsaved changes?',
+      },
+      message: 'The file goes back to its last save. This cannot be undone.',
       confirm: 'Discard changes',
     );
     if (yes &&

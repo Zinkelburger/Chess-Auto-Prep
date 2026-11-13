@@ -140,6 +140,25 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('a move names its player on hover only when the file names '
+        'one', (tester) async {
+      build();
+      lab.play(BoardNumber.one, 'e2e4');
+      await pump(tester);
+      // Nothing to say: no seat letter as a tooltip.
+      expect(find.byTooltip('Player A'), findsNothing);
+      lab.pasteMoves(file, file: 'night.bpgn');
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(BoardMoves),
+          matching: find.byTooltip('ann'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Player A'), findsNothing);
+    });
+
     testWidgets('at the smallest boards a seat keeps its hand\'s height and '
         'its whole clock', (tester) async {
       build();

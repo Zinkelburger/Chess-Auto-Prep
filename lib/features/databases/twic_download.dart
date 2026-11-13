@@ -29,6 +29,10 @@ class TwicDownload extends ChangeNotifier {
   int total = 0;
   int skipped = 0;
 
+  /// The last run went through every issue asked for: nothing is left to
+  /// download until the next issue.
+  bool finished = false;
+
   /// The unreadable database this run set aside, if it had to.
   String? setAside;
 
@@ -49,6 +53,7 @@ class TwicDownload extends ChangeNotifier {
   Future<void> _run(int weeks) async {
     running = true;
     _stopping = false;
+    finished = false;
     problem = null;
     done = 0;
     total = weeks;
@@ -87,6 +92,7 @@ class TwicDownload extends ChangeNotifier {
         done++;
         _notify();
       }
+      finished = !_stopping;
       status = _stopping
           ? 'Stopped. Download again to resume.'
           : 'TWIC database ready.';
