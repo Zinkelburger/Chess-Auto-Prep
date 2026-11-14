@@ -212,8 +212,9 @@ ChapterEdit _madeFirst(Chapter chapter, List<String> sans) {
     written.add(branch.game);
   }
   final first = branches.first;
-  if (first.child >= 0)
+  if (first.child >= 0) {
     return _reordered(chapter, lines, written, first, first);
+  }
   // The merged tree shows the move first only if a game that plays it comes
   // before [first]. Moving a game forward also puts its own main line first
   // above this point, so that is the same line only when both games reach
