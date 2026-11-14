@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Bounded local jobs: run [--headless] -- COMMAND; status; setup.
 
-Three machine-wide slots, one writer per checkout, and systemd-enforced limits.
-The slice caps all jobs together, so a third job shares the same total budget.
+Two machine-wide slots, one writer per checkout, and systemd-enforced limits.
 Admission locks live inside the service. A dead supervisor cannot leave a job
 running outside its reservation, and a failed user manager never runs uncapped.
 """
@@ -30,8 +29,6 @@ RUNTIME_ROOT = Path(f'/run/user/{os.getuid()}')
 STATE = Path(f'/tmp/chess-prep-jobs-{os.getuid()}')
 LEGACY_LOCK = Path('/tmp/chess-auto-prep-flutter.lock')
 SLICE = 'chessprep.slice'
-# Jobs admitted at once. Each is capped separately, and SLICE caps their sum.
-SLOTS = 3
 SLICE_CONFIG = '''[Unit]
 Description=Chess Auto Prep agent workloads
 [Slice]
@@ -304,7 +301,7 @@ def sweep_job_temps() -> None:
                 # New jobs record their service. Old jobs can still have live
                 # children after a worker dies, so consult the shared slots too.
                 owners = [read_json(folder / '.owner.json')]
-                owners += [read_json(STATE / f'slot-{i}.json') for i in range(SLOTS)]
+                owners += [read_json(STATE / f'slot-{i}.json') for i in range(2)]
                 if any(isinstance(owner, dict) and owner.get('cgroup')
                        and populated(owner['cgroup'])
                        and (index == 0 or owner.get('pid') == int(pid))
@@ -373,12 +370,12 @@ def worker(args) -> int:
             time.sleep(0.2)
     with contextlib.ExitStack() as stack:
         # Old checkouts still take an exclusive legacy lock. New checkouts
-        # share it, so old jobs and the slot setup never overlap.
+        # share it, so old jobs and the two-slot setup never overlap.
         legacy = Lease(LEGACY_LOCK, shared=True); stack.callback(legacy.close)
         wait_for([legacy])
         checkout = Lease(STATE / ('checkout-' + checkout_key(Path.cwd()) + '.lock'), metadata)
         stack.callback(checkout.close); wait_for([checkout])
-        slots = [Lease(STATE / f'slot-{i}.lock', metadata) for i in range(SLOTS)]
+        slots = [Lease(STATE / f'slot-{i}.lock', metadata) for i in range(2)]
         for slot in slots:
             stack.callback(slot.close)
         active = wait_for(slots)
@@ -459,7 +456,7 @@ def run(args) -> int:
 
 
 def status() -> None:
-    for i in range(SLOTS):
+    for i in range(2):
         metadata = read_json(STATE / f'slot-{i}.json')
         busy = populated(metadata.get('cgroup', '')) if metadata.get('cgroup') else False
         print(f'slot {i}: ' + (f"busy · {metadata.get('checkout')} · {metadata.get('command')}" if busy else 'free'))
