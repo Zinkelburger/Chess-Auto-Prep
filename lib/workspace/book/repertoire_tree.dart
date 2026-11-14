@@ -270,6 +270,10 @@ final class RepertoireTree extends ChangeNotifier {
   Future<void> _readThenShow() async {
     await _shelf.read(gone: () => _disposed);
     if (_disposed || _watching == 0) return;
+    // A failed read is said, not shown as a book with nothing in it.
+    if (_shelf.stale && _shelf.problem != null) {
+      return _show(const TreeNothing('Could not read your repertoires.'));
+    }
     _showHere();
   }
 
