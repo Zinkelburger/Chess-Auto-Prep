@@ -19,6 +19,7 @@ import 'package:chess_auto_prep/storage/operation_id.dart';
 import 'package:chess_auto_prep/storage/operation_participants.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/pgn_file_store.dart';
+import 'package:chess_auto_prep/storage/recovery_files.dart';
 import 'package:chess_auto_prep/storage/recovery_gate.dart';
 import 'package:chess_auto_prep/storage/recovery_ledger.dart';
 import 'package:chess_auto_prep/storage/recovery_quarantine.dart';
@@ -87,6 +88,25 @@ void main() {
         expect(rows.log, isEmpty);
       },
     );
+
+    test('a pivot found missing once every pivot has landed defers, never '
+        'leaving the references behind', () async {
+      final landed = _Part('landed', const HoldsAfter())
+        ..failSettle = const RecoveryRequired(
+          'The Documents directory is missing.',
+        );
+      final rows = _Part('rows', const HoldsBefore());
+      final settlement = await finishParticipants((
+        pivots: [landed],
+        references: [rows],
+      ));
+      expect(
+        settlement,
+        isA<Deferred>().having((d) => d.phase, 'phase', Phase.references),
+      );
+      expect(landed.log, isEmpty);
+      expect(rows.log, isEmpty);
+    });
 
     test('a passing failure applying a pivot is deferred as it is', () async {
       final first = _Part('first', const HoldsBefore());
@@ -830,6 +850,7 @@ final class _Part implements Pivot, Reference {
   final String name;
   Holds holds;
   Object? failApply;
+  Object? failSettle;
   final log = <String>[];
 
   @override
@@ -846,7 +867,10 @@ final class _Part implements Pivot, Reference {
   }
 
   @override
-  Future<void> settle() async => log.add('settle');
+  Future<void> settle() async {
+    if (failSettle case final error?) throw error;
+    log.add('settle');
+  }
 
   @override
   Future<void> putBack() async {
