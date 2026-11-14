@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/app/window_input.dart';
 import 'package:chess_auto_prep/app/workspace_requests.dart';
 import 'package:chess_auto_prep/chess/explorer_answer.dart';
 import 'package:chess_auto_prep/chess/explorer_choice.dart';
+import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/study.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
@@ -417,6 +418,41 @@ void main() {
         expect(w.viewer.file, w.session.source);
       },
     );
+
+    test(
+      'opens at the position explored, whatever its move counters say',
+      () async {
+        // After 1.e4 c5 2.Nf3 d6, set up with the counters reset.
+        const explored = Fen(
+          'rnbqkbnr/pp2pppp/3p4/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 1',
+        );
+        await w.requests.openPosition(explored, side: Side.white);
+        w.lichess.pgn =
+            '[Event "Scripted"]\n\n1. e4 c5 2. Nf3 d6 3. d4 cxd4 1-0\n';
+        expect(await openListed(), isA<RequestDone>());
+        expect(w.session.cursor.value, NodePath.of(const [0, 0, 0, 0]));
+        expect(w.session.cursor.fen.position, explored.position);
+      },
+    );
+
+    test('Back to the file the viewer was reading gives the viewer that '
+        'file again', () async {
+      final games = collectionRef('games');
+      w.store.documents[games] = Opened(
+        threeGameFile,
+        scriptedRevision(threeGameFile),
+      );
+      await w.requests.openFile(games);
+      w.requests.switchTo(Mode.repertoires);
+      expect(await openListed(), isA<RequestDone>());
+      expect(w.viewer.file, isNot(games));
+      await w.requests.back();
+      expect(await w.requests.back(), isA<RequestDone>());
+      expect(w.requests.mode, Mode.pgnViewer);
+      expect(w.session.source, games);
+      expect(w.viewer.file, games);
+      expect(w.viewer.games, isNotEmpty);
+    });
 
     test('that could not be fetched is refused and nothing moves', () async {
       await w.requests.open(kid);

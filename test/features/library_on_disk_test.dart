@@ -157,6 +157,39 @@ void main() {
     expect(reviews(), contains(at('repertoires/Sidelines/Modern.pgn')));
   });
 
+  test('a chapter added to a single-file repertoire gets a folder', () async {
+    File(at('repertoires/Italian.pgn'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('// Color: Black\n[Event "Main"]\n\n1. e4 e5 *\n');
+    trainOn('repertoires/Italian.pgn');
+    await library.refresh();
+    final added = await library.createChapter(named('Italian'), 'Ruy');
+    expect(added, isA<LibraryAdded>());
+    expect(exists('repertoires/Italian/Italian.pgn'), isTrue);
+    expect(exists('repertoires/Italian/Ruy.pgn'), isTrue);
+    expect(exists('repertoires/Italian.pgn'), isFalse);
+    expect(reviews(), contains(at('repertoires/Italian/Italian.pgn')));
+    expect(
+      File(at('repertoires/Italian/Ruy.pgn')).readAsStringSync(),
+      contains('Color: Black'),
+    );
+  });
+
+  test('a chapter moved into a single-file repertoire lands', () async {
+    File(at('repertoires/Italian.pgn'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('// Color: Black\n[Event "Main"]\n\n1. e4 e5 *\n');
+    await library.createRepertoire('Benoni', Side.black);
+    await library.createChapter(named('Benoni'), 'Modern');
+    await library.refresh();
+    expect(
+      await library.moveChapter(chapter('Benoni', 'Modern'), named('Italian')),
+      isA<LibraryDone>(),
+    );
+    expect(exists('repertoires/Italian/Modern.pgn'), isTrue);
+    expect(exists('repertoires/Italian/Italian.pgn'), isTrue);
+  });
+
   test('a deleted repertoire is in recovery, rows and all', () async {
     await library.createRepertoire('Sidelines', Side.black);
     await library.createChapter(named('Sidelines'), 'Modern');

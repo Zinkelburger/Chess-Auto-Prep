@@ -264,6 +264,37 @@ void main() {
     );
   });
 
+  test('repertoires that could not be read say so, not that the book is '
+      'empty', () async {
+    final unreadable = ScriptedFiles(
+      listing: const RepertoiresUnreadable('recovery required'),
+    );
+    final failing = RepertoireShelf(
+      files: unreadable,
+      documents: fixture.store,
+    );
+    final other = RepertoireTree(
+      session: fixture.session,
+      shelf: failing,
+      books: booksWith({'e4'}),
+    )..watch();
+    addTearDown(() {
+      other.dispose();
+      failing.dispose();
+    });
+    await pumpEventQueue();
+    expect(
+      (other.state as TreeNothing).sentence,
+      'Could not read your repertoires.',
+    );
+    unreadable.listing = Repertoires([
+      folder('e4', ['Italian', 'Ruy']),
+    ]);
+    other.forget();
+    await pumpEventQueue();
+    expect(other.state, isA<TreeShown>());
+  });
+
   test('a book without chapters of the side says which side', () async {
     RepertoireTree treeOf(Set<String> repertoires) {
       final other = RepertoireTree(

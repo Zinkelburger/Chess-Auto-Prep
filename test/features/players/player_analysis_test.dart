@@ -147,6 +147,51 @@ void main() {
       );
     }
   });
+  test('positions are cached until a filter or an eval changes', () {
+    final store = ScriptedDocumentStore();
+    final owner = PlayerAnalysis(
+      documents: store,
+      cache: GamesCache(store, folder: '/games'),
+      sites: const [],
+      pending: PendingWrites(),
+    );
+    addTearDown(owner.dispose);
+    const text =
+        '[White "Alex"]\n[Black "Bob"]\n[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 1-0';
+    owner.corpus = buildPlayerCorpus(
+      {'alex'},
+      [
+        const PlayerGame(file: DocumentRef('/a.pgn'), index: 0, text: text),
+        PlayerGame(
+          file: const DocumentRef('/a.pgn'),
+          index: 1,
+          text: text
+              .replaceFirst('Bob', 'Carl')
+              .replaceFirst('2. Nf3', '2. Bc4'),
+        ),
+      ],
+    );
+    owner.minPly = 0;
+    final first = owner.positions;
+    expect(first, isNotEmpty);
+    expect(owner.positions, same(first));
+    expect(owner.gameIndexes, same(owner.gameIndexes));
+    owner.search('carl');
+    final searched = owner.positions;
+    expect(searched, isNot(same(first)));
+    expect(owner.gameIndexes, [1]);
+    expect(searched.every((p) => p.games.single == 1), true);
+    owner.search('');
+    owner.minGames = 2;
+    expect(owner.positions.every((p) => p.count == 2), true);
+    owner.minGames = 1;
+    owner.configure(order: PositionOrder.badEval);
+    final before = owner.positions;
+    final last = before.last;
+    owner.evals[last.key] = -300;
+    expect(owner.positions, isNot(same(before)));
+    expect(owner.positions.first.key, last.key);
+  });
   test('pasted CSV quotes, TSV and opponent JSON preserve names', () {
     final csv = readPlayerList(
       'Name,Rating,Chess.com\n"Rivera, Alex",1900,alex_1',
@@ -326,6 +371,36 @@ void main() {
     expect(listed(), isNot(contains('Starting position')));
     // White to play move 2 and Black to play it are both move 2.
     expect(listed(), containsAll(['1. e4 c5', '1. e4 c5 2. Nf3']));
+  });
+  test('a large games file is split off the UI isolate with every game in '
+      'its place', () async {
+    final store = ScriptedDocumentStore();
+    const ref = DocumentRef('/big.pgn');
+    final text = [
+      for (var i = 0; i < 800; i++)
+        '[Event "Club $i"]\n[White "Alex"]\n[Black "Opponent $i"]\n'
+            '[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 1-0',
+    ].join('\n\n');
+    expect(text.length, greaterThan(64 * 1024));
+    store.documents[ref] = Opened(text, scriptedRevision(text));
+    final owner = PlayerAnalysis(
+      documents: store,
+      cache: GamesCache(store, folder: '/games'),
+      sites: const [],
+      pending: PendingWrites(),
+    );
+    addTearDown(owner.dispose);
+    await owner.select(
+      Player.create('Alex').edited({
+        'pgn_files': [ref.path],
+      }),
+    );
+    final games = owner.corpus!.games;
+    expect(games, hasLength(800));
+    for (final (i, game) in games.indexed) {
+      expect((game.source.file, game.source.index), (ref, i));
+    }
+    expect(games[799].source.text, contains('Opponent 799'));
   });
   test('a download missing a month keeps the games it read and names the '
       'month', () async {

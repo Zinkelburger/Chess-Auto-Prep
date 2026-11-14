@@ -201,7 +201,8 @@ time.
 - `Documents/repertoires/<repertoire>/` is a repertoire. Every `.pgn` under
   it, subfolders included, is a chapter file; dot-folders, `.import-*` staging
   folders and `*_raw_games.pgn` are skipped. A `.pgn` directly under
-  `repertoires/` is moved to `<name>/Main.pgn` when the list is read.
+  `repertoires/` is a repertoire of one chapter; adding or moving a chapter
+  into it first moves the file into a `<name>/` folder.
 - A chapter file starts with a `//` heading: `// <name>`,
   `// Color: White|Black`, `// Created on <date time>`, `// Root: 1. e4 e5
   2. f4` when it starts after moves, and `// Draft` for a proposed chapter.

@@ -1,8 +1,11 @@
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/engines/maia/move_policy.dart';
+import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
+import 'package:chess_auto_prep/workspace/book/gap_hunt.dart';
 import 'package:chess_auto_prep/workspace/book/replies_pane.dart';
 import 'package:chessground/chessground.dart' show StaticChessboard;
 import 'package:flutter/gestures.dart';
@@ -10,7 +13,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/replies_fixture.dart';
+import '../support/scripted_files.dart';
 import '../support/scripted_policy.dart';
+import '../support/scripted_store.dart';
 import '../support/session_fixture.dart';
 
 const chapter = '''
@@ -75,11 +80,16 @@ void main() {
   /// The owner is made inside the test body: its walk is a chain of futures,
   /// and one started in `setUp` lives outside the test's fake clock and
   /// never runs while the test pumps.
-  Future<void> show(WidgetTester tester, {MovePolicy? policy}) async {
+  Future<RepliesFixture> show(
+    WidgetTester tester, {
+    MovePolicy? policy,
+    RepertoireAnswers? answers,
+  }) async {
     final owners = RepliesFixture(
       fixture.session,
       policy: policy ?? OneOpinion(),
       settings: settings,
+      answers: answers,
     );
     addTearDown(owners.dispose);
     await tester.pumpWidget(
@@ -99,6 +109,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    return owners;
   }
 
   testWidgets('shows their replies with shares, a tick for the one the '
@@ -112,6 +123,33 @@ void main() {
     expect(find.text('40%'), findsOneWidget);
     expect(find.byIcon(Icons.check), findsOneWidget);
     expect(find.text('gap'), findsOneWidget);
+  });
+
+  testWidgets('a walk that failed is said, not the walk before it', (
+    tester,
+  ) async {
+    final files = ScriptedFiles();
+    final store = ScriptedDocumentStore();
+    fixture.session.cursor.forward();
+    final owners = await show(
+      tester,
+      answers: RepertoireAnswers(files: files, documents: store),
+    );
+    expect(find.textContaining('2 gaps · 0% covered'), findsOneWidget);
+    final other = chapterRef('KID', 'Other');
+    store
+      ..documents[other] = Opened(chapter, scriptedRevision(chapter))
+      ..throwOnOpen = StateError('disk gone');
+    files.listing = Repertoires([
+      folder('KID', ['Main', 'Other']),
+    ]);
+    owners.gaps.refreshAnswers();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('covered'), findsNothing);
+    expect(
+      find.text('Their replies · 2200 · could not find gaps'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a model that answered nothing finds no gaps and claims no '

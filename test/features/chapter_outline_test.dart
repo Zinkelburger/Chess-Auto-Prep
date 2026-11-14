@@ -111,6 +111,49 @@ void main() {
     expect(outline.lines.last.moves, '…1...Nf6');
   });
 
+  test('a line is shown from where it leaves every line above it, and a '
+      'repeated line still shows its last move', () async {
+    fixture = await openLibrary(
+      [
+        folder('KID', ['Main']),
+      ],
+      text: '''
+// Color: White
+
+[Event "A"]
+
+1. e4 e5 2. Nf3 Nc6 *
+
+[Event "B"]
+
+1. d4 d5 *
+
+[Event "C"]
+
+1. e4 e5 2. Nf3 Nf6 *
+
+[Event "D"]
+
+1. e4 e5 *
+''',
+      open: main,
+    );
+    outline = ChapterOutline(
+      library: fixture.library,
+      session: fixture.session,
+    );
+    addTearDown(() {
+      outline.dispose();
+      fixture.dispose();
+    });
+    expect(outline.lines.map((line) => line.moves).toList(), [
+      '1.e4 e5 2.Nf3 Nc6',
+      '1.d4 d5',
+      '…2...Nf6',
+      '…1...e5',
+    ]);
+  });
+
   test('a name every line repeats is left off the row', () async {
     fixture = await openLibrary(
       [

@@ -196,6 +196,23 @@ void main() {
     expect(find.text('Saved'), findsOneWidget);
   });
 
+  testWidgets('the answer to an undo goes with the next edit, and the strip '
+      'with Done', (tester) async {
+    await pump(tester);
+    edit('one');
+    await tester.pumpAndSettle();
+    fixture.store.saves.add(Conflict(scriptedRevision(fixture.onDisk)));
+    await tester.tap(find.widgetWithIcon(IconButton, Icons.undo));
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing to undo right now'), findsOneWidget);
+    edit('two');
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing to undo right now'), findsNothing);
+    editing.value = false;
+    await tester.pumpAndSettle();
+    expect(find.text('Saved'), findsNothing);
+  });
+
   /// Somebody else writes the file, then this window saves over it.
   Future<void> conflict(WidgetTester tester) async {
     fixture.externalEdit('// Color: Black\n\n[Event "Theirs"]\n\n1. e4 *\n');

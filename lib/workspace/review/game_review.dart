@@ -222,18 +222,44 @@ final class GameReview extends ChangeNotifier {
 
   /// The games of the open file a review of them all would cover: each one
   /// read whole, with moves, that carries no review yet.
+  ///
+  /// None while the file's moves are still on their way from another
+  /// isolate; listeners hear when they arrive. Kept per chapter, whose games
+  /// never change: an edit or a review is another chapter.
   List<int> get unreviewedGames {
     final chapter = session.chapter;
     if (chapter == null || chapter.lines.length < 2) return const [];
-    return [
+    if (_unreviewed case (final at, final games) when identical(at, chapter)) {
+      return games;
+    }
+    if (movesBeingRead(chapter.lines) case final reading?) {
+      if (!identical(_awaitingMoves, chapter)) {
+        _awaitingMoves = chapter;
+        void arrived() {
+          if (_disposed || !identical(session.chapter, chapter)) return;
+          notifyListeners();
+        }
+
+        unawaited(reading.then((_) => arrived(), onError: (_) => arrived()));
+      }
+      return const [];
+    }
+    final games = List<int>.unmodifiable([
       for (final (index, line) in chapter.lines.indexed)
         if (line.isWhole &&
             line.tree != null &&
             line.tree!.children.isNotEmpty &&
             !hasReview(line.tree!))
           index,
-    ];
+    ]);
+    _unreviewed = (chapter, games);
+    return games;
   }
+
+  (Chapter, List<int>)? _unreviewed;
+
+  /// The chapter whose moves a listener is waiting for, so one is added.
+  Chapter? _awaitingMoves;
 
   /// Whether every game can be reviewed now: the review writes into each,
   /// so the file must take edits and the switch must be on.

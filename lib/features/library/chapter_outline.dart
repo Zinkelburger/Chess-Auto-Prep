@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
@@ -14,17 +13,27 @@ import '../../workspace/document/document_session.dart';
 import '../../workspace/latest.dart';
 import 'library.dart';
 
-/// How many opening moves [sans] has in common with the line [above] it,
-/// never all of them: a row with nothing in it would say even less than a
-/// repeated one.
-int _sharedWith(List<String> above, List<String> sans) {
-  var shared = 0;
-  while (shared < above.length &&
-      shared < sans.length - 1 &&
-      above[shared] == sans[shared]) {
-    shared++;
+/// The moves of the lines above a row, merged by their common openings.
+final class _SanTrie {
+  final children = <String, _SanTrie>{};
+
+  /// How many opening moves [sans] has in common with the line above that
+  /// shares the most, never all of them: a row with nothing in it would say
+  /// even less than a repeated one. Then [sans] is added.
+  int sharedThenAdd(List<String> sans) {
+    var node = this;
+    var shared = 0;
+    while (shared < sans.length - 1) {
+      final next = node.children[sans[shared]];
+      if (next == null) break;
+      node = next;
+      shared++;
+    }
+    for (final san in sans.skip(shared)) {
+      node = node.children.putIfAbsent(san, _SanTrie.new);
+    }
+    return shared;
   }
-  return shared;
 }
 
 /// One chapter of the open repertoire, as the outline lists it.
@@ -417,16 +426,12 @@ bool _extends(NodePath path, NodePath from) {
 List<OutlineLine> _linesOf(Chapter chapter) {
   final rows = <OutlineLine>[];
   final names = <String>{};
-  final above = <List<String>>[];
+  final above = _SanTrie();
   for (final (index, line) in chapter.lines.indexed) {
     final tree = chapter.treeInChapter(line);
     if (tree == null) continue;
     final sans = mainlineSans(tree);
-    final shared = above.fold(
-      0,
-      (most, other) => math.max(most, _sharedWith(other, sans)),
-    );
-    above.add(sans);
+    final shared = above.sharedThenAdd(sans);
     final name = tagValue(line.tags, 'Event')?.trim();
     if (name != null) names.add(name);
     rows.add(
