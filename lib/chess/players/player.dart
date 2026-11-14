@@ -47,6 +47,20 @@ final class Player {
     ],
   });
 
+  /// This person with [added] in the list field [key]. Whatever [key] held
+  /// is kept: a value that is not a list stays as one entry, and entries
+  /// that are not text stay too.
+  Player withStrings(String key, Iterable<String> added) {
+    final kept = _kept(fields[key]);
+    return edited({
+      key: [
+        ...kept,
+        for (final text in {...added})
+          if (!kept.contains(text)) text,
+      ],
+    });
+  }
+
   /// This person without [link]; every other entry is kept as it was.
   Player withoutStudy(StudyLink link) => edited({
     'studies': [
@@ -237,7 +251,10 @@ List<Player> _tablePlayers(String text) {
   return lines
       .skip(1)
       .where((line) => !RegExp(r'^[\s|:\-]+$').hasMatch(line))
-      .map((line) => _tablePlayer(_cells(line, delimiter), headers))
+      .map((line) => _cells(line, delimiter))
+      // A spreadsheet's trailing empty row, `,,,`, is no player.
+      .where((cells) => cells.any((cell) => cell.isNotEmpty))
+      .map((cells) => _tablePlayer(cells, headers))
       .toList();
 }
 

@@ -247,10 +247,10 @@ final class Players extends ChangeNotifier {
                           existing.fields[e.key] == ''))
                     e.key: e.value,
               });
-        final linked = next.edited({
-          for (final key in ['aliases', 'pgn_files', 'game_sets'])
-            key: {...?existing?.strings(key), ...player.strings(key)}.toList(),
-        });
+        var linked = next;
+        for (final key in ['aliases', 'pgn_files', 'game_sets']) {
+          linked = linked.withStrings(key, player.strings(key));
+        }
         await store.savePlayer(linked, expected: existing);
         people.removeWhere((p) => p.id == next.id);
         people.add(linked);
