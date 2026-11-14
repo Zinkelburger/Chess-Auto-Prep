@@ -541,6 +541,9 @@ final class WorkspaceRequests extends ChangeNotifier {
   }) async {
     final ticket = _nextRequest();
     if (source == ExplorerSource.thisFile) return _showFileGame(game);
+    // The position explored, not its move counters: a set-up position or a
+    // game that got there by another move order is at another ply.
+    final explored = _session.cursor.fen;
     final kept = await _games.keep(game, source: source, ply: ply);
     if (ticket.overtaken) return const RequestDropped();
     switch (kept) {
@@ -549,7 +552,10 @@ final class WorkspaceRequests extends ChangeNotifier {
       case GameKept(:final ref, ply: final at):
         final result = await _inViewer(ticket, ref, game: 0);
         if (_disposed || result is! RequestDone) return result;
-        _session.cursor.goTo(NodePath.of(List.filled(at, 0)));
+        _session.cursor.goTo(
+          _session.tree?.mainLineTo(explored) ??
+              NodePath.of(List.filled(at, 0)),
+        );
         return result;
     }
   }
