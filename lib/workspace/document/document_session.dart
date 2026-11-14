@@ -94,8 +94,7 @@ final class DocumentSession extends ChangeNotifier {
     final undo = _saver.setAsideUndo();
     _saver.opened(source, draft.revision, readOnly: _readOnly);
     if (undo != null) _saver.restoreUndo(undo);
-    // The cursor follows onto the game restored: the same move when it is
-    // the game shown before, its start when it is another.
+    // The cursor keeps its move on the game shown before, else its start.
     cursor._place(
       before != null && before.game == draft.shown.chapter.game
           ? samePathIn(before.tree, draft.shown.chapter.tree, cursor.value)
