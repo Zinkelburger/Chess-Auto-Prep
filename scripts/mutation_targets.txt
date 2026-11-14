@@ -282,6 +282,9 @@
 #   lib/features/library/outline_panel.dart:109 `||` -> `&&` (a rename to the
 #     name the line has changes nothing either way), :153 `<` -> `<=` (equal
 #     ends make the same range).
+#   lib/features/my_games/game_book.dart:378 the disposed flag (taking the
+#     book down closes its reads first, so none reaches it), :394 the text's
+#     size: only which isolate reads the games.
 #   lib/chess/typed_move.dart:102 `>` -> `>=` (a castling king never lands
 #     on its own square), :187 `.first` -> `.last` (every candidate is then
 #     checked against the same four characters).
@@ -713,3 +716,5 @@ lib/features/library/library_panel.dart|test/features/library_panel_more_test.da
 lib/features/library/outline_panel.dart|test/features/outline_panel_more_test.dart|test/features/outline_panel_test.dart
 lib/features/library/pgn_drop_region.dart|test/features/pgn_drop_region_more_test.dart|test/features/pgn_drop_region_test.dart
 lib/features/my_games/book_pane.dart|test/features/my_games/book_pane_swap_test.dart|test/features/my_games/book_pane_test.dart
+lib/features/my_games/game_book.dart|test/features/my_games/game_book_watch_test.dart test/features/my_games/game_book_test.dart|test/app/mode_wiring_test.dart
+lib/features/my_games/my_games_panel.dart|test/features/my_games/my_games_panel_more_test.dart|test/features/my_games/my_games_panel_test.dart
