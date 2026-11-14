@@ -85,4 +85,19 @@ void main() {
       'Nf3',
     );
   });
+
+  testWidgets('outside a notation setting moves keep their letters', (
+    tester,
+  ) async {
+    late String shown;
+    await tester.pumpWidget(
+      Builder(
+        builder: (context) {
+          shown = displaySan(context, 'Nf3');
+          return const SizedBox();
+        },
+      ),
+    );
+    expect(shown, 'Nf3');
+  });
 }

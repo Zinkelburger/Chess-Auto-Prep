@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/ui/app_keys.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -52,5 +53,60 @@ void main() {
     );
     expect(AppKey.flip.accepts(down), isTrue);
     expect(AppKey.undo.accepts(down), isFalse);
+  });
+
+  test('every key is bound with exactly its modifiers', () {
+    String bound(AppKey key) => [
+      for (final activator in key.keys.cast<SingleActivator>())
+        keyName(activator) + (activator.includeRepeats ? '' : ' once'),
+    ].join(' / ');
+    expect(
+      {for (final key in AppKey.values) key.name: bound(key)},
+      {
+        'moveActions': 'Shift+F10 / Context Menu',
+        'settings': 'Ctrl+, / Cmd+,',
+        'openFile': 'Ctrl+O / Cmd+O',
+        'paste': 'Ctrl+V / Cmd+V',
+        'analysisBoard': 'Ctrl+N / Cmd+N',
+        'fullScreen': 'F11',
+        'historyBack': 'Alt+←',
+        'historyForward': 'Alt+→',
+        'play': 'Space',
+        'nextGame': '↓',
+        'previousGame': '↑',
+        'closeDialog': 'Esc',
+        'squareLeft': '←',
+        'squareRight': '→',
+        'squareUp': '↑',
+        'squareDown': '↓',
+        'squareChoose': 'Enter / Space',
+        'squareClear': 'Esc',
+        'focusMenu': 'Shift+F10 / Context Menu',
+        'back': '←',
+        'forward': '→',
+        'start': 'Home / PgUp',
+        'end': 'End / PgDn',
+        'enterVariation': 'Enter / Enter',
+        'leave': 'Esc once',
+        'flip': 'F',
+        'undo': 'Ctrl+Z / Cmd+Z',
+        'save': 'Ctrl+S / Cmd+S',
+        'nextTab': 'Ctrl+Tab',
+        'previousTab': 'Ctrl+Shift+Tab',
+        'closeTab': 'Ctrl+W / Cmd+W',
+        'commitComment': 'Ctrl+Enter / Cmd+Enter',
+        'clearMove': 'Esc',
+        'nextStep': 'Space',
+        'skipLine': '↓',
+        'leaveLesson': 'Esc',
+        'rate': '1 / 2 / 3 / 4',
+        'stepBack': '←',
+        'stepForward': '→',
+        'firstMove': 'Home / PgUp',
+        'lastMove': 'End / PgDn',
+        'flipBoards': 'F',
+        'closePreview': 'Esc',
+      },
+    );
   });
 }

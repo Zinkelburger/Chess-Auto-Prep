@@ -46,6 +46,17 @@ void main() {
   ) async {
     expect(await _named(tester, 'Main. '), isNull);
     expect(find.text('Names cannot end with a dot or space.'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'Main');
+    await tester.pump();
+    expect(find.text('Names cannot end with a dot or space.'), findsNothing);
+  });
+
+  testWidgets('the field is ready to type in when the dialog opens', (
+    tester,
+  ) async {
+    await _named(tester, '');
+    final field = tester.widget<EditableText>(find.byType(EditableText));
+    expect(field.focusNode.hasFocus, isTrue);
   });
 
   test('a plain name is fine', () {

@@ -248,11 +248,12 @@ class _PaneTabStripState<K extends Object> extends State<PaneTabStrip<K>>
     });
   }
 
+  /// An up-and-down wheel scrolls the row along. A sideways one the row's
+  /// own scroll view takes; taken here too, it went twice as far.
   void _wheel(PointerSignalEvent event) {
     if (event is! PointerScrollEvent || !_scroll.hasClients) return;
-    final delta = event.scrollDelta.dy != 0
-        ? event.scrollDelta.dy
-        : event.scrollDelta.dx;
+    final delta = event.scrollDelta.dy;
+    if (delta == 0) return;
     _scroll.jumpTo(
       (_scroll.offset + delta).clamp(0.0, _scroll.position.maxScrollExtent),
     );

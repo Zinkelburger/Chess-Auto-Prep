@@ -80,7 +80,6 @@ final class ActionLayout extends ChangeNotifier {
   int _active = 0;
 
   bool _restoring = false;
-  bool get restoring => _restoring;
   double _boardFraction = 0.4;
   double get boardFraction => _boardFraction;
 

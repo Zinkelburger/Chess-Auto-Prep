@@ -49,8 +49,8 @@ final class TrapTraining {
   /// Trains [kept]'s line, asking [addToDraft] with the draft's name first
   /// when it has to go into one. The window's [showTrain] puts the
   /// builder's Train tab up just before the sitting starts, which it needs:
-  /// a sitting ends when its tab is not open. True when one started.
-  Future<bool> train(
+  /// a sitting ends when its tab is not open.
+  Future<void> train(
     KeptFind kept, {
     required Future<bool> Function(String draft) addToDraft,
     required void Function() showTrain,
@@ -63,20 +63,20 @@ final class TrapTraining {
         chapter.game != null ||
         chapter.side != kept.side) {
       requests.say('Open a repertoire chapter for $side to train it.');
-      return false;
+      return;
     }
     final sans = kept.find.sans;
     if (!_sameRoot(chapter, kept)) {
       requests.say('This line starts where the chapter does not.');
-      return false;
+      return;
     }
     final holder = _plays(chapter, kept)
         ? source
         : await _chapterPlaying(source, kept);
-    if (session.source != source) return false;
+    if (session.source != source) return;
     if (holder != null) {
       if (await requests.readInBuilder(holder, sans) is! RequestDone) {
-        return false;
+        return;
       }
       return _trainOpen(sans, showTrain);
     }
@@ -87,7 +87,7 @@ final class TrapTraining {
   /// worked out before asking, so the question names the draft the line
   /// goes into, and again after: a draft made or renamed while the question
   /// was up that changes which one that is stops it.
-  Future<bool> _trainInDraft(
+  Future<void> _trainInDraft(
     KeptFind kept,
     ChapterRef source,
     Chapter chapter,
@@ -95,19 +95,19 @@ final class TrapTraining {
     void Function() showTrain,
   ) async {
     final asked = await _draftFor(source, kept);
-    if (session.source != source) return false;
+    if (session.source != source) return;
     if (asked == null) {
       requests.say('Too many drafts of ${source.name}; delete some first.');
-      return false;
+      return;
     }
     if (!await addToDraft(asked.name) || session.source != source) {
-      return false;
+      return;
     }
     final target = await _draftFor(source, kept);
-    if (session.source != source) return false;
+    if (session.source != source) return;
     if (target == null || target.name != asked.name) {
       requests.say('The drafts of ${source.name} changed. Try again.');
-      return false;
+      return;
     }
     final made = await publishDraft(
       target,
@@ -119,23 +119,23 @@ final class TrapTraining {
         created: _now(),
       ),
     );
-    if (session.source != source) return false;
+    if (session.source != source) return;
     final draft = switch (made) {
       DraftWritten(:final ref) => ref,
       DraftNotWritten() => null,
     };
     if (draft == null) {
       requests.say('Could not make the draft ${target.name}.');
-      return false;
+      return;
     }
     if (await requests.readInBuilder(draft, const []) is! RequestDone ||
         session.source != draft) {
-      return false;
+      return;
     }
     final refused = session.apply((c) => lineAdded(c, kept.find.sans));
     if (refused != null || !_played(kept)) {
       requests.say('Could not add the line to ${draft.name}.');
-      return false;
+      return;
     }
     return _trainOpen(kept.find.sans, showTrain);
   }
@@ -173,12 +173,12 @@ final class TrapTraining {
     return chapter != null && _plays(chapter, kept);
   }
 
-  Future<bool> _trainOpen(List<String> sans, void Function() showTrain) async {
+  Future<void> _trainOpen(List<String> sans, void Function() showTrain) async {
     requests.switchTo(Mode.repertoires);
     showTrain();
-    if (await trainer.trainLineThrough(sans)) return true;
-    requests.say('Could not start training that line.');
-    return false;
+    if (!await trainer.trainLineThrough(sans)) {
+      requests.say('Could not start training that line.');
+    }
   }
 
   static bool _sameRoot(Chapter chapter, KeptFind kept) =>

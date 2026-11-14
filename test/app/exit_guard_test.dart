@@ -9,6 +9,7 @@ import 'package:chess_auto_prep/storage/pgn_document_store.dart'
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/document/document_session.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';
@@ -395,6 +396,40 @@ void main() {
     expect(find.textContaining('has not finished'), findsNothing);
     expect(await answer, isNull);
   });
+
+  test('writes the modes have not finished are asked about with no copy to '
+      'offer', () async {
+    final question = _Question(answer: DraftChoice.keepWaiting);
+    final guard = ExitGuard(
+      saver: fixture.saver,
+      question: question,
+      wait: moment,
+      settleFeatures: () async => 'Settings: disk full',
+    );
+    expect(await guard.mayClose(), isFalse);
+    expect(question.prompts.single.offerCopy, isFalse);
+    expect(question.asked.single, startsWith('Settings: disk full'));
+  });
+
+  testWidgets('Enter on the question stays', (tester) async {
+    final navigator = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigator,
+        theme: darkTheme(),
+        home: const Scaffold(body: Text('workspace')),
+      ),
+    );
+    final answer = DraftDialog(navigator).put((
+      body: 'The save of Main.pgn has not finished.',
+      leave: 'Close and lose the words',
+      offerCopy: false,
+    ));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(await answer, DraftChoice.keepWaiting);
+  });
 }
 
 /// The question as a test puts it: it records what it was asked and answers
@@ -409,6 +444,7 @@ final class _Question implements DraftQuestion {
   final bool waits;
 
   final asked = <String>[];
+  final prompts = <DraftPrompt>[];
   var withdrawn = 0;
   Completer<DraftChoice?>? _open;
   Completer<void> _first = Completer<void>();
@@ -426,6 +462,7 @@ final class _Question implements DraftQuestion {
   @override
   Future<DraftChoice?> put(DraftPrompt prompt) {
     asked.add(prompt.body);
+    prompts.add(prompt);
     if (!_first.isCompleted) _first.complete();
     if (!waits) return Future<DraftChoice?>.value(answer);
     _first = Completer<void>();

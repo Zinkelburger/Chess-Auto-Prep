@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/ui/app_icons.dart';
 import 'package:chess_auto_prep/ui/choice_field.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:flutter/material.dart';
@@ -62,5 +63,126 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
     expect(submitted, ['Carlsen', 'Nobody known', '']);
+  });
+
+  Future<void> show(
+    WidgetTester tester, {
+    String text = '',
+    List<String> options = const ['White', 'Black'],
+  }) async {
+    submitted.clear();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: Scaffold(
+          body: Column(
+            children: [
+              SizedBox(
+                width: 300,
+                child: ChoiceField(
+                  text: text,
+                  options: options,
+                  hint: 'Side',
+                  onSubmitted: submitted.add,
+                ),
+              ),
+              const TextButton(onPressed: null, child: Text('Elsewhere')),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String box(WidgetTester tester) =>
+      tester.widget<TextField>(find.byType(TextField)).controller!.text;
+  Future<void> leave(WidgetTester tester) async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+  }
+
+  testWidgets('Enter on a suggestion submits that one alone', (tester) async {
+    await show(tester);
+    await tester.enterText(find.byType(TextField), 'whi');
+    await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(submitted, ['White']);
+  });
+
+  testWidgets('left with words that chose nothing, the box goes back', (
+    tester,
+  ) async {
+    await show(tester, text: 'White');
+    await tester.enterText(find.byType(TextField), 'zzz');
+    await tester.pump();
+    await leave(tester);
+    expect(box(tester), 'White');
+  });
+
+  testWidgets('the box follows a change from outside, but not while typed '
+      'in', (tester) async {
+    await show(tester, text: 'White');
+    await show(tester, text: 'Black');
+    expect(box(tester), 'Black');
+    await tester.enterText(find.byType(TextField), 'Wh');
+    await show(tester, text: 'White');
+    expect(box(tester), 'Wh');
+  });
+
+  testWidgets('empty, it shows the magnifier; holding something, it does '
+      'not', (tester) async {
+    await show(tester);
+    expect(find.byIcon(AppIcons.search), findsOneWidget);
+    await show(tester, text: 'White');
+    expect(find.byIcon(AppIcons.search), findsNothing);
+  });
+
+  group('the suggestions', () {
+    final many = [
+      for (var i = 1; i <= 25; i++) 'Option ${'$i'.padLeft(2, '0')}',
+    ];
+
+    testWidgets('are as tall as they are', (tester) async {
+      await show(tester);
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      expect(tester.getSize(find.byType(ListView)).height, 2 * listRowHeight);
+    });
+
+    testWidgets('are eight rows tall at most', (tester) async {
+      await show(tester, options: many);
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      expect(tester.getSize(find.byType(ListView)).height, 8 * listRowHeight);
+    });
+
+    testWidgets('show the first twenty that fit', (tester) async {
+      await show(tester, options: many);
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      await tester.drag(find.byType(ListView), const Offset(0, -2000));
+      await tester.pump();
+      expect(find.text('Option 20'), findsOneWidget);
+      expect(find.text('Option 21'), findsNothing);
+    });
+
+    testWidgets('mark the one Enter would pick', (tester) async {
+      await show(tester);
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      Color? fill(String option) => tester
+          .widget<Container>(
+            find
+                .ancestor(
+                  of: find.text(option),
+                  matching: find.byType(Container),
+                )
+                .first,
+          )
+          .color;
+      expect(fill('White'), darkTheme().colorScheme.surfaceContainerHighest);
+      expect(fill('Black'), isNull);
+    });
   });
 }

@@ -175,6 +175,29 @@ void main() {
     expect(w.analysis.multiPv, 3);
   });
 
+  test('a second start reads nothing again', () async {
+    await w.parts.start();
+    await leftAt(const Settings(engineLines: 4));
+    await w.parts.start();
+    expect(w.analysis.multiPv, 2);
+  });
+
+  test('the engine tournaments are wired only where the environment can '
+      'both keep and run them', () async {
+    final registry = ScriptedTournaments();
+    addTearDown(registry.dispose);
+    final both = WindowFixture(
+      tournaments: registry,
+      launchTournament: (_, _) async => const StartFailed('not launched'),
+    );
+    addTearDown(both.dispose);
+    expect(both.parts.tournaments, isNotNull);
+    final keepOnly = WindowFixture(tournaments: registry);
+    addTearDown(keepOnly.dispose);
+    expect(keepOnly.parts.tournaments, isNull);
+    expect(w.parts.tournaments, isNull);
+  });
+
   test('a window taken down while the settings are read starts no '
       'engine', () async {
     final starting = w.parts.start();

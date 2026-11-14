@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/app/document_tabs.dart';
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart' as store;
@@ -205,4 +206,41 @@ void main() {
       expect(w.saver.settled, isFalse);
     },
   );
+
+  test('analysis tabs are numbered from the second', () async {
+    // A blank board is reused; one with a move on it is not.
+    w.session.playMove('e2e4');
+    await w.requests.newAnalysisBoard();
+    final titles = w.requests.documents.tabs.tabs.map((tab) => tab.title);
+    expect(
+      titles.where((title) => title.endsWith(' · Analysis')),
+      hasLength(1),
+    );
+    expect(
+      titles.where((title) => title.endsWith(' · Analysis 2')),
+      hasLength(1),
+    );
+  });
+
+  test('a tab comes back the way round its board was', () async {
+    await w.requests.open(kidMain);
+    final side = w.session.orientation;
+    await w.requests.newAnalysisBoard();
+    w.session.flip();
+    await w.requests.documents.select(kidMain);
+    expect(w.session.orientation, side);
+  });
+
+  test('a document handed to another mode is retitled for it', () async {
+    await w.requests.open(kidMain);
+    w.requests.documents.carry(Mode.trainer);
+    expect(w.requests.documents.tabs.tabOf(kidMain).title, 'Trainer · Main');
+  });
+
+  test('taken down, it hands nothing on', () async {
+    await w.requests.open(kidMain);
+    final tabs = DocumentTabs(session: w.session, requests: w.requests)
+      ..dispose();
+    tabs.carry(Mode.trainer);
+  });
 }

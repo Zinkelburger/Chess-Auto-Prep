@@ -17,7 +17,7 @@ final class LayoutMemory {
   String? _key;
   Mode? _mode;
   ActionLayout? _layout;
-  bool _restoring = false, _dirty = false;
+  bool _dirty = false;
   Timer? _timer;
   Completer<void>? _queued;
 
@@ -29,12 +29,11 @@ final class LayoutMemory {
     _key = key;
     _mode = mode;
     _layout = layout;
-    _restoring = true;
+    // Not listened to yet, so restoring it is no change of the user's.
     final saved = settings.value.workspaceLayouts[key];
     if (saved == null || !layout.restore(saved)) {
       layout.restore(_defaults[mode]!);
     }
-    _restoring = false;
     layout.addListener(_changed);
   }
 
@@ -44,8 +43,9 @@ final class LayoutMemory {
     layout.restore(_defaults[_mode]!);
   }
 
+  /// The layout says nothing while it restores, so whatever it says is a
+  /// change of the user's, a reset included.
   void _changed() {
-    if (_restoring || _layout!.restoring) return;
     _dirty = true;
     if (_queued == null) {
       _queued = Completer<void>();

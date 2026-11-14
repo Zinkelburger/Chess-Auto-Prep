@@ -122,4 +122,48 @@ void main() {
       }
     },
   );
+
+  group('only what the user changed is written', () {
+    late SettingsStore settings;
+    late PendingWrites pending;
+    late ActionLayout layout;
+    late LayoutMemory memory;
+    setUp(() async {
+      final fixture = await openSession('[Result "*"]\n\n1. e4 *');
+      addTearDown(fixture.dispose);
+      pending = PendingWrites();
+      settings = SettingsStore()..pendingWrites = pending;
+      addTearDown(settings.dispose);
+      final explorer = explorerOver(fixture.session, settings: settings);
+      addTearDown(explorer.dispose);
+      layout = ActionLayout(viewerTabs(), explorer);
+      addTearDown(layout.dispose);
+      memory = LayoutMemory(settings, {Mode.pgnViewer: layout});
+    });
+    String key(String path) => jsonEncode(['pgnViewer', path]);
+
+    test('files only looked at write nothing', () async {
+      memory
+        ..select(Mode.pgnViewer, '/a.pgn', layout)
+        ..select(Mode.pgnViewer, '/b.pgn', layout)
+        ..select(Mode.pgnViewer, '/a.pgn', layout)
+        ..dispose();
+      await pending.settle();
+      expect(settings.value.workspaceLayouts, isEmpty);
+    });
+
+    test('a change is waited for until it is written, and a file looked at '
+        'after it writes nothing', () async {
+      memory.select(Mode.pgnViewer, '/a.pgn', layout);
+      layout.resizeBoard(0.6);
+      await pending.settleFor(memory);
+      expect(settings.value.workspaceLayouts.keys, [key('/a.pgn')]);
+      memory
+        ..select(Mode.pgnViewer, '/b.pgn', layout)
+        ..select(Mode.pgnViewer, '/c.pgn', layout)
+        ..dispose();
+      await pending.settle();
+      expect(settings.value.workspaceLayouts.keys, [key('/a.pgn')]);
+    });
+  });
 }

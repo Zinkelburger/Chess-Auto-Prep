@@ -37,6 +37,26 @@ void main() {
     );
   });
 
+  testWidgets('a sentence is a problem unless said otherwise, and is read '
+      'out when it comes', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: Scaffold(body: StatusBar('Not saved', onClose: () {})),
+      ),
+    );
+    expect(
+      tester.widget<Text>(find.text('Not saved')).style?.color,
+      darkTheme().colorScheme.error,
+    );
+    expect(
+      tester.getSemantics(find.text('Not saved')),
+      matchesSemantics(label: 'Not saved', isLiveRegion: true),
+    );
+    semantics.dispose();
+  });
+
   testWidgets('an outcome the user asked for gets no alarm colour', (
     tester,
   ) async {
