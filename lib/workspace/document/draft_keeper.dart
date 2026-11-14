@@ -94,7 +94,9 @@ final class DraftKeeper {
     final path = _session.source?.path;
     final held = _session.hasHeldEdits;
     final oneGame = _session.game != null;
-    if (path != _path) {
+    if (path != _path && held && _owns && _path != null && path != null) {
+      _moved(_path!, path);
+    } else if (path != _path) {
       _flush();
       _withdraw();
       _path = path;
@@ -121,6 +123,23 @@ final class DraftKeeper {
     // An edit saved as it is made, while editing, is newer than the offered
     // edits as much as a held one is: put back, they would undo it.
     if (_offered != null && !_saver.settled) _withdraw();
+  }
+
+  /// The file holding this visit's edits was renamed: the same edits, now
+  /// kept under [to]. The new checkpoint is written before the old one goes,
+  /// so one is always on disk, and nothing more is written under [from].
+  void _moved(String from, String to) {
+    _timer?.cancel();
+    _timer = null;
+    _waiting = null;
+    if (_kept.remove(from) case final file?) _kept[to] = file;
+    _unkept.remove(from);
+    _path = to;
+    // Never written over: a checkpoint at the new name may hold other work.
+    _setAside(to);
+    _schedule();
+    _flush();
+    _inTurn(() => _drop(from));
   }
 
   /// The edits this visit held are off the board, as the session says: kept

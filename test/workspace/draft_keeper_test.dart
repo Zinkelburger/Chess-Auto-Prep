@@ -149,6 +149,25 @@ void main() {
     second.kill();
   });
 
+  test('renaming the file moves its checkpoint, and discarding leaves none '
+      'under either name', () async {
+    final drafts = _MemoryDrafts();
+    final run = _Run(store, drafts);
+    await run.session.open(ref, game: 0);
+    run.session.setComment(NodePath.of(const [0]), 'A note');
+    await until(() => drafts.kept.isNotEmpty);
+    final renamed = collectionRef('games2');
+    run.session.relocated(renamed);
+    await run.keeper.settle();
+    expect(drafts.kept.keys, [renamed.path]);
+    expect(drafts.kept[renamed.path]!.text, contains('A note'));
+    run.session.discardHeld();
+    await until(() => drafts.kept.isEmpty);
+    await run.keeper.settle();
+    expect(drafts.kept, isEmpty);
+    run.kill();
+  });
+
   test('discarding the edits forgets their copy', () async {
     final drafts = _MemoryDrafts();
     final run = _Run(store, drafts);
