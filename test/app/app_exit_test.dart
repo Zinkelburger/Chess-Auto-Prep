@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show FileSystemException;
 import 'dart:ui' show AppExitResponse;
 
 import 'package:chess_auto_prep/app/app.dart';
@@ -128,6 +129,26 @@ void main() {
       expect(events, ['log']);
     },
   );
+
+  test('a log that fails to close does not keep the window open', () async {
+    final exit = AppExit(
+      guard: ExitGuard(saver: fixture.saver, question: question),
+      stopEngines: () async {},
+      closeLog: () async => throw const FileSystemException('disk full'),
+    );
+    addTearDown(exit.closing.dispose);
+    expect(await exit.leave(), AppExitResponse.exit);
+  });
+
+  test('a log that never closes does not keep the window open', () async {
+    final exit = AppExit(
+      guard: ExitGuard(saver: fixture.saver, question: question),
+      stopEngines: () async {},
+      closeLog: () => Completer<void>().future,
+    );
+    addTearDown(exit.closing.dispose);
+    expect(await exit.leave(), AppExitResponse.exit);
+  });
 }
 
 /// The question on the way out: it records what it was asked and answers

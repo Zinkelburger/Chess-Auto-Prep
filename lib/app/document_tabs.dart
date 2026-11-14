@@ -229,6 +229,12 @@ final class DocumentTabs {
     return true;
   }
 
+  /// Closes the tab [id] only while it is an analysis board nothing was
+  /// done on, such as the one the window starts with.
+  Future<void> closeIfBlank(Object id) async {
+    if (_pages[id]?.isBlank ?? false) await close(id);
+  }
+
   Future<void> close(Object id) async {
     if (_disposed || !tabs.isOpen(id)) return;
     if (tabs.selected == id) {
