@@ -239,8 +239,10 @@ final class Library extends ChangeNotifier {
     String name, {
     List<String> rootMoves = const [],
   }) => _run('create the chapter $name in ${into.name}', () async {
-    final ref = DocumentRef(p.join(into.path, '$name.pgn'));
     final side = await _sideOf(into);
+    final (folder, failed) = await _folderOf(into);
+    if (failed != null) return failed;
+    final ref = DocumentRef(p.join(folder, '$name.pgn'));
     final result = await _create(ref, name, side, rootMoves: rootMoves);
     if (result is! LibraryDone) return result;
     return LibraryAdded(ChapterRef.at(ref.path), chapters: 1, lines: 0);
@@ -255,7 +257,9 @@ final class Library extends ChangeNotifier {
     String name,
     Chapter board,
   ) => _run('save the analysis board as $name in ${into.name}', () async {
-    final ref = DocumentRef(p.join(into.path, '$name.pgn'));
+    final (folder, failed) = await _folderOf(into);
+    if (failed != null) return failed;
+    final ref = DocumentRef(p.join(folder, '$name.pgn'));
     final games = writeChapter(board).substring(board.preamble.length);
     final result = await _create(ref, name, board.side, games: games);
     if (result is! LibraryDone) return result;
@@ -320,7 +324,12 @@ final class Library extends ChangeNotifier {
             'a chapter of a course file moves with its file',
           );
         }
-        final target = p.join(to.path, p.basename(ref.path));
+        if (to.path == ref.path) {
+          return const LibraryRefused('the chapter is that repertoire');
+        }
+        final (folder, failed) = await _folderOf(to);
+        if (failed != null) return failed;
+        final target = p.join(folder, p.basename(ref.path));
         return _relocate(ref, DocumentRef(target));
       });
 
@@ -386,7 +395,9 @@ final class Library extends ChangeNotifier {
     final chapter = _session.chapter;
     final from = _session.source;
     if (chapter == null || from == null) return _nothingOpen;
-    final ref = ChapterRef.at(p.join(into.path, '$name.pgn'));
+    final (folder, failed) = await _folderOf(into);
+    if (failed != null) return failed;
+    final ref = ChapterRef.at(p.join(folder, '$name.pgn'));
     final written = await _write(DocumentRef(ref.path), name, chapter.side);
     if (written is! store.Created) return _createResult(written);
     final moved =
@@ -628,6 +639,22 @@ final class Library extends ChangeNotifier {
     changes: _changes,
     lineTransfers: _lineTransfers,
   );
+
+  /// The folder chapters are added to [into] in. A repertoire that is one
+  /// `.pgn` directly under the root has none, so its file first moves into
+  /// `<name>/` (training rows, books and the open chapter follow it) and
+  /// that folder is the answer. A move that does not land is returned as
+  /// the failure, and nothing is added.
+  Future<(String, LibraryResult?)> _folderOf(RepertoireFolder into) async {
+    if (!into.chapters.any((c) => c.path == into.path))
+      return (into.path, null);
+    final folder = p.join(_root, into.name);
+    final moved = await _relocate(
+      into.chapters.first.wholeFile,
+      DocumentRef(p.join(folder, p.basename(into.path))),
+    );
+    return (folder, moved is LibraryDone ? null : moved);
+  }
 
   /// The chapter at [ref] renamed or moved to [to].
   Future<LibraryResult> _relocate(ChapterRef ref, DocumentRef to) =>
