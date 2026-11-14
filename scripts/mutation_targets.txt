@@ -279,6 +279,9 @@
 #     row; :446 an index that differs -> true: a step aside kept as "deeper"
 #     keeps the current line only if it plays both places, and a line is
 #     one path.
+#   lib/features/library/outline_panel.dart:109 `||` -> `&&` (a rename to the
+#     name the line has changes nothing either way), :153 `<` -> `<=` (equal
+#     ends make the same range).
 #   lib/chess/typed_move.dart:102 `>` -> `>=` (a castling king never lands
 #     on its own square), :187 `.first` -> `.last` (every candidate is then
 #     checked against the same four characters).
@@ -706,3 +709,7 @@ lib/features/bughouse/lab_engine.dart|test/features/bughouse/lab_engine_rows_tes
 lib/features/databases/twic_download.dart|test/features/twic_download_more_test.dart|test/features/twic_download_test.dart
 lib/features/library/chapter_outline.dart|test/features/chapter_outline_search_test.dart|test/features/chapter_outline_test.dart
 lib/features/library/library.dart|test/features/library_more_test.dart test/features/library_lines_test.dart|test/features/library_changes_test.dart test/features/library_follows_test.dart test/features/library_holds_test.dart test/features/library_import_recovery_test.dart test/features/library_import_test.dart test/features/library_messages_test.dart test/features/library_on_disk_test.dart test/features/library_open_course_test.dart test/features/library_panel_test.dart test/features/library_test.dart test/features/library_unfinished_move_test.dart
+lib/features/library/library_panel.dart|test/features/library_panel_more_test.dart|test/features/library_panel_test.dart
+lib/features/library/outline_panel.dart|test/features/outline_panel_more_test.dart|test/features/outline_panel_test.dart
+lib/features/library/pgn_drop_region.dart|test/features/pgn_drop_region_more_test.dart|test/features/pgn_drop_region_test.dart
+lib/features/my_games/book_pane.dart|test/features/my_games/book_pane_swap_test.dart|test/features/my_games/book_pane_test.dart

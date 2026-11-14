@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/features/library/library.dart';
+import 'package:chess_auto_prep/storage/backup_history.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
@@ -59,6 +60,7 @@ Future<LibraryFixture> openLibrary(
   Duration delay = Duration.zero,
   DateTime Function() now = DateTime.now,
   PendingWrites? pendingWrites,
+  BackupHistory? backupHistory,
 }) async {
   final store = ScriptedDocumentStore();
   // A folder is empty when the store holds no document inside it, so
@@ -93,6 +95,7 @@ Future<LibraryFixture> openLibrary(
     picker: picker,
     now: now,
     pendingWrites: pendingWrites,
+    backupHistory: backupHistory,
   );
   await library.refresh();
   if (open != null) await session.open(open);
@@ -110,6 +113,7 @@ Library libraryOver(
   String root = '/repertoires',
   DateTime Function() now = DateTime.now,
   PendingWrites? pendingWrites,
+  BackupHistory? backupHistory,
 }) => Library(
   files: files,
   documents: documents,
@@ -119,4 +123,5 @@ Library libraryOver(
   root: root,
   now: now,
   pendingWrites: pendingWrites,
+  backupHistory: backupHistory,
 );
