@@ -5,7 +5,8 @@ import '../engines/engine_supervisor.dart';
 import '../engines/fixed_depth.dart';
 import '../net/chessdb_moves.dart';
 import '../net/search_evaluator.dart';
-import '../storage/document_repository.dart' show DocumentChange, DocumentChangeKind;
+import '../storage/document_repository.dart'
+    show DocumentChange, DocumentChangeKind;
 import '../storage/eval_cache.dart' show CachedEvaluator;
 import '../storage/my_games_files.dart';
 import '../storage/settings.dart';

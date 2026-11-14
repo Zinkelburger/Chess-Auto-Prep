@@ -81,23 +81,20 @@ void main() {
     },
   );
 
-  test(
-    'opening a chapter: undo of the one left is dropped once the file '
-    'changed outside',
-    () async {
-      await open();
-      study.session.cursor.goTo(const NodePath.root());
-      study.session.playMove('d2d4');
-      await pumpEventQueue();
-      final outside = '${study.onDisk}\n';
-      study.store.documents[study.ref] = Opened(
-        outside,
-        scriptedRevision(outside),
-      );
-      await study.session.open(study.ref, game: 1);
-      expect(study.session.canUndo, isFalse);
-    },
-  );
+  test('opening a chapter: undo of the one left is dropped once the file '
+      'changed outside', () async {
+    await open();
+    study.session.cursor.goTo(const NodePath.root());
+    study.session.playMove('d2d4');
+    await pumpEventQueue();
+    final outside = '${study.onDisk}\n';
+    study.store.documents[study.ref] = Opened(
+      outside,
+      scriptedRevision(outside),
+    );
+    await study.session.open(study.ref, game: 1);
+    expect(study.session.canUndo, isFalse);
+  });
 
   test(
     'playing a move in a chapter: goes into that game as a variation, not a new chapter',

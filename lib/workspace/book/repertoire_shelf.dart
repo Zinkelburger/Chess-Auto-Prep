@@ -183,8 +183,10 @@ final class RepertoireShelf extends ChangeNotifier {
           revisions[file.path] = revision;
           return;
         }
-        if (_parsed[file.path] case (final parsedAt, final done)
-            when parsedAt == revision && chapters.every(done.containsKey)) {
+        if (_parsed[file.path] case (
+          final parsedAt,
+          final done,
+        ) when parsedAt == revision && chapters.every(done.containsKey)) {
           for (final chapter in chapters) {
             indexed[chapter] = done[chapter]!;
           }
@@ -202,10 +204,13 @@ final class RepertoireShelf extends ChangeNotifier {
           }
           revisions[file.path] = revision;
           if (!_disposed) {
-            _parsed[file.path] = (revision, {
-              for (final (at, chapter) in chapters.indexed)
-                chapter: indexes[at],
-            });
+            _parsed[file.path] = (
+              revision,
+              {
+                for (final (at, chapter) in chapters.indexed)
+                  chapter: indexes[at],
+              },
+            );
           }
         } on Object catch (error) {
           log.w('index ${file.path}', error);

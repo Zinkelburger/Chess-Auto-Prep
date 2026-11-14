@@ -290,7 +290,9 @@ void main() {
       layout.split(1, WorkspaceTab.moves, PaneSplitDirection.right, from: 0);
       expect(layout.count, 2);
       expect(
-        layout.visible.where((i) => layout.openIn(i).contains(WorkspaceTab.moves)),
+        layout.visible.where(
+          (i) => layout.openIn(i).contains(WorkspaceTab.moves),
+        ),
         hasLength(1),
       );
       expect(layout.active, 0);
