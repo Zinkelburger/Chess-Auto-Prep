@@ -220,6 +220,13 @@ void main() {
       expect(journal.listSync(), isEmpty);
     });
 
+    test('a record already gone, or without a marker, is forgotten', () async {
+      await file('a.json').writeAsString(jsonEncode({'id': 'a'}));
+      await forgetRecord(file('a.json'));
+      await forgetRecord(file('a.json'));
+      expect(journal.listSync(), isEmpty);
+    });
+
     test(
       'an older build sets the marker aside and still reads the record',
       () async {

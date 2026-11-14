@@ -150,14 +150,19 @@ Future<bool> quarantineRecord(
   return true;
 }
 
-/// Removes the record of an operation that is done, which is on disk, then
-/// its marker, and flushes its folder.
+/// Removes the record of an operation that is done, then its marker, and
+/// flushes its folder. It deletes without asking first: a look that wrongly
+/// answers "missing" would leave a finished record behind, pending forever.
 Future<void> forgetRecord(
   File record, {
   Future<void> Function(String) synchronize = syncDirectory,
 }) async {
   for (final file in [record, followingMarker(record)]) {
-    if (await file.exists()) await _remove(file);
+    try {
+      await _remove(file);
+    } on PathNotFoundException {
+      // Already gone.
+    }
   }
   await flushRecoveryDirectory(record.parent.path, synchronize: synchronize);
 }
