@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:dartchess/dartchess.dart' show Position;
 
 import '../fen.dart';
+import '../pgn/tree_edit.dart' show positionOf;
 import 'eval.dart';
 import 'legal_moves.dart';
 import 'search_config.dart';
@@ -228,7 +229,7 @@ final class _Search {
   /// valued from them and stays unscored.
   Future<PendingNode> _restore(SearchPath path, SearchNode saved) async {
     if (_holding) await _letGo();
-    if (saved.fen != path.fen) {
+    if (saved.fen != path.fen && !_samePosition(saved.fen, path.fen)) {
       throw const FormatException('Saved search position is not this one.');
     }
     final kind = terminalKind(path.position, path.history);
@@ -236,21 +237,10 @@ final class _Search {
         (config.horizonPlies != null && path.ply >= config.horizonPlies!) ||
         path.reach < config.replyFloor;
     var eval = saved.evaluated ? saved.evalForUs : null;
-    final hasMoves = switch (saved) {
-      OurNode(:final candidates) => candidates.isNotEmpty,
-      OpponentNode(:final replies) => replies.isNotEmpty,
-      _ => false,
-    };
-    if (kind == null && eval == null && (beyond || !hasMoves)) {
-      switch (await evaluationOf(evaluator, path.position)) {
-        case EvaluationUnavailable(:final reason):
-          _stop ??= _EvaluationFailed(path.fen, reason);
-          return PendingNode(
-            path,
-            FrontierNode(fen: path.fen, evalForUs: null),
-          );
-        case Evaluated(eval: final scored):
-          eval = scored.forUs(config.side, path.position.turn);
+    if (kind == null && eval == null && (beyond || !_hasMoves(saved))) {
+      eval = await _scored(path);
+      if (eval == null) {
+        return PendingNode(path, FrontierNode(fen: path.fen, evalForUs: null));
       }
     }
     final leaf = kind != null
@@ -310,6 +300,32 @@ final class _Search {
       _topUp.add(pending);
     }
     return pending;
+  }
+
+  static bool _hasMoves(SearchNode saved) => switch (saved) {
+    OurNode(:final candidates) => candidates.isNotEmpty,
+    OpponentNode(:final replies) => replies.isNotEmpty,
+    _ => false,
+  };
+
+  /// The engine's score for [path] for our side, or null when it has none
+  /// to give, which stops the search.
+  Future<Eval?> _scored(SearchPath path) async {
+    switch (await evaluationOf(evaluator, path.position)) {
+      case EvaluationUnavailable(:final reason):
+        _stop ??= _EvaluationFailed(path.fen, reason);
+        return null;
+      case Evaluated(:final eval):
+        return eval.forUs(config.side, path.position.turn);
+    }
+  }
+
+  /// Whether [saved] is [fen] written another way. The C builder writes the
+  /// en passant square after every double pawn push; this app writes it only
+  /// where a pawn can take there.
+  bool _samePosition(Fen saved, Fen fen) {
+    final position = positionOf(saved);
+    return position != null && fenOf(position) == fen;
   }
 
   /// The node for [path] before anything below it is expanded: a finished
