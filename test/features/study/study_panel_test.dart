@@ -175,6 +175,21 @@ void main() {
     expect(study.onDisk, contains('[ChapterName "Rooks"]'));
   });
 
+  testWidgets('a chapter name is no file name: a colon, a question mark and '
+      'a trailing dot are kept', (tester) async {
+    await pump(tester);
+    await tester.tap(find.byTooltip('Chapter actions').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rename…'));
+    await tester.pumpAndSettle();
+    const name = 'Sicilian Defense: Najdorf 6.Bg5, why not 12...Nxe4? Ch 3.';
+    await tester.enterText(find.byType(TextField).last, name);
+    await tester.tap(find.text('Rename'));
+    await tester.pumpAndSettle();
+    expect(find.text(name), findsOneWidget);
+    expect(study.onDisk, contains('[ChapterName "$name"]'));
+  });
+
   testWidgets('invalid Lichess links explain how to recover', (tester) async {
     await pump(tester);
     await tester.tap(find.text('Import chapters…'));

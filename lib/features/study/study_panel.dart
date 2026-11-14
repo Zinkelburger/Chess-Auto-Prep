@@ -8,6 +8,7 @@ import '../../chess/pgn/study_cleanup.dart';
 import '../../storage/chapter_files.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/confirm_dialog.dart';
+import '../../ui/file_names.dart';
 import '../../ui/list_message.dart';
 import '../../ui/list_row.dart';
 import '../../ui/name_dialog.dart';
@@ -200,6 +201,7 @@ class _StudyPanelState extends State<StudyPanel> {
       label: 'Chapter name',
       confirm: 'Rename',
       initial: chapter.name,
+      validator: chapterNameProblem,
     );
     if (name == null || name == chapter.name || !mounted) return;
     _edited(

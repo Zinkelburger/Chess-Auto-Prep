@@ -14,6 +14,11 @@ import '../../workspace/explorer/file_filter.dart';
 
 /// Reading metadata follows the immutable document. Latest snapshots coalesce
 /// per path; disposal stops capture, never the saves already accepted.
+///
+/// A step through the moves of one game waits [settleDelay] for the cursor
+/// to settle before it is written, so holding an arrow key or AutoPlay does
+/// not rewrite the preferences file on every move; another game, sort,
+/// filter, perspective or file is written at once.
 final class ViewerReading {
   ViewerReading({
     required this.session,
@@ -37,6 +42,8 @@ final class ViewerReading {
   final Perspective Function() perspective;
   final void Function() changed;
 
+  static const settleDelay = Duration(seconds: 1);
+
   /// Finds a place in a long file off the UI isolate; a test may fail it.
   final Future<int> Function(ReadingPlace place, List<ChapterLine> games)
   locateElsewhere;
@@ -47,6 +54,10 @@ final class ViewerReading {
   String? _key;
   String? problem;
   GameFilter? _restoredFilter;
+  Timer? _settle;
+  Completer<void>? _settled;
+  String? _lastPath;
+  ReadingPlace? _last;
 
   void start() {
     session.anyChange.addListener(capture);
@@ -163,10 +174,45 @@ final class ViewerReading {
       perspective: perspective(),
     );
     _queued[path] = place;
+    final last = _last;
+    final sameGame =
+        path == _lastPath &&
+        last != null &&
+        last.game == place.game &&
+        last.key == place.key &&
+        last.sort == place.sort &&
+        last.filter == place.filter &&
+        last.perspective == place.perspective;
+    _lastPath = path;
+    _last = place;
+    if (sameGame) return _writeSoon();
     unawaited(retry());
   }
 
+  /// Writes the queued places once the cursor has been still for
+  /// [settleDelay]. Shutdown waits for the timer as for any accepted write.
+  void _writeSoon() {
+    _settle?.cancel();
+    _settle = Timer(settleDelay, () => unawaited(retry()));
+    if (_settled == null) {
+      final settled = _settled = Completer<void>();
+      pending.track(this, settled.future, label: 'Reading position');
+    }
+  }
+
+  /// Writes every queued place now.
   Future<void> retry() {
+    _settle?.cancel();
+    _settle = null;
+    final settled = _settled;
+    _settled = null;
+    final work = _write();
+    // A failure is reported by the write's own obligation, not by the wait.
+    settled?.complete(work.then((_) {}, onError: (Object _) {}));
+    return work;
+  }
+
+  Future<void> _write() {
     if (_writing != null) return _writing!;
     if (_queued.isEmpty) return Future.value();
     final work = _writing = _drain().whenComplete(() => _writing = null);
@@ -204,6 +250,7 @@ final class ViewerReading {
 
   void dispose() {
     _disposed = true;
+    if (_settle != null) unawaited(retry());
     session.anyChange.removeListener(capture);
     filter.removeListener(_filterChanged);
   }

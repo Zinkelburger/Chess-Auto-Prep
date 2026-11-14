@@ -315,6 +315,64 @@ void main() {
     });
   });
 
+  group('hands', () {
+    const knights =
+        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[N] w KQkq - 0 1|'
+        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[N] w KQkq - 0 1';
+
+    Future<void> dragKnight(WidgetTester tester, BoardNumber onto) async {
+      final knight = find.byKey(
+        ValueKey((
+          'reserve',
+          Seat.of(BoardNumber.one, Side.white),
+          Role.knight,
+        )),
+      );
+      final from = tester.getCenter(knight);
+      final to = squareCenter(tester, onto, Square.e4);
+      final drag = await tester.startGesture(from);
+      await drag.moveTo(from + const Offset(0, -20));
+      await tester.pump();
+      await drag.moveTo(to);
+      await tester.pump();
+      await drag.up();
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a piece dragged from board 1\'s hand onto board 2 is not '
+        'dropped from board 2\'s hand', (tester) async {
+      build();
+      lab
+        ..showBoards(LabBoards.two)
+        ..loadDualFen(knights);
+      await pump(tester);
+      await dragKnight(tester, BoardNumber.two);
+      expect(lab.line.of(BoardNumber.two), isEmpty);
+      expect(lab.line.of(BoardNumber.one), isEmpty);
+      expect(
+        lab.position
+            .board(BoardNumber.two)
+            .pockets!
+            .of(Side.white, Role.knight),
+        1,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a piece dragged onto its own board is dropped', (
+      tester,
+    ) async {
+      build();
+      lab
+        ..showBoards(LabBoards.two)
+        ..loadDualFen(knights);
+      await pump(tester);
+      await dragKnight(tester, BoardNumber.one);
+      expect(lab.line.of(BoardNumber.one).single.san, 'N@e4');
+      expect(lab.line.of(BoardNumber.two), isEmpty);
+    });
+  });
+
   group('engine lines', () {
     testWidgets('one board: each move floats board 1 with its hands and '
         'plays the line up to it; the row never changes size', (tester) async {

@@ -61,6 +61,25 @@ String? nameProblem(String name) {
   return null;
 }
 
+/// What is wrong with [name] as a chapter name, or null when nothing is.
+///
+/// A chapter is a PGN tag value, not a file, so the file rules above do not
+/// apply: "Sicilian Defense: Najdorf Variation" and "Why not 12...Nxe4?" are
+/// ordinary chapter names. A tag value is one line and has to fit a row.
+String? chapterNameProblem(String name) {
+  final trimmed = name.trim();
+  if (trimmed.isEmpty) return 'Please enter a name.';
+  if (_controlCharacters.hasMatch(trimmed)) {
+    return 'Names cannot contain line breaks or control characters.';
+  }
+  if (trimmed.length > maxNameLength) {
+    return 'Names must be $maxNameLength characters or fewer.';
+  }
+  return null;
+}
+
+final _controlCharacters = RegExp(r'[\x00-\x1F\x7F]');
+
 /// [name] with the characters a file cannot take replaced, for a name this
 /// app made up rather than one the user typed — the title of a downloaded
 /// study, say. A name left with nothing in it becomes [fallback].
