@@ -312,19 +312,54 @@ final class FileTournaments
   });
 
   @override
-  Future<TournamentResult<List<TournamentEngine>>> engines() => _guard(
-    'read tournament engines',
-    () async {
+  Future<TournamentResult<List<TournamentEngine>>> engines() async {
+    var setAside = false;
+    final result = await _guard('read tournament engines', () async {
       _checkRoot();
-      final text = await recoveryText(p.join(root.path, 'engines.json'));
-      if (text == null) return <TournamentEngine>[];
+      if (!await recoveryDirectory(root)) return <TournamentEngine>[];
+      return withDirectoryLock(root, () async {
+        final (engines, aside) = await _registry(_enginesPath);
+        setAside = aside;
+        return engines ?? <TournamentEngine>[];
+      });
+    });
+    return switch (result) {
+      TournamentSaved(:final value) when setAside => TournamentSaved(
+        value,
+        warnings: const [
+          'The engine registry could not be read and was set aside.',
+        ],
+      ),
+      _ => result,
+    };
+  }
+
+  String get _enginesPath => p.join(root.path, 'engines.json');
+
+  /// The engines `engines.json` lists, or null when there is none. One that
+  /// cannot be read is moved into quarantine, logged, and read as none, so
+  /// one broken file never stops the registry; a file that cannot be moved
+  /// aside fails the call instead, so nothing is ever written over it. The
+  /// caller holds the directory lock.
+  Future<(List<TournamentEngine>?, bool)> _registry(String path) async {
+    try {
+      final text = await recoveryText(path);
+      if (text == null) return (null, false);
       final data = jsonDecode(text);
       if (data is! List) {
         throw const FormatException('Invalid engine registry.');
       }
-      return [for (final row in data) TournamentEngine(tournamentObject(row))];
-    },
-  );
+      return (
+        [for (final row in data) TournamentEngine(tournamentObject(row))],
+        false,
+      );
+    } on Exception catch (error) {
+      if (error is! FormatException && error is! RecoveryRequired) rethrow;
+      final reason = 'Unreadable engine registry: $error';
+      if (!await quarantine(support, File(path), reason)) rethrow;
+      return (null, true);
+    }
+  }
 
   @override
   Future<TournamentResult<void>> saveEngines(
@@ -334,13 +369,16 @@ final class FileTournaments
     _checkRoot();
     await recoveryDirectory(root, create: true);
     await withDirectoryLock(root, () async {
-      final path = p.join(root.path, 'engines.json');
-      final current = await recoveryText(path);
+      final path = _enginesPath;
+      final (engines, _) = await _registry(path);
+      final current = engines == null
+          ? null
+          : jsonEncode([for (final e in engines) e.json]);
       final expected = jsonEncode([for (final e in before) e.json]);
       final target = jsonEncode([for (final e in after) e.json]);
-      if (current != null && jsonEncode(jsonDecode(current)) == target) return;
+      if (current == target) return;
       if ((current == null && before.isNotEmpty) ||
-          (current != null && jsonEncode(jsonDecode(current)) != expected)) {
+          (current != null && current != expected)) {
         throw StateError('The engine registry changed. Refresh before saving.');
       }
       await _publish(path, target);

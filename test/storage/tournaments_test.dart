@@ -376,6 +376,37 @@ void main() {
     expect(File(p.join(root.path, 'engines.json')).existsSync(), isFalse);
   });
 
+  test('an unreadable registry is set aside, and a new one can be '
+      'saved', () async {
+    final registry = File(p.join(root.path, 'engines.json'));
+    await registry.create(recursive: true);
+    await registry.writeAsString('not json');
+    final read =
+        await store.engines() as TournamentSaved<List<TournamentEngine>>;
+    expect(read.value, isEmpty);
+    expect(read.warnings.single, contains('set aside'));
+    expect(registry.existsSync(), isFalse);
+    final kept = await files.support
+        .list(recursive: true)
+        .where((e) => e is File && e.path.contains('quarantine'))
+        .cast<File>()
+        .toList();
+    expect(await kept.single.readAsString(), 'not json');
+
+    final engine = TournamentEngine.bundled();
+    expect(await store.saveEngines([], [engine]), isA<TournamentSaved<void>>());
+    expect(jsonDecode(await registry.readAsString()), [engine.json]);
+
+    await registry.writeAsString('{}');
+    expect(
+      await store.saveEngines([engine], []),
+      isA<TournamentFailed<void>>(),
+      reason: 'a stale list is not written over the set-aside registry',
+    );
+    expect(registry.existsSync(), isFalse);
+    expect(await store.saveEngines([], [engine]), isA<TournamentSaved<void>>());
+  });
+
   test('a tournament id that is a path is refused', () {
     for (final id in ['a/b', r'a\b']) {
       expect(() => store.games(id), throwsFormatException, reason: id);
