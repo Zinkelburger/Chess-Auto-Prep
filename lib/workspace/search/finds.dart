@@ -66,7 +66,9 @@ final class Finds extends ChangeNotifier {
       (_opened?.available ?? false) ? _opened! : _opened = _store();
   final PendingWrites _pending;
   PendingObligation<FindsRecorded>? _latest;
-  bool get canRetry => _pending.unfinished(_store).isNotEmpty;
+  /// Whether a save of positions failed and can be asked again; one still
+  /// running is not a failure.
+  bool get canRetry => _pending.unfinished(_store).any((entry) => entry.failed);
   final DateTime Function() _clock;
 
   List<KeptFind>? _all;
