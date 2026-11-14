@@ -92,6 +92,7 @@ final class WindowFixture {
     this.updates,
     this.exportText,
     this.settingRows,
+    this.now,
     this.launchTournament,
     this._players,
     this.exitWait = const Duration(milliseconds: 20),
@@ -129,6 +130,10 @@ final class WindowFixture {
 
   /// The rows the settings show; none unless the test gives them.
   final List<SettingGroup> Function()? settingRows;
+
+  /// The clock; the tactics set's day, standing still, unless the test
+  /// gives one.
+  final DateTime Function()? now;
 
   /// How long closing waits on writes before it asks; short, so a test of
   /// the question does not wait long for it.
@@ -243,7 +248,7 @@ final class WindowFixture {
       keepTree: (_, _, {required runId}) async {},
       setFullScreen: (on) async => fullScreenAsked.add(on),
       bughouse: bughouse.outside,
-      now: () => tacticsToday,
+      now: now ?? () => tacticsToday,
       saveDelay: Duration.zero,
       explorerDelay: Duration.zero,
       exitWait: exitWait,

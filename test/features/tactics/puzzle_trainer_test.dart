@@ -478,4 +478,55 @@ void main() {
       expect(w.trainer.up?.puzzle.index, 0);
     }),
   );
+
+  test(
+    'solved with auto-advance off, it stays on the puzzle and waits for '
+    'nothing',
+    () => sitting((async) {
+      unawaited(
+        w.settings.update(w.settings.value.copyWith(autoAdvance: false)),
+      );
+      begin(async);
+      final index = w.trainer.up!.puzzle.index;
+      w.trainer.play('e7e5');
+      async.elapse(replyDelay);
+      w.trainer.play('b8c6');
+      expect(w.trainer.up!.feedback, isA<Solved>());
+      expect(w.trainer.up!.waiting, isFalse);
+      async.elapse(const Duration(seconds: 10));
+      expect(w.trainer.up?.puzzle.index, index);
+    }),
+  );
+
+  test('the time a solve took is written in seconds', () {
+    fakeAsync((async) {
+      var clock = tacticsToday;
+      w = WindowFixture(now: () => clock);
+      unawaited(
+        w.settings.update(
+          w.settings.value.copyWith(puzzles: const PuzzleFilter(days: 14)),
+        ),
+      );
+      unawaited(w.tactics.load());
+      async.flushMicrotasks();
+      begin(async);
+      clock = clock.add(const Duration(seconds: 4));
+      w.trainer.play('e7e5');
+      async.elapse(replyDelay);
+      w.trainer.play('b8c6');
+      async.elapse(const Duration(seconds: 10));
+      expect(setText(), contains('[TimeToSolve "4.0"]'));
+      w.dispose();
+    });
+  });
+
+  test(
+    'the answer is not shown while the sitting is put aside',
+    () => sitting((async) {
+      begin(async);
+      w.trainer.suspend();
+      w.trainer.showSolution();
+      expect(w.trainer.up?.feedback, isNot(isA<Revealed>()));
+    }),
+  );
 }
