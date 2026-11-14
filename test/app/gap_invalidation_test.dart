@@ -189,7 +189,11 @@ void main() {
     await pumpEventQueue();
     await fixture.parts.catalog.synchronize();
     await pumpEventQueue();
-    expect(fixture.store.saves.whereType<Saved>(), hasLength(2));
+    expect(
+      (fixture.store.documents[benkoMain]! as Opened).text,
+      contains('3. Bb5'),
+      reason: 'both moves were saved',
+    );
     expect(fixture.store.opens, opens, reason: 'no sibling read again');
     expect(workspace.gaps.walk, isNotNull);
     fixture.session.cursor.goTo(NodePath.of([0]));
