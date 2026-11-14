@@ -751,3 +751,6 @@ lib/features/players/prep_sheet.dart|test/features/players/prep_sheet_test.dart|
 lib/features/players/saved_games.dart|test/features/players/saved_games_more_test.dart test/features/players/saved_games_test.dart|
 lib/features/settings/lichess_account.dart|test/features/settings/lichess_account_outcomes_test.dart test/features/settings/lichess_account_test.dart|
 lib/features/settings/app_updates.dart|test/features/settings/app_updates_more_test.dart test/features/settings/app_updates_test.dart|test/features/settings/update_prompt_test.dart
+lib/features/settings/lichess_login_dialog.dart|test/features/settings/lichess_login_dialog_more_test.dart test/features/settings/lichess_login_dialog_test.dart|
+lib/features/settings/setting_rows.dart|test/features/settings/setting_rows_bounds_test.dart test/features/settings/setting_rows_test.dart|test/features/settings/app_updates_test.dart test/features/settings/lichess_account_test.dart test/features/settings/lichess_login_dialog_test.dart test/features/settings/setting_rows_test.dart test/features/settings/settings_dialog_test.dart test/features/settings/update_offer_test.dart test/features/settings/update_prompt_test.dart
+lib/features/settings/settings_dialog.dart|test/features/settings/settings_dialog_places_test.dart test/features/settings/settings_dialog_test.dart|
