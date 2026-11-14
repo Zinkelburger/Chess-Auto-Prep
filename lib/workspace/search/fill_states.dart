@@ -163,6 +163,9 @@ Future<Object> savedSeed(
   Side side,
 ) async {
   String? refused;
+  // The book keeps every master reply it found; only an expectimax search
+  // cuts its replies to the likeliest.
+  final book = request.method == SearchMethod.mainline;
   try {
     await for (final text in trees) {
       final decoded =
@@ -175,8 +178,8 @@ Future<Object> savedSeed(
             evalDepth: request.evalDepth,
             candidateMoves: request.candidateMoves,
             replyFloor: request.replyFloor,
-            replyMass: fillReplyMass,
-            maxReplies: fillMaxReplies,
+            replyMass: book ? null : fillReplyMass,
+            maxReplies: book ? null : fillMaxReplies,
           ).catchError((Object error) {
             log.w('resume search', error);
             return 'The saved search could not be read.';
