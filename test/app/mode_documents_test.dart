@@ -206,6 +206,25 @@ void main() {
     expect(w.session.game, 1);
   });
 
+  test('a study handed to the viewer comes back as the viewer\'s file '
+      'when its tab is picked', () async {
+    final study = studyRef('Openings');
+    w.store.documents[study] = store.Opened(
+      threeChapterStudy,
+      scriptedRevision(threeChapterStudy),
+    );
+    keepClassics();
+    await w.requests.openStudy(study, chapter: 1);
+    expect(await w.requests.readInViewer(study, game: 1), isA<RequestDone>());
+    expect(await w.requests.openFile(classics), isA<RequestDone>());
+    expect(w.viewer.file, classics);
+
+    await w.requests.documents.select(study);
+    expect(w.requests.mode, Mode.pgnViewer);
+    expect(w.session.source, study);
+    expect(w.viewer.file, study);
+  });
+
   test('Back after picking another mode\'s tab goes to the document and '
       'mode that were up before it', () async {
     final study = studyRef('Openings');
@@ -248,5 +267,9 @@ void main() {
     expect(w.requests.mode, Mode.study);
     expect(w.session.source, study);
     expect(shownTitle(), 'Study · Openings');
+    // Straight to Study, not by way of the viewer.
+    expect(w.requests.backTo?.mode, Mode.repertoires);
+    expect(await w.requests.back(), isA<RequestDone>());
+    expect(w.requests.backTo?.mode, isNot(Mode.pgnViewer));
   });
 }

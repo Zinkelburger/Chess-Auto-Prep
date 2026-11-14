@@ -7,9 +7,16 @@ void main() {
   final changed = <String>[];
   final submitted = <String>[];
 
-  Future<void> pump(WidgetTester tester, {required bool submitOnly}) async {
-    changed.clear();
-    submitted.clear();
+  Future<void> pump(
+    WidgetTester tester, {
+    required bool submitOnly,
+    List<String> options = const ['Carlsen', 'Caruana', 'Giri'],
+    bool clear = true,
+  }) async {
+    if (clear) {
+      changed.clear();
+      submitted.clear();
+    }
     await tester.pumpWidget(
       MaterialApp(
         theme: darkTheme(),
@@ -18,7 +25,7 @@ void main() {
             width: 300,
             child: ChoiceField(
               text: '',
-              options: const ['Carlsen', 'Caruana', 'Giri'],
+              options: options,
               hint: 'Player',
               onChanged: submitOnly ? null : changed.add,
               onSubmitted: submitOnly ? submitted.add : null,
@@ -62,5 +69,38 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
     expect(submitted, ['Carlsen', 'Nobody known', '']);
+  });
+
+  testWidgets('a cleared box that takes every keystroke is not given the '
+      'first option on Enter', (tester) async {
+    await pump(tester, submitOnly: false);
+    await tester.enterText(find.byType(TextField), 'Car');
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(changed, ['Car', '']);
+  });
+
+  testWidgets('new options are offered though the text stayed the same', (
+    tester,
+  ) async {
+    await pump(tester, submitOnly: false, options: const ['Carlsen', 'Giri']);
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    expect(find.text('Carlsen'), findsOneWidget);
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    await pump(
+      tester,
+      submitOnly: false,
+      options: const ['Firouzja', 'Ding'],
+      clear: false,
+    );
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    expect(find.text('Firouzja'), findsOneWidget);
+    expect(find.text('Carlsen'), findsNothing);
   });
 }
