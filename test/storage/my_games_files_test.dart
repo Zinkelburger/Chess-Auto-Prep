@@ -481,14 +481,14 @@ void main() {
           '[White "Me"]\n[Black "Other"]\n[Result "*"]\n\n'
           '1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 *';
       final when = DateTime(2026, 9, 22);
-      final big = [for (var i = 0; i < 400; i++) game(i), game(7)];
+      final big = [for (var i = 0; i < 500; i++) game(i), game(7)];
       expect(big.join('\n\n').length, greaterThan(64 * 1024));
       await cache.keep(GameSite.lichess, 'big', big, when);
       final text = await File(
         cache.refFor(GameSite.lichess, 'big').path,
       ).readAsString();
-      expect(text, '${big.take(400).join('\n\n')}\n');
-      expect(await cache.all(GameSite.lichess, 'big'), big.take(400));
+      expect(text, '${big.take(500).join('\n\n')}\n');
+      expect(await cache.all(GameSite.lichess, 'big'), big.take(500));
 
       await cache.keep(GameSite.lichess, 'small', [
         scholarsMate,
