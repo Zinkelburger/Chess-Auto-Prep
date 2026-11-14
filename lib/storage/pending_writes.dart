@@ -185,6 +185,10 @@ final class PendingObligation<T> {
 
   String get detail => _detail ?? 'Not saved yet.';
 
+  /// Whether the last run ended without saving and nothing is running now:
+  /// a save still on its way has not failed.
+  bool get failed => _running == null && _detail != null && !committed;
+
   Future<T> run() {
     if (discarded) return Future.error(StateError('This save was discarded.'));
     if (committed) return Future.value(result as T);

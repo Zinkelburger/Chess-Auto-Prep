@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../diagnostics/log.dart';
+import '../storage/disk_problems.dart';
 import '../ui/theme.dart';
 import '../workspace/document/document_saver.dart';
 
@@ -318,8 +319,10 @@ final class ExitGuard {
     final path = _saver.documentPath;
     final file = path == null ? 'your chapter' : p.basename(path);
     return switch (_saver.state) {
-      SaveFailed(:final detail) =>
-        'The last save of $file did not go through: $detail.',
+      SaveFailed(:final detail) => failedWithDetail(
+        'The last save of $file did not go through.',
+        detail,
+      ),
       SaveConflict() =>
         '$file was changed somewhere else, so your version of it has not '
             'been saved.',

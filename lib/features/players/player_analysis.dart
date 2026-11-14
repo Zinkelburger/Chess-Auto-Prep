@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../../chess/fen.dart';
+import '../../chess/pgn/chapter.dart' show readOffThreadFrom;
 import '../../chess/pgn/game_text.dart';
 import '../../chess/players/download_range.dart';
 import '../../chess/players/player.dart';
@@ -44,7 +47,13 @@ final class PlayerAnalysis extends ChangeNotifier {
   PositionOrder order = PositionOrder.frequent;
   PlayerList list = PlayerList.openings;
   String query = '';
-  int minGames = 1, minPly = 2;
+  int minGames = 1;
+
+  /// The first ply listed, numbered as from the standard starting position
+  /// (0 is White to play move 1, 1 is Black to play it); `From move N` is
+  /// ply `2 * (N - 1)`, so both sides' positions at move N are listed.
+  int minPly = 0;
+  int get fromMove => minPly ~/ 2 + 1;
   int? recentDays;
 
   /// The time controls the games are narrowed to; none is every game, and
@@ -86,11 +95,13 @@ final class PlayerAnalysis extends ChangeNotifier {
     PositionOrder? order,
     int? minGames,
     int? minPly,
+    int? fromMove,
   }) {
     this.list = list ?? this.list;
     this.order = order ?? this.order;
     this.minGames = minGames ?? this.minGames;
-    this.minPly = minPly ?? this.minPly;
+    this.minPly =
+        minPly ?? (fromMove == null ? this.minPly : (fromMove - 1) * 2);
     changed();
   }
 
@@ -117,11 +128,61 @@ final class PlayerAnalysis extends ChangeNotifier {
     return true;
   }
 
-  List<int> get gameIndexes => [
-    for (final (i, g) in (corpus?.games ?? <AnalyzedGame>[]).indexed)
-      if (includes(g)) i,
-  ];
+  /// What [gameIndexes] depends on; the filters are plain fields that
+  /// callers assign directly, so the cache compares values, not events.
+  Object get _gamesKey => (
+    corpus,
+    side,
+    query,
+    recentDays,
+    // Recent games age by the day.
+    recentDays == null ? null : _today(),
+    speeds.join(','),
+  );
+  static (int, int, int) _today() {
+    final now = DateTime.now();
+    return (now.year, now.month, now.day);
+  }
+
+  Object? _gamesKeyCached;
+  List<int> _gameIndexes = const [];
+  Object? _positionsKey;
+  List<PlayerPosition> _positions = const [];
+
+  /// The indexes of the corpus games the filters keep. Computed again only
+  /// when an input changed; the list cannot be modified.
+  List<int> get gameIndexes {
+    final key = _gamesKey;
+    if (key != _gamesKeyCached) {
+      _gameIndexes = List.unmodifiable([
+        for (final (i, g) in (corpus?.games ?? <AnalyzedGame>[]).indexed)
+          if (includes(g)) i,
+      ]);
+      _gamesKeyCached = key;
+    }
+    return _gameIndexes;
+  }
+
+  /// The filtered, sorted positions. Computed again only when an input
+  /// changed, including [evals], which the Eval order reads; the list cannot
+  /// be modified.
   List<PlayerPosition> get positions {
+    final key = (
+      _gamesKey,
+      minGames,
+      minPly,
+      order,
+      Object.hashAll([for (final e in evals.entries) (e.key, e.value)]),
+      evals.length,
+    );
+    if (key != _positionsKey) {
+      _positions = List.unmodifiable(_filteredPositions());
+      _positionsKey = key;
+    }
+    return _positions;
+  }
+
+  List<PlayerPosition> _filteredPositions() {
     final data = corpus;
     if (data == null) return const [];
     // Filtering statistics is done over the actual games, not by hiding rows
@@ -130,7 +191,7 @@ final class PlayerAnalysis extends ChangeNotifier {
     final kept = gameIndexes.toSet();
     final result = <PlayerPosition>[];
     for (final at in data.positions) {
-      if (at.side != side || at.ply < minPly) continue;
+      if (at.side != side || _plyOf(at.fen) < minPly) continue;
       final included = at.games.where(kept.contains).toList();
       if (included.length < minGames) continue;
       final filtered = PlayerPosition(
@@ -139,6 +200,7 @@ final class PlayerAnalysis extends ChangeNotifier {
         line: at.line,
         game: included.first,
         ply: at.ply,
+        start: at.start,
       );
       for (final index in included) {
         filtered.addGame(index, data.games[index].result);
@@ -158,6 +220,11 @@ final class PlayerAnalysis extends ChangeNotifier {
     });
     return result;
   }
+
+  /// The ply [fen] is at, so a game set up from a position counts its moves
+  /// by their numbers rather than from where it began.
+  static int _plyOf(Fen fen) =>
+      (fen.fullMove - 1) * 2 + (fen.whiteToMove ? 0 : 1);
 
   void cancel() {
     _selections.cancel();
@@ -286,8 +353,20 @@ final class PlayerAnalysis extends ChangeNotifier {
     List<String> notes,
   ) async {
     switch (fetched) {
-      case GamesFetched(:final games):
-        final keeping = cache.keep(site, username, games, DateTime.now());
+      case GamesFetched(:final games, :final unread, :final complete):
+        if (!complete) {
+          notes.add(
+            '${site.label}: could not read ${unread.join(', ')}; '
+            'the other games were saved.',
+          );
+        }
+        final keeping = cache.keep(
+          site,
+          username,
+          games,
+          DateTime.now(),
+          complete: complete,
+        );
         pending.watch(this, keeping);
         final kept = await keeping;
         if (kept is GamesNotKept) {
@@ -323,8 +402,12 @@ final class PlayerAnalysis extends ChangeNotifier {
       switch (await documents.open(ref)) {
         case Opened(:final text, :final revision):
           revisions[ref] = revision;
-          for (final (i, g) in splitChapterText(text).games.indexed) {
-            games.add(PlayerGame(file: ref, index: i, text: g.text));
+          final texts = await _gameTexts(text);
+          if (ticket.overtaken) {
+            return (<PlayerGame>[], <DocumentRef, Revision>{});
+          }
+          for (final (i, g) in texts.indexed) {
+            games.add(PlayerGame(file: ref, index: i, text: g));
           }
         case Unreadable(:final detail):
           notes.add('${p.basename(path)}: $detail');
@@ -386,4 +469,15 @@ final class PlayerAnalysis extends ChangeNotifier {
     _selections.close();
     super.dispose();
   }
+}
+
+/// The games of [text], split off the UI isolate once the file is large, as
+/// the saved-games count does. Top-level, so the closure sends only the text.
+Future<List<String>> _gameTexts(String text) {
+  List<String> split() => [
+    for (final game in splitChapterText(text).games) game.text,
+  ];
+  return text.length < readOffThreadFrom
+      ? Future.value(split())
+      : Isolate.run(split);
 }

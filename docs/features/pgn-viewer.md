@@ -40,33 +40,34 @@ move list, engine and explorer are described in [workspace](workspace.md).
   while the engine is on, the move field while typed in, the
   move-note card when the move has a note. On Edit the engine row and the move
   field are always there.
-- **Reading card** — opens on `Moves` alone: no tab strip, no frame, a `+` in
-  its corner. The game's heading (players, result · event · year, opening
+- **Reading card** — opens on `Moves` alone: no tab strip, no frame, `+
+  Tools` in its corner. The game's heading (players, result · event · year, opening
   name) is the top of the move text and scrolls with it. Where the game left
   the user's book, one line under the heading says so, e.g. `You left book:
   3...Nf6 (book 3...cxd4) · Main`, with `Show my line`. Its foot is `Read |
   Edit`, then the four move arrows; the viewer opens on Read.
 - **`+` menu** — the viewer's tabs (`Moves`, `Notes`, `Explorer`, `Filter`, `Analysis`,
-  `Game review`, `Solitaire`, `My books`), then `Engine on` with its key, then
-  `New pane`. A tab picked while Moves is alone opens under it.
+  `Game review`, `Solitaire`, `My books`), then `Engine on` / `Engine off`,
+  then `New pane`. A tab picked while Moves is alone opens under it.
 - **Tabs** — `Explorer` starts on `This file` here (other modes keep their
   remembered source); for a followed player it offers `All n` / `White n` /
   `Black n`. `Filter`, `Analysis` (a scratch copy of the whole game at the
   cursor, engine on; Ctrl+N), `Game review`, `Solitaire`, `My books` (what the
   book in use says about the game, from the side the board is seen from).
-- **Edit strip** (under the moves on Edit, or while edits are held) — Undo,
-  the save state (`Saved`, `Unsaved changes`, `Unsaved changes · this file is
+- **Edit strip** (under the moves on Edit, or while edits are held) — Undo
+  (on Edit), the save state (`Saved`, `Unsaved changes`, `Unsaved changes · this file is
   read-only`, `Edits stay unsaved until you save them`), `Discard` and `Save`
   while edits are held, then on Edit the glyphs and the comment field. `Read`
   closes it; there is no `Done`.
-- **Actions menu** — Document: `Edit` / `Done editing`, `Undo`,
-  `Save changes` and `Discard changes` while edits are held; Board: `Flip
-  board`, `Engine on`/`off`, `Play through` / `Stop playing`; Game: `Analyze
-  game` / `Stop analysis`, `Analyze all games` (the review's `Analyze all N
-  games`), `Solitaire chess` / `Stop
-  solitaire`, `Add game to study…`; File: `Open in Study` (a study's file),
-  `Close file`, `Filter games`, `Export games…`, `Add
-  games to study…`; Copy: `Copy game PGN`, `Copy FEN`.
+- **Actions menu** — Document: `Edit` / `Done editing`, `Undo`, `Save`
+  (Ctrl+S) and `Discard changes` while edits are held; Board: `Flip board`,
+  `Engine on`/`off`, `Paste PGN or FEN`, `Edit position…`, `Play through` /
+  `Stop playing`; Game: `Analyze game` / `Stop analysis`, `Analyze all games`
+  (the review's `Analyze all N games`), `Solitaire chess` / `Stop
+  solitaire`, `Add game to study…`; File: `Open PGN file…`, `Close file`,
+  `Open in Study` (on only for a study's file), `Filter games`, `Export
+  games…`, `Add games to study…`; then `View` and `Copy` (`Copy game PGN`,
+  `Copy FEN`).
 
 ## Actions
 
@@ -79,7 +80,9 @@ Documents when opened` is on (default); `Could not copy <name> into your
 Documents: <detail>` otherwise. With copying off, or for a file whose
 encoding is not UTF-8, it opens read-only. The saved reading place for that
 path (game, cursor, variation, sort, filter rules, followed player) is
-restored unless the handoff names a game.
+restored unless the handoff names a game; when it cannot be looked for, the
+file stays on its first game, `Could not find your place in this file.` shows
+over the list, and the saved place is kept for the next opening.
 
 **Pick a game** — click a row, ↑/↓, the counter's arrows or number → the game
 goes on the board without re-reading the file; the list, grouped chapters,
@@ -118,15 +121,20 @@ a manual flip stands until the next game.
 mode keeps its own side (the viewer starts on Read, Study on Edit). On Read,
 moves played, review annotations and the like show at once but are held in
 memory (`DocumentSession.holdsEdits`): the strip says `Unsaved changes` with
-`Discard` (asks `Discard unsaved changes?`) and `Save` / Ctrl+S. On Edit every
+`Discard` (asks `Discard unsaved changes to “<chapter>”?`) and `Save` / Ctrl+S. On Edit every
 change is written as it is made, as in the builder, and turning to Edit writes
 what Read held first; Ctrl+Z undoes either way (100 steps held). Coming to the
 mode, or to a document tab that held edits, never writes them. A read-only
 file holds edits on Read and Edit alike, and Save asks `Save your moves` →
 `Copy into Documents…` (a file name, checked as every name is, then a copy in
-`pgn_collections` that opens) or `Add to a study…`. Document tabs keep each file's held edits and undo
-while another is up. Failures go to the top bar's status line with one way
-out (`Retry save`, Reload).
+`pgn_collections` that opens) or `Add to a study…`. Document tabs keep each file's held edits and their undo
+while another is up; coming back reads the file again at the tab's game and
+cursor, with its saved order, filter rules and followed player. Failures go to the top bar's status line with one way
+out (`Retry save`, Reload). A failed save reads `Could not save.`, and a file
+that could not be opened `Could not read <name>.`, each followed by what the
+disk says when it says something (`The disk is full.`, `Permission was
+denied.`, `The disk is read-only.`, `The file or folder was not found.`); the
+error itself goes to the log, never on screen.
 
 **Open in Study** — a file from `Documents/studies` read here goes to Study
 on the same chapter; Study's `Read in PGN Viewer` comes back.
@@ -138,7 +146,10 @@ held edits closes only once its checkpoint is written. Opening the file again
 says `Unsaved edits to <file> from an earlier session.` with `Restore unsaved
 edits`; if the file changed since, `… The file has changed since.` with `Save
 them as a copy` (`<file> unsaved edits.pgn` beside it). A checkpoint edited
-past or unreadable is moved to the recovery quarantine.
+past, or that is not a draft at all, is moved to the recovery quarantine; one
+that cannot be read just now stays where it is for the next opening.
+`Unsaved edits to <file> were not kept.` (with what the disk says) when a
+checkpoint could not be written.
 
 **Game review** — `Analyze game` (Actions or the tab's button; `Stop` while
 running) → a depth-14 Stockfish pass over the main line: an evaluation graph
@@ -219,7 +230,8 @@ Ctrl+Z, Ctrl+N (Analysis tab), Ctrl+O, F11 — all from
   `pgn_collections/explorer games/`, Databases games under `database games/`.
 - **Reading place** — SharedPreferences `pgn_viewer.session:<path>` (game
   identity, cursor, variation path/FEN, sort, filter rules, followed player);
-  written only by reading changes, never touching the PGN. A reordered file
+  written only by reading changes, never touching the PGN; steps through one
+  game are written once the cursor has rested for a second. A reordered file
   finds the game by identity; a missing game does not redirect to another.
 - **Recent files** — up to 10 paths in SharedPreferences
   (`pgn_viewer_recent_files`).

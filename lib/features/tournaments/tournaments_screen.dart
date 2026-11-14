@@ -45,7 +45,10 @@ class _ScreenState extends State<TournamentsScreen> {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: Listenable.merge([run, widget.settings]),
     builder: (context, _) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // The top bar already names the mode, so the row starts with its
+        // actions, at the left edge like every other mode's bar.
         Padding(
           padding: const EdgeInsets.all(Space.m),
           child: Wrap(
@@ -53,10 +56,6 @@ class _ScreenState extends State<TournamentsScreen> {
             runSpacing: Space.s,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Text(
-                'Engine tournament',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
               FilledButton.icon(
                 onPressed: run.running || run.canRetry
                     ? null
@@ -154,7 +153,7 @@ class _ScreenState extends State<TournamentsScreen> {
             children: [
               _summary(t),
               if (positions case TournamentFailed(:final message))
-                Text('Final positions unavailable: $message'),
+                Text(message),
             ],
           ),
         ),
@@ -206,7 +205,8 @@ class _ScreenState extends State<TournamentsScreen> {
       const SizedBox(height: Space.m),
       if ((run.activeId == t.id ? run.live : null) case final live?) ...[
         Text(
-          'Game ${live.pairing.index + 1} · ${live.plies} plies · ${live.move}',
+          'Game ${live.pairing.index + 1} · ${live.plies} '
+          '${live.plies == 1 ? 'ply' : 'plies'} · ${live.move}',
         ),
         const SizedBox(height: Space.s),
         StaticChessboard(

@@ -47,6 +47,49 @@ void main() {
     expect(find.text('of 3'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('a file tab gone back to keeps its order and filter rules', (
+    tester,
+  ) async {
+    final parsed = await readChapter(name: '', text: threeGameFile);
+    final stored = _StoredPlace(
+      ReadingPlace(
+        game: 0,
+        key: readingGameKey(parsed.lines[0]),
+        path: const NodePath.root(),
+        sort: GameOrder.fileOrder,
+      ),
+    );
+    final app = WindowFixture(viewerPlaces: stored);
+    addTearDown(app.dispose);
+    final ref = collectionRef('tabbed');
+    app.store.documents[ref] = Opened(
+      threeGameFile,
+      scriptedRevision(threeGameFile),
+    );
+    await app.pumpShell(tester);
+    await app.requests.openFile(ref);
+    await tester.pumpAndSettle();
+    final viewer = app.parts.documents.viewer;
+    viewer.sortBy(GameOrder.dateDesc);
+    app.parts.documents.filter.apply(
+      const GameFilter(
+        rules: [HeaderRule(field: 'Event', value: 'Tata')],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(app.parts.documents.filter.kept, 2);
+
+    await app.requests.newAnalysisBoard();
+    await tester.pumpAndSettle();
+    await app.requests.documents.select(ref);
+    await tester.pumpAndSettle();
+    expect(app.parts.session.source, ref);
+    expect(app.parts.documents.filter.kept, 2, reason: 'the rules stay');
+    expect(viewer.sort, GameOrder.dateDesc);
+    expect(stored.place.filter.isEmpty, isFalse, reason: 'and stay saved');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'sorted counter, number entry and keyboard share the visible list',
     (tester) async {

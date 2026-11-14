@@ -90,8 +90,13 @@ class _OutlinePanelState extends State<OutlinePanel> {
   /// A chapter made with the board on a position can start there: that is
   /// how a chapter for one opening is set up, and its root is what the
   /// outline then prints under its name.
-  Future<void> _newChapter() =>
-      newChapter(context, widget.library, widget.outline, widget.session);
+  Future<void> _newChapter() => newChapter(
+    context,
+    widget.library,
+    widget.outline,
+    widget.session,
+    widget.onOpen,
+  );
 
   Future<void> _rename(OutlineLine line) async {
     final name = await showNameDialog(
@@ -225,10 +230,7 @@ class _OutlinePanelState extends State<OutlinePanel> {
       Future.value(result),
       thing: 'line',
       name: drag.label,
-      failed: switch (result) {
-        LibraryFailure(:final detail) => 'Could not move the lines: $detail',
-        _ => 'Could not move the lines.',
-      },
+      failed: linesNotMoved(result),
     );
   }
 

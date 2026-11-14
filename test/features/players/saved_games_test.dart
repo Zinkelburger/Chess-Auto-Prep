@@ -60,6 +60,20 @@ void main() {
     players.dispose();
   });
 
+  test('a count that fails says so, keeps the counts it had, and comes '
+      'right on Try again', () async {
+    final alex = await person('Alex', {'lichess': 'alex'});
+    await saved.refresh();
+    expect(saved.of(alex)!.downloaded, 3);
+    store.throwOnOpen = StateError('Isolate exited');
+    await saved.refresh();
+    expect(saved.problem, 'Could not count the saved games.');
+    expect(saved.of(alex)!.downloaded, 3);
+    await saved.refresh();
+    expect(saved.problem, isNull);
+    expect(saved.of(alex)!.downloaded, 3);
+  });
+
   test('counts downloads and linked files, and names the downloads a delete '
       'would keep', () async {
     const linked = DocumentRef('/collections/alex.pgn');

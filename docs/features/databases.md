@@ -22,7 +22,7 @@ Reached from the mode menu (`Databases`, in the `Data & engines` group of
   (filled; only where the
   environment has a master games path), `Import PGN…`, `Storage · 4.1 GB`
   (`Storage · measuring…` before the first measurement) and a refresh button
-  (`Refresh database counts and storage`).
+  (`Refresh`) that reads the counts and measures the storage again.
 - **Summary line** — `Master games · 1,944,320 games · 2.0 GB · Sep 2020 – Sep
   2026 · TWIC issues 1340–1612 · 2 PGN files imported`, or `Master games ·
   empty`; under it a sentence (`databaseAbout`) saying the games come from The
@@ -55,27 +55,39 @@ reads `Finding the latest TWIC issue…`, `Downloading TWIC 1612 · 3 of 52`,
 `Importing TWIC 1612 · 3 of 52`, ending `TWIC database ready.` (plus `Skipped
 N unsupported or unfinished games.`). `Stop` ends after the current issue
 (`Stopped. Download again to resume.`). The dialog cannot be dismissed while
-it runs. Failure: `Could not finish the TWIC download. <reason>` with
-`Completed issues are saved. Try again to resume.` and a `Try again` button; a
-full disk reads `The disk is full.` The explorer refreshes when the dialog
-closes.
+it runs; its buttons are `Stop` then, `Cancel` / `Download` otherwise, the
+dialog staying open on the last status. Failure: `Could not finish the TWIC
+download. <reason>` in the problem line over `Completed issues are saved. Try
+again to resume.`, and `Download` resumes. The reason is `Could not reach
+theweekinchess.com; it needs a connection.`, TWIC's answer (`TWIC answered
+HTTP 503.`), or what the disk says (`The disk is full.`, `Permission was
+denied.`, `The disk is read-only.`, `The file or folder was not found.`);
+any other error adds nothing and goes only to the log. The explorer
+refreshes when the dialog closes.
 
 **Import PGN** — `Import PGN…` → file picker → the file's games are added to
 the same database → `Imported N games · M skipped.`, or `This file was already
 imported.` (by SHA-256 of the bytes, so a renamed copy is also caught), or
-`Import failed: <detail>`, which stays until a retry or refresh. The source
-PGN is never changed.
+`Import failed.` with the import's reason (`No supported finished games.`) or
+what the disk says, which stays until a retry or refresh. The source PGN is
+never changed. A database that cannot be read says `Could not read the master
+games database.`, with what the disk says when it says something.
 
 **Browse and open a game** — filters and pager → a row click copies the game
-to `pgn_collections/database games/<name>.pgn` (an existing copy is reused)
+to `pgn_collections/database games/<White> - <Black> (database <12 hex
+digits of its SHA-256>).pgn` (an existing copy is reused)
 and opens it in the PGN Viewer. Leaving the mode before the copy is ready
-drops the open. `Could not keep the game: <detail>` on a write failure.
+drops the open. `Could not keep the game.` on a write failure, with what the
+disk says (`The disk is full.`) when it says something.
 
 **Storage** — the button among the actions opens a dialog `Storage · <total>` with one
 row per store that has bytes, its measured size and its path as a tooltip.
+The total is measured on entering the mode, on `Refresh`, and after a
+download, an import or a delete; a measurement that fails says `Could not
+measure the storage.` on the problem line and the last sizes stay.
 Only derived data has a delete button: `Master games` and leftover copies of
 derived databases (`Leftover master_games.db.pre-v3.bak`, `…unreadable-<stamp>`).
-Delete asks `Delete <name>?` (`Frees 2.0 GB. Download TWIC and import the PGN
+The bin (`Delete <name>…`) asks `Delete “<name>”?` (`Frees 2.0 GB. Download TWIC and import the PGN
 files again to get the games back; the PGN files themselves are not touched.`)
 and really deletes the file and its sidecars; there is no `.trash`. A delete
 is refused while a download or import is writing. Failure: `Could not delete

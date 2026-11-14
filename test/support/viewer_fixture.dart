@@ -56,9 +56,13 @@ final class ScriptedImport implements PgnFileImport {
   /// Every path read, in order.
   final reads = <String>[];
 
+  /// What [read] throws instead of answering, by path.
+  final throws = <String, Object>{};
+
   @override
   Future<PickedRead> read(String path) async {
     reads.add(path);
+    if (throws[path] case final error?) throw error;
     return picked[path] ?? const PickedUnread('no such file');
   }
 

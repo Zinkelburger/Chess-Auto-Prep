@@ -8,6 +8,7 @@ import '../../chess/pgn/study_cleanup.dart';
 import '../../storage/chapter_files.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/confirm_dialog.dart';
+import '../../ui/file_names.dart';
 import '../../ui/list_message.dart';
 import '../../ui/list_row.dart';
 import '../../ui/name_dialog.dart';
@@ -200,6 +201,7 @@ class _StudyPanelState extends State<StudyPanel> {
       label: 'Chapter name',
       confirm: 'Rename',
       initial: chapter.name,
+      validator: chapterNameProblem,
     );
     if (name == null || name == chapter.name || !mounted) return;
     _edited(
@@ -331,7 +333,16 @@ class _StudyPanelState extends State<StudyPanel> {
       );
     }
     if (_studies.studies.isEmpty) {
-      return const ListMessage('No studies yet.');
+      return ListMessage(
+        'No studies yet.',
+        action: FilledButton.icon(
+          onPressed: _studies.busy
+              ? null
+              : () => unawaited(_commands.create(context)),
+          icon: const Icon(AppIcons.add, size: IconSize.action),
+          label: const Text('New study…'),
+        ),
+      );
     }
     if (_studies.visible.isEmpty) {
       return ListMessage('Nothing matches "${_studies.query}".');
@@ -470,18 +481,8 @@ class _Toolbar extends StatelessWidget {
               ),
               const SizedBox(height: Space.s),
             ],
-            // As wide as their words, as every list's buttons are.
-            if (!_hasOpenStudy)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.icon(
-                  onPressed: _busy
-                      ? null
-                      : () => unawaited(commands.create(context)),
-                  icon: const Icon(AppIcons.add, size: IconSize.action),
-                  label: const Text('New study…'),
-                ),
-              ),
+            // `New study…` is the empty list's button, and the header's
+            // `⋯` once there are studies.
             _transfers(context),
             if (_hasOpenStudy && onTrain != null)
               Align(

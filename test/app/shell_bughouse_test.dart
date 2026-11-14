@@ -1,7 +1,9 @@
+import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/storage/pgn_file_import.dart';
 import 'package:chess_auto_prep/storage/pgn_file_picker.dart';
+import 'package:chess_auto_prep/storage/saved_place.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart' show Role, Side, Square;
 import 'package:flutter/gestures.dart';
@@ -217,6 +219,30 @@ void main() {
     expect(w.analysis.pausedFor, isNull);
   });
 
+  testWidgets('a close the window stays open after gives the engine back', (
+    tester,
+  ) async {
+    await toBughouse(tester);
+    await engineOn(tester);
+    final first = w.bughouse.engine;
+    w.parts.prepareToClose();
+    await tester.pumpAndSettle();
+    expect(first.gone, isTrue, reason: 'quit while the window closes');
+    w.parts.resumeAfterClose();
+    await tester.pumpAndSettle();
+    expect(w.bughouse.engine, isNot(same(first)));
+    expect(w.bughouse.engine.gone, isFalse);
+    expect(w.analysis.pausedFor, isNotNull, reason: 'Bughouse is still up');
+  });
+
+  testWidgets('a launch that reopens on Bughouse pauses Stockfish there', (
+    tester,
+  ) async {
+    await w.parts.requests.resume(SavedPlace(mode: Mode.bughouse.name));
+    await w.pumpShell(tester, openFolders: false);
+    expect(w.analysis.pausedFor, 'Paused while Bughouse is open');
+  });
+
   testWidgets('the arrow keys step the board', (tester) async {
     await toBughouse(tester);
     w.lab.play(BoardNumber.one, 'e2e4');
@@ -340,6 +366,16 @@ void main() {
         find.text('Not opened: 1a. Ke7 in bad.bpgn does not play.'),
         findsOneWidget,
       );
+      expect(w.lab.line.moves, isEmpty);
+    });
+
+    testWidgets('a read that throws is said like any unreadable file', (
+      tester,
+    ) async {
+      await toBughouse(tester);
+      files().throws['/games/odd.bpgn'] = StateError('Isolate exited');
+      await open(tester, '/games/odd.bpgn');
+      expect(find.text('odd.bpgn could not be read.'), findsOneWidget);
       expect(w.lab.line.moves, isEmpty);
     });
   });

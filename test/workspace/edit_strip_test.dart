@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/line_moves.dart';
+import 'package:chess_auto_prep/storage/disk_problems.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart'
     show Collision, Conflict, IoFailure, Opened, SaveRefused, Unfinished;
 import 'package:chess_auto_prep/ui/theme.dart';
@@ -149,15 +150,22 @@ void main() {
     expect(find.text('Saved'), findsOneWidget);
   });
 
-  testWidgets('a save that failed says what the system said', (tester) async {
+  testWidgets('a save that failed says what the user can act on, never the '
+      'exception', (tester) async {
     await pump(tester);
-    fixture.store.saves.add(const IoFailure('No space left on device'));
+    fixture.store.saves.add(IoFailure(DiskProblem.full.sentence));
     edit('one');
     await tester.pumpAndSettle();
-    expect(
-      find.text('Could not save: No space left on device'),
-      findsOneWidget,
+    expect(find.text('Could not save. The disk is full.'), findsOneWidget);
+    fixture.store.saves.add(
+      const IoFailure(
+        "PathAccessException: Cannot open file, path = '/x.pgn' "
+        '(OS Error: Input/output error, errno = 5)',
+      ),
     );
+    edit('two');
+    await tester.pumpAndSettle();
+    expect(find.text('Could not save.'), findsOneWidget);
   });
 
   testWidgets('undo is offered once there is an edit to take back', (
@@ -186,6 +194,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Nothing to undo right now'), findsOneWidget);
     expect(find.text('Saved'), findsOneWidget);
+  });
+
+  testWidgets('the answer to an undo goes with the next edit, and the strip '
+      'with Done', (tester) async {
+    await pump(tester);
+    edit('one');
+    await tester.pumpAndSettle();
+    fixture.store.saves.add(Conflict(scriptedRevision(fixture.onDisk)));
+    await tester.tap(find.widgetWithIcon(IconButton, Icons.undo));
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing to undo right now'), findsOneWidget);
+    edit('two');
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing to undo right now'), findsNothing);
+    editing.value = false;
+    await tester.pumpAndSettle();
+    expect(find.text('Saved'), findsNothing);
   });
 
   /// Somebody else writes the file, then this window saves over it.

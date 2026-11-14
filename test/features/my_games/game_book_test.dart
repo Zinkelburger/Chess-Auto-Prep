@@ -246,4 +246,41 @@ void main() {
     expect(told, 1);
     expect((fixture.book.state as BookChecked).games, hasLength(1));
   });
+  test('an unreadable repertoire listing is a problem, not a book with '
+      'nothing in it', () async {
+    fixture.files.listing = const RepertoiresUnreadable('Permission denied');
+    fixture.book.watch();
+    await pumpEventQueue();
+    expect(fixture.book.state, isA<BookReading>());
+    expect(fixture.book.problem, contains('Permission denied'));
+
+    // A later read that fails keeps the comparison it had.
+    fixture.files.listing = Repertoires([
+      folder('e4', ['Sicilian']),
+      folder('Najdorf', ['Main']),
+    ]);
+    fixture.book.recheck();
+    await pumpEventQueue();
+    final before = fixture.book.state as BookChecked;
+    fixture.files.listing = const RepertoiresUnreadable('Permission denied');
+    fixture.book.recheck();
+    await pumpEventQueue();
+    expect(fixture.book.state, same(before));
+    expect(fixture.book.problem, isNotNull);
+  });
+
+  test(
+    'one unreadable saved-games file leaves out only its own account',
+    () async {
+      await fixture.accounts.setUsername(GameSite.chesscom, 'Me');
+      fixture.store.documents[fixture.cache.refFor(GameSite.chesscom, 'Me')] =
+          const Unreadable('not text');
+      fixture.book.watch();
+      await pumpEventQueue();
+      final checked = fixture.book.state as BookChecked;
+      expect(checked.games, hasLength(5));
+      expect(checked.games.every((g) => g.site == GameSite.lichess), isTrue);
+      expect(fixture.book.problem, 'Could not read your Chess.com games.');
+    },
+  );
 }

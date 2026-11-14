@@ -5,7 +5,8 @@ app; production code lives under `lib/`, tests under `test/`.
 `scripts/check_architecture.py` enforces the mechanical parts (import table, size caps,
 write ownership, theme literals, symbols only from `ui/app_icons.dart`, raw
 Material dialogs, progress indicators, segmented buttons, checkbox tiles,
-chips and icon buttons only inside `ui/`); `scripts/ci.sh lint` runs it. What each mode
+chips and icon buttons only inside `ui/`, `Isolate.run` only outside instance
+members); `scripts/ci.sh lint` runs it. What each mode
 does is in [the mode specs](features/README.md); where the code is, in
 [the component map](COMPONENT_MAP.md); stores and recovery files, in
 [DATA_INTEGRITY.md](DATA_INTEGRITY.md).
@@ -330,9 +331,15 @@ never a new one that would append twice).
    access touching a file a record changes tries that record first. What is
    owed lives in memory per profile (`RecoveryLedger`); the folders stay the
    truth. Per participant: still at *before* → apply; already at *after* →
-   accept; anything else (another program's edit) → put back what the record
-   already rewrote, keep its bytes as a version, quarantine the record, log
-   why, continue. A participant unreadable for now leaves the record pending.
+   accept; anything else (another program's edit), still so when looked at
+   twice more 50 ms apart → put back what the record already rewrote, keep
+   its bytes as a version, quarantine the record, log why, continue. A
+   participant unreadable for now leaves the record pending, and so does a
+   record whose read fails; only one that reads but does not decode is
+   quarantined. A record a pass did not meet (its folder read briefly as
+   missing) counts as unseen, so the next access runs another pass. A file a
+   killed create left with its staged second name loses that name on its
+   next read.
    A record owed for five minutes stops guarding when a write meets it: one not
    applied whole is undone and set aside; one that landed lets plain saves
    pass (`<id>.following`). A record whose quarantine move fails is marked
@@ -353,6 +360,8 @@ and its references back. Draft undo changes only the draft; committed undo is
 a new guarded operation, refused when a participant changed since. Undo
 history is built from store receipts (before-content and committed revision),
 never from controller memory; a failed or uncertain undo never pops history.
+A document tab put aside keeps its receipts and gives them back to the saver
+only when the file reads again at the revision the last of them committed.
 
 ### Derived views and background work
 
@@ -459,6 +468,11 @@ disappear, or a changed `//` heading, refuses the save and names the game.
 A revision is the SHA-256 of the exact bytes on disk. Reading, hashing,
 encoding, decoding large files and the game-by-game comparison run off the UI
 isolate (`packages/document_file_io`); parsing large chapters does too.
+Work goes to another isolate through a top-level or static function that
+takes only plain data. A closure shares its context with every closure in
+the same member, so one made inside an instance member sends `this` along
+whenever a neighbour uses it, and an owner holding a future, port or socket
+cannot be sent at all.
 
 **Reading and writing a game.** `chess/pgn/` owns the PGN grammar; dartchess
 is used for legality and positions, never text. Reading a game yields its

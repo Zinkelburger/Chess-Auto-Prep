@@ -1,7 +1,9 @@
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/diagnostics/log.dart';
+import 'package:chess_auto_prep/features/library/library_messages.dart';
 import 'package:chess_auto_prep/features/library/library_state.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/disk_problems.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
@@ -163,6 +165,40 @@ void main() {
     final here = fixture.textAt('/repertoires/KID/Main.pgn')!;
     expect(here, contains('2. Ke3 Nf6 3. Nf3 {my note}'));
     expect(here, withPartial);
+  });
+
+  test('a move that failed says the library\'s reason or what the disk '
+      'says, never the exception', () async {
+    await openPartial();
+    final refused = await fixture.library.moveLines(
+      games: {1},
+      to: ref('KID', 'Main'),
+      asSidelineOf: 0,
+    );
+    expect(refused, isA<LibraryRefused>());
+    expect(
+      linesNotMoved(refused),
+      'Could not move the lines: ${(refused as LibraryFailure).detail}',
+    );
+    fixture.store.saves.add(IoFailure(DiskProblem.full.sentence));
+    final full = await fixture.library.moveLines(
+      games: {0},
+      to: ref('KID', 'Sidelines'),
+    );
+    expect(linesNotMoved(full), 'Could not move the lines. The disk is full.');
+    await fixture.library.discardLineMove();
+    fixture.store.saves.add(
+      const IoFailure(
+        "FileSystemException: Cannot open file, path = 'x' "
+        '(OS Error: Input/output error, errno = 5)',
+      ),
+    );
+    final raw = await fixture.library.moveLines(
+      games: {0},
+      to: ref('KID', 'Sidelines'),
+    );
+    expect(raw, isA<LibraryFailure>());
+    expect(linesNotMoved(raw), 'Could not move the lines.');
   });
 
   test('a whole line folds nowhere when a partial one moves with it', () async {
@@ -426,7 +462,7 @@ void main() {
       expect(await fixture.library.retryLineMove(), isA<LibraryStale>());
       expect(fixture.library.hasPendingLineMove, isFalse);
       expect(await writes.settle() ?? '', isNot(contains('Move repertoire')));
-      expect(await newChapter(), isA<LibraryDone>());
+      expect(await newChapter(), isA<LibraryAdded>());
     });
 
     test('settles when its retry meets a changed file while the source '
@@ -456,7 +492,7 @@ void main() {
       expect(fixture.saver.referencesPending, isFalse);
       expect(fixture.saver.settled, isTrue);
       expect(await writes.settle() ?? '', isNot(contains('Move repertoire')));
-      expect(await newChapter(), isA<LibraryDone>());
+      expect(await newChapter(), isA<LibraryAdded>());
     });
 
     test('a discarded move releases the open source', () async {
@@ -571,7 +607,7 @@ void main() {
         fixture.textAt('/repertoires/KID/Sidelines.pgn'),
         contains("[Event \"Queen's\"]"),
       );
-      expect(await newChapter(), isA<LibraryDone>());
+      expect(await newChapter(), isA<LibraryAdded>());
       expect(await writes.settle() ?? '', isNot(contains('Move repertoire')));
     });
 
@@ -606,7 +642,7 @@ void main() {
         fixture.textAt('/repertoires/KID/Sidelines.pgn'),
         contains("[Event \"Queen's\"]"),
       );
-      expect(await newChapter(), isA<LibraryDone>());
+      expect(await newChapter(), isA<LibraryAdded>());
     });
   });
 }

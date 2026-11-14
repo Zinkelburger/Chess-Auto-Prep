@@ -382,9 +382,8 @@
 #     or replaces the evaluator, which the other tests catch), :392 `.first`
 #     -> `.last` of one move, :476 the move number of a FEN with fewer than
 #     six fields (a FEN tag is read whole).
-#   lib/engines/maia/maia_model.dart:187 `.first` -> `.last` (the shipped
-#     model has one output), :247 the intra-op thread count (speed only), :261
-#     the options release (a native leak no test or user sees).
+#   lib/engines/maia/maia_model.dart:152 `.first` -> `.last`: the move head
+#     is asked about one position, so its `[1, 4352]` answer has one row.
 lib/chess/pgn/game_review.dart|test/workspace/game_review_test.dart|test/chess/pgn/edit_laws_test.dart test/app
 lib/chess/pgn/line_edits.dart|test/chess/pgn/line_edits_test.dart|test/chess/pgn test/workspace
 lib/chess/pgn/chapter_edits.dart|test/chess/pgn/chapter_edits_test.dart|test/chess/pgn test/workspace

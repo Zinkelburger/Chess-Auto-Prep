@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:path/path.dart' as p;
 
 import 'directory_entries.dart';
+import 'journal_records.dart';
 import 'recovery_files.dart';
 
 /// How far an unfinished operation got: still changing the files it renames
@@ -120,14 +121,7 @@ final class RecoveryLedger {
           folder,
           followLinks: false,
         )) {
-          final name = p.basename(entry.path);
-          // A record's `.following` and `.aside` markers name the record.
-          records.add((
-            journal,
-            const {'.json', '.following', '.aside'}.contains(p.extension(name))
-                ? p.basenameWithoutExtension(name)
-                : name,
-          ));
+          records.add((journal, recordName(p.basename(entry.path))));
         }
       } on FileSystemException {
         unlisted.add(journal);
@@ -167,12 +161,15 @@ final class RecoveryLedger {
     return wait != null && now.isBefore(wait);
   }
 
-  /// A pass ran every step; what it could not finish its owners reported.
-  void passRan(Listing listing) {
+  /// A pass ran every step, meeting the records [found]; what it could not
+  /// finish its owners reported. A record the names-only look listed that
+  /// the pass did not meet (its folder read briefly as missing, say) is
+  /// still unseen, so the next access runs another pass.
+  void passRan(Set<RecordKey> found) {
     _passed = true;
     _passWait = null;
     _lockFailures = 0;
-    _seen = listing.records;
+    _seen = found;
   }
 
   /// A pass could not run, or stopped part way: the next waits [base], or

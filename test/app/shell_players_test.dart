@@ -1,7 +1,11 @@
 import 'dart:async';
 import 'dart:io' show FileSystemException;
+import 'dart:isolate' show ReceivePort;
 
 import 'package:chess_auto_prep/app/mode.dart';
+import 'package:chess_auto_prep/chess/pgn/chapter_sections.dart'
+    show chapterNameTag;
+import 'package:chess_auto_prep/chess/pgn/game_text.dart' show tagValue;
 import 'package:chess_auto_prep/chess/players/player.dart';
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/engines/engine_line.dart';
@@ -96,6 +100,52 @@ void main() {
     await tester.pumpAndSettle();
     expect(w.requests.mode, Mode.players);
     expect(tester.takeException(), isNull);
+  });
+
+  test('Check my book reads the games against the book on another isolate, '
+      'whatever the app holds besides', () async {
+    const white =
+        '// Color: White\n\n[Event "Sicilian"]\n[Result "*"]\n\n'
+        '1. e4 c5 2. Nf3 *\n';
+    w.store.documents[benkoMain] = Opened(white, scriptedRevision(white));
+    await w.library.refresh();
+    final analysis = w.parts.players.analysis;
+    await analysis.select(player);
+    analysis.setSide(Side.black);
+    final book = w.parts.players.book;
+    // The app's owners hold things no isolate can be sent, as the real
+    // Maia launcher's pending load is: a port stands in for them here.
+    final port = ReceivePort();
+    addTearDown(port.close);
+    void holdsAPort() => port.hashCode;
+    book.addListener(holdsAPort);
+    addTearDown(() => book.removeListener(holdsAPort));
+    await book.check();
+    expect(book.status, '1 games against your white book · 0 reach a gap');
+  });
+
+  testWidgets('a pasted table it cannot read says why in plain words', (
+    tester,
+  ) async {
+    await w.pumpShell(tester);
+    w.requests.switchTo(Mode.players);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Paste players…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Jane Doe 1800');
+    await tester.tap(find.text('Preview players'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Include column headings, such as Name, Rating, Chess.com and Lichess.',
+      ),
+      findsOneWidget,
+    );
+    await tester.enterText(find.byType(TextField).last, '[{"name": ');
+    await tester.tap(find.text('Preview players'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('FormatException'), findsNothing);
+    expect(find.text('That JSON cannot be read.'), findsOneWidget);
   });
 
   testWidgets('directory to analysis, colour, game and retained mode context', (
@@ -236,6 +286,87 @@ void main() {
     expect(find.text('Export prep sheet…'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('a hand-edited group with a date and rounds of the wrong type '
+      'opens in Edit group, and a rename keeps them as they were', (
+    tester,
+  ) async {
+    final group = PlayerGroup.create(
+      'Club Open',
+    ).edited({'date': 20261010, 'rounds': '5'}).member(player.id);
+    await w.parts.players.directory.saveGroup(group);
+    await w.pumpShell(tester);
+    w.requests.switchTo(Mode.players);
+    w.parts.players.directory.showGroup(group.id);
+    await tester.pumpAndSettle();
+    expect(find.text('1 player · 0 prepared'), findsOneWidget);
+    await tester.tap(find.byTooltip('More actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit group…'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Edit group'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Club Open'),
+      'Club Open 2026',
+    );
+    await tester.tap(find.text('Save group'));
+    await tester.pumpAndSettle();
+    final saved = w.parts.players.directory.group!;
+    expect(saved.name, 'Club Open 2026');
+    expect(saved.fields['date'], 20261010);
+    expect(saved.fields['rounds'], '5');
+
+    // A field the player does change is written.
+    await tester.tap(find.byTooltip('More actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit group…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Event date (YYYY-MM-DD, optional)'),
+      '2026-10-10',
+    );
+    await tester.tap(find.text('Save group'));
+    await tester.pumpAndSettle();
+    final dated = w.parts.players.directory.group!;
+    expect(dated.fields['date'], '2026-10-10');
+    expect(dated.fields['rounds'], '5');
+  });
+  testWidgets('a person whose studies were hand edited still shows, with the '
+      'links that can be read, and unlinking one keeps the rest', (
+    tester,
+  ) async {
+    final odd = player.edited({
+      'studies': [
+        {'path': '$studiesRoot/najdorf.pgn', 'chapter': 7},
+        'not a link',
+        {'path': '$studiesRoot/dragon.pgn', 'chapter': 'Main line'},
+      ],
+    });
+    await w.parts.players.directory.save(odd, expected: player);
+    final other = Player.create('Bea').edited({'studies': 'najdorf.pgn'});
+    await w.parts.players.directory.save(other);
+    await w.pumpShell(tester);
+    w.requests.switchTo(Mode.players);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Bea'), findsOneWidget);
+    expect(find.text('najdorf'), findsOneWidget);
+    expect(find.text('Main line'), findsOneWidget);
+    await tester.tap(
+      find.descendant(
+        of: find.widgetWithText(InputChip, 'Main line'),
+        matching: find.byTooltip('Unlink study'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final saved = w.parts.players.directory.players.firstWhere(
+      (p) => p.id == player.id,
+    );
+    expect(saved.fields['studies'], [
+      {'path': '$studiesRoot/najdorf.pgn', 'chapter': 7},
+      'not a link',
+    ]);
+  });
   testWidgets('group prepared state survives leaving and reopening it', (
     tester,
   ) async {
@@ -271,6 +402,11 @@ void main() {
       await w.parts.players.saveLine();
       expect(w.requests.mode, Mode.study);
       expect(w.session.chapter!.lines, hasLength(3));
+      // Named like the study's own chapters, `As White` / `As Black`.
+      expect(
+        tagValue(w.session.chapter!.lines.last.tags, chapterNameTag),
+        'Alex · As Black',
+      );
       expect(w.session.tree!.children.first.san, 'e4');
       expect(w.session.tree!.children.first.children.first.san, 'c5');
       final group = PlayerGroup.create('Club Open').member(player.id);

@@ -8,6 +8,7 @@ import '../chess/pgn/chapter.dart';
 import '../chess/pgn/study.dart';
 import '../chess/players/download_range.dart';
 import '../chess/players/player.dart';
+import '../diagnostics/log.dart';
 import '../features/players/player_analysis.dart';
 import '../features/players/player_book.dart';
 import '../features/players/player_hunt.dart';
@@ -94,6 +95,47 @@ final class PlayerModes {
       ..changed();
   }
 
+  /// The player the last run was on, until Player analysis opens on them
+  /// or they are found gone.
+  String? _resuming;
+
+  /// The player Player analysis is on, or will reopen on; what the next
+  /// launch comes back to.
+  String? get rememberedPlayer => analysis.player?.id ?? _resuming;
+
+  /// Opens Player analysis on the player with [id], as the last run left
+  /// it, once the mode is on screen and the directory is read; their games
+  /// are not read before then. A player removed since is let go and logged,
+  /// leaving the picker; one chosen meanwhile wins.
+  void resumePlayer(String? id) {
+    if (_disposed || id == null || _resuming != null) return;
+    _resuming = id;
+    requests.addListener(_resume);
+    directory.addListener(_resume);
+    _resume();
+  }
+
+  void _resume() {
+    final id = _resuming;
+    if (_disposed || id == null) return;
+    if (analysis.player != null) return _resumed();
+    if (requests.mode != Mode.playerAnalysis || !directory.loaded) return;
+    final player = directory.players.where((p) => p.id == id).firstOrNull;
+    _resumed();
+    if (player == null) {
+      log.i('reopen player analysis: the last player is no longer saved');
+      analysis.changed();
+      return;
+    }
+    unawaited(analysis.select(player));
+  }
+
+  void _resumed() {
+    _resuming = null;
+    requests.removeListener(_resume);
+    directory.removeListener(_resume);
+  }
+
   void choose(Player player) {
     hunt.stop();
     requests.switchTo(Mode.playerAnalysis);
@@ -127,9 +169,7 @@ final class PlayerModes {
             .where((p) => p.id == player.id)
             .firstOrNull;
         if (current == null) return;
-        final next = current.edited({
-          'pgn_files': {...current.files, path}.toList(),
-        });
+        final next = current.withStrings('pgn_files', [path]);
         if (await directory.save(next, expected: current) &&
             !_disposed &&
             analysis.player?.id == player.id) {
@@ -220,7 +260,7 @@ final class PlayerModes {
         path.isNotEmpty &&
         p.equals(path.toLowerCase(), ref.path.toLowerCase());
     return directory.players.any((person) => same(person.text('prep_file'))) ||
-        directory.groups.any((g) => same(g.fields['study']));
+        directory.groups.any((g) => same(g.study));
   }
 
   Future<void> openStudy(Player player) async {
@@ -244,17 +284,8 @@ final class PlayerModes {
         .firstOrNull;
     if (current == null) return;
     player = current;
-    final links = player.fields['studies'] as List? ?? const [];
-    if (links.any((e) => e is Map && e['path'] == inside)) return;
-    await directory.save(
-      player.edited({
-        'studies': [
-          ...links,
-          {'path': inside},
-        ],
-      }),
-      expected: player,
-    );
+    if (player.studies.any((link) => link.path == inside)) return;
+    await directory.save(player.withStudy(inside), expected: player);
   }
 
   Future<void> openLinkedStudy(String path, String? chapter) async {
@@ -354,7 +385,7 @@ final class PlayerModes {
   Future<({ChapterRef ref, List<String> leftOut})?> _groupStudy(
     PlayerGroup group,
   ) async {
-    final linked = group.fields['study'] as String? ?? '';
+    final linked = group.study;
     final usable = await _linked(linked, 'The group study');
     if (_disposed || usable == null) return null;
     if (usable) return (ref: ChapterRef.at(linked), leftOut: const <String>[]);
@@ -462,7 +493,9 @@ final class PlayerModes {
     final ref = await _study(player);
     if (_disposed || ref == null) return;
     final added = await studies.addChapters(IntoStudy(ref), [
-      board.named('${player.name} · As ${side.name}'),
+      board.named(
+        '${player.name} · ${side == Side.white ? 'As White' : 'As Black'}',
+      ),
     ]);
     if (_disposed) return;
     switch (added) {
@@ -481,6 +514,7 @@ final class PlayerModes {
 
   void dispose() {
     _disposed = true;
+    _resumed();
     directory.removeListener(_followDirectory);
     book.dispose();
     saved.dispose();

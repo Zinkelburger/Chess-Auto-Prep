@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../chess/audit/chapter_audit.dart';
 import '../../chess/fen.dart';
 import '../../ui/app_icons.dart';
+import '../../ui/list_row.dart';
 import '../../ui/problem_line.dart';
 import '../../ui/theme.dart';
 import '../../ui/toggle_chip.dart';
@@ -167,7 +168,7 @@ class _AuditPaneState extends State<AuditPane> {
     }
     return ListView.builder(
       itemCount: findings.length,
-      itemExtent: twoLineRowHeight,
+      itemExtent: rowExtent(context, twoLineRowHeight),
       itemBuilder: (context, index) {
         final finding = findings[index];
         return _FindingRow(

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../chess/players/player.dart';
+import '../../diagnostics/log.dart';
 import '../../ui/attempting.dart';
 import '../../ui/form_dialog.dart';
+import '../../ui/list_row.dart';
 import '../../ui/theme.dart';
 import 'players.dart';
 import 'saved_games.dart';
@@ -272,10 +274,16 @@ class _ImportDialogState extends State<_ImportDialog>
         _preview = read;
         problem = null;
       });
-    } on Object catch (e) {
+    } on FormatException catch (e) {
       setState(() {
         _preview = null;
-        problem = '$e';
+        problem = e.message;
+      });
+    } on Object catch (e) {
+      log.w('read pasted players', e);
+      setState(() {
+        _preview = null;
+        problem = 'These players could not be read.';
       });
     }
   }
@@ -364,7 +372,7 @@ class _ImportDialogState extends State<_ImportDialog>
             Expanded(
               child: ListView.builder(
                 itemCount: preview.length,
-                itemExtent: twoLineRowHeight,
+                itemExtent: rowExtent(context, twoLineRowHeight),
                 itemBuilder: (context, i) => _previewRow(preview[i]),
               ),
             ),

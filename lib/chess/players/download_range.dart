@@ -21,11 +21,14 @@ final class PlayerDownloadRange {
   factory PlayerDownloadRange.from(Object? value) {
     if (value is! Map) return const PlayerDownloadRange();
     return PlayerDownloadRange(
-      max: (value['max'] as int? ?? 500).clamp(1, 10000),
-      months: (value['months'] as int?)?.clamp(1, 120),
+      max: (value['max'] is int ? value['max'] as int : 500).clamp(1, 10000),
+      months: value['months'] is int
+          ? (value['months'] as int).clamp(1, 120)
+          : null,
       speeds:
-          (value['speeds'] as List? ??
-                  const ['blitz', 'rapid', 'classical', 'correspondence'])
+          (value['speeds'] is List
+                  ? value['speeds'] as List
+                  : const ['blitz', 'rapid', 'classical', 'correspondence'])
               .whereType<String>()
               .toSet(),
     );

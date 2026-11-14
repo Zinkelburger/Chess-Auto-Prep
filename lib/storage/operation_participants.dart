@@ -158,11 +158,14 @@ final class NotWritten extends Refusal {
 /// Carries [parts] as far as the disk lets it. It looks at everything
 /// first, so nothing is applied while any participant cannot be read: a
 /// pivot that cannot be told, or a reference that cannot be read, defers
-/// it, and a pivot holding something else sets it aside. Then it runs
+/// it, and a pivot still holding something else when looked at again
+/// ([relooks]) sets it aside. Then it runs
 /// [prepare], applies the pivots still before, settles them all and
 /// follows the references; one that can never follow ([NotFollowed]) is
 /// left as it is and named in [Finished.notFollowed]. A [PivotTaken] or a
-/// [RecoveryRequired] from any step sets it aside. Setting aside while no
+/// [RecoveryRequired] from any step sets it aside while the pivots are
+/// still being applied, and defers it once they have all landed
+/// ([_stopped]). Setting aside while no
 /// reference has followed yet puts back every pivot that holds what the
 /// operation put there, whichever attempt applied it, so it is undone
 /// whole; any other throw defers it.
@@ -181,10 +184,20 @@ Future<Settlement> finishParticipants(
   // The pivots holding what the operation put there, in order.
   final applied = <Pivot>[];
   try {
-    final looks = [
+    Future<List<Holds>> lookAll() async => [
       if (!following)
         for (final pivot in parts.pivots) await pivot.look(),
     ];
+    var looks = await lookAll();
+    // Recovery cannot tell a file or folder a synced folder shows briefly
+    // missing from one another program deleted, so one look is not enough
+    // to set the operation aside: what holds something else must still
+    // hold it when looked at again.
+    for (var again = 0; again < relooks; again++) {
+      if (!looks.any((look) => look is HoldsOther)) break;
+      await Future<void>.delayed(relookPause);
+      looks = await lookAll();
+    }
     if (looks.whereType<CannotTell>().firstOrNull case final look?) {
       return Deferred(look.detail, phase: phase);
     }
@@ -230,13 +243,19 @@ Future<Settlement> finishParticipants(
     }
     return Finished(notFollowed: notFollowed);
   } on RecoveryRequired catch (error) {
-    return _setAside(applied, error.detail, phase, describe);
+    return _stopped(applied, error.detail, phase, describe);
   } on PivotTaken catch (error) {
-    return _setAside(applied, error.detail, phase, describe);
+    return _stopped(applied, error.detail, phase, describe);
   } on Object catch (error) {
     return Deferred(describe(error), phase: phase);
   }
 }
+
+/// How many more times [finishParticipants] looks at the pivots before
+/// setting an operation aside for one that holds something else, and how
+/// long it waits before each look.
+const relooks = 2;
+const relookPause = Duration(milliseconds: 50);
 
 /// Whether every pivot of [parts] had landed before the one at [other]
 /// was changed, or while it cannot be told ([HoldsAfter]), and so nothing
@@ -262,6 +281,22 @@ Future<Holds> pivotsLanded(
   }
   return const HoldsBefore();
 }
+
+/// What a [RecoveryRequired] or [PivotTaken] thrown by a step comes to.
+/// While the pivots are still being applied, the operation is set aside
+/// ([_setAside]). Once they have all landed it can only go forward, and
+/// setting it aside would leave the references naming what came before:
+/// the looks found everything as planned a moment ago, so what changed
+/// since (a folder read briefly as missing, say) is looked at again by the
+/// next attempt.
+Future<Settlement> _stopped(
+  List<Pivot> applied,
+  String detail,
+  Phase phase,
+  String Function(Object error) describe,
+) async => phase == Phase.references
+    ? Deferred(detail, phase: phase)
+    : _setAside(applied, detail, phase, describe);
 
 /// Sets an operation aside, first putting back, last first, the [applied]
 /// pivots that still hold exactly what it put there, while it is still in

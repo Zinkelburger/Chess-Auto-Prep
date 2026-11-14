@@ -173,10 +173,12 @@ class _StudyChapterListState extends State<StudyChapterList> {
 
   void _reveal() => WidgetsBinding.instance.addPostFrameCallback((_) {
     if (!mounted || !_scroll.hasClients || _query.isNotEmpty) return;
-    final offset = (widget.active ?? 0) * listRowHeight;
+    // The rows grow with the system's text size, as the list lays them out.
+    final extent = rowExtent(context, listRowHeight);
+    final offset = (widget.active ?? 0) * extent;
     final position = _scroll.position;
     if (offset < position.pixels ||
-        offset + listRowHeight > position.pixels + position.viewportDimension) {
+        offset + extent > position.pixels + position.viewportDimension) {
       _scroll.jumpTo(offset.clamp(0.0, position.maxScrollExtent));
     }
   });
@@ -239,13 +241,13 @@ class _StudyChapterListState extends State<StudyChapterList> {
                   scrollController: _scroll,
                   buildDefaultDragHandles: false,
                   itemCount: chapters.length,
-                  itemExtent: listRowHeight,
+                  itemExtent: rowExtent(context, listRowHeight),
                   itemBuilder: (_, index) => row(index),
                   onReorderItem: (from, to) => widget.onReorder(from, to),
                 )
               : ListView.builder(
                   controller: _scroll,
-                  itemExtent: listRowHeight,
+                  itemExtent: rowExtent(context, listRowHeight),
                   itemCount: chapters.length,
                   itemBuilder: (_, index) => row(index),
                 ),

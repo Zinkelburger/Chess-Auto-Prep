@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/app/exit_guard.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/line_moves.dart';
 import 'package:chess_auto_prep/features/library/library_state.dart';
+import 'package:chess_auto_prep/storage/disk_problems.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart'
     show IoFailure, Opened, SaveRefused, Unfinished;
 import 'package:chess_auto_prep/ui/theme.dart';
@@ -35,7 +36,7 @@ void main() {
   /// A disk that stays full: the edit's save fails, and so does every try a
   /// flush of the guard's makes after it.
   void diskFull() => fixture.store.saves.addAll(
-    List.filled(4, const IoFailure('No space left on device')),
+    List.filled(4, IoFailure(DiskProblem.full.sentence)),
   );
 
   ExitGuard guardWith(_Question question) =>
@@ -186,7 +187,10 @@ void main() {
       isFalse,
       reason: 'the user answered nothing, so the window stays',
     );
-    expect(question.asked.single, contains('No space left on device'));
+    expect(
+      question.asked.single,
+      contains('did not go through. The disk is full.'),
+    );
   });
 
   test('a save the store stopped says what it was, not a stopwatch', () async {

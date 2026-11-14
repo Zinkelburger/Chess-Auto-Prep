@@ -223,6 +223,26 @@ void main() {
       );
     });
 
+    test('part of a download is kept without saying the games came down '
+        'then', () async {
+      final when = DateTime(2026, 9, 1, 8);
+      await cache.keep(GameSite.chesscom, 'jdoe', [scholarsMate], when);
+      final kept = await cache.keep(
+        GameSite.chesscom,
+        'jdoe',
+        [quietChesscomGame],
+        DateTime(2026, 9, 2, 8),
+        complete: false,
+      );
+      expect(kept, isA<GamesKept>());
+      final ref = cache.refFor(GameSite.chesscom, 'jdoe');
+      expect(
+        await File(ref.path).readAsString(),
+        '$scholarsMate\n\n$quietChesscomGame\n',
+      );
+      expect(await cache.fetchedAt(GameSite.chesscom, 'jdoe'), when);
+    });
+
     test('says when the games came down, and a delete moves them to the '
         'recovery folder with their note', () async {
       final when = DateTime(2026, 9, 1, 8);
@@ -451,6 +471,34 @@ void main() {
       final newest = await cache.newest(GameSite.lichess, 'me', max: 3);
       expect([for (final g in newest!) g.index], [400, 399, 398]);
       expect(newest.first.text, game(400));
+    });
+
+    test('a first download, big or small, is kept once each in its '
+        'order', () async {
+      String game(int i) =>
+          '[Event "Rated blitz game"]\n'
+          '[Site "https://lichess.org/${'g$i'.padLeft(8, '0')}"]\n'
+          '[White "Me"]\n[Black "Other"]\n[Result "*"]\n\n'
+          '1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 *';
+      final when = DateTime(2026, 9, 22);
+      final big = [for (var i = 0; i < 500; i++) game(i), game(7)];
+      expect(big.join('\n\n').length, greaterThan(64 * 1024));
+      await cache.keep(GameSite.lichess, 'big', big, when);
+      final text = await File(
+        cache.refFor(GameSite.lichess, 'big').path,
+      ).readAsString();
+      expect(text, '${big.take(500).join('\n\n')}\n');
+      expect(await cache.all(GameSite.lichess, 'big'), big.take(500));
+
+      await cache.keep(GameSite.lichess, 'small', [
+        scholarsMate,
+        quietChesscomGame,
+        scholarsMate,
+      ], when);
+      expect(
+        await File(cache.refFor(GameSite.lichess, 'small').path).readAsString(),
+        '$scholarsMate\n\n$quietChesscomGame\n',
+      );
     });
   });
 }

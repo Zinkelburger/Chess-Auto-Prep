@@ -140,6 +140,25 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('a move names its player on hover only when the file names '
+        'one', (tester) async {
+      build();
+      lab.play(BoardNumber.one, 'e2e4');
+      await pump(tester);
+      // Nothing to say: no seat letter as a tooltip.
+      expect(find.byTooltip('Player A'), findsNothing);
+      lab.pasteMoves(file, file: 'night.bpgn');
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(BoardMoves),
+          matching: find.byTooltip('ann'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Player A'), findsNothing);
+    });
+
     testWidgets('at the smallest boards a seat keeps its hand\'s height and '
         'its whole clock', (tester) async {
       build();
@@ -296,6 +315,64 @@ void main() {
     });
   });
 
+  group('hands', () {
+    const knights =
+        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[N] w KQkq - 0 1|'
+        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[N] w KQkq - 0 1';
+
+    Future<void> dragKnight(WidgetTester tester, BoardNumber onto) async {
+      final knight = find.byKey(
+        ValueKey((
+          'reserve',
+          Seat.of(BoardNumber.one, Side.white),
+          Role.knight,
+        )),
+      );
+      final from = tester.getCenter(knight);
+      final to = squareCenter(tester, onto, Square.e4);
+      final drag = await tester.startGesture(from);
+      await drag.moveTo(from + const Offset(0, -20));
+      await tester.pump();
+      await drag.moveTo(to);
+      await tester.pump();
+      await drag.up();
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a piece dragged from board 1\'s hand onto board 2 is not '
+        'dropped from board 2\'s hand', (tester) async {
+      build();
+      lab
+        ..showBoards(LabBoards.two)
+        ..loadDualFen(knights);
+      await pump(tester);
+      await dragKnight(tester, BoardNumber.two);
+      expect(lab.line.of(BoardNumber.two), isEmpty);
+      expect(lab.line.of(BoardNumber.one), isEmpty);
+      expect(
+        lab.position
+            .board(BoardNumber.two)
+            .pockets!
+            .of(Side.white, Role.knight),
+        1,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a piece dragged onto its own board is dropped', (
+      tester,
+    ) async {
+      build();
+      lab
+        ..showBoards(LabBoards.two)
+        ..loadDualFen(knights);
+      await pump(tester);
+      await dragKnight(tester, BoardNumber.one);
+      expect(lab.line.of(BoardNumber.one).single.san, 'N@e4');
+      expect(lab.line.of(BoardNumber.two), isEmpty);
+    });
+  });
+
   group('engine lines', () {
     testWidgets('one board: each move floats board 1 with its hands and '
         'plays the line up to it; the row never changes size', (tester) async {
@@ -326,6 +403,29 @@ void main() {
       await tester.pumpAndSettle();
       expect(lab.line.moves.map((m) => m.san), ['e4', 'e5']);
       expect(find.byType(BughousePreviewBoard), findsNothing);
+    });
+
+    testWidgets('the engine reporting does not rebuild the move lists', (
+      tester,
+    ) async {
+      build();
+      lab.showBoards(LabBoards.two);
+      await pump(tester);
+      final before = [
+        for (final e in find.byType(BoardMoves).evaluate()) e.widget,
+      ];
+      expect(before, hasLength(2));
+      await engineSays(tester, const [
+        JointMove('e2e4', null),
+        JointMove('e7e5', null),
+      ]);
+      expect(engine.on, isTrue);
+      final after = [
+        for (final e in find.byType(BoardMoves).evaluate()) e.widget,
+      ];
+      for (final (i, widget) in after.indexed) {
+        expect(identical(widget, before[i]), isTrue);
+      }
     });
 
     testWidgets('two boards: each board\'s lines are under it; a move '

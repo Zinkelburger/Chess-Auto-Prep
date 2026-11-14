@@ -25,7 +25,6 @@ import 'package:path/path.dart' as p;
 
 import '../../support/faulty_disk/contracts.dart';
 import '../../support/faulty_disk/fault_matrix.dart';
-import '../../support/faulty_disk/known_findings.dart';
 import '../../support/faulty_disk/scenario.dart';
 import '../../support/faulty_disk/stores.dart';
 import '../../support/fixtures.dart';
@@ -80,12 +79,6 @@ const _importRetry =
 const _pasteKnown = {
   'transient/*/O8': _importRetry,
   'lostAck/*/O8': _importRetry,
-  // The relocation findings of recoveryLedger that a full run
-  // (CAP_FAULT_DEPTH=full) shows for the staging folder's move.
-  'recoveryFault/*/read:Support/relocation-writes/*/O4': recordReadFailed,
-  'recoveryMissing/*/read:Support/relocation-writes/*/O4': recordReadFailed,
-  'recoveryMissing/*/stat:Support#*/O7': journalMissingSkipped,
-  'recoveryMissing/*/stat:Support/relocation-writes*/O7': journalMissingSkipped,
 };
 
 const _pasteImport = StorageScenario<Stores, LibraryResult>(
@@ -144,7 +137,6 @@ const _copyRetry =
 
 const _openKnown = {
   'record/mkdir:Documents/pgn_collections#0/R2': _collectionsUnflushed,
-  'crashMidway/publishNew:Documents/pgn_collections/*/O9': twoNames,
   'transient/syncDir:Documents/pgn_collections#0/O8': _copyRetry,
   'lostAck/*/O8': _copyRetry,
 };

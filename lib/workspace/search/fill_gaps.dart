@@ -742,7 +742,7 @@ final class FillGaps extends ChangeNotifier {
       Object error,
     ) {
       log.w('generate repertoire lines', error);
-      return (DraftNotWritten('The draft could not be prepared: $error'), 0);
+      return (const DraftNotWritten('The draft could not be prepared.'), 0);
     });
     _pending.watch(this, work);
     final (result, lines) = await work;

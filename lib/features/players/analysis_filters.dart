@@ -27,7 +27,7 @@ class AnalysisFilters extends StatelessWidget {
   /// How many filters are narrowing the games or the positions.
   static int active(PlayerAnalysis analysis) => [
     analysis.minGames > 1,
-    analysis.minPly != 2,
+    analysis.minPly != 0,
     analysis.recentDays != null,
     analysis.speeds.isNotEmpty,
   ].where((on) => on).length;
@@ -111,10 +111,10 @@ class AnalysisFilters extends StatelessWidget {
       tooltip: 'Positions before this move are not listed.',
       child: NumberField(
         label: 'From move',
-        value: analysis.minPly ~/ 2,
-        min: 0,
+        value: analysis.fromMove,
+        min: 1,
         max: 20,
-        onChanged: (v) => analysis.configure(minPly: v * 2),
+        onChanged: (v) => analysis.configure(fromMove: v),
       ),
     ),
   ];

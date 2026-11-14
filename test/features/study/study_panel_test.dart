@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/storage/pgn_file_import.dart';
 import 'package:chess_auto_prep/storage/study_files.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/status_host.dart';
@@ -174,6 +175,21 @@ void main() {
     expect(study.onDisk, contains('[ChapterName "Rooks"]'));
   });
 
+  testWidgets('a chapter name is no file name: a colon, a question mark and '
+      'a trailing dot are kept', (tester) async {
+    await pump(tester);
+    await tester.tap(find.byTooltip('Chapter actions').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rename…'));
+    await tester.pumpAndSettle();
+    const name = 'Sicilian Defense: Najdorf 6.Bg5, why not 12...Nxe4? Ch 3.';
+    await tester.enterText(find.byType(TextField).last, name);
+    await tester.tap(find.text('Rename'));
+    await tester.pumpAndSettle();
+    expect(find.text(name), findsOneWidget);
+    expect(study.onDisk, contains('[ChapterName "$name"]'));
+  });
+
   testWidgets('invalid Lichess links explain how to recover', (tester) async {
     await pump(tester);
     await tester.tap(find.text('Import chapters…'));
@@ -228,6 +244,30 @@ void main() {
     await tester.tap(find.text('Endgames'));
     await tester.pumpAndSettle();
     expect(find.text('Pawn endings'), findsOneWidget);
+  });
+
+  testWidgets('the filled New study… fills an empty list; listed studies '
+      'leave it to the header\'s menu', (tester) async {
+    await pump(tester);
+    await tester.tap(find.byTooltip('Back to studies'));
+    await tester.pumpAndSettle();
+    expect(find.text('Endgames'), findsOneWidget);
+    final filled = find.byWidgetPredicate((w) => w is FilledButton);
+    expect(filled, findsNothing);
+    await tester.tap(find.byTooltip('Study actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('New study…'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    study.files.listing = const StudiesListed([]);
+    await study.studies.refresh();
+    await tester.pumpAndSettle();
+    expect(find.text('No studies yet.'), findsOneWidget);
+    expect(
+      find.ancestor(of: find.text('New study…'), matching: filled),
+      findsOneWidget,
+    );
   });
 
   testWidgets('move to position moves the selected chapter and its identity', (

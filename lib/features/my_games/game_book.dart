@@ -271,12 +271,25 @@ final class GameBook extends ChangeNotifier {
       }
       final accounts = (accountRead as AccountsSnapshot).accounts;
       if (accounts.isEmpty) return _become(const BookNoAccounts());
-      final corpus = await _readCorpus(accounts, overtaken);
-      if (corpus == null || overtaken()) return;
+      final read = await _readCorpus(accounts, overtaken);
+      if (read == null || overtaken()) return;
+      final (corpus, failed) = read;
       _shelf.forget();
       await _shelf.read(gone: overtaken);
       if (overtaken()) return;
+      // A listing that could not be read leaves an empty or old index, which
+      // would call every game out of book.
+      if (_shelf.stale) {
+        throw StateError(
+          _shelf.problem ?? 'The repertoires could not be read.',
+        );
+      }
       _become(_checked(corpus, book));
+      if (failed.isNotEmpty && !_disposed) {
+        final sites = failed.map((site) => site.label).join(' and ');
+        _problem = 'Could not read your $sites games.';
+        notifyListeners();
+      }
     } on Object catch (error) {
       if (overtaken()) return;
       _problem = '$error';
@@ -285,12 +298,17 @@ final class GameBook extends ChangeNotifier {
     }
   }
 
-  /// The newest saved games of each account, or null when overtaken.
-  Future<List<(ChapterRef, GameSite, PlayedGame)>?> _readCorpus(
+  /// The newest saved games of each account and the sites whose saved games
+  /// could not be read, or null when overtaken. One unreadable file leaves
+  /// out its own account; only when every account fails is nothing compared.
+  Future<(List<(ChapterRef, GameSite, PlayedGame)>, List<GameSite>)?>
+  _readCorpus(
     Map<GameSite, Account> accounts,
     bool Function() overtaken,
   ) async {
     final played = <(ChapterRef, GameSite, PlayedGame)>[];
+    final failed = <GameSite>[];
+    String? detail;
     for (final MapEntry(key: site, value: account) in accounts.entries) {
       final saved = await _cache.snapshotNewest(
         site,
@@ -299,7 +317,12 @@ final class GameBook extends ChangeNotifier {
         speeds: _speedsSeen,
       );
       if (overtaken()) return null;
-      if (saved is CachedGamesUnavailable) throw StateError(saved.detail);
+      if (saved is CachedGamesUnavailable) {
+        log.w('read the saved ${site.label} games', saved.detail);
+        failed.add(site);
+        detail = saved.detail;
+        continue;
+      }
       final snapshot = saved as CachedGamesSnapshot;
       final file = ChapterRef.at(snapshot.ref.path);
       for (final game in await _readGames(snapshot.games, account.username)) {
@@ -307,7 +330,8 @@ final class GameBook extends ChangeNotifier {
       }
       if (overtaken()) return null;
     }
-    return played;
+    if (failed.length == accounts.length) throw StateError(detail!);
+    return (played, failed);
   }
 
   BookChecked _checked(

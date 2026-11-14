@@ -246,13 +246,15 @@ final class GamesCache {
   /// the downloaded input with the caller for exact retry, including lost acks.
   /// Another download of the same account landing first is merged with, up
   /// to [_keepAttempts] times: the merge skips games the file has, so doing
-  /// it again adds nothing twice.
+  /// it again adds nothing twice. A download that is only part of what was
+  /// asked for is kept without the note: it is not the time they came down.
   Future<GamesKeep> keep(
     GameSite site,
     String username,
     List<String> downloaded,
-    DateTime when,
-  ) async {
+    DateTime when, {
+    bool complete = true,
+  }) async {
     final frozen = List<String>.unmodifiable(downloaded);
     final ref = refFor(site, username);
     try {
@@ -260,7 +262,7 @@ final class GamesCache {
         final read = await _store.open(ref);
         final _Attempt outcome = switch (read) {
           Absent() => _created(
-            await _store.create(ref, '${_freshIn('', frozen).join('\n\n')}\n'),
+            await _store.create(ref, await _newFileText(frozen)),
           ),
           Opened(readOnly: null, :final text, :final revision) =>
             await _appended(ref, text, revision, frozen),
@@ -271,7 +273,7 @@ final class GamesCache {
         if (outcome.failure case final failure?) return GamesNotKept(failure);
         break;
       }
-      await _stamp(ref, when);
+      if (complete) await _stamp(ref, when);
       return const GamesKept();
     } on Object catch (error) {
       log.w('keep the ${site.label} games of $username', error);
@@ -400,6 +402,14 @@ Future<List<CachedGame>> _newestOf(
 /// site id or else exact text; worked out off the UI isolate for big files.
 Future<List<String>> freshGamesOf(String text, List<String> downloaded) =>
     _offThread(text, () => _freshIn(text, downloaded));
+
+/// The text of a new file holding [games], each once; a big first download
+/// is deduplicated and joined off the UI isolate.
+Future<String> _newFileText(List<String> games) {
+  String build() => '${_freshIn('', games).join('\n\n')}\n';
+  final size = games.fold<int>(0, (n, game) => n + game.length);
+  return size < readOffThreadFrom ? Future.value(build()) : Isolate.run(build);
+}
 
 Future<T> _offThread<T>(String text, T Function() work) =>
     text.length < readOffThreadFrom ? Future.value(work()) : Isolate.run(work);

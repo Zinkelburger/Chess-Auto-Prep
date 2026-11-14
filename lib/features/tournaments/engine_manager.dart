@@ -38,7 +38,9 @@ Future<void> manageTournamentEngines(
                 ListTile(
                   title: Text(engine.name),
                   subtitle: Text(
-                    '${engine.threads} cores · ${engine.memory} MB · ${engine.executable ?? "Bundled Stockfish"}',
+                    '${engine.threads} ${engine.threads == 1 ? 'core' : 'cores'} · '
+                    '${engine.memory} MB · '
+                    '${engine.executable ?? "Bundled Stockfish"}',
                   ),
                   trailing: Wrap(
                     children: [
@@ -288,7 +290,9 @@ class _EditorState extends State<_Editor> with Attempting<_Editor> {
     if (check case EngineVerified(
       :final name,
     ) when _autoName && engine.executable != null && name.isNotEmpty) {
-      engine = _engine(name)!;
+      // The engine that was tested, named as it named itself: the fields
+      // may have been edited while it ran.
+      engine = TournamentEngine({...tested.json, 'name': name});
       _name.text = name;
     }
     await widget.run.keepEngines([

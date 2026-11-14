@@ -220,33 +220,20 @@ class PersonRow extends StatelessWidget {
   /// The studies and chapters linked to the person, each a chip that opens
   /// it and can be taken off.
   List<Widget> _studyLinks(ThemeData theme) => [
-    for (final link in player.fields['studies'] as List? ?? const [])
-      if (link is Map && link['path'] is String)
-        InputChip(
-          label: Text(
-            link['chapter'] as String? ??
-                p.basenameWithoutExtension(link['path'] as String),
-          ),
-          labelStyle: bodySmallInk(theme),
-          visualDensity: VisualDensity.compact,
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          padding: EdgeInsets.zero,
-          labelPadding: const EdgeInsets.only(left: Space.s),
-          deleteButtonTooltipMessage: 'Unlink study',
-          onPressed: () =>
-              onLinkedStudy(link['path'] as String, link['chapter'] as String?),
-          onDeleted: owner.busy
-              ? null
-              : () => owner.save(
-                  player.edited({
-                    'studies': [
-                      for (final other in player.fields['studies'] as List)
-                        if (!identical(other, link)) other,
-                    ],
-                  }),
-                  expected: player,
-                ),
-        ),
+    for (final link in player.studies)
+      InputChip(
+        label: Text(link.chapter ?? p.basenameWithoutExtension(link.path)),
+        labelStyle: bodySmallInk(theme),
+        visualDensity: VisualDensity.compact,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        padding: EdgeInsets.zero,
+        labelPadding: const EdgeInsets.only(left: Space.s),
+        deleteButtonTooltipMessage: 'Unlink study',
+        onPressed: () => onLinkedStudy(link.path, link.chapter),
+        onDeleted: owner.busy
+            ? null
+            : () => owner.save(player.withoutStudy(link), expected: player),
+      ),
   ];
 }
 

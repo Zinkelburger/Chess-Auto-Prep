@@ -5,6 +5,8 @@ import '../engines/engine_supervisor.dart';
 import '../engines/fixed_depth.dart';
 import '../net/chessdb_moves.dart';
 import '../net/search_evaluator.dart';
+import '../storage/document_repository.dart'
+    show DocumentChange, DocumentChangeKind;
 import '../storage/eval_cache.dart' show CachedEvaluator;
 import '../storage/my_games_files.dart';
 import '../storage/settings.dart';
@@ -49,6 +51,7 @@ final class WorkspaceWiring {
     required this._books,
   }) : _gamesCache = games {
     _catalog.addListener(_filesChanged);
+    _saver.addListener(_saveAnswered);
     _env.store.addListener(_corpusChanged);
   }
 
@@ -313,7 +316,12 @@ final class WorkspaceWiring {
     final repertoire = source == null
         ? null
         : _catalog.repertoireOf(source.path);
-    if (all || (repertoire != null && change.touches(repertoire))) {
+    if (!all && _mayBeOwnSave(change)) {
+      // One the saver never answered for cannot be proven its own.
+      if (_landing != null) _gaps.refreshAnswers();
+      _landing = change;
+      _saveAnswered();
+    } else if (all || (repertoire != null && change.touches(repertoire))) {
       _gaps.refreshAnswers();
     } else if (change.folder) {
       _answers.forget();
@@ -333,6 +341,34 @@ final class WorkspaceWiring {
     }
   }
 
+  /// A save of the open chapter, admitted before the saver has its answer.
+  DocumentChange? _landing;
+
+  /// A commit to the open chapter's own file may be this session's autosave,
+  /// which the store announces while the saver still awaits it.
+  bool _mayBeOwnSave(DocumentChange change) =>
+      change.kind == DocumentChangeKind.saved &&
+      !change.folder &&
+      change.movedTo == null &&
+      change.revision != null &&
+      change.path == _session.source?.path;
+
+  /// Decides on [_landing] once the saver can say whose commit it was. Its
+  /// own receipt changed nothing the live tree does not already answer for,
+  /// so only that file's other chapters are read again; any other write to
+  /// the file reads the whole repertoire again.
+  void _saveAnswered() {
+    final change = _landing;
+    if (change == null) return;
+    if (identical(_saver.lastReceipt?.committed, change.revision)) {
+      _landing = null;
+      _answers.forgetFile(change.path);
+    } else if (_saver.state is! Saving) {
+      _landing = null;
+      _gaps.refreshAnswers();
+    }
+  }
+
   /// Download timestamps are not the source: revoke the corpus at its actual
   /// committed PGN boundary, including creations and folder relocations.
   void _corpusChanged() {
@@ -346,6 +382,7 @@ final class WorkspaceWiring {
     _env.store.removeListener(_corpusChanged);
     _env.settings.removeListener(_engineSettings);
     _catalog.removeListener(_filesChanged);
+    _saver.removeListener(_saveAnswered);
     _fill.dispose();
     _audit.dispose();
     _jobs.dispose();

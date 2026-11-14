@@ -102,7 +102,7 @@ void main() {
   test('a pass is due first, then only for something new or due', () async {
     final none = await ledger.list(const [CompoundWrites.journal]);
     expect(ledger.passDue(now, none), isTrue);
-    ledger.passRan(none);
+    ledger.passRan(none.records);
     expect(ledger.passDue(now, none), isFalse);
 
     final record = File(
@@ -113,7 +113,11 @@ void main() {
     final listed = await ledger.list(const [CompoundWrites.journal]);
     expect(listed.records, {(CompoundWrites.journal, 'new')});
     expect(ledger.passDue(now, listed), isTrue);
-    ledger.passRan(listed);
+    // A pass that did not meet the record (its folder read briefly as
+    // missing) leaves it unseen.
+    ledger.passRan(const {});
+    expect(ledger.passDue(now, listed), isTrue);
+    ledger.passRan(listed.records);
     expect(ledger.passDue(now, listed), isFalse);
 
     for (var i = 0; i < 4; i++) {
@@ -264,11 +268,11 @@ void main() {
 
   test('nothing is owed only after a pass ran with nothing left', () async {
     final none = await ledger.list(const [CompoundWrites.journal]);
-    ledger.passRan(none);
+    ledger.passRan(none.records);
     expect(ledger.nothingOwed, isTrue);
     ledger.passCouldNotRun(now, const Duration(seconds: 30), locked: false);
     expect(ledger.nothingOwed, isFalse);
-    ledger.passRan(none);
+    ledger.passRan(none.records);
     ledger.deferred(
       CompoundWrites.journal,
       'edit',
@@ -286,7 +290,7 @@ void main() {
       ledger
         ..passCouldNotRun(now, base, locked: true)
         ..passCouldNotRun(now, base, locked: true)
-        ..passRan(await ledger.list(const [CompoundWrites.journal]))
+        ..passRan(const {})
         ..passCouldNotRun(now, base, locked: true);
       expect(ledger.waiting(now.add(base)), isFalse);
     },

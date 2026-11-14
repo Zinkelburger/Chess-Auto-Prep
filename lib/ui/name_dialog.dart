@@ -14,7 +14,9 @@ typedef NameDialogExtra =
     Widget Function(BuildContext context, VoidCallback changed);
 
 /// Asks for a name and answers the trimmed one, or null when the user backed
-/// out. A name the filesystem would refuse never leaves this dialog.
+/// out. A name the filesystem would refuse never leaves this dialog, unless
+/// [validator] says what this name must be instead — a chapter name, say,
+/// which is no file.
 Future<String?> showNameDialog(
   BuildContext context, {
   required String title,
@@ -22,6 +24,7 @@ Future<String?> showNameDialog(
   required String confirm,
   String initial = '',
   NameDialogExtra? extra,
+  String? Function(String name) validator = nameProblem,
 }) => showDialog<String>(
   context: context,
   builder: (context) => _NameDialog(
@@ -30,6 +33,7 @@ Future<String?> showNameDialog(
     confirm: confirm,
     initial: initial,
     extra: extra,
+    validator: validator,
   ),
 );
 
@@ -40,6 +44,7 @@ class _NameDialog extends StatefulWidget {
     required this.confirm,
     required this.initial,
     required this.extra,
+    required this.validator,
   });
 
   final String title;
@@ -47,6 +52,7 @@ class _NameDialog extends StatefulWidget {
   final String confirm;
   final String initial;
   final NameDialogExtra? extra;
+  final String? Function(String name) validator;
 
   @override
   State<_NameDialog> createState() => _NameDialogState();
@@ -68,7 +74,7 @@ class _NameDialogState extends State<_NameDialog> {
   void _submit() {
     if (!mounted) return;
     final name = _field.text.trim();
-    final problem = nameProblem(name);
+    final problem = widget.validator(name);
     if (problem != null) {
       setState(() => _problem = problem);
       return;

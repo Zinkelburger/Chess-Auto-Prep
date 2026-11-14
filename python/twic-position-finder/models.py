@@ -425,6 +425,17 @@ def activate_user_subscriptions(db: sqlite3.Connection, user_id: int) -> int:
     return cur.rowcount
 
 
+def activate_subscription(db: sqlite3.Connection, sub_id: int,
+                          user_id: int) -> bool:
+    """Turn on one owned subscription. Returns True if it changed."""
+    cur = db.execute(
+        "UPDATE subscriptions SET active = 1 WHERE id = ? AND user_id = ? AND active = 0",
+        (sub_id, user_id),
+    )
+    db.commit()
+    return cur.rowcount > 0
+
+
 def deactivate_subscription(db: sqlite3.Connection, sub_id: int,
                             user_id: int) -> bool:
     """Set a subscription to inactive. Returns True if updated."""

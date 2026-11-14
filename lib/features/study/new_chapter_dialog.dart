@@ -81,7 +81,7 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
   void _create() {
     if (!mounted) return;
     final name = _name.text.trim();
-    final problem = nameProblem(name);
+    final problem = chapterNameProblem(name);
     if (problem != null) return _change(() => _nameProblem = problem);
     final root = _start == _Start.initial ? Fen.initial : _position;
     if (root == null) return;

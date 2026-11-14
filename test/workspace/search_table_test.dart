@@ -272,6 +272,11 @@ void main() {
       await pumpFrom(tester, RepliesFrom.games);
       expect(find.text('60%'), findsOneWidget);
       expect(find.byTooltip('From Lichess masters'), findsNWidgets(3));
+      expect(
+        find.descendant(of: find.byType(SearchTable), matching: find.text('')),
+        findsNothing,
+        reason: 'Qc5 has no share: a muted dash, never a blank cell',
+      );
     });
 
     testWidgets('an unknown source shows nothing extra', (tester) async {

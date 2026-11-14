@@ -2,11 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
-import 'package:dartchess/dartchess.dart' show Side;
+import 'package:dartchess/dartchess.dart' show Move, Side;
 import 'package:flutter/foundation.dart';
 
 import '../../chess/fen.dart';
 import '../../chess/generation/eval.dart';
+import '../../chess/pgn/tree_edit.dart' show moveNode;
 import '../../chess/pv_text.dart';
 import '../../engines/engine.dart';
 import '../../engines/engine_line.dart';
@@ -133,7 +134,9 @@ final class PlayerHunt extends ChangeNotifier {
       .toString();
   void _inputsChanged() {
     if (_inputs == _inputKey && !analysis.busy) return;
-    _inputs = _inputKey;
+    // Not recorded while a load runs: the first notify after it ends, or is
+    // cancelled or fails with the corpus unchanged, restores the report.
+    _inputs = analysis.busy ? null : _inputKey;
     stop();
     findings = [];
     analysis.evals.clear();
@@ -234,9 +237,20 @@ final class PlayerHunt extends ChangeNotifier {
       if (ticket.overtaken) return;
       _engine = engine;
       final scores = _scores = <String, int>{};
+      // Looked up once per run; the first entry per key, as before.
+      final corpusAt = <String, PlayerPosition>{};
+      for (final at in _corpus!.positions) {
+        corpusAt.putIfAbsent(at.key, () => at);
+      }
       for (final position in positions) {
         if (ticket.overtaken) return;
-        await _evaluate(engine, position, scores, ticket);
+        await _evaluate(
+          engine,
+          position,
+          corpusAt[position.key]!,
+          scores,
+          ticket,
+        );
         if (ticket.overtaken) return;
         done++;
         _notify();
@@ -268,6 +282,7 @@ final class PlayerHunt extends ChangeNotifier {
   Future<void> _evaluate(
     Engine engine,
     PlayerPosition position,
+    PlayerPosition original,
     Map<String, int> scores,
     Ticket ticket,
   ) async {
@@ -283,15 +298,13 @@ final class PlayerHunt extends ChangeNotifier {
     final score = ourTurn ? best.score : best.score.negated;
     final cp = packedCp(score).cp;
     scores[position.key] = cp;
-    // Presence is taken from the full corpus, while frequency is from the
-    // filtered view. Missing evidence is never called a forced refutation.
-    final original = _corpus!.positions.firstWhere(
-      (p) => p.key == position.key,
-    );
+    // Presence is taken from the full corpus ([original]), while frequency
+    // is from the filtered view. Missing evidence is never called a forced
+    // refutation.
     final unseen =
         !ourTurn &&
         best.pv.isNotEmpty &&
-        !original.moves.containsKey(best.pv.first);
+        !original.moves.containsKey(_asPlayed(position.fen, best.pv.first));
     if (cp <= -50 || (unseen && cp <= 30)) {
       findings.add(PlayerWeakness(position, score, best.pv, unseen));
       findings.sort(
@@ -402,6 +415,13 @@ final class PlayerHunt extends ChangeNotifier {
     super.dispose();
   }
 }
+
+/// [uci] spelled as the games' moves are: castling king onto rook (`e8h8`)
+/// where the engine names it king to its square (`e8g8`).
+String _asPlayed(Fen fen, String uci) => switch (Move.parse(uci)) {
+  final move? => moveNode(fen, move)?.uci ?? uci,
+  null => uci,
+};
 
 Score scoreFromPacked(int cp) {
   if (cp.abs() < mateSaturationCp) return Centipawns(cp);

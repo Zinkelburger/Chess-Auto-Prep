@@ -185,8 +185,10 @@ final class _Lines {
         label: label,
         text: text,
         edit: edit,
+        // A move names who played it only when a game read from a file
+        // says so; a bare seat letter tells nothing the list does not.
         tip: switch (_line.entry(node)) {
-          LineMove(:final side) => 'Player ${Seat.of(board, side).letter}',
+          LineMove(:final side) => lab.game?.name(Seat.of(board, side)),
           HandEdit() => 'Hands edited',
         },
         selected: _line.at(board) == node,
@@ -293,7 +295,9 @@ class _MoveToken extends StatefulWidget {
 
   /// A hand edit, in muted ink.
   final bool edit;
-  final String tip;
+
+  /// What hovering says; null for nothing.
+  final String? tip;
   final bool selected;
   final VoidCallback onTap;
   final List<AppAction> Function() menu;
@@ -331,51 +335,51 @@ class _MoveTokenState extends State<_MoveToken> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Tooltip(
-      message: widget.tip,
-      waitDuration: previewDelay,
-      child: Semantics(
-        selected: widget.selected,
-        child: InkWell(
-          onTap: widget.onTap,
-          onSecondaryTapUp: (details) => unawaited(
-            showActionContextMenu(
-              context,
-              details.globalPosition,
-              widget.menu(),
-            ),
+    final token = Semantics(
+      selected: widget.selected,
+      child: InkWell(
+        onTap: widget.onTap,
+        onSecondaryTapUp: (details) => unawaited(
+          showActionContextMenu(context, details.globalPosition, widget.menu()),
+        ),
+        borderRadius: moveTokenRadius,
+        child: Container(
+          padding: moveTokenPadding,
+          decoration: BoxDecoration(
+            color: widget.selected ? cursorTint : null,
+            borderRadius: moveTokenRadius,
           ),
-          borderRadius: moveTokenRadius,
-          child: Container(
-            padding: moveTokenPadding,
-            decoration: BoxDecoration(
-              color: widget.selected ? cursorTint : null,
-              borderRadius: moveTokenRadius,
-            ),
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  if (widget.label.isNotEmpty)
-                    TextSpan(
-                      text: '${widget.label} ',
-                      style: TextStyle(color: scheme.onSurfaceVariant),
-                    ),
+          child: Text.rich(
+            TextSpan(
+              children: [
+                if (widget.label.isNotEmpty)
                   TextSpan(
-                    text: widget.edit
-                        ? widget.text
-                        : displaySan(context, widget.text),
+                    text: '${widget.label} ',
+                    style: TextStyle(color: scheme.onSurfaceVariant),
                   ),
-                ],
-              ),
-              softWrap: false,
-              overflow: TextOverflow.clip,
-              style: readingMoveText.copyWith(
-                color: widget.edit ? scheme.onSurfaceVariant : scheme.onSurface,
-              ),
+                TextSpan(
+                  text: widget.edit
+                      ? widget.text
+                      : displaySan(context, widget.text),
+                ),
+              ],
+            ),
+            softWrap: false,
+            overflow: TextOverflow.clip,
+            style: readingMoveText.copyWith(
+              color: widget.edit ? scheme.onSurfaceVariant : scheme.onSurface,
             ),
           ),
         ),
       ),
     );
+    return switch (widget.tip) {
+      final tip? => Tooltip(
+        message: tip,
+        waitDuration: previewDelay,
+        child: token,
+      ),
+      null => token,
+    };
   }
 }

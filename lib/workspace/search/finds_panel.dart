@@ -265,7 +265,7 @@ class _FindsPanelState extends State<FindsPanel>
     }
     return ListView.builder(
       itemCount: shown.length,
-      itemExtent: twoLineRowHeight,
+      itemExtent: rowExtent(context, twoLineRowHeight),
       itemBuilder: (context, at) {
         final kept = shown[at];
         return _FindRow(

@@ -229,6 +229,24 @@ void main() {
     expect(gaps.walk!.gaps.whereType<MissingReply>(), isEmpty);
   });
 
+  test('a walk that fails leaves no walk to follow, and says why', () async {
+    await pumpEventQueue();
+    expect(gaps.currentWalk, isNotNull);
+    expect(gaps.canNextGap, isTrue);
+    final ref = chapterRef('KID', 'Other');
+    fixture.store
+      ..documents[ref] = Opened(other, scriptedRevision(other))
+      ..throwOnOpen = StateError('disk gone');
+    files.listing = Repertoires([
+      folder('KID', ['Main', 'Other']),
+    ]);
+    gaps.refreshAnswers();
+    await pumpEventQueue();
+    expect(gaps.problem, contains('disk gone'));
+    expect(gaps.currentWalk, isNull);
+    expect(gaps.canNextGap, isFalse);
+  });
+
   test('closing the document walks the analysis board instead', () async {
     await pumpEventQueue();
     final walked = gaps.walk;

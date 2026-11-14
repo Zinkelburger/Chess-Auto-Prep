@@ -102,16 +102,37 @@ void main() {
       importMasterPgn(database, source.path);
       await source.writeAsString('not a PGN');
       final result = await corpus.importPgn(source.path, database);
-      expect(result, isA<CorpusFailure<(int, int)>>());
+      expect(
+        (result as CorpusFailure<(int, int)>).detail,
+        'Import failed. No supported finished games.',
+      );
       final count = await corpus.size(database) as CorpusRead<CorpusSize>;
       expect(count.value.games, 1);
       await File(database).writeAsString('damaged');
+      // The page shows a sentence; SQLite's words stay in the log.
       expect(
         await corpus.search(database, const CorpusFilter()),
-        isA<CorpusFailure<CorpusPage>>(),
+        isA<CorpusFailure<CorpusPage>>().having(
+          (failure) => failure.detail,
+          'detail',
+          'Could not read the master games database.',
+        ),
       );
     },
   );
+
+  test('a game no longer in the database says so', () async {
+    await source.writeAsString(game(1));
+    importMasterPgn(database, source.path);
+    expect(
+      await corpus.game(database, 999),
+      isA<CorpusFailure<String>>().having(
+        (failure) => failure.detail,
+        'detail',
+        'That game is no longer available.',
+      ),
+    );
+  });
 
   test('size says when the games were played and where they came from, '
       'ignoring unknown dates', () async {

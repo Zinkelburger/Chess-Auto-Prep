@@ -16,8 +16,13 @@ the shared picker in `lib/workspace/document/study_picker.dart`.
 
 ## Navigate and organize
 
-The sidebar has two views: a searchable **Your studies** picker, and the
-current study's searchable chapter list. The back arrow (**Back to studies**) returns to the picker.
+The sidebar has two views. **Your studies** (its `⋯` **Study actions**
+holds **New study…**): `Search studies`, **Import chapters…**, then the
+studies; with none yet, `No studies yet.` and the filled **New study…**. A study: the back arrow (**Back to studies**, to the picker), its
+name with the `⋯` **Study actions**, **Import chapters…** beside **Send to
+Lichess…** (wrapping in a narrow column), **Train study**, **New
+chapter…**, `Search chapters`, then the chapters by ordinal, each with its
+`⋯` **Chapter actions**.
 Chapter names have full-name tooltips, the active chapter is highlighted and
 revealed on selection, and filtering preserves the original chapter ordinals.
 Drag an ordinal to reorder when the search is empty; **Move to position…** in
@@ -30,15 +35,16 @@ own tags first, `White`, `Black`, `Result`, `Date`, `Event`, `Round`, ready to
 fill in from a scoresheet, then any others; a tag left empty is not written,
 and the study's own tags and the training `LineID` are not shown. A chapter
 still called `Chapter N` takes its players' names (`White - Black`) once both
-are entered, as Lichess names an imported game. The chapter menu provides
+are entered, as Lichess names an imported game. A chapter name is any one
+line of text: unlike a study's file name it may hold `:`, `?` or a final dot,
+as in `Sicilian Defense: Najdorf Variation`. The chapter menu provides
 **Rename…**, **PGN tags…**, **Set starting position…**, **Face White/Black**,
 **Move to position…**, **Move up/down**, **Copy chapter PGN**, **Clear comments,
 glyphs and shapes…**, **Clear variations…** and **Delete chapter…**. Changing a starting
 position or clearing material asks for confirmation. The last chapter cannot
 be deleted. The study menu (**Study actions**) provides **New study…**,
 **Rename study…**, **Export study PGN…**, **Copy study PGN** and **Delete
-study…**, plus **Retry save** when a write failed. **Import chapters…** and, with a study open,
-**Send to Lichess…** sit side by side under the toolbar. Actions ▸ File has
+study…**, plus **Retry save** when a write failed. Actions ▸ File has
 **New study…**, **New chapter…**, **Import chapters…** and **Send to
 Lichess…** too, off where the panel's are.
 

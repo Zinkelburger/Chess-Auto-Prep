@@ -112,16 +112,46 @@ void main() {
       thisFile: thisFile,
       myGames: myGames,
     );
+    // A pane shows it: nothing is asked for a table nobody sees.
+    explorer.addListener(_shown);
     await pumpEventQueue();
   }
 
   ExplorerShown shown() => explorer.state as ExplorerShown;
 
+  test('nothing is asked while no pane shows the table; the first pane to '
+      'show it asks about the board, and the last one leaving stops a rest '
+      'from asking', () async {
+    explorer = explorerOver(
+      fixture.session,
+      settings: settings,
+      lichess: lichess,
+      book: book,
+      thisFile: thisFile,
+      myGames: myGames,
+      debounce: const Duration(milliseconds: 250),
+    );
+    fixture.session.cursor.forward();
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(lichess.asked, isEmpty, reason: 'no pane shows it');
+
+    explorer.addListener(_shown);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(lichess.asked.single.fen, fixture.session.cursor.fen);
+
+    fixture.session.cursor.forward();
+    expect(explorer.state, isA<ExplorerAsking>());
+    explorer.removeListener(_shown);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(lichess.asked, hasLength(1), reason: 'the pane went first');
+    expect(explorer.state, isA<ExplorerIdle>());
+  });
+
   test(
     'independent panes keep filters while sharing board navigation',
     () async {
       await start();
-      final second = explorer.independent();
+      final second = explorer.independent()..addListener(_shown);
       addTearDown(second.dispose);
       second.choose(
         const ExplorerChoice(source: ExplorerSource.lichess, ratings: {1600}),
@@ -371,7 +401,7 @@ void main() {
           myGames: myGames,
         ),
         debounce: Duration.zero,
-      );
+      )..addListener(_shown);
       await pumpEventQueue();
       held.answer(const ExplorerFetched(startAnswer));
       await pumpEventQueue();
@@ -575,3 +605,6 @@ void main() {
     });
   });
 }
+
+/// A pane showing the table.
+void _shown() {}

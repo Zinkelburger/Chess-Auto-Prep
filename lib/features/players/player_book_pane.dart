@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../chess/book/book_check.dart';
+import '../../ui/list_row.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/progress_line.dart';
 import '../../ui/theme.dart';
@@ -71,12 +72,15 @@ class PlayerBookPane extends StatelessWidget {
                       ? 'No games match. Change the colour or filters in the left panel.'
                       : 'Compare this player’s replies with your book for the opposite colour.'),
               style: theme.textTheme.bodySmall,
+              // A long problem must not push the list off the pane.
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           Expanded(
             child: ListView.builder(
               itemCount: book.gaps.length,
-              itemExtent: twoLineRowHeight,
+              itemExtent: rowExtent(context, twoLineRowHeight),
               itemBuilder: (context, i) =>
                   _GapRow(book: book, gap: book.gaps[i], onOpen: onOpen),
             ),

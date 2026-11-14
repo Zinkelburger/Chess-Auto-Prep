@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate' show ReceivePort;
 
 import 'package:chess_auto_prep/chess/tournament/config.dart';
 import 'package:chess_auto_prep/chess/tournament/result.dart';
@@ -375,9 +376,86 @@ void main() {
     expect(File(p.join(root.path, 'engines.json')).existsSync(), isFalse);
   });
 
+  test('an unreadable registry is set aside, and a new one can be '
+      'saved', () async {
+    final registry = File(p.join(root.path, 'engines.json'));
+    await registry.create(recursive: true);
+    await registry.writeAsString('not json');
+    final read =
+        await store.engines() as TournamentSaved<List<TournamentEngine>>;
+    expect(read.value, isEmpty);
+    expect(read.warnings.single, contains('set aside'));
+    expect(registry.existsSync(), isFalse);
+    final kept = await files.support
+        .list(recursive: true)
+        .where((e) => e is File && e.path.contains('quarantine'))
+        .cast<File>()
+        .toList();
+    expect(await kept.single.readAsString(), 'not json');
+
+    final engine = TournamentEngine.bundled();
+    expect(await store.saveEngines([], [engine]), isA<TournamentSaved<void>>());
+    expect(jsonDecode(await registry.readAsString()), [engine.json]);
+
+    await registry.writeAsString('{}');
+    expect(
+      await store.saveEngines([engine], []),
+      isA<TournamentFailed<void>>(),
+      reason: 'a stale list is not written over the set-aside registry',
+    );
+    expect(registry.existsSync(), isFalse);
+    expect(await store.saveEngines([], [engine]), isA<TournamentSaved<void>>());
+  });
+
   test('a tournament id that is a path is refused', () {
     for (final id in ['a/b', r'a\b']) {
       expect(() => store.games(id), throwsFormatException, reason: id);
     }
+  });
+  test('final positions are read on another isolate, whatever the store '
+      'holds besides', () async {
+    // The store holds things no isolate can be sent (the app's owners hold
+    // pending futures): a port stands in for them here. Only the PGN may
+    // cross.
+    final port = ReceivePort();
+    addTearDown(port.close);
+    store = FileTournaments(
+      root: root,
+      support: files.support,
+      documents: files.store,
+      afterPgn: () async => port.hashCode,
+    );
+    final before = initial();
+    await store.create(before);
+    await store.save(
+      before,
+      before.changed({'status': 'completed'}),
+      pgn,
+      expectedPgn: null,
+    );
+    final read = await store.positions('test');
+    expect(
+      read,
+      isA<TournamentSaved<List<String?>>>().having((r) => r.value, 'value', [
+        'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+      ]),
+    );
+  });
+
+  test('final positions that cannot be read say so in a sentence', () async {
+    await store.create(initial());
+    final games = await File(store.games('test').path).create(recursive: true);
+    await games.writeAsString(pgn);
+    await Process.run('chmod', ['000', games.path]);
+    addTearDown(() => Process.run('chmod', ['644', games.path]));
+    final read = await store.positions('test');
+    expect(
+      read,
+      isA<TournamentFailed<List<String?>>>().having(
+        (r) => r.message,
+        'message',
+        'Could not read the final positions.',
+      ),
+    );
   });
 }

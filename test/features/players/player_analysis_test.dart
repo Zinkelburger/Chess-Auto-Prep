@@ -52,6 +52,26 @@ void main() {
     expect(black.unknown, 1);
     expect(black.score, isNull);
   });
+  test('a game from a set position numbers its moves from there', () {
+    const fromPosition =
+        '[Event "Club"]\n[White "Bob"]\n[Black "Alex"]\n[Result "*"]\n'
+        '[Variant "From Position"]\n[SetUp "1"]\n'
+        '[FEN "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"]'
+        '\n\n1... e5 2. Nf3 Nc6 *';
+    final corpus = buildPlayerCorpus(
+      {'alex'},
+      [
+        const PlayerGame(
+          file: DocumentRef('/a.pgn'),
+          index: 0,
+          text: fromPosition,
+        ),
+      ],
+    );
+    final labels = [for (final p in corpus.positions) p.label];
+    expect(labels, contains('1... e5 2. Nf3'));
+    expect(labels, contains('1... e5 2. Nf3 Nc6'));
+  });
   test('repetition counts a game at a position only once', () {
     final corpus = buildPlayerCorpus(
       {'alex'},
@@ -126,6 +146,51 @@ void main() {
         (1, 1, 1, 1),
       );
     }
+  });
+  test('positions are cached until a filter or an eval changes', () {
+    final store = ScriptedDocumentStore();
+    final owner = PlayerAnalysis(
+      documents: store,
+      cache: GamesCache(store, folder: '/games'),
+      sites: const [],
+      pending: PendingWrites(),
+    );
+    addTearDown(owner.dispose);
+    const text =
+        '[White "Alex"]\n[Black "Bob"]\n[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 1-0';
+    owner.corpus = buildPlayerCorpus(
+      {'alex'},
+      [
+        const PlayerGame(file: DocumentRef('/a.pgn'), index: 0, text: text),
+        PlayerGame(
+          file: const DocumentRef('/a.pgn'),
+          index: 1,
+          text: text
+              .replaceFirst('Bob', 'Carl')
+              .replaceFirst('2. Nf3', '2. Bc4'),
+        ),
+      ],
+    );
+    owner.minPly = 0;
+    final first = owner.positions;
+    expect(first, isNotEmpty);
+    expect(owner.positions, same(first));
+    expect(owner.gameIndexes, same(owner.gameIndexes));
+    owner.search('carl');
+    final searched = owner.positions;
+    expect(searched, isNot(same(first)));
+    expect(owner.gameIndexes, [1]);
+    expect(searched.every((p) => p.games.single == 1), true);
+    owner.search('');
+    owner.minGames = 2;
+    expect(owner.positions.every((p) => p.count == 2), true);
+    owner.minGames = 1;
+    owner.configure(order: PositionOrder.badEval);
+    final before = owner.positions;
+    final last = before.last;
+    owner.evals[last.key] = -300;
+    expect(owner.positions, isNot(same(before)));
+    expect(owner.positions.first.key, last.key);
   });
   test('pasted CSV quotes, TSV and opponent JSON preserve names', () {
     final csv = readPlayerList(
@@ -279,6 +344,96 @@ void main() {
       );
     },
   );
+  test('From move N lists both sides\' positions at move N', () {
+    final store = ScriptedDocumentStore();
+    final owner = PlayerAnalysis(
+      documents: store,
+      cache: GamesCache(store, folder: '/games'),
+      sites: const [],
+      pending: PendingWrites(),
+    );
+    addTearDown(owner.dispose);
+    const asBlack =
+        '[Event "Club"]\n[White "Bob"]\n[Black "Alex"]\n[Result "*"]\n\n'
+        '1. e4 c5 2. Nf3 d6 *';
+    owner.corpus = buildPlayerCorpus(
+      {'alex'},
+      [const PlayerGame(file: DocumentRef('/a.pgn'), index: 0, text: asBlack)],
+    );
+    owner.setSide(Side.black);
+    List<String> listed() => [for (final p in owner.positions) p.label];
+    // The default reads `From move 1`: Black's first decision is listed.
+    expect(owner.fromMove, 1);
+    expect(listed(), containsAll(['Starting position', '1. e4', '1. e4 c5']));
+    owner.configure(fromMove: 2);
+    expect(owner.fromMove, 2);
+    expect(listed(), isNot(contains('1. e4')));
+    expect(listed(), isNot(contains('Starting position')));
+    // White to play move 2 and Black to play it are both move 2.
+    expect(listed(), containsAll(['1. e4 c5', '1. e4 c5 2. Nf3']));
+  });
+  test('a large games file is split off the UI isolate with every game in '
+      'its place', () async {
+    final store = ScriptedDocumentStore();
+    const ref = DocumentRef('/big.pgn');
+    final text = [
+      for (var i = 0; i < 800; i++)
+        '[Event "Club $i"]\n[White "Alex"]\n[Black "Opponent $i"]\n'
+            '[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 1-0',
+    ].join('\n\n');
+    expect(text.length, greaterThan(64 * 1024));
+    store.documents[ref] = Opened(text, scriptedRevision(text));
+    final owner = PlayerAnalysis(
+      documents: store,
+      cache: GamesCache(store, folder: '/games'),
+      sites: const [],
+      pending: PendingWrites(),
+    );
+    addTearDown(owner.dispose);
+    await owner.select(
+      Player.create('Alex').edited({
+        'pgn_files': [ref.path],
+      }),
+    );
+    final games = owner.corpus!.games;
+    expect(games, hasLength(800));
+    for (final (i, game) in games.indexed) {
+      expect((game.source.file, game.source.index), (ref, i));
+    }
+    expect(games[799].source.text, contains('Opponent 799'));
+  });
+  test('a download missing a month keeps the games it read and names the '
+      'month', () async {
+    final store = ScriptedDocumentStore();
+    final cache = GamesCache(store, folder: '/games');
+    final owner = PlayerAnalysis(
+      documents: store,
+      cache: cache,
+      sites: [
+        _AnsweredGames(
+          GameSite.chesscom,
+          const GamesFetched([game], unread: ['2026-08']),
+        ),
+      ],
+      pending: PendingWrites(),
+    );
+    addTearDown(owner.dispose);
+    await owner.select(
+      Player.create('Alex').edited({'chesscom': 'alex'}),
+      download: true,
+    );
+    final saved = store.documents[cache.refFor(GameSite.chesscom, 'alex')];
+    expect((saved! as Opened).text, contains('1. e4 e5'));
+    expect(owner.corpus!.games, hasLength(1));
+    expect(
+      owner.error,
+      'Some games could not be updated. Showing saved games.',
+    );
+    expect(
+      owner.errorDetail,
+      'Chess.com: could not read 2026-08; the other games were saved.',
+    );
+  });
   test('late download cannot change another selected player', () async {
     final api = _DelayedGames();
     final store = ScriptedDocumentStore();
@@ -401,4 +556,14 @@ class _DelayedGames implements RecentGames {
   @override
   Future<GamesFetch> recent(String username, {required int max}) =>
       answer.future;
+}
+
+class _AnsweredGames implements RecentGames {
+  _AnsweredGames(this.site, this.answer);
+  @override
+  final GameSite site;
+  final GamesFetch answer;
+  @override
+  Future<GamesFetch> recent(String username, {required int max}) async =>
+      answer;
 }

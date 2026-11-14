@@ -24,17 +24,22 @@ Shared: `lib/chess/players/` (`Player`, `PlayerGroup`, `readPlayerList`,
 
 A full page (no board), capped at `playersPageWidth`.
 
-- **`All players` / `Groups`** switch; inside a group, `← Groups`, the group
-  name and `2026-10-10 · 5 rounds · 18 players · 5 prepared` instead.
+- **`All players` / `Groups`** switch; inside a group, a back arrow (`Back to
+  groups`), the group name with its `⋯` right after it, and `2026-10-10 · 5
+  rounds · 18 players · 5 prepared` instead.
 - **Toolbar** — search (`Search name, ID or account` / `Search groups`), the one
   filled button (`Add player…`, `Add players…` in a group, `New group…` over
   the groups), `Paste players…`, and in a group `Open group study` and
-  `Train group study`. The `⋯` (`More actions`) holds, in a group, `Edit group…`,
+  `Train group study`. The `⋯` (`More actions`) ends the toolbar, or follows
+  the group's name inside a group; it holds, in a group, `Edit group…`,
   `Copy prep sheet`, `Export prep sheet…`, `Unlink group study`; always
   `Update US Chess ratings`, `Refresh`.
 - **Notices** — a fixed-height progress line, the rating lookup status with
-  `Stop`, unreadable player rows and group files, and a failed save with `Retry save` /
-  `Discard failed edit and reload` (or `Try again` for a failed load).
+  `Stop`, unreadable player rows and group files, `Could not count the saved
+  games.` with `Try again` (the counts from before stay), and a failed save
+  (`Could not save.`, plus what the disk says, such as `The disk is full.`)
+  with `Retry save` / `Discard failed edit and reload` (or `Try again` for a
+  failed load).
 - **Person row** — name and rating; accounts by site and `US Chess <id>` (or
   `No online accounts`); notes (two lines); linked studies as chips (× unlinks);
   saved-research suggestions (`PlayerLookup`, see Data); the saved-games line
@@ -50,10 +55,12 @@ A full page (no board), capped at `playersPageWidth`.
 ### Player analysis
 
 The column (`AnalysisPanel`) beside the shared board; pane tabs
-`Player openings` (pinned), `Game`, `My book`, `Explorer`, `Expectimax`.
+`Player openings` (pinned), `Game`, `My book` and `Explorer` open, `Expectimax`
+from the pane's `+`.
 
-- **Header** — the player's name and one `⋯` (`Change player…`, `Get games…`
-  when they have an account, `Add PGN…`, `Reload saved games`, `Players & prep`).
+- **Header** — the player's name and one `⋯` (`Player actions`: `Change
+  player…`, `Get games…` when they have an account, `Add PGN…`, `Refresh`,
+  `Players & prep`).
 - **Status** — `412 games · Chess.com (jdoe) · downloaded 3d ago`, plus
   `n unmatched` / `n unreadable or nonstandard`; while busy, the step with
   `Cancel` and a bar; errors with `Try again` and `Details`.
@@ -61,7 +68,9 @@ The column (`AnalysisPanel`) beside the shared board; pane tabs
   `Filters` fold (`Filters (n)` when some are on).
 - **`Positions` / `Games` / `Findings`** switch, pinned while its list scrolls.
 - With nobody chosen: the searchable saved-player list (`PlayerPicker`), or
-  `Add player…` and `Players & prep` on first run.
+  `Add player…` and `Players & prep` on first run. After a restart the mode
+  opens on the player it was last on (kept in `lastPlace`), the picker only
+  when that player has been removed.
 - No game yet: `Get games…` (with an account) and `Add PGN…`.
 
 Lists:
@@ -72,12 +81,15 @@ Lists:
 - **Games** — a row per game naming the opponent, with ECO and event.
 - **Findings** — `Analyze with engine` (`Stop · done / total` while running),
   `Analysis settings` fold, progress words, `Dismissed (n)` / `Back to findings`,
-  then the finding rows.
+  then the finding rows: the kind in full (`Strong reply absent from these
+  games` or `Unfavourable position`, wrapping in a narrow column) with the
+  score at its end, the moves to the position and `n games · <engine line>`,
+  each on up to two lines; the whole engine line on hover.
 
 Tabs:
 
-- **Player openings** — `<name> as White · n games` with
-  `Add line to prep study`, a move table (`Move`, `Games`,
+- **Player openings** — `<name> as White · n games`, then `Add line to prep
+  study` once the board is past the start, a move table (`Move`, `Games`,
   `White / Draw / Black` bar) for the board position, then the games reaching
   it. Off their games: `None of these games reached the position on the board.`
   with `Go to the first move`.
@@ -157,12 +169,18 @@ counted.
 1–10000, default 500) or `Recent months` (1–120), and time controls (Bullet …
 Correspondence; default all but bullet) → `New games are added to the ones
 already saved.` The choice is stored on the person (`download`). Per-site
-failures (`username not found`, `download limit reached; try again later`) show
-under `Some games could not be updated. Showing saved games.`
+failures (`Lichess: username not found`, `download limit reached; try again
+later`, otherwise `could not download; showing saved games`) show under `Some
+games could not be updated. Showing saved games.` A Chess.com month that
+cannot be read, or a Lichess export that keeps breaking off, does not cost the
+rest: the games that came down are saved and the line names what was not
+(`Chess.com: could not read 2026-08; the other games were saved.`). It does not
+change when the games last came down; the next download reads the gap again.
 
 **Filters** — `Dates` (`All dates`, last 30/90/180/365 days), `Time controls`
 (none chosen = all; `Other` for an unreadable time control), `Minimum games`
-(default 1), `From move` (default 1). They narrow Positions, Games, Findings and
+(default 1), `From move` (default 1; move N lists both sides' positions at
+move N and later). They narrow Positions, Games, Findings and
 both tabs.
 
 **Analyze with engine** — Findings button or Actions → a finite, cancellable
@@ -195,7 +213,10 @@ No chapter for that colour in the book: `Your book has no white repertoire to ch
   is skipped with one warning (`1 player in people.json could not be read. It
   is kept in the file as it is.`) and a log line, and every save writes it back
   where it was; a `people.json` that cannot be read at all shows no players and
-  refuses saves. One unreadable group file is reported and skipped.
+  refuses saves. One unreadable group file is reported and skipped. A field of
+  the wrong type in a readable row or group (a `date` that is a number, a
+  `studies` that is not a list, a `chapter` that is not text) reads as absent,
+  is named in the log, and stays in the file: edits write only what they change.
 - `lookup` (`status`, `confirmed`, `candidates` with `evidence`, `next_steps`)
   is written by the chess-prep MCP tools; the row shows the candidates and
   `Use account` adds one to the person and marks it `confirmed_by: user`.
