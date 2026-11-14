@@ -245,7 +245,10 @@ final class _Search {
       switch (await evaluationOf(evaluator, path.position)) {
         case EvaluationUnavailable(:final reason):
           _stop ??= _EvaluationFailed(path.fen, reason);
-          return PendingNode(path, FrontierNode(fen: path.fen, evalForUs: null));
+          return PendingNode(
+            path,
+            FrontierNode(fen: path.fen, evalForUs: null),
+          );
         case Evaluated(eval: final scored):
           eval = scored.forUs(config.side, path.position.turn);
       }
