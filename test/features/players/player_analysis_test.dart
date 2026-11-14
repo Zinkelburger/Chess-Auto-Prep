@@ -372,6 +372,36 @@ void main() {
     // White to play move 2 and Black to play it are both move 2.
     expect(listed(), containsAll(['1. e4 c5', '1. e4 c5 2. Nf3']));
   });
+  test('a large games file is split off the UI isolate with every game in '
+      'its place', () async {
+    final store = ScriptedDocumentStore();
+    const ref = DocumentRef('/big.pgn');
+    final text = [
+      for (var i = 0; i < 800; i++)
+        '[Event "Club $i"]\n[White "Alex"]\n[Black "Opponent $i"]\n'
+            '[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 1-0',
+    ].join('\n\n');
+    expect(text.length, greaterThan(64 * 1024));
+    store.documents[ref] = Opened(text, scriptedRevision(text));
+    final owner = PlayerAnalysis(
+      documents: store,
+      cache: GamesCache(store, folder: '/games'),
+      sites: const [],
+      pending: PendingWrites(),
+    );
+    addTearDown(owner.dispose);
+    await owner.select(
+      Player.create('Alex').edited({
+        'pgn_files': [ref.path],
+      }),
+    );
+    final games = owner.corpus!.games;
+    expect(games, hasLength(800));
+    for (final (i, game) in games.indexed) {
+      expect((game.source.file, game.source.index), (ref, i));
+    }
+    expect(games[799].source.text, contains('Opponent 799'));
+  });
   test('a download missing a month keeps the games it read and names the '
       'month', () async {
     final store = ScriptedDocumentStore();

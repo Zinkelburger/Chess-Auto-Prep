@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
 import 'package:dartchess/dartchess.dart' show Side;
@@ -7,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../../chess/fen.dart';
+import '../../chess/pgn/chapter.dart' show readOffThreadFrom;
 import '../../chess/pgn/game_text.dart';
 import '../../chess/players/download_range.dart';
 import '../../chess/players/player.dart';
@@ -400,8 +402,12 @@ final class PlayerAnalysis extends ChangeNotifier {
       switch (await documents.open(ref)) {
         case Opened(:final text, :final revision):
           revisions[ref] = revision;
-          for (final (i, g) in splitChapterText(text).games.indexed) {
-            games.add(PlayerGame(file: ref, index: i, text: g.text));
+          final texts = await _gameTexts(text);
+          if (ticket.overtaken) {
+            return (<PlayerGame>[], <DocumentRef, Revision>{});
+          }
+          for (final (i, g) in texts.indexed) {
+            games.add(PlayerGame(file: ref, index: i, text: g));
           }
         case Unreadable(:final detail):
           notes.add('${p.basename(path)}: $detail');
@@ -463,4 +469,15 @@ final class PlayerAnalysis extends ChangeNotifier {
     _selections.close();
     super.dispose();
   }
+}
+
+/// The games of [text], split off the UI isolate once the file is large, as
+/// the saved-games count does. Top-level, so the closure sends only the text.
+Future<List<String>> _gameTexts(String text) {
+  List<String> split() => [
+    for (final game in splitChapterText(text).games) game.text,
+  ];
+  return text.length < readOffThreadFrom
+      ? Future.value(split())
+      : Isolate.run(split);
 }
