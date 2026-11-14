@@ -241,7 +241,8 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (_disposed || ticket.overtaken) return;
     if (result is RequestDone) {
       documents.carry(mode);
-      return documents.close(blank);
+      // Moves played on it while the file was read keep it open.
+      return documents.closeIfBlank(blank);
     }
     if (result is RequestRefused) say(null);
     documents.entered(mode);
@@ -340,8 +341,24 @@ final class WorkspaceRequests extends ChangeNotifier {
     }
     final source = place.source;
     if (source == null) return const RequestDone();
+    // The viewer is told its file again, as when it was read there first,
+    // so its game list and reading place come back with it.
+    final viewing = place.mode == Mode.pgnViewer;
+    final saved = viewing ? await _viewer.savedPlace(source) : null;
+    if (_disposed || ticket.overtaken) return const RequestDropped();
     final result = await _open(ticket, source, game: place.game, left: leave);
     if (_disposed || result is! RequestDone) return stayed(result);
+    if (viewing && ticket.current && _viewer.file != source) {
+      await _viewer.opened(
+        source,
+        place: saved,
+        currentRequest: () => ticket.current,
+      );
+      if (_disposed || ticket.overtaken) return const RequestDropped();
+      if (place.game case final game? when _session.game != game) {
+        _session.showGame(game);
+      }
+    }
     documents.carry(place.mode);
     _session.cursor.goTo(place.cursor);
     return result;
@@ -541,6 +558,9 @@ final class WorkspaceRequests extends ChangeNotifier {
   }) async {
     final ticket = _nextRequest();
     if (source == ExplorerSource.thisFile) return _showFileGame(game);
+    // The position explored, not its move counters: a set-up position or a
+    // game that got there by another move order is at another ply.
+    final explored = _session.cursor.fen;
     final kept = await _games.keep(game, source: source, ply: ply);
     if (ticket.overtaken) return const RequestDropped();
     switch (kept) {
@@ -549,7 +569,10 @@ final class WorkspaceRequests extends ChangeNotifier {
       case GameKept(:final ref, ply: final at):
         final result = await _inViewer(ticket, ref, game: 0);
         if (_disposed || result is! RequestDone) return result;
-        _session.cursor.goTo(NodePath.of(List.filled(at, 0)));
+        _session.cursor.goTo(
+          _session.tree?.mainLineTo(explored) ??
+              NodePath.of(List.filled(at, 0)),
+        );
         return result;
     }
   }

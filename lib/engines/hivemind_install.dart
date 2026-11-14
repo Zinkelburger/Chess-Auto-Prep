@@ -146,16 +146,16 @@ final class HivemindInstall {
 
   /// Removes a half-written `.part` an install that was killed left behind:
   /// one an hour old is no install still running.
+  /// A sweep that fails never fails the install.
   Future<void> _sweepLeftovers(Directory folder) async {
     final stale = DateTime.now().subtract(const Duration(hours: 1));
-    await for (final entry in folder.list()) {
-      if (entry is! File || !entry.path.endsWith('.part')) continue;
-      if ((await entry.lastModified()).isAfter(stale)) continue;
-      try {
-        await entry.delete();
-      } on FileSystemException catch (error) {
-        log.w('remove ${entry.path}', error);
+    try {
+      await for (final entry in folder.list()) {
+        if (entry is! File || !entry.path.endsWith('.part')) continue;
+        await removeStaleLeftover(entry, stale);
       }
+    } on FileSystemException catch (error) {
+      log.w('sweep ${folder.path}', error);
     }
   }
 
@@ -341,4 +341,16 @@ String get _runtimeName {
   if (Platform.isWindows) return 'hivemind_ort.dll';
   if (Platform.isMacOS) return 'libonnxruntime.dylib';
   return 'libonnxruntime.so.1';
+}
+
+/// Deletes [entry] when it was last written before [stale]. Another copy
+/// of the app may rename its own `.part` into place at any moment, so a
+/// file gone before it is looked at is skipped, not an error.
+Future<void> removeStaleLeftover(File entry, DateTime stale) async {
+  try {
+    if ((await entry.lastModified()).isAfter(stale)) return;
+    await entry.delete();
+  } on FileSystemException catch (error) {
+    log.w('remove ${entry.path}', error);
+  }
 }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
 import 'package:dartchess/dartchess.dart' show Side;
@@ -7,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../../chess/fen.dart';
+import '../../chess/pgn/chapter.dart' show readOffThreadFrom;
 import '../../chess/pgn/game_text.dart';
 import '../../chess/players/download_range.dart';
 import '../../chess/players/player.dart';
@@ -126,11 +128,61 @@ final class PlayerAnalysis extends ChangeNotifier {
     return true;
   }
 
-  List<int> get gameIndexes => [
-    for (final (i, g) in (corpus?.games ?? <AnalyzedGame>[]).indexed)
-      if (includes(g)) i,
-  ];
+  /// What [gameIndexes] depends on; the filters are plain fields that
+  /// callers assign directly, so the cache compares values, not events.
+  Object get _gamesKey => (
+    corpus,
+    side,
+    query,
+    recentDays,
+    // Recent games age by the day.
+    recentDays == null ? null : _today(),
+    speeds.join(','),
+  );
+  static (int, int, int) _today() {
+    final now = DateTime.now();
+    return (now.year, now.month, now.day);
+  }
+
+  Object? _gamesKeyCached;
+  List<int> _gameIndexes = const [];
+  Object? _positionsKey;
+  List<PlayerPosition> _positions = const [];
+
+  /// The indexes of the corpus games the filters keep. Computed again only
+  /// when an input changed; the list cannot be modified.
+  List<int> get gameIndexes {
+    final key = _gamesKey;
+    if (key != _gamesKeyCached) {
+      _gameIndexes = List.unmodifiable([
+        for (final (i, g) in (corpus?.games ?? <AnalyzedGame>[]).indexed)
+          if (includes(g)) i,
+      ]);
+      _gamesKeyCached = key;
+    }
+    return _gameIndexes;
+  }
+
+  /// The filtered, sorted positions. Computed again only when an input
+  /// changed, including [evals], which the Eval order reads; the list cannot
+  /// be modified.
   List<PlayerPosition> get positions {
+    final key = (
+      _gamesKey,
+      minGames,
+      minPly,
+      order,
+      Object.hashAll([for (final e in evals.entries) (e.key, e.value)]),
+      evals.length,
+    );
+    if (key != _positionsKey) {
+      _positions = List.unmodifiable(_filteredPositions());
+      _positionsKey = key;
+    }
+    return _positions;
+  }
+
+  List<PlayerPosition> _filteredPositions() {
     final data = corpus;
     if (data == null) return const [];
     // Filtering statistics is done over the actual games, not by hiding rows
@@ -350,8 +402,12 @@ final class PlayerAnalysis extends ChangeNotifier {
       switch (await documents.open(ref)) {
         case Opened(:final text, :final revision):
           revisions[ref] = revision;
-          for (final (i, g) in splitChapterText(text).games.indexed) {
-            games.add(PlayerGame(file: ref, index: i, text: g.text));
+          final texts = await _gameTexts(text);
+          if (ticket.overtaken) {
+            return (<PlayerGame>[], <DocumentRef, Revision>{});
+          }
+          for (final (i, g) in texts.indexed) {
+            games.add(PlayerGame(file: ref, index: i, text: g));
           }
         case Unreadable(:final detail):
           notes.add('${p.basename(path)}: $detail');
@@ -413,4 +469,15 @@ final class PlayerAnalysis extends ChangeNotifier {
     _selections.close();
     super.dispose();
   }
+}
+
+/// The games of [text], split off the UI isolate once the file is large, as
+/// the saved-games count does. Top-level, so the closure sends only the text.
+Future<List<String>> _gameTexts(String text) {
+  List<String> split() => [
+    for (final game in splitChapterText(text).games) game.text,
+  ];
+  return text.length < readOffThreadFrom
+      ? Future.value(split())
+      : Isolate.run(split);
 }

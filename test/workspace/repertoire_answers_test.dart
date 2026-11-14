@@ -76,6 +76,36 @@ void main() {
     expect(around.containsKey(const Fen(_afterD3D5).position), isFalse);
   });
 
+  test('the library is listed once until something is forgotten', () async {
+    final main = ref('KID', 'Main');
+    final sicilian = ref('KID', 'Sicilian');
+    final text = _chapter('1. e4 c5 2. c3 d5 3. exd5');
+    final store = ScriptedDocumentStore()
+      ..documents[sicilian] = Opened(text, scriptedRevision(text));
+    final files = ScriptedFiles(
+      listing: Repertoires([
+        folder('KID', ['Main', 'Sicilian']),
+      ]),
+    );
+    final answers = RepertoireAnswers(files: files, documents: store);
+    await answers.around(main, Side.white);
+    await answers.around(main, Side.white);
+    await answers.around(main, Side.white);
+    expect(files.listings, 1);
+    answers.forgetFile(sicilian.path);
+    await answers.around(main, Side.white);
+    expect(files.listings, 2);
+    answers.forget();
+    await answers.around(main, Side.white);
+    expect(files.listings, 3);
+    // A listing that could not be read is asked again.
+    files.listing = const RepertoiresUnreadable('recovery required');
+    answers.forget();
+    expect(await answers.around(main, Side.white), isEmpty);
+    await answers.around(main, Side.white);
+    expect(files.listings, 5);
+  });
+
   test('the other chapters of a course file answer too', () async {
     final open = ChapterRef.at(_path, section: 'Open games');
     final sicilian = ChapterRef.at(_path, section: 'Sicilian');

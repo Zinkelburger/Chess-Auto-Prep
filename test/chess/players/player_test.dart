@@ -88,6 +88,34 @@ void main() {
       expect(players.first.text('uscf_id'), '12345678');
     });
 
+    test('an empty spreadsheet row is left out, not refused', () {
+      final players = readPlayerList(
+        'Name,Rating,USCF ID\nAlice,2000,1\nBob,1800,2\n,,\n',
+      );
+      expect(players.map((p) => p.name), ['Alice', 'Bob']);
+      expect(
+        () => readPlayerList('Name,Rating\nAlice,2000\n,1800\n'),
+        throwsFormatException,
+      );
+    });
+
+    test('a person gains list entries while keeping what the field held', () {
+      final person = Player({
+        'id': 'p',
+        'pgn_files': '/home/u/opp.pgn',
+        'aliases': ['Magnus', 7],
+      });
+      expect(person.withStrings('pgn_files', ['/a.pgn']).fields['pgn_files'], [
+        '/home/u/opp.pgn',
+        '/a.pgn',
+      ]);
+      expect(
+        person.withStrings('aliases', ['Magnus', 'MC']).fields['aliases'],
+        ['Magnus', 7, 'MC'],
+      );
+      expect(person.withStrings('game_sets', []).fields['game_sets'], isEmpty);
+    });
+
     test('reads a Markdown table, its rule line and outer bars left out', () {
       final players = readPlayerList(
         '| Name | Rating |\n|---|---|\n| Alice | 2000 |\n',

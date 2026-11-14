@@ -71,9 +71,12 @@ final class PuzzleInView {
   List<Listenable> get _owners => [_puzzles, _requests];
 
   /// Puts the puzzle down if it is up out of Tactics: the mode changed, or
-  /// a set game came up in another mode's document.
+  /// a set game came up in another mode's document. A run with no puzzle up
+  /// is parked too, so a set game opened in another mode is not taken for
+  /// the next puzzle.
   void check() {
-    if (_puzzles.up != null && _requests.mode != Mode.tactics) {
+    if (_requests.mode != Mode.tactics &&
+        (_puzzles.up != null || _puzzles.run != null)) {
       _puzzles.putDown();
     }
   }
