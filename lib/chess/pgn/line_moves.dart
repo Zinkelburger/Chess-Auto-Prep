@@ -181,9 +181,9 @@ String? _headingFor(Chapter chapter) {
 /// everything it had — its place in the file, its name, its id, its review
 /// state, its comments and the order of its moves — because folding keeps
 /// the first tree's moves where they are and can only add after them. The
-/// host's introduction stands too; the arriving line's is taken only when
-/// the host has none, which is the rule folding follows for every other
-/// comment.
+/// host's introduction and comments stand too; what the arriving line wrote
+/// on the moves they share, and on its introduction, is added after the
+/// host's rather than dropped, since its game is taken out after.
 ///
 /// A [line] that was not read whole is refused: only what reading kept of it
 /// could be folded in, and the caller takes its game out after, so whatever
@@ -210,8 +210,8 @@ ChapterEdit lineGraftedInto(
   if (tree == null) return const ChapterEditRefused(lineNotWholeReason);
   final grafted = GameTree(
     rootFen: tree.rootFen,
-    rootComment: tree.rootComment ?? moves.rootComment,
-    children: mergeForests(tree.children, moves.children),
+    rootComment: joinedComment(tree.rootComment, moves.rootComment),
+    children: mergeForests(tree.children, moves.children, joinNotes: true),
   );
   if (_writesTheSame(grafted, tree, into.terminator)) {
     return const ChapterUnchanged();
