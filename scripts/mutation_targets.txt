@@ -292,6 +292,13 @@
 #     missing score or eval sorts by (any value out of range sorts last);
 #     :282 `.first` -> `.last` (with no game of the side shown, every game
 #     has the other side).
+#   lib/features/players/practical_probe.dart:19 `take(1)` -> `take(2)`
+#     (only the first move is read), :36, :38 the clamps' upper bound one
+#     higher (expected scores stay between 0 and 1).
+#   lib/features/players/player_hunt.dart:311 the ranking weight's `+ 100`
+#     one more (the order changes only between findings whose weights fall
+#     within one game's worth of each other), :378 `>` -> `>=` against
+#     `baseline + .05` (a float the estimate does not land on exactly).
 #   lib/chess/typed_move.dart:102 `>` -> `>=` (a castling king never lands
 #     on its own square), :187 `.first` -> `.last` (every candidate is then
 #     checked against the same four characters).
@@ -730,3 +737,5 @@ lib/features/pgn_viewer/filter_pane.dart|test/features/pgn_viewer/filter_pane_mo
 lib/features/pgn_viewer/pgn_viewer.dart|test/features/pgn_viewer/viewer_walk_test.dart|test/features/pgn_viewer/filter_pane_test.dart test/features/pgn_viewer/pgn_viewer_panel_test.dart test/features/pgn_viewer/pgn_viewer_persistence_test.dart test/features/pgn_viewer/pgn_viewer_test.dart test/features/pgn_viewer/position_export_test.dart test/features/pgn_viewer/viewer_perspective_test.dart test/features/pgn_viewer/viewer_reading_test.dart test/features/pgn_viewer/viewer_workflows_test.dart test/app/viewer_navigation_test.dart
 lib/features/pgn_viewer/pgn_viewer_panel.dart|test/features/pgn_viewer/viewer_panel_marks_test.dart|test/features/pgn_viewer/pgn_viewer_panel_test.dart
 lib/features/players/player_analysis.dart|test/features/players/player_analysis_recent_test.dart test/features/players/player_analysis_test.dart|test/features/players/findings_row_test.dart test/features/players/player_analysis_test.dart test/features/players/player_download_test.dart test/features/players/player_hunt_test.dart test/features/players/players_owner_test.dart test/features/players/practical_probe_test.dart test/features/players/prep_sheet_test.dart test/features/players/saved_games_test.dart test/app/player_views_test.dart
+lib/features/players/player_hunt.dart|test/features/players/player_hunt_more_test.dart test/features/players/player_hunt_test.dart|
+lib/features/players/practical_probe.dart|test/features/players/practical_probe_limits_test.dart test/features/players/practical_probe_test.dart|
