@@ -242,24 +242,35 @@ final class DatabaseLibrary extends ChangeNotifier {
   }
 
   /// Measures every kept store. Never throws: a measurement that fails is
-  /// logged and said on the problem line, and the last sizes stay. A second
-  /// request while one runs is dropped, since the running one reads the
-  /// disk afresh.
+  /// logged and said on the problem line, and the last sizes stay. A
+  /// request made while one runs measures once more after it: the running
+  /// one may have sized a store that has since been deleted.
   Future<void> measure() async {
-    final places = this.places;
-    if (places == null || measuring || _disposed) return;
+    if (places == null || _disposed) return;
+    if (measuring) {
+      _measureAgain = true;
+      return;
+    }
     measuring = true;
     _notify();
     try {
-      storage = await measureWith(places);
+      do {
+        _measureAgain = false;
+        final places = this.places;
+        if (places == null) break;
+        storage = await measureWith(places);
+      } while (_measureAgain && !_disposed);
     } on Object catch (error) {
       log.w('measure storage', error);
       if (!_disposed) problem = 'Could not measure the storage.';
     } finally {
       measuring = false;
+      _measureAgain = false;
       _notify();
     }
   }
+
+  bool _measureAgain = false;
 
   /// Deletes a removable store's files and frees the space. Refused while a
   /// download or import could be writing it.

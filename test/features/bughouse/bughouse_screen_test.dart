@@ -405,6 +405,29 @@ void main() {
       expect(find.byType(BughousePreviewBoard), findsNothing);
     });
 
+    testWidgets('the engine reporting does not rebuild the move lists', (
+      tester,
+    ) async {
+      build();
+      lab.showBoards(LabBoards.two);
+      await pump(tester);
+      final before = [
+        for (final e in find.byType(BoardMoves).evaluate()) e.widget,
+      ];
+      expect(before, hasLength(2));
+      await engineSays(tester, const [
+        JointMove('e2e4', null),
+        JointMove('e7e5', null),
+      ]);
+      expect(engine.on, isTrue);
+      final after = [
+        for (final e in find.byType(BoardMoves).evaluate()) e.widget,
+      ];
+      for (final (i, widget) in after.indexed) {
+        expect(identical(widget, before[i]), isTrue);
+      }
+    });
+
     testWidgets('two boards: each board\'s lines are under it; a move '
         'floats its board and plays both boards up to it', (tester) async {
       build();

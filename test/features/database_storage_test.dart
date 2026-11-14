@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/databases/database_library.dart';
 import 'package:chess_auto_prep/features/databases/databases_screen.dart';
 import 'package:chess_auto_prep/features/databases/twic_download.dart';
+import 'package:chess_auto_prep/storage/disk_usage.dart';
 import 'package:chess_auto_prep/storage/master_corpus.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:flutter/material.dart';
@@ -72,6 +74,45 @@ void main() {
       'Master games',
       'Repertoires',
     ]);
+  });
+
+  test('a store deleted while a measurement runs is measured again, so it '
+      'does not stay in the list', () async {
+    final first = Completer<List<StoreUsage>>();
+    var measured = 0;
+    final databases = DatabaseLibrary(
+      path: master,
+      corpus: const SqliteMasterCorpus(),
+      picker: ScriptedPicker(),
+      documents: ScriptedDocumentStore(),
+      collections: p.join(support.path, 'collections'),
+      pending: PendingWrites(),
+      places: (
+        support: support.path,
+        derived: const ['master_games.db'],
+        stores: [(name: 'Master games', path: master, removable: true)],
+      ),
+      measureWith: (places) {
+        measured++;
+        if (measured == 1) return first.future;
+        return Future.value(const <StoreUsage>[]);
+      },
+    );
+    addTearDown(databases.dispose);
+    const old = (
+      name: 'Leftover master_games.db.pre-v3.bak',
+      path: '',
+      bytes: 5000,
+      removable: true,
+    );
+    final running = databases.measure();
+    // Sized before the delete, published after it.
+    await databases.measure();
+    first.complete(const [old]);
+    await running;
+    expect(measured, 2);
+    expect(databases.storage, isEmpty);
+    expect(databases.measuring, isFalse);
   });
 
   test('an import measures the storage again, so the total is not the size '
