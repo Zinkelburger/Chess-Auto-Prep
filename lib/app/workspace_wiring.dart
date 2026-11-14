@@ -5,6 +5,7 @@ import '../engines/engine_supervisor.dart';
 import '../engines/fixed_depth.dart';
 import '../net/chessdb_moves.dart';
 import '../net/search_evaluator.dart';
+import '../storage/document_repository.dart' show DocumentChange, DocumentChangeKind;
 import '../storage/eval_cache.dart' show CachedEvaluator;
 import '../storage/my_games_files.dart';
 import '../storage/settings.dart';
@@ -315,7 +316,11 @@ final class WorkspaceWiring {
     final repertoire = source == null
         ? null
         : _catalog.repertoireOf(source.path);
-    if (all || (repertoire != null && change.touches(repertoire))) {
+    if (!all && _isOwnSave(change)) {
+      // The live tree already answers for the open chapter, and its
+      // siblings are as they were: only its own file is read again.
+      _answers.forgetFile(change.path);
+    } else if (all || (repertoire != null && change.touches(repertoire))) {
       _gaps.refreshAnswers();
     } else if (change.folder) {
       _answers.forget();
@@ -334,6 +339,16 @@ final class WorkspaceWiring {
       _shelf.forget();
     }
   }
+
+  /// Whether [change] is this session's own save of the open chapter, not a
+  /// write to that file from anywhere else.
+  bool _isOwnSave(DocumentChange change) =>
+      change.kind == DocumentChangeKind.saved &&
+      !change.folder &&
+      change.movedTo == null &&
+      change.path == _session.source?.path &&
+      change.revision != null &&
+      change.revision == _session.persistedRevision;
 
   /// Download timestamps are not the source: revoke the corpus at its actual
   /// committed PGN boundary, including creations and folder relocations.
