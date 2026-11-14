@@ -8,11 +8,13 @@ import 'package:chess_auto_prep/storage/my_accounts.dart';
 import 'package:chess_auto_prep/storage/saved_place.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
+import 'package:chess_auto_prep/storage/update_files.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../support/scripted_engine.dart';
+import '../support/scripted_releases.dart';
 import '../support/scripted_tournaments.dart';
 import '../support/window_fixture.dart';
 
@@ -180,6 +182,53 @@ void main() {
     await leftAt(const Settings(engineLines: 4));
     await w.parts.start();
     expect(w.analysis.multiPv, 2);
+  });
+
+  test(
+    'with nothing left to write, the window closes without a word',
+    () async {
+      await w.parts.start();
+      expect(await w.parts.exit.mayClose(), isTrue);
+      expect(w.question.asked, isEmpty);
+    },
+  );
+
+  group('an update that did not finish installing', () {
+    Future<WindowFixture> started({required bool failed}) async {
+      final updates = Directory(p.join(support.path, 'updates'))..createSync();
+      if (failed) {
+        File(
+          p.join(updates.path, 'last-error.txt'),
+        ).writeAsStringSync('Update installation failed (exit 1).');
+      }
+      final window = WindowFixture(
+        updates: (
+          releases: ScriptedReleases(),
+          folder: UpdateFolder(updates),
+          installer: portableInstaller(support),
+          version: () async => '1.16.1',
+          automatic: false,
+          openPage: (_) async => true,
+          showFolder: (_) {},
+        ),
+      );
+      addTearDown(window.dispose);
+      await window.parts.start();
+      for (var i = 0; i < 100 && window.requests.status == null; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      return window;
+    }
+
+    test('is said once the window starts', () async {
+      final window = await started(failed: true);
+      expect(window.requests.status, contains('did not finish'));
+    });
+
+    test('is not said when there was none', () async {
+      final window = await started(failed: false);
+      expect(window.requests.status, isNull);
+    });
   });
 
   test('the engine tournaments are wired only where the environment can '

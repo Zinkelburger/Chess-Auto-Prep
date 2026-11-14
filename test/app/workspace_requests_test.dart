@@ -393,9 +393,20 @@ void main() {
 
     test('is not opened over a draft the user stays with', () async {
       await freezeKid();
+      // On a sideline, where the explorer's ply down the main line is
+      // somewhere else.
+      final path = <int>[];
+      var nodes = w.session.tree!.children;
+      while (nodes.length < 2) {
+        path.add(0);
+        nodes = nodes.first.children;
+      }
+      final sideline = NodePath.of([...path, 1]);
+      w.session.cursor.goTo(sideline);
       w.question.answer = DraftChoice.keepWaiting;
       expect(await openListed(), isA<RequestDropped>());
       expect(w.session.source, kid);
+      expect(w.session.cursor.value, sideline);
     });
 
     test('that lands after the user opened another chapter is dropped, '
@@ -687,6 +698,25 @@ void main() {
       expect(w.requests.mode, Mode.repertoires);
       expect(w.session.source, kid);
       expect(w.requests.forwardTo?.mode, Mode.databases);
+    });
+
+    test('Back goes to the latest place of several', () async {
+      await w.requests.open(kid);
+      w.requests.switchTo(Mode.databases);
+      w.requests.switchTo(Mode.players);
+      expect(await w.requests.back(), isA<RequestDone>());
+      expect(w.requests.mode, Mode.databases);
+      expect(w.requests.forwardTo?.mode, Mode.players);
+    });
+
+    test('Back to an analysis board comes, and Forward is offered', () async {
+      final started = w.requests.mode;
+      w.session.playMove('e2e4');
+      w.requests.switchTo(Mode.databases);
+      expect(await w.requests.back(), isA<RequestDone>());
+      expect(w.requests.mode, started);
+      expect(w.requests.forwardTo?.mode, Mode.databases);
+      expect(w.session.cursor.currentMove?.san, 'e4');
     });
   });
 

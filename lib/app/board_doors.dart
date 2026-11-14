@@ -242,12 +242,10 @@ final class _Existing extends _SaveInto {
   final RepertoireFolder folder;
 }
 
-Future<String?> _chapterName(BuildContext context, String into) async {
-  if (!context.mounted) return null;
-  return showNameDialog(
-    context,
-    title: 'New chapter in $into',
-    label: 'Chapter name',
-    confirm: 'Save',
-  );
-}
+Future<String?> _chapterName(BuildContext context, String into) =>
+    showNameDialog(
+      context,
+      title: 'New chapter in $into',
+      label: 'Chapter name',
+      confirm: 'Save',
+    );

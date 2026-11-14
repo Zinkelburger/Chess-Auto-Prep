@@ -247,6 +247,26 @@ void main() {
     expect(w.lab.position.one.pockets!.of(Side.white, Role.queen), 1);
   });
 
+  testWidgets('Play best move is off until the engine has a line, then plays '
+      'its first move', (tester) async {
+    await toBughouse(tester);
+    MenuItemButton best() => tester.widget<MenuItemButton>(
+      find.widgetWithText(MenuItemButton, 'Play best move'),
+    );
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    expect(best().onPressed, isNull);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    await engineOn(tester);
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    expect(best().onPressed, isNotNull);
+    await tester.tap(find.text('Play best move'));
+    await tester.pumpAndSettle();
+    expect(w.lab.line.of(BoardNumber.one), hasLength(1));
+  });
+
   testWidgets('Paste moves reads the window\'s clipboard', (tester) async {
     final input = ScriptedInput()..clipboardText = '1A. e4 1a. d5';
     w.dispose();

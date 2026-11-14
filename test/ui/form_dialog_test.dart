@@ -410,6 +410,20 @@ void main() {
       },
     );
   }
+
+  testWidgets('a form not said to fail holds no line for a problem', (
+    tester,
+  ) async {
+    await _open(
+      tester,
+      (context) => showDialog<String>(
+        context: context,
+        builder: (_) => const _Busy(_AfterEnter.working),
+      ),
+    );
+    expect(find.text('Busy'), findsOneWidget);
+    expect(find.byType(ProblemLine), findsNothing);
+  });
 }
 
 enum _AfterEnter { working, asks }

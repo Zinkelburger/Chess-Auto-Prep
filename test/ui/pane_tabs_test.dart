@@ -241,6 +241,14 @@ void main() {
       );
       await tester.pump();
       expect(scroll(tester).pixels, 70);
+      // A trackpad's smallest step counts too.
+      await tester.sendEventToBinding(
+        const PointerScrollEvent(
+          scrollDelta: Offset(0, 1),
+        ).copyWith(position: at),
+      );
+      await tester.pump();
+      expect(scroll(tester).pixels, 71);
     });
 
     testWidgets('a new board can be asked for with every tab open, and the '

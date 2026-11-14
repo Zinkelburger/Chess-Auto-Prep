@@ -116,10 +116,46 @@ void main() {
     await w.requests.newAnalysisBoard();
     await w.requests.documents.select(kidMain);
     expect(w.session.hasHeldEdits, isTrue);
+    expect(w.session.cursor.value, cursor);
     expect(w.session.commentAt(cursor), contains('Unsaved viewer note'));
     expect(w.store.requestedSaves, isEmpty);
     w.session.discardHeld();
     expect(w.session.commentAt(cursor), isNot(contains('Unsaved viewer note')));
+  });
+
+  test('a parked draft put away, by keeping or discarding it, does not come '
+      'back with its tab', () async {
+    for (final keep in [false, true]) {
+      final w = WindowFixture();
+      addTearDown(w.dispose);
+      w.requests.switchTo(Mode.pgnViewer);
+      await w.requests.open(kidMain);
+      w.session.holdsEdits = true;
+      w.session.setComment(const NodePath.root(), 'Parked note');
+      await w.requests.newAnalysisBoard();
+      await w.requests.documents.select(kidMain);
+      expect(w.session.hasHeldEdits, isTrue);
+      if (keep) {
+        w.session.keepHeld();
+      } else {
+        w.session.discardHeld();
+      }
+      await w.requests.newAnalysisBoard();
+      await w.requests.documents.select(kidMain);
+      expect(w.session.hasHeldEdits, isFalse, reason: 'keep: $keep');
+    }
+  });
+
+  test('a mode with no tab of its own gets an empty board, not an analysis '
+      'with a game on it', () async {
+    await w.requests.open(kidMain);
+    await w.requests.newAnalysisBoard();
+    expect(w.session.isScratch, isTrue);
+    expect(w.session.canUndo, isFalse);
+    expect(w.session.tree!.children, isNotEmpty);
+    w.requests.switchTo(Mode.tactics);
+    await pumpEventQueue();
+    expect(w.session.tree!.children, isEmpty);
   });
   test('selecting the active tab cancels a pending switch', () async {
     await w.requests.open(kidMain);
@@ -211,15 +247,12 @@ void main() {
     // A blank board is reused; one with a move on it is not.
     w.session.playMove('e2e4');
     await w.requests.newAnalysisBoard();
-    final titles = w.requests.documents.tabs.tabs.map((tab) => tab.title);
-    expect(
-      titles.where((title) => title.endsWith(' · Analysis')),
-      hasLength(1),
-    );
-    expect(
-      titles.where((title) => title.endsWith(' · Analysis 2')),
-      hasLength(1),
-    );
+    final titles = [
+      for (final tab in w.requests.documents.tabs.tabs) tab.title,
+    ];
+    expect(titles, hasLength(2));
+    expect(titles.first, endsWith(' · Analysis'));
+    expect(titles.last, endsWith(' · Analysis 2'));
   });
 
   test('a tab comes back the way round its board was', () async {

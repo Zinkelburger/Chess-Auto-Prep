@@ -146,6 +146,8 @@ void main() {
     final w = await start();
     addTearDown(w.dispose);
     w.session.setComment(NodePath.of(const [0]), 'Parked note');
+    w.session.cursor.forward();
+    final cursor = w.session.cursor.value;
     await w.requests.openFile(other, game: 0);
     await until(() => checkpointHas('Parked note'));
     final changed = threeGameFile.replaceFirst(
@@ -156,6 +158,7 @@ void main() {
 
     await w.requests.documents.select(games);
     expect(w.session.source, games);
+    expect(w.session.cursor.value, cursor);
     expect(w.session.hasHeldEdits, isFalse);
     expect(
       w.session.tree!.mainLine.first.comment ?? '',
@@ -164,6 +167,12 @@ void main() {
     await until(() => w.requests.statusAction != null);
     expect(w.requests.statusAction!.label, 'Save them as a copy');
     expect(checkpointHas('Parked note'), isTrue);
+
+    // A copy that cannot be written is said as a problem.
+    w.store.creates.add(const IoFailure('Disk full'));
+    w.requests.statusAction!.onPressed();
+    await until(() => w.requests.status?.contains('Disk full') ?? false);
+    expect(w.requests.statusIsProblem, isTrue);
 
     // Visiting another tab and back does not bring the old draft back.
     await w.requests.documents.select(other);

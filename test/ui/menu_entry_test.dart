@@ -94,6 +94,14 @@ void main() {
     expect(inset(tester, 'Plain'), greaterThanOrEqualTo(IconSize.menu));
   });
 
+  testWidgets('a submenu without a symbol gives them none', (tester) async {
+    await openMenu(tester, [
+      const SubmenuButton(menuChildren: [], child: Text('More')),
+      rowAction('Plain', () {}),
+    ]);
+    expect(inset(tester, 'Plain'), lessThan(Space.l + IconSize.menu));
+  });
+
   testWidgets('a symbol is muted on a row that is on, and plain on one off', (
     tester,
   ) async {

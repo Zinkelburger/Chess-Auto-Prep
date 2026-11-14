@@ -14,6 +14,7 @@ import 'package:chess_auto_prep/features/library/chapter_outline.dart';
 import 'package:chess_auto_prep/features/library/library.dart';
 import 'package:chess_auto_prep/features/my_games/game_book.dart';
 import 'package:chess_auto_prep/features/pgn_viewer/pgn_viewer.dart';
+import 'package:chess_auto_prep/features/settings/app_updates.dart';
 import 'package:chess_auto_prep/features/study/studies.dart';
 import 'package:chess_auto_prep/features/tactics/my_games.dart';
 import 'package:chess_auto_prep/features/tactics/puzzle_trainer.dart';
@@ -87,6 +88,7 @@ final class WindowFixture {
     this.tournaments,
     this.viewerPlaces,
     this.viewerDrafts,
+    this.updates,
     this.launchTournament,
     this._players,
     this.exitWait = const Duration(milliseconds: 20),
@@ -114,6 +116,9 @@ final class WindowFixture {
 
   /// Where held viewer edits are checkpointed; none by default.
   final ViewerDrafts? viewerDrafts;
+
+  /// The app's own updates; none unless the test gives them.
+  final UpdateOutside? updates;
 
   /// How long closing waits on writes before it asks; short, so a test of
   /// the question does not wait long for it.
@@ -183,6 +188,7 @@ final class WindowFixture {
       recentFiles: ScriptedRecentFiles(),
       viewerPlaces: viewerPlaces,
       viewerDrafts: viewerDrafts,
+      updates: updates,
       fileImport: ScriptedImport(),
       lichessLogin: ScriptedLogin(),
       readAccount: () async => null,
