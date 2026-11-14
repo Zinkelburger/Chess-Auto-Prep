@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
 import 'app_icons.dart';
@@ -61,8 +62,20 @@ class ChoiceField extends StatefulWidget {
 
 class _ChoiceFieldState extends State<ChoiceField>
     with ListeningState<ChoiceField> {
-  late final _controller = TextEditingController(text: widget.text);
+  late final _controller = _Controller(text: widget.text);
   final _focus = FocusNode();
+
+  /// Keys the suggestions. RawAutocomplete works out what to suggest only
+  /// when the words in the box change, never for new [ChoiceField.options];
+  /// one under a new key works them out from the next word the controller
+  /// says. Not replaced while the box has the focus, which it would lose.
+  int _optionsKey = 0;
+
+  /// Options changed while the box had the focus: replaced on leaving it.
+  bool _optionsStale = false;
+
+  /// The suggestions under a new key have heard nothing from the box yet.
+  bool _optionsUnread = false;
 
   /// Whether the last Enter picked a suggestion.
   bool _picked = false;
@@ -98,9 +111,23 @@ class _ChoiceFieldState extends State<ChoiceField>
         baseOffset: 0,
         extentOffset: _controller.text.length,
       );
-    } else if (_controller.text != widget.text) {
-      _controller.text = widget.text;
+      // The selection may be the one it already had, which says nothing.
+      if (_optionsUnread) {
+        _optionsUnread = false;
+        _controller.sayAgain();
+      }
+      return;
     }
+    if (_controller.text != widget.text) _controller.text = widget.text;
+    if (_optionsStale && mounted) {
+      setState(_replaceSuggestions);
+    }
+  }
+
+  void _replaceSuggestions() {
+    _optionsStale = false;
+    _optionsKey++;
+    _optionsUnread = true;
   }
 
   @override
@@ -108,6 +135,13 @@ class _ChoiceFieldState extends State<ChoiceField>
     super.didUpdateWidget(old);
     if (!_focus.hasFocus && _controller.text != widget.text) {
       _controller.text = widget.text;
+    }
+    if (!listEquals(old.options, widget.options)) {
+      if (_focus.hasFocus) {
+        _optionsStale = true;
+      } else {
+        _replaceSuggestions();
+      }
     }
   }
 
@@ -132,6 +166,7 @@ class _ChoiceFieldState extends State<ChoiceField>
   @override
   Widget build(BuildContext context) {
     return RawAutocomplete<String>(
+      key: ValueKey(_optionsKey),
       textEditingController: _controller,
       focusNode: _focus,
       optionsBuilder: _suggestions,
@@ -166,6 +201,14 @@ class _ChoiceFieldState extends State<ChoiceField>
           _Suggestions(options: options.toList(), onPick: pick),
     );
   }
+}
+
+/// The box's words, which can be said again unchanged so that suggestions
+/// under a new key work out what to offer.
+final class _Controller extends TextEditingController {
+  _Controller({super.text});
+
+  void sayAgain() => notifyListeners();
 }
 
 /// The suggestions under the box, as a short list to click.

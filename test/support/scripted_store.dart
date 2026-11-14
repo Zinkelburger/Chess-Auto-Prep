@@ -40,6 +40,9 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
   /// How many reads were asked for.
   int opens = 0;
 
+  /// Every document a read was asked for, in the order it was asked.
+  final opened = <DocumentRef>[];
+
   /// When set, the next [open] reads what [documents] holds at once and
   /// answers only when this completes: a read that came off the disk
   /// before a write that lands while it is on its way.
@@ -84,6 +87,7 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
   @override
   Future<DocumentRead> open(DocumentRef ref) async {
     opens++;
+    opened.add(ref);
     if (throwOnOpen case final thrown?) {
       throwOnOpen = null;
       throw thrown;

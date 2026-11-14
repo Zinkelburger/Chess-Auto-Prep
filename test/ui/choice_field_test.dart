@@ -82,4 +82,46 @@ void main() {
     await tester.pump();
     expect(changed, ['Car', '']);
   });
+
+  testWidgets('a box whose options change offers the new ones when next '
+      'focused, without anything typed', (tester) async {
+    Future<void> focus() async {
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      await tester.pump();
+    }
+
+    Future<void> leave() async {
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump();
+    }
+
+    bool focused() =>
+        tester.widget<TextField>(find.byType(TextField)).focusNode!.hasFocus;
+
+    await pump(tester, submitOnly: false);
+    await focus();
+    expect(find.text('Giri'), findsOneWidget);
+    await leave();
+
+    await pump(tester, submitOnly: false, options: ['Nakamura', 'So']);
+    await focus();
+    expect(find.text('Nakamura'), findsOneWidget);
+    expect(find.text('Carlsen'), findsNothing);
+
+    // Changed while the box is open: it keeps the focus, and what is typed
+    // is matched against the new options.
+    await pump(tester, submitOnly: false, options: ['Ding', 'Nakamura']);
+    expect(focused(), isTrue);
+    await tester.enterText(find.byType(TextField), 'D');
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Ding'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pump();
+    await leave();
+    await focus();
+    expect(find.text('Ding'), findsOneWidget);
+    expect(find.text('So'), findsNothing);
+  });
 }
