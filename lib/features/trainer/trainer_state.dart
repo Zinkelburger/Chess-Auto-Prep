@@ -59,7 +59,7 @@ final class TrainerFailed extends TrainerState {
 }
 
 final class TrainerReady extends TrainerState {
-  const TrainerReady({
+  TrainerReady({
     required this.chapters,
     required this.progress,
     this.study = false,
@@ -72,19 +72,29 @@ final class TrainerReady extends TrainerState {
   final List<ChapterLines> chapters;
   final TrainingProgress progress;
 
-  List<TrainingLine> get lines => [
+  late final List<TrainingLine> lines = List.unmodifiable([
     for (final chapter in chapters) ...chapter.lines,
-  ];
+  ]);
+
+  /// Each line by its key, with the chapter holding it; the first wins.
+  late final Map<LineKey, (TrainingLine, ChapterRef)> _byKey = () {
+    final byKey = <LineKey, (TrainingLine, ChapterRef)>{};
+    for (final chapter in chapters) {
+      for (final line in chapter.lines) {
+        byKey.putIfAbsent(line.key, () => (line, chapter.ref));
+      }
+    }
+    return byKey;
+  }();
 
   /// The line [key] names, if the scope has it.
-  TrainingLine? lineOf(LineKey key) =>
-      lines.where((line) => line.key == key).firstOrNull;
+  TrainingLine? lineOf(LineKey key) => _byKey[key]?.$1;
 
   /// [line] as far as [ply] — the whole of it when null — to be read in
   /// [place].
   LineToRead toRead(TrainingLine line, ReadIn place, {int? ply}) => (
     // By the line, not its file: one file can hold several chapters.
-    ref: chapters.firstWhere((c) => c.lines.any((l) => l.key == line.key)).ref,
+    ref: _byKey[line.key]!.$2,
     game: study ? line.game : null,
     sans: [
       for (final move in line.moves.take(ply ?? line.moves.length)) move.san,
