@@ -3,11 +3,14 @@
 // library rather than a copy of either.
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
 import 'package:chess_auto_prep/features/library/chapter_outline.dart';
+import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/library_fixture.dart';
 import '../support/scripted_files.dart';
+import '../support/scripted_store.dart';
 
 const twoLines = '''
 // Book
@@ -109,6 +112,49 @@ void main() {
     await open();
 
     expect(outline.lines.last.moves, '…1...Nf6');
+  });
+
+  test('a line is shown from where it leaves every line above it, and a '
+      'repeated line still shows its last move', () async {
+    fixture = await openLibrary(
+      [
+        folder('KID', ['Main']),
+      ],
+      text: '''
+// Color: White
+
+[Event "A"]
+
+1. e4 e5 2. Nf3 Nc6 *
+
+[Event "B"]
+
+1. d4 d5 *
+
+[Event "C"]
+
+1. e4 e5 2. Nf3 Nf6 *
+
+[Event "D"]
+
+1. e4 e5 *
+''',
+      open: main,
+    );
+    outline = ChapterOutline(
+      library: fixture.library,
+      session: fixture.session,
+    );
+    addTearDown(() {
+      outline.dispose();
+      fixture.dispose();
+    });
+    expect(outline.lines.map((line) => line.moves).toList(), [
+      '1.e4 e5 2.Nf3 Nc6',
+      '1.d4 d5',
+      '…2...Nf6',
+      '…1...e5',
+    ]);
   });
 
   test('a name every line repeats is left off the row', () async {
@@ -213,6 +259,41 @@ void main() {
     await pumpEventQueue();
 
     expect(outline.lines.map((line) => line.name), ["Queen's"]);
+  });
+
+  test('a re-listing after a save keeps the closed chapters a search found, '
+      'and reads only those whose file changed', () async {
+    await open();
+    final folders = [
+      folder('KID', ['Main', 'Sidelines']),
+      folder('benko', ['Main']),
+    ];
+    final sidelines = ref('KID', 'Sidelines');
+    void listed(Revision sidelinesAt) => fixture.files.listing = Repertoires(
+      folders,
+      revisions: {
+        for (final f in folders)
+          for (final c in f.chapters)
+            c.path: c == sidelines ? sidelinesAt : scriptedRevision(twoLines),
+      },
+    );
+    listed(scriptedRevision(twoLines));
+    await fixture.library.refresh();
+    outline.search('bg5');
+    await pumpEventQueue();
+    expect(outline.chapters.map((c) => c.name), ['Main', 'Sidelines']);
+    final opens = fixture.store.opens;
+    listed(scriptedRevision(twoLines));
+    await fixture.library.refresh();
+    expect(outline.chapters.map((c) => c.name), ['Main', 'Sidelines']);
+    await pumpEventQueue();
+    expect(outline.chapters.map((c) => c.name), ['Main', 'Sidelines']);
+    expect(fixture.store.opens, opens, reason: 'nothing was read again');
+    listed(scriptedRevision('$twoLines\n'));
+    await fixture.library.refresh();
+    await pumpEventQueue();
+    expect(fixture.store.opens, greaterThan(opens));
+    expect(outline.chapters.map((c) => c.name), ['Main', 'Sidelines']);
   });
 
   test('a search that matches nothing leaves nothing', () async {

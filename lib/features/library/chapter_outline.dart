@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
@@ -9,22 +8,33 @@ import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/move_label.dart';
 import '../../chess/pgn/tree_edit.dart';
 import '../../storage/chapter_files.dart';
+import '../../storage/document_ref.dart';
 import '../../ui/selection.dart';
 import '../../workspace/document/document_session.dart';
 import '../../workspace/latest.dart';
 import 'library.dart';
 
-/// How many opening moves [sans] has in common with the line [above] it,
-/// never all of them: a row with nothing in it would say even less than a
-/// repeated one.
-int _sharedWith(List<String> above, List<String> sans) {
-  var shared = 0;
-  while (shared < above.length &&
-      shared < sans.length - 1 &&
-      above[shared] == sans[shared]) {
-    shared++;
+/// The moves of the lines above a row, merged by their common openings.
+final class _SanTrie {
+  final children = <String, _SanTrie>{};
+
+  /// How many opening moves [sans] has in common with the line above that
+  /// shares the most, never all of them: a row with nothing in it would say
+  /// even less than a repeated one. Then [sans] is added.
+  int sharedThenAdd(List<String> sans) {
+    var node = this;
+    var shared = 0;
+    while (shared < sans.length - 1) {
+      final next = node.children[sans[shared]];
+      if (next == null) break;
+      node = next;
+      shared++;
+    }
+    for (final san in sans.skip(shared)) {
+      node = node.children.putIfAbsent(san, _SanTrie.new);
+    }
+    return shared;
   }
-  return shared;
 }
 
 /// One chapter of the open repertoire, as the outline lists it.
@@ -122,7 +132,11 @@ final class ChapterOutline extends ChangeNotifier {
   final _current = ValueNotifier<int?>(null);
   final _currentRows = Selection<int?>();
   bool _disposed = false;
-  final _index = <ChapterRef, List<OutlineLine>>{};
+
+  /// The closed chapters' lines for search, each with the file revision it
+  /// was read at, so a listing that changed only other files keeps it.
+  final _index =
+      <ChapterRef, ({Revision? revision, List<OutlineLine> lines})>{};
   final _indexing = Latest();
   bool searching = false;
   String? searchProblem;
@@ -146,7 +160,7 @@ final class ChapterOutline extends ChangeNotifier {
   List<OutlineLine> matchesIn(ChapterRef ref) => ref == _session.source
       ? lines
       : [
-          for (final line in _index[ref] ?? const <OutlineLine>[])
+          for (final line in _index[ref]?.lines ?? const <OutlineLine>[])
             if (_matches(line.text)) line,
         ];
 
@@ -161,6 +175,7 @@ final class ChapterOutline extends ChangeNotifier {
     notifyListeners();
     for (final ref in repertoire?.chapters ?? const <ChapterRef>[]) {
       if (_index.containsKey(ref) || ref == _session.source) continue;
+      final revision = _revisionOf(ref);
       try {
         final chapter = await _library.chapterForSearch(ref);
         if (ticket.overtaken) return;
@@ -168,7 +183,7 @@ final class ChapterOutline extends ChangeNotifier {
           searchProblem = 'Some chapters could not be searched.';
           continue;
         }
-        _index[ref] = _linesOf(chapter);
+        _index[ref] = (revision: revision, lines: _linesOf(chapter));
       } on Object {
         if (ticket.overtaken) return;
         searchProblem = 'Some chapters could not be searched.';
@@ -178,6 +193,12 @@ final class ChapterOutline extends ChangeNotifier {
     searching = false;
     notifyListeners();
   }
+
+  /// The revision the catalog's listing has for [ref]'s file, if any.
+  Revision? _revisionOf(ChapterRef ref) => switch (_library.catalog.listing) {
+    Repertoires(:final revisions) => revisions[ref.path],
+    _ => null,
+  };
 
   /// What the user has typed, which the field shows at once even though the
   /// list waits a moment before it narrows.
@@ -274,7 +295,17 @@ final class ChapterOutline extends ChangeNotifier {
       _cursor = _session.cursor.value;
       _current.value = _lineHolding(_cursor);
     }
-    if (!identical(repertoires, _repertoires)) _index.clear();
+    if (!identical(repertoires, _repertoires)) {
+      // A save re-lists every repertoire: only the chapters whose file
+      // changed, or that are gone, are read again.
+      final listed = {...?repertoire?.chapters};
+      _index.removeWhere(
+        (ref, entry) =>
+            !listed.contains(ref) ||
+            entry.revision == null ||
+            entry.revision != _revisionOf(ref),
+      );
+    }
     if (source != null) _index.remove(source);
     _source = source;
     _repertoires = repertoires;
@@ -417,16 +448,12 @@ bool _extends(NodePath path, NodePath from) {
 List<OutlineLine> _linesOf(Chapter chapter) {
   final rows = <OutlineLine>[];
   final names = <String>{};
-  final above = <List<String>>[];
+  final above = _SanTrie();
   for (final (index, line) in chapter.lines.indexed) {
     final tree = chapter.treeInChapter(line);
     if (tree == null) continue;
     final sans = mainlineSans(tree);
-    final shared = above.fold(
-      0,
-      (most, other) => math.max(most, _sharedWith(other, sans)),
-    );
-    above.add(sans);
+    final shared = above.sharedThenAdd(sans);
     final name = tagValue(line.tags, 'Event')?.trim();
     if (name != null) names.add(name);
     rows.add(
