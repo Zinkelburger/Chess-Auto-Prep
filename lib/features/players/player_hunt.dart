@@ -134,9 +134,7 @@ final class PlayerHunt extends ChangeNotifier {
       .toString();
   void _inputsChanged() {
     if (_inputs == _inputKey && !analysis.busy) return;
-    // Not recorded while a load runs: the first notify after it ends, or is
-    // cancelled or fails with the corpus unchanged, restores the report.
-    _inputs = analysis.busy ? null : _inputKey;
+    _inputs = _inputKey;
     stop();
     findings = [];
     analysis.evals.clear();

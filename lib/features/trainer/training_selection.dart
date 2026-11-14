@@ -53,7 +53,6 @@ final class TrainingSelection extends ChangeNotifier {
     chapter = null;
     line = null;
     picked.clear();
-    choosing = false;
     if (root.isNotEmpty) update(options.copyWith(repertoirePath: root));
     notifyListeners();
     _adoptOnly();
@@ -150,14 +149,11 @@ final class TrainingSelection extends ChangeNotifier {
   }
 
   void followDocument() {
-    if (!active && !choosing) return;
+    if (!active) return;
     active = false;
     chapter = null;
     line = null;
     picked.clear();
-    // Choosing lines belongs to the trainer mode; left on, it would hide
-    // every line from the builder's and Study's Train tabs.
-    choosing = false;
     notifyListeners();
   }
 

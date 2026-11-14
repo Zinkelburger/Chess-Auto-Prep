@@ -3,14 +3,11 @@
 // library rather than a copy of either.
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
 import 'package:chess_auto_prep/features/library/chapter_outline.dart';
-import 'package:chess_auto_prep/storage/chapter_files.dart';
-import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/library_fixture.dart';
 import '../support/scripted_files.dart';
-import '../support/scripted_store.dart';
 
 const twoLines = '''
 // Book
@@ -259,41 +256,6 @@ void main() {
     await pumpEventQueue();
 
     expect(outline.lines.map((line) => line.name), ["Queen's"]);
-  });
-
-  test('a re-listing after a save keeps the closed chapters a search found, '
-      'and reads only those whose file changed', () async {
-    await open();
-    final folders = [
-      folder('KID', ['Main', 'Sidelines']),
-      folder('benko', ['Main']),
-    ];
-    final sidelines = ref('KID', 'Sidelines');
-    void listed(Revision sidelinesAt) => fixture.files.listing = Repertoires(
-      folders,
-      revisions: {
-        for (final f in folders)
-          for (final c in f.chapters)
-            c.path: c == sidelines ? sidelinesAt : scriptedRevision(twoLines),
-      },
-    );
-    listed(scriptedRevision(twoLines));
-    await fixture.library.refresh();
-    outline.search('bg5');
-    await pumpEventQueue();
-    expect(outline.chapters.map((c) => c.name), ['Main', 'Sidelines']);
-    final opens = fixture.store.opens;
-    listed(scriptedRevision(twoLines));
-    await fixture.library.refresh();
-    expect(outline.chapters.map((c) => c.name), ['Main', 'Sidelines']);
-    await pumpEventQueue();
-    expect(outline.chapters.map((c) => c.name), ['Main', 'Sidelines']);
-    expect(fixture.store.opens, opens, reason: 'nothing was read again');
-    listed(scriptedRevision('$twoLines\n'));
-    await fixture.library.refresh();
-    await pumpEventQueue();
-    expect(fixture.store.opens, greaterThan(opens));
-    expect(outline.chapters.map((c) => c.name), ['Main', 'Sidelines']);
   });
 
   test('a search that matches nothing leaves nothing', () async {

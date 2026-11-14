@@ -212,24 +212,6 @@ void main() {
       expect((diskHunt.done, diskHunt.total), (1, 1));
       expect(owner.evals.values, contains(-125));
     });
-    test('a cancelled reload of the same player restores the report', () async {
-      final running = diskHunt.start();
-      await pumpEventQueue();
-      engine.current.emit(
-        line(depth: 14, score: const Centipawns(-125), pv: ['g1f3']),
-      );
-      engine.current.end();
-      await running;
-      await owner.pending.settle();
-      await pumpEventQueue();
-      final reload = owner.select(alex);
-      owner.cancel();
-      await reload;
-      await pumpEventQueue();
-      expect(owner.corpus, isNotNull);
-      expect(diskHunt.findings, isNotEmpty);
-      expect(owner.evals.values, contains(-125));
-    });
   });
   test('mate cache scores keep both sides of mate zero', () {
     expect((scoreFromPacked(10000) as MateIn).mating, true);

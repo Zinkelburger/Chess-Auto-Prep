@@ -121,9 +121,7 @@ class Trainer extends ChangeNotifier {
         .where(
           (line) =>
               !paused.contains(line.key) &&
-              (!selection.active ||
-                  !selection.choosing ||
-                  selection.picked.contains(line.key)),
+              (!selection.choosing || selection.picked.contains(line.key)),
         )
         .toList();
   }

@@ -8,7 +8,6 @@ import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/move_label.dart';
 import '../../chess/pgn/tree_edit.dart';
 import '../../storage/chapter_files.dart';
-import '../../storage/document_ref.dart';
 import '../../ui/selection.dart';
 import '../../workspace/document/document_session.dart';
 import '../../workspace/latest.dart';
@@ -132,11 +131,7 @@ final class ChapterOutline extends ChangeNotifier {
   final _current = ValueNotifier<int?>(null);
   final _currentRows = Selection<int?>();
   bool _disposed = false;
-
-  /// The closed chapters' lines for search, each with the file revision it
-  /// was read at, so a listing that changed only other files keeps it.
-  final _index =
-      <ChapterRef, ({Revision? revision, List<OutlineLine> lines})>{};
+  final _index = <ChapterRef, List<OutlineLine>>{};
   final _indexing = Latest();
   bool searching = false;
   String? searchProblem;
@@ -160,7 +155,7 @@ final class ChapterOutline extends ChangeNotifier {
   List<OutlineLine> matchesIn(ChapterRef ref) => ref == _session.source
       ? lines
       : [
-          for (final line in _index[ref]?.lines ?? const <OutlineLine>[])
+          for (final line in _index[ref] ?? const <OutlineLine>[])
             if (_matches(line.text)) line,
         ];
 
@@ -175,7 +170,6 @@ final class ChapterOutline extends ChangeNotifier {
     notifyListeners();
     for (final ref in repertoire?.chapters ?? const <ChapterRef>[]) {
       if (_index.containsKey(ref) || ref == _session.source) continue;
-      final revision = _revisionOf(ref);
       try {
         final chapter = await _library.chapterForSearch(ref);
         if (ticket.overtaken) return;
@@ -183,7 +177,7 @@ final class ChapterOutline extends ChangeNotifier {
           searchProblem = 'Some chapters could not be searched.';
           continue;
         }
-        _index[ref] = (revision: revision, lines: _linesOf(chapter));
+        _index[ref] = _linesOf(chapter);
       } on Object {
         if (ticket.overtaken) return;
         searchProblem = 'Some chapters could not be searched.';
@@ -193,12 +187,6 @@ final class ChapterOutline extends ChangeNotifier {
     searching = false;
     notifyListeners();
   }
-
-  /// The revision the catalog's listing has for [ref]'s file, if any.
-  Revision? _revisionOf(ChapterRef ref) => switch (_library.catalog.listing) {
-    Repertoires(:final revisions) => revisions[ref.path],
-    _ => null,
-  };
 
   /// What the user has typed, which the field shows at once even though the
   /// list waits a moment before it narrows.
@@ -295,17 +283,7 @@ final class ChapterOutline extends ChangeNotifier {
       _cursor = _session.cursor.value;
       _current.value = _lineHolding(_cursor);
     }
-    if (!identical(repertoires, _repertoires)) {
-      // A save re-lists every repertoire: only the chapters whose file
-      // changed, or that are gone, are read again.
-      final listed = {...?repertoire?.chapters};
-      _index.removeWhere(
-        (ref, entry) =>
-            !listed.contains(ref) ||
-            entry.revision == null ||
-            entry.revision != _revisionOf(ref),
-      );
-    }
+    if (!identical(repertoires, _repertoires)) _index.clear();
     if (source != null) _index.remove(source);
     _source = source;
     _repertoires = repertoires;
