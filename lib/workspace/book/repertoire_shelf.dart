@@ -37,6 +37,11 @@ final class RepertoireShelf extends ChangeNotifier {
   /// bytes are the same is not parsed again.
   var _revisions = <String, Revision>{};
 
+  /// Files parsed by reads that did not finish, each with the revision it
+  /// was parsed at: the next read takes them rather than parsing again.
+  /// Never read by [refs] or [indexOf]; cleared once a read commits.
+  final _parsed = <String, (Revision, Map<ChapterRef, RepertoireIndex>)>{};
+
   List<ChapterRef> _refs = const [];
   bool _stale = true;
   bool _disposed = false;
@@ -142,6 +147,7 @@ final class RepertoireShelf extends ChangeNotifier {
       // reads again; there is nothing to check here first.
       _indexed = indexed;
       _revisions = revisions;
+      _parsed.clear();
       _refs = List.unmodifiable([
         for (final ref in listed)
           if (indexed.containsKey(ref)) ref,
@@ -177,6 +183,14 @@ final class RepertoireShelf extends ChangeNotifier {
           revisions[file.path] = revision;
           return;
         }
+        if (_parsed[file.path] case (final parsedAt, final done)
+            when parsedAt == revision && chapters.every(done.containsKey)) {
+          for (final chapter in chapters) {
+            indexed[chapter] = done[chapter]!;
+          }
+          revisions[file.path] = revision;
+          return;
+        }
         try {
           final indexes = await _indexesIn(
             text,
@@ -187,6 +201,12 @@ final class RepertoireShelf extends ChangeNotifier {
             indexed[chapter] = indexes[at];
           }
           revisions[file.path] = revision;
+          if (!_disposed) {
+            _parsed[file.path] = (revision, {
+              for (final (at, chapter) in chapters.indexed)
+                chapter: indexes[at],
+            });
+          }
         } on Object catch (error) {
           log.w('index ${file.path}', error);
         }
