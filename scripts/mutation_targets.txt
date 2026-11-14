@@ -299,6 +299,14 @@
 #     one more (the order changes only between findings whose weights fall
 #     within one game's worth of each other), :378 `>` -> `>=` against
 #     `baseline + .05` (a float the estimate does not land on exactly).
+#   lib/features/players/saved_games.dart:281 the disposed flag (taking it
+#     down closes its refreshes first).
+#   lib/features/settings/lichess_account.dart:179 `Connecting`'s
+#     `browserOpened` default (shown only until the login says whether the
+#     browser took the page).
+#   lib/features/settings/app_updates.dart:324 `||` -> `&&` (Cancel cuts the
+#     transfer, so no progress comes once it is not downloading), :327 how
+#     often the bar redraws (the look).
 #   lib/chess/typed_move.dart:102 `>` -> `>=` (a castling king never lands
 #     on its own square), :187 `.first` -> `.last` (every candidate is then
 #     checked against the same four characters).
@@ -739,3 +747,7 @@ lib/features/pgn_viewer/pgn_viewer_panel.dart|test/features/pgn_viewer/viewer_pa
 lib/features/players/player_analysis.dart|test/features/players/player_analysis_recent_test.dart test/features/players/player_analysis_test.dart|test/features/players/findings_row_test.dart test/features/players/player_analysis_test.dart test/features/players/player_download_test.dart test/features/players/player_hunt_test.dart test/features/players/players_owner_test.dart test/features/players/practical_probe_test.dart test/features/players/prep_sheet_test.dart test/features/players/saved_games_test.dart test/app/player_views_test.dart
 lib/features/players/player_hunt.dart|test/features/players/player_hunt_more_test.dart test/features/players/player_hunt_test.dart|
 lib/features/players/practical_probe.dart|test/features/players/practical_probe_limits_test.dart test/features/players/practical_probe_test.dart|
+lib/features/players/prep_sheet.dart|test/features/players/prep_sheet_test.dart|
+lib/features/players/saved_games.dart|test/features/players/saved_games_more_test.dart test/features/players/saved_games_test.dart|
+lib/features/settings/lichess_account.dart|test/features/settings/lichess_account_outcomes_test.dart test/features/settings/lichess_account_test.dart|
+lib/features/settings/app_updates.dart|test/features/settings/app_updates_more_test.dart test/features/settings/app_updates_test.dart|test/features/settings/update_prompt_test.dart
