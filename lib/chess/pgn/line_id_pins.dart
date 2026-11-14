@@ -33,16 +33,12 @@ import 'tree_edit.dart';
 /// game with no moves or one nothing could read, which is no line but keeps
 /// its place, so the ids of the games after it do not move.
 ///
-/// A game's place is its index in [lines] unless [indexes] gives it one.
-List<String?> trainedIds(List<ChapterLine> lines, {List<int>? indexes}) {
+/// A game's place is its index in [lines].
+List<String?> trainedIds(List<ChapterLine> lines) {
   final claims = [
     for (final (index, line) in lines.indexed)
       if (line.tree case final tree? when tree.children.isNotEmpty)
-        (
-          index: indexes?[index] ?? index,
-          header: line.lineId,
-          sans: mainLineSpellings(tree),
-        )
+        (index: index, header: line.lineId, sans: mainLineSpellings(tree))
       else
         null,
   ];
@@ -148,7 +144,9 @@ String _idSpelling(String spelling) {
   Set<String>? taken;
   for (var changed = true; changed;) {
     changed = false;
-    final now = trainedIdsOf(withLines(after, lines));
+    // The ids are read off the games alone; building the chapter around them
+    // would merge every game of the file again on each pass.
+    final now = trainedIds(lines);
     for (final (:place, :from) in moved) {
       if (pinned.contains(from)) continue;
       final id = from < was.length ? was[from] : null;
