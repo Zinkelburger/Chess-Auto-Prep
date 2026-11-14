@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'dart:isolate';
 
 import 'package:path/path.dart' as p;
 
 import '../../chess/pgn/chapter.dart';
 import '../../diagnostics/log.dart';
+import '../../storage/disk_problems.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/edit_scope.dart';
 import '../../storage/viewer_drafts.dart';
@@ -18,7 +18,7 @@ import 'session_results.dart';
 /// the next time its file opens after a crash or a close.
 ///
 /// A checkpoint is written a second after the held edits last changed,
-/// one write per burst, its text encoded off the UI isolate; it is dropped
+/// one write per burst, its text the file's games joined; it is dropped
 /// once the edits are saved (the file took them) or discarded. Edits another
 /// reading of their file put away leave it on disk, offered back. The offer is
 /// one line in the status bar with `Restore unsaved edits`: restoring puts
@@ -94,7 +94,9 @@ final class DraftKeeper {
     final path = _session.source?.path;
     final held = _session.hasHeldEdits;
     final oneGame = _session.game != null;
-    if (path != _path) {
+    if (path != _path && held && _owns && _path != null && path != null) {
+      _moved(_path!, path);
+    } else if (path != _path) {
       _flush();
       _withdraw();
       _path = path;
@@ -121,6 +123,23 @@ final class DraftKeeper {
     // An edit saved as it is made, while editing, is newer than the offered
     // edits as much as a held one is: put back, they would undo it.
     if (_offered != null && !_saver.settled) _withdraw();
+  }
+
+  /// The file holding this visit's edits was renamed: the same edits, now
+  /// kept under [to]. The new checkpoint is written before the old one goes,
+  /// so one is always on disk, and nothing more is written under [from].
+  void _moved(String from, String to) {
+    _timer?.cancel();
+    _timer = null;
+    _waiting = null;
+    if (_kept.remove(from) case final file?) _kept[to] = file;
+    _unkept.remove(from);
+    _path = to;
+    // Never written over: a checkpoint at the new name may hold other work.
+    _setAside(to);
+    _schedule();
+    _flush();
+    _inTurn(() => _drop(from));
   }
 
   /// The edits this visit held are off the board, as the session says: kept
@@ -221,9 +240,9 @@ final class DraftKeeper {
   ) async {
     try {
       final file = waiting.file;
-      final text = file.lines.length < 200
-          ? writeChapter(file)
-          : await _writtenElsewhere(file);
+      // A join of each game's own text: cheaper here than copying the
+      // parsed games to another isolate would be.
+      final text = writeChapter(file);
       await _drafts.keep(
         ViewerDraft(
           path: waiting.path,
@@ -237,8 +256,10 @@ final class DraftKeeper {
       // Derived from the draft on screen, which is still there: the next
       // edit tries again.
       log.w('keep unsaved viewer edits for ${waiting.path}', error);
-      _unkept[waiting.path] =
-          'Unsaved edits to ${p.basename(waiting.path)} were not kept: $error';
+      _unkept[waiting.path] = failedBecause(
+        'Unsaved edits to ${p.basename(waiting.path)} were not kept.',
+        error,
+      );
     }
   }
 
@@ -374,10 +395,3 @@ final class DraftKeeper {
     _saver.removeListener(_changed);
   }
 }
-
-/// [writeChapter] on another isolate. Top level, so the closure sent carries
-/// only [file]: one made inside a [DraftKeeper] method shares its context
-/// with the closures there that hold `this`, and so would try to send the
-/// keeper and everything it holds.
-Future<String> _writtenElsewhere(Chapter file) =>
-    Isolate.run(() => writeChapter(file));

@@ -121,7 +121,9 @@ class Trainer extends ChangeNotifier {
         .where(
           (line) =>
               !paused.contains(line.key) &&
-              (!selection.choosing || selection.picked.contains(line.key)),
+              (!selection.active ||
+                  !selection.choosing ||
+                  selection.picked.contains(line.key)),
         )
         .toList();
   }
@@ -164,7 +166,8 @@ class Trainer extends ChangeNotifier {
   /// A document under the scope was created, saved, moved or deleted, or
   /// the list was read again. The workspace's saves of the open chapter
   /// reach the lines through the session instead ([_follow], [_saved]),
-  /// unless the file holds other chapters of the scope too.
+  /// unless the file holds other chapters of the scope too; sections of the
+  /// file outside the scope do not count.
   void _catalogChanged() {
     if (_state is TrainerIdle) return;
     if (selection.active) {
@@ -205,14 +208,18 @@ class Trainer extends ChangeNotifier {
         },
       };
       if (!inputs.any(change.touches)) return;
+      // Sections of the file outside the scope do not count: the receipt in
+      // [_saved] already moved the one revision the scope trains against.
+      final state = _state;
+      final chaptersAtPath = state is TrainerReady
+          ? state.chapters.where((c) => c.ref.path == source?.path).length
+          : catalog.repertoires
+                .expand((folder) => folder.chapters)
+                .where((chapter) => chapter.path == source?.path)
+                .length;
       final wholeFile =
           (_retained ? _read?.chapter?.game : _session.game) == null &&
-          source?.section == null &&
-          catalog.repertoires
-                  .expand((folder) => folder.chapters)
-                  .where((chapter) => chapter.path == source?.path)
-                  .length <=
-              1;
+          chaptersAtPath <= 1;
       if (wholeFile &&
           _session.source == source &&
           change.kind == DocumentChangeKind.saved &&
@@ -345,7 +352,6 @@ class Trainer extends ChangeNotifier {
   /// A study is a file opened one game at a time, independent of readiness.
   Chapter? get studyDocument =>
       !selection.active && _session.game != null ? _session.chapter : null;
-  int? get studyChapter => _session.game;
   String? setStudySides(Chapter expected, Map<int, Side> sides) {
     if (!identical(expected, studyDocument)) {
       return 'The study changed. Choose the sides again.';

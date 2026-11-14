@@ -35,8 +35,11 @@ A full page (no board), capped at `playersPageWidth`.
   `Copy prep sheet`, `Export prep sheet…`, `Unlink group study`; always
   `Update US Chess ratings`, `Refresh`.
 - **Notices** — a fixed-height progress line, the rating lookup status with
-  `Stop`, unreadable player rows and group files, and a failed save with `Retry save` /
-  `Discard failed edit and reload` (or `Try again` for a failed load).
+  `Stop`, unreadable player rows and group files, `Could not count the saved
+  games.` with `Try again` (the counts from before stay), and a failed save
+  (`Could not save.`, plus what the disk says, such as `The disk is full.`)
+  with `Retry save` / `Discard failed edit and reload` (or `Try again` for a
+  failed load).
 - **Person row** — name and rating; accounts by site and `US Chess <id>` (or
   `No online accounts`); notes (two lines); linked studies as chips (× unlinks);
   saved-research suggestions (`PlayerLookup`, see Data); the saved-games line

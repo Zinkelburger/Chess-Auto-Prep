@@ -169,9 +169,7 @@ final class PlayerModes {
             .where((p) => p.id == player.id)
             .firstOrNull;
         if (current == null) return;
-        final next = current.edited({
-          'pgn_files': {...current.files, path}.toList(),
-        });
+        final next = current.withStrings('pgn_files', [path]);
         if (await directory.save(next, expected: current) &&
             !_disposed &&
             analysis.player?.id == player.id) {

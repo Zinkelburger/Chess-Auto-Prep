@@ -165,6 +165,8 @@ class _Status extends StatelessWidget {
       _ => 'Their replies',
     };
     final rating = '$who · ${replies.elo}';
+    // An old walk is not shown as the answer once a new one failed.
+    if (gaps.problem != null) return '$rating · could not find gaps';
     final walk = gaps.walk;
     if (gaps.walking && walk == null) return '$rating · finding gaps…';
     // Where the model could not answer, the replies are unknown rather than

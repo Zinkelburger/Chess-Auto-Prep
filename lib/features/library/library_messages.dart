@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../storage/disk_problems.dart';
 import '../../storage/training_records.dart' as records;
 import '../../ui/status_bar.dart';
 import '../../workspace/document/session_results.dart';
@@ -32,6 +33,19 @@ String? libraryMessage(
   LibraryBusy() => 'Another change is still running.',
   LibraryFailure() => failed,
   LibraryStoppedAt(:final chapter) => '$failed It stopped at "$chapter".',
+};
+
+/// Why lines dragged to another chapter did not go: the library's own
+/// reason when it declined, what the disk says when it says something the
+/// user can act on, and otherwise only that they did not; the error itself
+/// is in the log.
+String linesNotMoved(LibraryResult result) => switch (result) {
+  LibraryRefused(:final detail) => 'Could not move the lines: $detail',
+  LibraryFailure(:final detail) => failedWithDetail(
+    'Could not move the lines.',
+    detail,
+  ),
+  _ => 'Could not move the lines.',
 };
 
 /// The file moved but its training rows did not, which is worth saying: the

@@ -173,10 +173,12 @@ class _StudyChapterListState extends State<StudyChapterList> {
 
   void _reveal() => WidgetsBinding.instance.addPostFrameCallback((_) {
     if (!mounted || !_scroll.hasClients || _query.isNotEmpty) return;
-    final offset = (widget.active ?? 0) * listRowHeight;
+    // The rows grow with the system's text size, as the list lays them out.
+    final extent = rowExtent(context, listRowHeight);
+    final offset = (widget.active ?? 0) * extent;
     final position = _scroll.position;
     if (offset < position.pixels ||
-        offset + listRowHeight > position.pixels + position.viewportDimension) {
+        offset + extent > position.pixels + position.viewportDimension) {
       _scroll.jumpTo(offset.clamp(0.0, position.maxScrollExtent));
     }
   });

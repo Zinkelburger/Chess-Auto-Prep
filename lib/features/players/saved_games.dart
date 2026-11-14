@@ -84,6 +84,10 @@ final class SavedGames extends ChangeNotifier {
   /// The ids of people whose downloads are being deleted.
   final Set<String> deleting = {};
 
+  /// Why the last count did not finish, or null when it did. The counts
+  /// from before stay up.
+  String? problem;
+
   GamesSummary? of(Player person) => _summaries[person.id];
 
   /// [person]'s summary counted against the user's accounts as they are
@@ -115,21 +119,30 @@ final class SavedGames extends ChangeNotifier {
       ],
   ]);
 
+  /// Counts everyone again. Never throws: a count that fails is logged and
+  /// said in [problem].
   Future<void> refresh() async {
     final ticket = _refreshes.begin();
     final people = players.players;
     final revision = mine.revision;
-    final shared = await _sharedDownloads(people);
-    if (ticket.overtaken) return;
-    final next = <String, GamesSummary>{};
-    for (final person in people) {
-      final summary = await _summary(person, shared);
+    try {
+      final shared = await _sharedDownloads(people);
       if (ticket.overtaken) return;
-      next[person.id] = summary;
+      final next = <String, GamesSummary>{};
+      for (final person in people) {
+        final summary = await _summary(person, shared);
+        if (ticket.overtaken) return;
+        next[person.id] = summary;
+      }
+      _summaries = next;
+      _countedWith = shared == null ? null : revision;
+      problem = null;
+    } on Object catch (error) {
+      if (ticket.overtaken) return;
+      log.w('count saved games', error);
+      problem = 'Could not count the saved games.';
     }
-    _summaries = next;
-    _countedWith = shared == null ? null : revision;
-    notifyListeners();
+    _notify();
   }
 
   Future<GamesSummary> _summary(Player person, _Shared? shared) async {

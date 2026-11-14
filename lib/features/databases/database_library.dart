@@ -7,7 +7,9 @@ import 'package:path/path.dart' as p;
 
 import '../../chess/explorer_answer.dart';
 import '../../chess/explorer_choice.dart';
+import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
+import '../../storage/disk_problems.dart';
 import '../../storage/disk_usage.dart';
 import '../../storage/master_corpus.dart';
 import '../../storage/pending_writes.dart';
@@ -37,6 +39,7 @@ final class DatabaseLibrary extends ChangeNotifier {
     required this.pending,
     this.download,
     this.places,
+    this.measureWith = _measure,
   });
 
   /// `<support>/master_games.db`; null where there is none to keep.
@@ -54,6 +57,9 @@ final class DatabaseLibrary extends ChangeNotifier {
 
   /// What the Storage list measures; null hides it.
   final StoragePlaces? places;
+
+  /// Measures [places]: [measureStorage], unless a test says otherwise.
+  final Future<List<StoreUsage>> Function(StoragePlaces places) measureWith;
   List<StoreUsage> storage = const [];
   bool measuring = false;
 
@@ -181,7 +187,7 @@ final class DatabaseLibrary extends ChangeNotifier {
               : 'Imported ${counts.$1} games · ${counts.$2} skipped.';
           filter = const CorpusFilter();
         case CorpusFailure(:final detail):
-          problem = 'Import failed: $detail';
+          problem = detail;
       }
     }
     activity = DatabaseActivity.idle;
@@ -224,7 +230,7 @@ final class DatabaseLibrary extends ChangeNotifier {
           case Created() || Collision():
             kept = ref;
           case IoFailure(:final detail):
-            problem = 'Could not keep the game: $detail';
+            problem = failedWithDetail('Could not keep the game.', detail);
         }
       case CorpusFailure(:final detail):
         problem = detail;
@@ -235,24 +241,36 @@ final class DatabaseLibrary extends ChangeNotifier {
     return kept;
   }
 
-  /// Measures every kept store. Never throws; a second request while one
-  /// runs is dropped, since the running one reads the disk afresh.
+  /// Measures every kept store. Never throws: a measurement that fails is
+  /// logged and said on the problem line, and the last sizes stay. A
+  /// request made while one runs measures once more after it: the running
+  /// one may have sized a store that has since been deleted.
   Future<void> measure() async {
-    final places = this.places;
-    if (places == null || measuring || _disposed) return;
+    if (places == null || _disposed) return;
+    if (measuring) {
+      _measureAgain = true;
+      return;
+    }
     measuring = true;
     _notify();
     try {
-      storage = await measureStorage(
-        places.stores,
-        support: places.support,
-        derived: places.derived,
-      );
+      do {
+        _measureAgain = false;
+        final places = this.places;
+        if (places == null) break;
+        storage = await measureWith(places);
+      } while (_measureAgain && !_disposed);
+    } on Object catch (error) {
+      log.w('measure storage', error);
+      if (!_disposed) problem = 'Could not measure the storage.';
     } finally {
       measuring = false;
+      _measureAgain = false;
       _notify();
     }
   }
+
+  bool _measureAgain = false;
 
   /// Deletes a removable store's files and frees the space. Refused while a
   /// download or import could be writing it.
@@ -286,3 +304,9 @@ final class DatabaseLibrary extends ChangeNotifier {
     super.dispose();
   }
 }
+
+Future<List<StoreUsage>> _measure(StoragePlaces places) => measureStorage(
+  places.stores,
+  support: places.support,
+  derived: places.derived,
+);

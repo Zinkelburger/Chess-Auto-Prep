@@ -30,21 +30,31 @@ class LabPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The engine reports a few times a second; only its bar and lines
+    // follow it, not the move lists under them.
     return ListenableBuilder(
-      listenable: Listenable.merge([lab, engine]),
+      listenable: lab,
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _BoardsSwitch(lab: lab),
           _TimeChips(lab: lab),
           const SizedBox(height: Space.s),
-          _EngineBar(engine: engine, single: lab.single),
-          if (lab.single)
-            BoardLineRows(
-              lab: lab,
-              lines: engine.lines,
-              board: BoardNumber.one,
+          ListenableBuilder(
+            listenable: engine,
+            builder: (context, _) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _EngineBar(engine: engine, single: lab.single),
+                if (lab.single)
+                  BoardLineRows(
+                    lab: lab,
+                    lines: engine.lines,
+                    board: BoardNumber.one,
+                  ),
+              ],
             ),
+          ),
           _ProblemLine(lab: lab),
           if (lab.game != null || lab.gameCount > 1) _GameRow(lab: lab),
           Expanded(

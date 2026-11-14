@@ -81,6 +81,24 @@ void main() {
     expect(await pending.settle(), isNull);
   });
 
+  test(
+    'a failed save says what the user can act on, never the exception',
+    () async {
+      final flaky = _FailOnce(files);
+      final failing = Players(flaky, pending);
+      addTearDown(failing.dispose);
+      await failing.load();
+      final a = failing.players.firstWhere((p) => p.name == 'A');
+      flaky.failNext = true;
+      expect(await failing.save(a.edited({'rating': 1}), expected: a), isFalse);
+      expect(failing.error, 'Could not save. The disk is full.');
+      flaky.failWith = StateError('Internal: list was modified');
+      flaky.failNext = true;
+      await failing.retry();
+      expect(failing.error, 'Could not save.');
+    },
+  );
+
   test('retrying a failed save over a row another window changed drops it '
       'and leaves later saves free', () async {
     final flaky = _FailOnce(files);
@@ -125,6 +143,26 @@ void main() {
     expect(named('Alex Kim').text('uscf_id'), isEmpty);
     expect(owner.players, hasLength(4));
   });
+
+  test('an imported row keeps file links and aliases the person held in a '
+      'form this app does not read', () async {
+    await files.savePlayer(
+      Player.create('Carla Diaz').edited({
+        'uscf_id': '33333333',
+        'pgn_files': '/home/u/opp.pgn',
+        'aliases': ['Carla', 7],
+      }),
+    );
+    await owner.load();
+    final imported = Player.create('Carla Diaz').edited({
+      'uscf_id': '33333333',
+      'aliases': ['C. Diaz'],
+    });
+    expect(await owner.import([imported]), isTrue);
+    final carla = named('Carla Diaz');
+    expect(carla.fields['pgn_files'], ['/home/u/opp.pgn']);
+    expect(carla.fields['aliases'], ['Carla', 7, 'C. Diaz']);
+  });
 }
 
 /// [PlayerFiles] whose next player save fails like a disk error.
@@ -133,13 +171,20 @@ final class _FailOnce implements PlayerStore {
   final PlayerFiles files;
   bool failNext = false;
 
+  /// What the failing save throws: the disk's own error for a full disk.
+  Object failWith = FileSystemException(
+    'Cannot write file',
+    'player.json',
+    OSError('No space left on device', Platform.isWindows ? 112 : 28),
+  );
+
   @override
   Future<PlayerDirectory> read() => files.read();
   @override
   Future<void> savePlayer(Player player, {Player? expected}) async {
     if (failNext) {
       failNext = false;
-      throw const FileSystemException('disk full');
+      throw failWith;
     }
     return files.savePlayer(player, expected: expected);
   }

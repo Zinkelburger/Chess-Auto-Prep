@@ -367,6 +367,15 @@ final class ActionLayout extends ChangeNotifier {
       index,
       ActionPaneSplit(direction, ActionPaneLeaf(index), ActionPaneLeaf(fresh)),
     );
+    if (from == 0 && index != 0 && pane(0).open.length == 1) {
+      // The main pane cannot lose its last tab: it goes where the tab was
+      // dropped instead, and its old place closes, leaving no copy behind.
+      _root = _swapped(_root, 0, fresh);
+      _root = _without(_root, fresh)!;
+      _active = 0;
+      notifyListeners();
+      return;
+    }
     if (from != null && visible.contains(from)) {
       if (from == index) {
         pane(from).close(tab);

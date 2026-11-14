@@ -4,6 +4,7 @@ import '../../chess/pgn/comment_edits.dart' show isGlyph, isPositionGlyph;
 import '../../chess/pgn/comment_text.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/study.dart';
+import '../../storage/disk_problems.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/app_keys.dart';
 import '../../ui/confirm_dialog.dart';
@@ -65,6 +66,7 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
   /// document changes under it.
   String? _notice;
   Object? _about;
+  Object? _aboutChapter;
 
   @override
   Listenable listenableOf(EditStrip widget) => widget.session;
@@ -73,14 +75,19 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
   void initState() {
     super.initState();
     _about = widget.session.source;
+    _aboutChapter = widget.session.chapter;
   }
 
-  /// Another document drops the answer about the last one.
+  /// Another document, or an edit to this one, drops the answer about it.
   @override
   void changed() {
-    if (widget.session.source == _about) return;
+    final session = widget.session;
+    if (session.source == _about && identical(session.chapter, _aboutChapter)) {
+      return;
+    }
     setState(() {
-      _about = widget.session.source;
+      _about = session.source;
+      _aboutChapter = session.chapter;
       _notice = null;
     });
   }
@@ -327,7 +334,10 @@ class _SaveLine extends StatelessWidget {
         Saved() => 'Saved',
         Saving() => 'Saving…',
         Unsaved() => 'Unsaved',
-        SaveFailed(:final detail) => 'Could not save: $detail',
+        SaveFailed(:final detail) => failedWithDetail(
+          'Could not save.',
+          detail,
+        ),
         SaveConflict() => 'The file changed on disk',
         SaveStopped() =>
           'The app tried to change a line you did not edit, so the save was '

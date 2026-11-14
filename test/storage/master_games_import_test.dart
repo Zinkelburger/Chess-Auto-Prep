@@ -345,7 +345,31 @@ void main() {
       ),
       'The disk is full.',
     );
-    expect(describeImportFailure(StateError('other')), contains('other'));
+  });
+
+  test('an import failure says the import\'s own refusal or what the disk '
+      'says, and nothing else', () {
+    expect(
+      describeImportFailure(const FormatException('No supported games.')),
+      'No supported games.',
+    );
+    expect(
+      describeImportFailure(
+        FileSystemException(
+          'open',
+          'x',
+          OSError('Read-only file system', Platform.isWindows ? 19 : 30),
+        ),
+      ),
+      'The disk is read-only.',
+    );
+    expect(describeImportFailure(ArgumentError('Internal: x')), isNull);
+    expect(
+      describeImportFailure(
+        SqliteException(extendedResultCode: 1, message: 'SQL logic error'),
+      ),
+      isNull,
+    );
   });
 
   test('a TWIC archive whose bytes fail their checksum is refused', () {

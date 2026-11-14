@@ -35,7 +35,9 @@ own tags first, `White`, `Black`, `Result`, `Date`, `Event`, `Round`, ready to
 fill in from a scoresheet, then any others; a tag left empty is not written,
 and the study's own tags and the training `LineID` are not shown. A chapter
 still called `Chapter N` takes its players' names (`White - Black`) once both
-are entered, as Lichess names an imported game. The chapter menu provides
+are entered, as Lichess names an imported game. A chapter name is any one
+line of text: unlike a study's file name it may hold `:`, `?` or a final dot,
+as in `Sicilian Defense: Najdorf Variation`. The chapter menu provides
 **Rename…**, **PGN tags…**, **Set starting position…**, **Face White/Black**,
 **Move to position…**, **Move up/down**, **Copy chapter PGN**, **Clear comments,
 glyphs and shapes…**, **Clear variations…** and **Delete chapter…**. Changing a starting

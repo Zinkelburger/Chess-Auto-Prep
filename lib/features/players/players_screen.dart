@@ -137,7 +137,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                 group == null ? _viewSwitch() : _groupHeading(group),
                 const SizedBox(height: Space.m),
                 _toolbar(group, groups),
-                _Notices(players: owner),
+                _Notices(players: owner, saved: widget.saved),
                 Expanded(child: groups ? _groups() : _people()),
               ],
             ),
@@ -438,12 +438,14 @@ class _GroupRow extends StatelessWidget {
 
 /// Under the toolbar: the line that says the directory is being read or
 /// written, a rating lookup with the way to stop it, files that could not
-/// be read, and a failed save with what can be done about it. The line for
+/// be read, saved games that could not be counted, and a failed save with
+/// what can be done about it. The line for
 /// the bar is always there, so the list does not move when it shows.
 class _Notices extends StatelessWidget {
-  const _Notices({required this.players});
+  const _Notices({required this.players, required this.saved});
 
   final Players players;
+  final SavedGames saved;
 
   @override
   Widget build(BuildContext context) {
@@ -467,6 +469,14 @@ class _Notices extends StatelessWidget {
             ],
           ),
         for (final warning in players.warnings) ProblemLine(warning),
+        if (saved.problem case final problem?)
+          ProblemLine(
+            problem,
+            action: OutlinedButton(
+              onPressed: () => unawaited(saved.refresh()),
+              child: const Text('Try again'),
+            ),
+          ),
         if (players.error case final error?)
           ProblemLine(
             error,

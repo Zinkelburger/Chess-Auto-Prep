@@ -56,6 +56,21 @@ void main() {
     });
   });
 
+  test('a setup from the move on the board counts again as the board '
+      'moves', () {
+    run((async, f, solitaire) {
+      solitaire.offer();
+      solitaire.setFromStart(false);
+      f.session.cursor.goTo(NodePath.of(const [0, 0, 0, 0, 0]));
+      expect(solitaire.movesToGuess, 0);
+      var heard = 0;
+      solitaire.addListener(() => heard++);
+      f.session.cursor.goTo(NodePath.of(const [0, 0]));
+      expect(heard, 1);
+      expect(solitaire.movesToGuess, greaterThan(0));
+    });
+  });
+
   test('a right guess advances and the reply is played for the user; a '
       'wrong one is refused and writes nothing', () {
     run((async, f, solitaire) {

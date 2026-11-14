@@ -148,7 +148,8 @@ workspace; a line row puts the cursor on that line's last move.
 
 **Move lines** — Ctrl-click / Shift-click pick lines; drag them onto another
 chapter to make them its lines, or onto a line of the open chapter to fold
-them in as variations. `Move to chapter…` does the first by name, and also
+them in as variations; their comments and glyphs on the moves both lines
+play are added after the host's. `Move to chapter…` does the first by name, and also
 offers `New chapter…` (made with the open chapter's side). Picks last through
 moves, comments and the side changing, and go when another chapter opens or
 is read again, on an undo, or when a line is deleted, put back, moved or
@@ -200,7 +201,8 @@ time.
 - `Documents/repertoires/<repertoire>/` is a repertoire. Every `.pgn` under
   it, subfolders included, is a chapter file; dot-folders, `.import-*` staging
   folders and `*_raw_games.pgn` are skipped. A `.pgn` directly under
-  `repertoires/` is moved to `<name>/Main.pgn` when the list is read.
+  `repertoires/` is a repertoire of one chapter; adding or moving a chapter
+  into it first moves the file into a `<name>/` folder.
 - A chapter file starts with a `//` heading: `// <name>`,
   `// Color: White|Black`, `// Created on <date time>`, `// Root: 1. e4 e5
   2. f4` when it starts after moves, and `// Draft` for a proposed chapter.

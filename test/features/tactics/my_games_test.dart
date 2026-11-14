@@ -196,6 +196,24 @@ void main() {
     expect(r.games.accounts[GameSite.lichess]!.username, 'Other');
   });
 
+  test('a download that cannot be added to the saved games is reviewed '
+      'instead of the old ones', () async {
+    final newer = scholarsMate.replaceAll('AbCd1234', 'XyZw9876');
+    r = _Review(
+      accounts: {GameSite.lichess: const Account('Me')},
+      lichess: GamesFetched([newer, scholarsMate]),
+    );
+    await r.cache.keep(GameSite.lichess, 'Me', [scholarsMate], DateTime(2026));
+    r.store.saves.add(const IoFailure('disk full'));
+    await r.start();
+    expect(await r.cache.all(GameSite.lichess, 'Me'), [scholarsMate]);
+    expect((r.games.status as MyGamesDone).reviewed, 2);
+    expect(
+      analyzedIn(r.setText),
+      containsAll(['lichess_XyZw9876', 'lichess_AbCd1234']),
+    );
+  });
+
   test('one failed save leaves the other site saved and reviewed', () async {
     r = _Review();
     r.store.creates.add(const IoFailure('disk full'));

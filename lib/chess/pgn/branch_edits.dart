@@ -211,8 +211,26 @@ ChapterEdit _madeFirst(Chapter chapter, List<String> sans) {
     lines[branch.game] = (result as LineRewritten).line;
     written.add(branch.game);
   }
-  return _reordered(chapter, lines, written, branches.first, playing.first);
+  final first = branches.first;
+  if (first.child >= 0) {
+    return _reordered(chapter, lines, written, first, first);
+  }
+  // The merged tree shows the move first only if a game that plays it comes
+  // before [first]. Moving a game forward also puts its own main line first
+  // above this point, so that is the same line only when both games reach
+  // the point along their main lines.
+  final mover = playing.where((branch) => _onMainLine(branch.at)).firstOrNull;
+  if (mover == null || !_onMainLine(first.at)) {
+    return const ChapterEditRefused(_underVariationReason);
+  }
+  return _reordered(chapter, lines, written, first, mover);
 }
+
+bool _onMainLine(NodePath at) => at.indexes.every((index) => index == 0);
+
+const _underVariationReason =
+    'that move is reached through a variation of its game, so promoting it '
+    'would change the main line above it; use Make main line';
 
 /// The chapter with the game that plays the move moved in front of the first
 /// game that branches at that point, so the merged tree shows it first.

@@ -60,6 +60,35 @@ void main() {
     expect(answered?.orientation, isNull);
   });
 
+  testWidgets('a chapter name may hold what a file name may not', (
+    tester,
+  ) async {
+    NewChapter? answered;
+    await tester.binding.setSurfaceSize(const Size(1000, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async =>
+                answered = await showNewChapterDialog(context),
+            child: const Text('Ask'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Ask'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Chapter name'),
+      'Sicilian Defense: Najdorf Variation 6.Bg5?',
+    );
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+    expect(answered?.name, 'Sicilian Defense: Najdorf Variation 6.Bg5?');
+  });
+
   testWidgets('a position half set up survives the window narrowing and the '
       'editor moving under the form', (tester) async {
     tester.view.devicePixelRatio = 1;

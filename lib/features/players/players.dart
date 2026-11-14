@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../chess/players/player.dart';
+import '../../diagnostics/log.dart';
 import '../../net/player_ratings.dart';
+import '../../storage/disk_problems.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/player_files.dart';
 
@@ -112,8 +114,9 @@ final class Players extends ChangeNotifier {
       }
       return false;
     } on Object catch (e) {
+      log.w(label, e);
       if (!obligation.committed) _failed = obligation;
-      error = 'Could not save: $e';
+      error = failedBecause('Could not save.', e);
       return false;
     } finally {
       busy = false;
@@ -143,7 +146,8 @@ final class Players extends ChangeNotifier {
         // The conflict is what the user is told; a later load says the rest.
       }
     } on Object catch (e) {
-      error = 'Could not save: $e';
+      log.w('save players', e);
+      error = failedBecause('Could not save.', e);
     } finally {
       busy = false;
       changed();
@@ -243,10 +247,10 @@ final class Players extends ChangeNotifier {
                           existing.fields[e.key] == ''))
                     e.key: e.value,
               });
-        final linked = next.edited({
-          for (final key in ['aliases', 'pgn_files', 'game_sets'])
-            key: {...?existing?.strings(key), ...player.strings(key)}.toList(),
-        });
+        var linked = next;
+        for (final key in ['aliases', 'pgn_files', 'game_sets']) {
+          linked = linked.withStrings(key, player.strings(key));
+        }
         await store.savePlayer(linked, expected: existing);
         people.removeWhere((p) => p.id == next.id);
         people.add(linked);

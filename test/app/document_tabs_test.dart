@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart' as store;
+import 'package:chess_auto_prep/storage/saved_place.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_store.dart';
@@ -65,6 +66,24 @@ void main() {
       expect(w.requests.documents.tabs.open.length, 1);
     },
   );
+
+  test('moves played on the starting board while the last file is read '
+      'keep its tab open', () async {
+    final blank = w.requests.documents.tabs.selected;
+    w.store.hold = true;
+    final resumed = w.requests.resume(
+      SavedPlace(mode: Mode.repertoires.name, path: kidMain.path),
+    );
+    await pumpEventQueue();
+    w.session.playMove('e2e4');
+    w.store.hold = false;
+    w.store.releaseAll();
+    await resumed;
+    expect(w.session.source, kidMain);
+    expect(w.requests.documents.tabs.open, contains(blank));
+    await w.requests.documents.select(blank);
+    expect(w.session.cursor.currentMove?.san, 'e4');
+  });
 
   test('a file tab gone back to shows the games it read, without reading '
       'them again; a file changed since is read', () async {

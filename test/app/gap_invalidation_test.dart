@@ -154,6 +154,96 @@ void main() {
     },
   );
 
+  test('saving the open chapter does not read its siblings again', () async {
+    final fixture = WindowFixture(maia: TwoPositions());
+    addTearDown(fixture.dispose);
+    final sibling = ref('benko', 'Sicilian');
+    fixture.store.documents[benkoMain] = Opened(
+      chapter,
+      scriptedRevision(chapter),
+    );
+    fixture.store.documents[sibling] = Opened(
+      sicilian,
+      scriptedRevision(sicilian),
+    );
+    fixture.chapterFiles.listing = Repertoires([
+      folder('benko', ['Main', 'Sicilian']),
+    ]);
+    final workspace = fixture.parts.workspace;
+    await fixture.library.refresh();
+    await fixture.session.open(benkoMain);
+    fixture.session.cursor.goTo(NodePath.of([0]));
+    await pumpEventQueue();
+    ReplyRow c5() => (workspace.replies.table as RepliesShown).rows.singleWhere(
+      (row) => row.uci == 'c7c5',
+    );
+    expect(c5().elsewhere, 'Sicilian');
+
+    final opens = fixture.store.opens;
+    fixture.session.cursor.goTo(NodePath.of([0, 0, 0]));
+    fixture.session.playMove('b8c6');
+    await pumpEventQueue();
+    await fixture.parts.catalog.synchronize();
+    await pumpEventQueue();
+    fixture.session.playMove('f1b5');
+    await pumpEventQueue();
+    await fixture.parts.catalog.synchronize();
+    await pumpEventQueue();
+    expect(
+      (fixture.store.documents[benkoMain]! as Opened).text,
+      contains('3. Bb5'),
+      reason: 'both moves were saved',
+    );
+    expect(fixture.store.opens, opens, reason: 'no sibling read again');
+    expect(workspace.gaps.walk, isNotNull);
+    fixture.session.cursor.goTo(NodePath.of([0]));
+    await pumpEventQueue();
+    expect(c5().elsewhere, 'Sicilian');
+  });
+
+  test(
+    'a write to the open chapter from outside the session reads its siblings '
+    'again',
+    () async {
+      final fixture = WindowFixture(maia: TwoPositions());
+      addTearDown(fixture.dispose);
+      final sibling = ref('benko', 'Sicilian');
+      fixture.store.documents[benkoMain] = Opened(
+        chapter,
+        scriptedRevision(chapter),
+      );
+      fixture.store.documents[sibling] = Opened(
+        sicilian,
+        scriptedRevision(sicilian),
+      );
+      fixture.chapterFiles.listing = Repertoires([
+        folder('benko', ['Main', 'Sicilian']),
+      ]);
+      final workspace = fixture.parts.workspace;
+      await fixture.library.refresh();
+      await fixture.session.open(benkoMain);
+      fixture.session.cursor.goTo(NodePath.of([0]));
+      await pumpEventQueue();
+      ReplyRow c5() => (workspace.replies.table as RepliesShown).rows
+          .singleWhere((row) => row.uci == 'c7c5');
+      expect(c5().elsewhere, 'Sicilian');
+
+      int siblingReads() =>
+          fixture.store.opened.where((read) => read == sibling).length;
+      final before = siblingReads();
+      final current = await fixture.parts.env.store.open(benkoMain) as Opened;
+      await fixture.parts.env.store.save(
+        benkoMain,
+        '${current.text}\n',
+        expected: current.revision,
+        scope: const WholeDocument(),
+      );
+      await fixture.parts.catalog.synchronize();
+      await pumpEventQueue();
+      expect(siblingReads(), greaterThan(before));
+    },
+  );
+
   test(
     'a sibling changed while another repertoire is open is read again',
     () async {

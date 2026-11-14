@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:path/path.dart' as p;
 
 import '../chess/bughouse/bpgn_moves.dart' show BpgnGames;
+import '../diagnostics/log.dart';
 import '../features/bughouse/bughouse_screen.dart';
 import '../storage/pgn_file_import.dart';
 import '../storage/pgn_file_picker.dart';
@@ -123,17 +124,25 @@ final class BughouseView extends ModeView {
   /// as Paste moves would put them. The file is read where it is and not
   /// kept; its games are found off the UI isolate. A file opened, or moves
   /// pasted, while an earlier file was still being read is what is shown.
+  /// A read that fails outside its answers, finding the games off the UI
+  /// isolate among them, is logged and said as a file that could not be
+  /// read; the boards stay as they are.
   Future<void> _open() async {
     final path = await _labs.picker.pickPgn(extensions: bpgnExtensions);
     if (path == null) return;
     final opening = ++_opening;
     final name = p.basename(path);
-    switch (await _labs.files.read(path)) {
-      case PickedText(:final text):
-        final games = await BpgnGames.index(text);
-        if (_current(opening)) _labs.lab.openGames(games, file: name);
-      case PickedUnread():
-        if (_current(opening)) _labs.lab.fileUnread(name);
+    try {
+      switch (await _labs.files.read(path)) {
+        case PickedText(:final text):
+          final games = await BpgnGames.index(text);
+          if (_current(opening)) _labs.lab.openGames(games, file: name);
+        case PickedUnread():
+          if (_current(opening)) _labs.lab.fileUnread(name);
+      }
+    } on Object catch (error) {
+      log.w('open the bughouse file $path', error);
+      if (_current(opening)) _labs.lab.fileUnread(name);
     }
   }
 

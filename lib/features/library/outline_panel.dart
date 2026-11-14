@@ -230,10 +230,7 @@ class _OutlinePanelState extends State<OutlinePanel> {
       Future.value(result),
       thing: 'line',
       name: drag.label,
-      failed: switch (result) {
-        LibraryFailure(:final detail) => 'Could not move the lines: $detail',
-        _ => 'Could not move the lines.',
-      },
+      failed: linesNotMoved(result),
     );
   }
 

@@ -601,7 +601,8 @@ final class Solitaire extends ChangeNotifier {
   }
 
   void _cursorChanged() {
-    if (_active && !_moving) notifyListeners();
+    // A setup starting at the move on the board counts from it.
+    if ((_active || (setting && !fromStart)) && !_moving) notifyListeners();
   }
 
   @override

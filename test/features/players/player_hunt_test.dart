@@ -68,6 +68,26 @@ void main() {
       expect(analysis.evals.values, contains(-125));
     },
   );
+  // In-memory reports: a disk read is real I/O that pumpEventQueue does not
+  // wait for.
+  test('a cancelled reload of the same player restores the report', () async {
+    final running = hunt.start();
+    await pumpEventQueue();
+    engine.current.emit(
+      line(depth: 14, score: const Centipawns(-125), pv: ['g1f3']),
+    );
+    engine.current.end();
+    await running;
+    await analysis.pending.settle();
+    final reload = analysis.select(player);
+    expect(hunt.findings, isEmpty, reason: 'nothing shown while it loads');
+    analysis.cancel();
+    await reload;
+    await pumpEventQueue();
+    expect(analysis.corpus, isNotNull);
+    expect(hunt.findings.single.score.text, '-1.25');
+    expect(analysis.evals.values, contains(-125));
+  });
   test(
     'unseen best reply is evidence of an uncovered move, with correct sign',
     () async {
@@ -169,6 +189,7 @@ void main() {
   group('with reports on disk', () {
     late PlayerAnalysis owner;
     late PlayerHunt diskHunt;
+    late Player alex;
     setUp(() async {
       final folder = Directory.systemTemp.createTempSync('player_reports');
       addTearDown(() => folder.deleteSync(recursive: true));
@@ -186,11 +207,10 @@ void main() {
         () async => Started(engine),
         reports: PlayerReports(folder),
       )..configure(limit: 1);
-      await owner.select(
-        Player.create('Alex').edited({
-          'pgn_files': [ref.path],
-        }),
-      );
+      alex = Player.create('Alex').edited({
+        'pgn_files': [ref.path],
+      });
+      await owner.select(alex);
       await pumpEventQueue();
     });
     tearDown(() {
