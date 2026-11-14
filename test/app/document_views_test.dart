@@ -127,15 +127,14 @@ void main() {
       expect(view.walk(1), isTrue);
     });
 
-    testWidgets('keeps the board entries but not the file ones a builder '
-        'has', (tester) async {
+    testWidgets('keeps the board and file entries, but makes no copy of a '
+        'file it reads', (tester) async {
       start();
       final labels = viewer()
           .actions(await menu(tester))
           .map((action) => action.label);
       expect(labels, isNot(contains('Save a copy…')));
-      expect(labels, isNot(contains('Close file')));
-      expect(labels, contains('Play through'));
+      expect(labels, containsAll(['Close file', 'Play through']));
       expect(
         viewer().actions(await menu(tester)).where((a) => a.group == 'View'),
         isNotEmpty,

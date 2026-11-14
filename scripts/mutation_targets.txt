@@ -239,19 +239,19 @@
 #     were added to always names the first of them).
 #   lib/app/trap_training.dart:136 `||` -> `&&` (a draft just read in is
 #     not blocked, so an edit it refuses never leaves the line played).
-#   lib/app/mode_wiring.dart:193 and lib/app/workspace_wiring.dart:306
+#   lib/app/mode_wiring.dart:193 and lib/app/workspace_wiring.dart:309
 #     (`_catalogInputs = -1` -> 0): the catalog notifies only after it bumps
 #     inputsRevision (a change it admits, or a refresh), so the first
 #     revision a listener sees is at least 1.
-#   lib/app/document_views.dart:259 (`_ => false` -> true): a trainer that is
+#   lib/app/document_views.dart:260 (`_ => false` -> true): a trainer that is
 #     not ready has no lines, so learnCount and reviewCount are 0 and both
 #     entries stay off either way.
 #   lib/app/training_visibility.dart:32,40 (`_wasSuspended = false` -> true):
 #     it only matters on the first check of a sitting, when _mode is still
 #     null, and setting it to the mode on screen is what `??=` does next.
-#   lib/app/training_visibility.dart:76 (`_puzzles.up != null` -> ==): put
-#     down with no puzzle up only parks the run, and a run out of Tactics
-#     with no puzzle up was parked when its puzzle went down.
+#   lib/app/training_visibility.dart:79 `_puzzles.up != null` -> ==: a
+#     puzzle is only up during a run, so the run alone decides; parking a
+#     trainer with no run is undone by the next run's first puzzle.
 #   lib/app/window_keys.dart:105,107 (`by > 0` -> `>=`): ↓ and ↑ pass 1 and
 #     -1 only, never 0.
 #   lib/app/window_columns.dart:58 the workspace's `flex: 1`: it is the one
