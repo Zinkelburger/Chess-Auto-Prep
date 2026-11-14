@@ -307,6 +307,9 @@
 #   lib/features/settings/app_updates.dart:324 `||` -> `&&` (Cancel cuts the
 #     transfer, so no progress comes once it is not downloading), :327 how
 #     often the bar redraws (the look).
+#   lib/features/settings/update_prompt.dart:118 the answered flag (a dialog
+#     being popped takes no more taps, and its status listener stops at the
+#     first answer).
 #   lib/chess/typed_move.dart:102 `>` -> `>=` (a castling king never lands
 #     on its own square), :187 `.first` -> `.last` (every candidate is then
 #     checked against the same four characters).
@@ -754,3 +757,6 @@ lib/features/settings/app_updates.dart|test/features/settings/app_updates_more_t
 lib/features/settings/lichess_login_dialog.dart|test/features/settings/lichess_login_dialog_more_test.dart test/features/settings/lichess_login_dialog_test.dart|
 lib/features/settings/setting_rows.dart|test/features/settings/setting_rows_bounds_test.dart test/features/settings/setting_rows_test.dart|test/features/settings/app_updates_test.dart test/features/settings/lichess_account_test.dart test/features/settings/lichess_login_dialog_test.dart test/features/settings/setting_rows_test.dart test/features/settings/settings_dialog_test.dart test/features/settings/update_offer_test.dart test/features/settings/update_prompt_test.dart
 lib/features/settings/settings_dialog.dart|test/features/settings/settings_dialog_places_test.dart test/features/settings/settings_dialog_test.dart|
+lib/features/settings/update_prompt.dart|test/features/settings/update_prompt_answers_test.dart test/features/settings/update_prompt_test.dart|
+lib/features/study/studies.dart|test/features/study/studies_more_test.dart test/features/study/studies_test.dart|test/features/study/study_import_preview_test.dart
+lib/features/study/study_panel.dart|test/features/study/study_panel_menus_test.dart test/features/study/study_panel_test.dart|
