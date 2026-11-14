@@ -98,9 +98,8 @@ final class GapHunt extends ChangeNotifier {
     notifyListeners();
   }
 
-  void retry() => refreshAnswers();
-
   void _failed(Object error) {
+    log.w('walk gaps', error);
     _problem = '$error';
     _walking = false;
     _highlighted = null;
