@@ -147,6 +147,51 @@ void main() {
       );
     }
   });
+  test('positions are cached until a filter or an eval changes', () {
+    final store = ScriptedDocumentStore();
+    final owner = PlayerAnalysis(
+      documents: store,
+      cache: GamesCache(store, folder: '/games'),
+      sites: const [],
+      pending: PendingWrites(),
+    );
+    addTearDown(owner.dispose);
+    const text =
+        '[White "Alex"]\n[Black "Bob"]\n[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 1-0';
+    owner.corpus = buildPlayerCorpus(
+      {'alex'},
+      [
+        const PlayerGame(file: DocumentRef('/a.pgn'), index: 0, text: text),
+        PlayerGame(
+          file: const DocumentRef('/a.pgn'),
+          index: 1,
+          text: text
+              .replaceFirst('Bob', 'Carl')
+              .replaceFirst('2. Nf3', '2. Bc4'),
+        ),
+      ],
+    );
+    owner.minPly = 0;
+    final first = owner.positions;
+    expect(first, isNotEmpty);
+    expect(owner.positions, same(first));
+    expect(owner.gameIndexes, same(owner.gameIndexes));
+    owner.search('carl');
+    final searched = owner.positions;
+    expect(searched, isNot(same(first)));
+    expect(owner.gameIndexes, [1]);
+    expect(searched.every((p) => p.games.single == 1), true);
+    owner.search('');
+    owner.minGames = 2;
+    expect(owner.positions.every((p) => p.count == 2), true);
+    owner.minGames = 1;
+    owner.configure(order: PositionOrder.badEval);
+    final before = owner.positions;
+    final last = before.last;
+    owner.evals[last.key] = -300;
+    expect(owner.positions, isNot(same(before)));
+    expect(owner.positions.first.key, last.key);
+  });
   test('pasted CSV quotes, TSV and opponent JSON preserve names', () {
     final csv = readPlayerList(
       'Name,Rating,Chess.com\n"Rivera, Alex",1900,alex_1',

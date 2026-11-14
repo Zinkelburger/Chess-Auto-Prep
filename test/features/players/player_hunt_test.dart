@@ -169,6 +169,7 @@ void main() {
   group('with reports on disk', () {
     late PlayerAnalysis owner;
     late PlayerHunt diskHunt;
+    late Player alex;
     setUp(() async {
       final folder = Directory.systemTemp.createTempSync('player_reports');
       addTearDown(() => folder.deleteSync(recursive: true));
@@ -186,11 +187,10 @@ void main() {
         () async => Started(engine),
         reports: PlayerReports(folder),
       )..configure(limit: 1);
-      await owner.select(
-        Player.create('Alex').edited({
-          'pgn_files': [ref.path],
-        }),
-      );
+      alex = Player.create('Alex').edited({
+        'pgn_files': [ref.path],
+      });
+      await owner.select(alex);
       await pumpEventQueue();
     });
     tearDown(() {
@@ -210,6 +210,24 @@ void main() {
       await pumpEventQueue();
       expect(diskHunt.findings, isNotEmpty);
       expect((diskHunt.done, diskHunt.total), (1, 1));
+      expect(owner.evals.values, contains(-125));
+    });
+    test('a cancelled reload of the same player restores the report', () async {
+      final running = diskHunt.start();
+      await pumpEventQueue();
+      engine.current.emit(
+        line(depth: 14, score: const Centipawns(-125), pv: ['g1f3']),
+      );
+      engine.current.end();
+      await running;
+      await owner.pending.settle();
+      await pumpEventQueue();
+      final reload = owner.select(alex);
+      owner.cancel();
+      await reload;
+      await pumpEventQueue();
+      expect(owner.corpus, isNotNull);
+      expect(diskHunt.findings, isNotEmpty);
       expect(owner.evals.values, contains(-125));
     });
   });

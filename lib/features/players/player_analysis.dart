@@ -126,11 +126,61 @@ final class PlayerAnalysis extends ChangeNotifier {
     return true;
   }
 
-  List<int> get gameIndexes => [
-    for (final (i, g) in (corpus?.games ?? <AnalyzedGame>[]).indexed)
-      if (includes(g)) i,
-  ];
+  /// What [gameIndexes] depends on; the filters are plain fields that
+  /// callers assign directly, so the cache compares values, not events.
+  Object get _gamesKey => (
+    corpus,
+    side,
+    query,
+    recentDays,
+    // Recent games age by the day.
+    recentDays == null ? null : _today(),
+    speeds.join(','),
+  );
+  static (int, int, int) _today() {
+    final now = DateTime.now();
+    return (now.year, now.month, now.day);
+  }
+
+  Object? _gamesKeyCached;
+  List<int> _gameIndexes = const [];
+  Object? _positionsKey;
+  List<PlayerPosition> _positions = const [];
+
+  /// The indexes of the corpus games the filters keep. Computed again only
+  /// when an input changed; the list cannot be modified.
+  List<int> get gameIndexes {
+    final key = _gamesKey;
+    if (key != _gamesKeyCached) {
+      _gameIndexes = List.unmodifiable([
+        for (final (i, g) in (corpus?.games ?? <AnalyzedGame>[]).indexed)
+          if (includes(g)) i,
+      ]);
+      _gamesKeyCached = key;
+    }
+    return _gameIndexes;
+  }
+
+  /// The filtered, sorted positions. Computed again only when an input
+  /// changed, including [evals], which the Eval order reads; the list cannot
+  /// be modified.
   List<PlayerPosition> get positions {
+    final key = (
+      _gamesKey,
+      minGames,
+      minPly,
+      order,
+      Object.hashAll([for (final e in evals.entries) (e.key, e.value)]),
+      evals.length,
+    );
+    if (key != _positionsKey) {
+      _positions = List.unmodifiable(_filteredPositions());
+      _positionsKey = key;
+    }
+    return _positions;
+  }
+
+  List<PlayerPosition> _filteredPositions() {
     final data = corpus;
     if (data == null) return const [];
     // Filtering statistics is done over the actual games, not by hiding rows
