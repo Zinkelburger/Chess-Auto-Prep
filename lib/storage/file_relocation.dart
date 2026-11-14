@@ -479,11 +479,13 @@ final class FileRelocations {
   /// Finishes the moves a stopped process began, and tells the ledger what
   /// each came to. One that can never be finished — its file is gone or
   /// replaced, or the record is damaged — is set aside and logged; the rest
-  /// still run. Then the kept versions still owed are moved.
-  Future<void> recover() async {
+  /// still run. Then the kept versions still owed are moved. Answers the
+  /// records it met ([OperationJournal.recover]).
+  Future<Set<String>> recover() async {
     _checkRoots();
-    await _journal.recover();
+    final found = await _journal.recover();
     await _histories.moveAll();
+    return found;
   }
 
   /// Stops the owed move [id] guarding its file or folder, once it has

@@ -193,8 +193,8 @@ final class RecoveryGate {
         DocumentRef(documents.path),
         [support],
         () async {
-          if (await _finishEach()) {
-            ledger.passRan(listing);
+          if (await _finishEach() case final found?) {
+            ledger.passRan(found);
           } else {
             ledger.passCouldNotRun(_clock(), retryDelay, locked: false);
           }
@@ -212,22 +212,23 @@ final class RecoveryGate {
     }
   }
 
-  /// Whether every step ran. What each step could not finish its owner
-  /// reported to the ledger.
-  Future<bool> _finishEach() async {
+  /// The records every step met, or null when a step did not run. What
+  /// each step could not finish its owner reported to the ledger.
+  Future<Set<RecordKey>?> _finishEach() async {
     var ran = true;
-    for (final (name, step) in [
-      ('unfinished edits', compounds.recover),
-      ('unfinished moves', relocations.recover),
+    final found = <RecordKey>{};
+    for (final (name, journal, step) in [
+      ('unfinished edits', CompoundWrites.journal, compounds.recover),
+      ('unfinished moves', FileRelocations.journal, relocations.recover),
     ]) {
       try {
-        await step();
+        found.addAll({for (final id in await step()) (journal, id)});
       } on Object catch (error) {
         ran = false;
         log.w('finish $name', error);
       }
     }
-    return ran;
+    return ran ? found : null;
   }
 
   /// Tries once more the journals of the [owed] operations an access is

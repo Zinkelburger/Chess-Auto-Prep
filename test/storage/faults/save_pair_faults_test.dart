@@ -18,7 +18,6 @@ import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/faulty_disk/fault_matrix.dart';
-import '../../support/faulty_disk/known_findings.dart';
 import '../../support/faulty_disk/perturbations.dart';
 import '../../support/faulty_disk/scenario.dart';
 import '../../support/faulty_disk/stores.dart';
@@ -102,7 +101,6 @@ final _pair = StorageScenario<Stores, SaveResult>(
     badBookEntry(expect: Expected.finished),
     corruptJournal,
   ],
-  known: {...recoveryLedger('compound-writes')},
 );
 
 void main() => faultMatrix(_pair);

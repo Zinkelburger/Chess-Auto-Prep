@@ -331,9 +331,15 @@ never a new one that would append twice).
    access touching a file a record changes tries that record first. What is
    owed lives in memory per profile (`RecoveryLedger`); the folders stay the
    truth. Per participant: still at *before* → apply; already at *after* →
-   accept; anything else (another program's edit) → put back what the record
-   already rewrote, keep its bytes as a version, quarantine the record, log
-   why, continue. A participant unreadable for now leaves the record pending.
+   accept; anything else (another program's edit), still so when looked at
+   twice more 50 ms apart → put back what the record already rewrote, keep
+   its bytes as a version, quarantine the record, log why, continue. A
+   participant unreadable for now leaves the record pending, and so does a
+   record whose read fails; only one that reads but does not decode is
+   quarantined. A record a pass did not meet (its folder read briefly as
+   missing) counts as unseen, so the next access runs another pass. A file a
+   killed create left with its staged second name loses that name on its
+   next read.
    A record owed for five minutes stops guarding when a write meets it: one not
    applied whole is undone and set aside; one that landed lets plain saves
    pass (`<id>.following`). A record whose quarantine move fails is marked

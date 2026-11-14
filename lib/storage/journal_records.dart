@@ -10,6 +10,15 @@ import 'operation_id.dart';
 import 'recovery_files.dart';
 import 'recovery_quarantine.dart';
 
+/// What one look at a journal folder found: the records it could read,
+/// those it could not read just now, and the name of every record it met
+/// ([recordName]), whatever came of it.
+typedef JournalRead<T> = ({
+  List<(File, T)> records,
+  List<(File, String id, FileSystemException error)> unread,
+  Set<String> found,
+});
+
 /// The records in one journal folder (`Support/<name>/<id>.json`).
 ///
 /// Only a whole record counts. A write killed before its rename leaves a
@@ -17,24 +26,28 @@ import 'recovery_quarantine.dart';
 /// can leave the replaced bytes as `.<id>.json.v2-tmp.previous-N-N`: neither is
 /// the record, so both are removed. A record's `<id>.following` and
 /// `<id>.aside` markers ([followingMarker], [asideMarker]) stay beside it and
-/// go wherever it goes; one whose record is gone is removed. Anything else
-/// that cannot be read or [decode]d is set aside ([quarantine]) and logged,
-/// so one damaged record never stops the others, or any open or save, from
-/// going ahead.
-Future<List<(File, T)>> readJournal<T>(
+/// go wherever it goes; one whose record is gone is removed. A record whose
+/// read failed for now (held open, changing while read, briefly missing) is
+/// [unread] and left where it is for the next look. Anything else that cannot be read
+/// or [decode]d is set aside ([quarantine]) and logged, so one damaged record
+/// never stops the others, or any open or save, from going ahead.
+Future<JournalRead<T>> readJournalEntries<T>(
   Directory directory, {
   required T Function(Object? value, String id) decode,
 }) async {
+  final records = <(File, T)>[];
+  final unread = <(File, String, FileSystemException)>[];
+  final found = <String>{};
   if (await FileSystemEntity.type(directory.path, followLinks: false) !=
       FileSystemEntityType.directory) {
-    return const [];
+    return (records: records, unread: unread, found: found);
   }
   final entries = await directoryEntries(directory, followLinks: false).toList()
     ..sort((a, b) => a.path.compareTo(b.path));
   final names = {for (final entry in entries) p.basename(entry.path)};
-  final records = <(File, T)>[];
   for (final entry in entries) {
     final name = p.basename(entry.path);
+    found.add(recordName(name));
     final marker = entry is File && _markers.contains(p.extension(name));
     if (marker && names.contains(p.setExtension(name, '.json'))) continue;
     if (marker || (entry is File && _leftover.hasMatch(name))) {
@@ -47,8 +60,16 @@ Future<List<(File, T)>> readJournal<T>(
         throw const FormatException('not a journal record');
       }
       final id = OperationId(p.basenameWithoutExtension(name));
-      final value = jsonDecode(utf8.decode(await entry.readAsBytes()));
-      records.add((entry, decode(value, id)));
+      final List<int> bytes;
+      try {
+        bytes = await entry.readAsBytes();
+      } on FileSystemException catch (error) {
+        if (_denied(error)) rethrow;
+        log.w('read ${entry.path} later', error);
+        unread.add((entry, id, error));
+        continue;
+      }
+      records.add((entry, decode(jsonDecode(utf8.decode(bytes)), id)));
     } on Object catch (error) {
       await quarantine(directory.parent, entry, error);
       for (final extension in _markers) {
@@ -63,8 +84,30 @@ Future<List<(File, T)>> readJournal<T>(
       }
     }
   }
-  return records;
+  return (records: records, unread: unread, found: found);
 }
+
+/// Whether [error] refuses this app the record for good: its permissions,
+/// not a passing failure such as a file held open (on Windows, a sharing or
+/// lock violation, which dart:io also reports as denied access).
+bool _denied(FileSystemException error) {
+  final code = error.osError?.errorCode;
+  return Platform.isWindows ? code == 5 : code == 1 || code == 13;
+}
+
+/// The records [readJournalEntries] could read now; see there.
+Future<List<(File, T)>> readJournal<T>(
+  Directory directory, {
+  required T Function(Object? value, String id) decode,
+}) async => (await readJournalEntries(directory, decode: decode)).records;
+
+/// The record a journal folder entry named [name] belongs to: a record's
+/// markers name the record, anything else names itself.
+String recordName(String name) => _names.contains(p.extension(name))
+    ? p.basenameWithoutExtension(name)
+    : name;
+
+const _names = {'.json', _marker, _aside};
 
 const _marker = '.following';
 const _aside = '.aside';

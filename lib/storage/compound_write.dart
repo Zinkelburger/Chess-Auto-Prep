@@ -181,9 +181,10 @@ final class CompoundWrites {
   /// Finishes the edits a stopped process began, and tells the ledger what
   /// each came to. One that can never be finished — a PGN changed since, or
   /// the record is damaged — is set aside and logged; the rest still run.
-  Future<void> recover() async {
+  /// Answers the records it met ([OperationJournal.recover]).
+  Future<Set<String>> recover() async {
     _checkRoots();
-    await _journal.recover();
+    return _journal.recover();
   }
 
   /// Stops the owed edit [id] guarding its PGNs, once it has guarded them
