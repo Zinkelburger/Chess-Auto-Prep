@@ -355,6 +355,19 @@ void main() {
   );
 
   test(
+    'a reset keeps the rating just given',
+    () => sitting((async) {
+      begin(async);
+      w.trainer.showSolution();
+      w.trainer.rate(4);
+      async.elapse(Duration.zero);
+      w.trainer.reset();
+      w.trainer.showSolution();
+      expect(w.trainer.up!.rating, 4);
+    }),
+  );
+
+  test(
     'another document takes the puzzle off the board but not the run, '
     'and next brings the set back',
     () => sitting((async) {
@@ -390,11 +403,24 @@ void main() {
     () => sitting((async) {
       begin(async);
       expect(w.trainer.up?.puzzle.index, 1);
+      w.trainer.showSolution();
+      final shown = w.trainer.up!;
       final doomed = w.tactics.at(0)!;
       unawaited(w.tactics.delete(doomed));
       async.flushMicrotasks();
       expect(w.tactics.puzzles.map((p) => p.fen), isNot(contains(doomed.fen)));
       expect(w.trainer.up?.puzzle.fen, w.tactics.at(0)!.fen);
+      // Only its index moved: the answer stays shown.
+      final kept = w.trainer.up!;
+      expect(kept.puzzle.index, 0);
+      expect(kept.finished, isTrue);
+      expect(kept.feedback, same(shown.feedback));
+      expect((kept.frontier, kept.found), (shown.frontier, shown.found));
+      expect(w.session.shownTo, isNull);
+      w.trainer.rate(3);
+      expect(w.trainer.up!.saveProblem, isNull);
+      async.elapse(Duration.zero);
+      expect(gameOnDisk(0), contains('[StarRating "3"]'));
       unawaited(w.trainer.next());
       async.flushMicrotasks();
       expect(

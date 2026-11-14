@@ -169,6 +169,7 @@ void main() {
   group('with reports on disk', () {
     late PlayerAnalysis owner;
     late PlayerHunt diskHunt;
+    late Player alex;
     setUp(() async {
       final folder = Directory.systemTemp.createTempSync('player_reports');
       addTearDown(() => folder.deleteSync(recursive: true));
@@ -186,11 +187,10 @@ void main() {
         () async => Started(engine),
         reports: PlayerReports(folder),
       )..configure(limit: 1);
-      await owner.select(
-        Player.create('Alex').edited({
-          'pgn_files': [ref.path],
-        }),
-      );
+      alex = Player.create('Alex').edited({
+        'pgn_files': [ref.path],
+      });
+      await owner.select(alex);
       await pumpEventQueue();
     });
     tearDown(() {

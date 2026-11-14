@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart' hide Saved;
@@ -13,6 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../storage/store_fixture.dart';
+import '../support/big_chapter.dart';
 import '../support/scripted_store.dart';
 import '../support/viewer_fixture.dart';
 
@@ -122,6 +124,53 @@ void main() {
     second.kill();
   });
 
+  test(
+    'edits restored onto another game put the cursor at its start',
+    () async {
+      final drafts = _MemoryDrafts();
+      final first = _Run(store, drafts);
+      await first.session.open(ref, game: 1);
+      first.session
+        ..cursor.goTo(NodePath.of(const [0, 0, 0, 0]))
+        ..playMove('b1c3');
+      await first.keeper.settle();
+      first.kill();
+
+      final second = _Run(store, drafts);
+      await second.session.open(ref, game: 0);
+      second.session.cursor.goTo(NodePath.of(const [0, 0, 0, 0, 0]));
+      expect(second.session.cursor.currentMove?.san, 'Bb5');
+      await until(() => second.offer != null);
+      second.offer!.onPressed();
+      await until(() => second.session.hasHeldEdits);
+      expect(second.session.game, 1);
+      expect(second.session.cursor.value, const NodePath.root());
+      expect(second.session.cursor.currentMove, isNull);
+      second.session.cursor.forward();
+      expect(second.session.cursor.currentMove?.san, 'd4');
+      second.kill();
+    },
+  );
+
+  test('renaming the file moves its checkpoint, and discarding leaves none '
+      'under either name', () async {
+    final drafts = _MemoryDrafts();
+    final run = _Run(store, drafts);
+    await run.session.open(ref, game: 0);
+    run.session.setComment(NodePath.of(const [0]), 'A note');
+    await until(() => drafts.kept.isNotEmpty);
+    final renamed = collectionRef('games2');
+    run.session.relocated(renamed);
+    await run.keeper.settle();
+    expect(drafts.kept.keys, [renamed.path]);
+    expect(drafts.kept[renamed.path]!.text, contains('A note'));
+    run.session.discardHeld();
+    await until(() => drafts.kept.isEmpty);
+    await run.keeper.settle();
+    expect(drafts.kept, isEmpty);
+    run.kill();
+  });
+
   test('discarding the edits forgets their copy', () async {
     final drafts = _MemoryDrafts();
     final run = _Run(store, drafts);
@@ -132,6 +181,28 @@ void main() {
     await until(() => drafts.kept.isEmpty);
     run.kill();
   });
+
+  test(
+    'a large collection is kept as its games joined, byte for byte',
+    () async {
+      final big = bigChapter(games: 260);
+      final bigRef = collectionRef('big');
+      store.documents[bigRef] = Opened(big, scriptedRevision(big));
+      final drafts = _MemoryDrafts();
+      final run = _Run(store, drafts);
+      await run.session.open(bigRef, game: 3);
+      run.session.setComment(NodePath.of(const [0]), 'A note');
+      final shown = run.session.retainedDraft!.shown;
+      final file = shown.view?.file ?? shown.chapter;
+      expect(file.lines.length, greaterThanOrEqualTo(200));
+      await movesBeingRead(file.lines);
+      await run.keeper.settle();
+      final kept = drafts.kept[bigRef.path]!;
+      expect(kept.text, writeChapter(file));
+      expect(kept.text, contains('A note'));
+      run.kill();
+    },
+  );
 
   test('a parked draft is kept only once its checkpoint is written', () async {
     final run = _Run(store, _MemoryDrafts());

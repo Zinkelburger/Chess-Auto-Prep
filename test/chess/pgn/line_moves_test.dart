@@ -215,6 +215,38 @@ void main() {
     expect(host, endsWith('4. Nc3 *'));
   });
 
+  test('grafting keeps the notes the folded line wrote on shared moves', () {
+    final before = oneGame(
+      '[Event "A"]\n[Result "*"]\n\n'
+      '1. d4 {Main move} d5 2. c4 \$3 {[%eval 0.2]} *\n\n'
+      '[Event "B"]\n[Result "*"]\n\n'
+      '1. d4 {My note} d5 2. c4 \$1 {Key idea [%eval 0.3]} e6 *\n',
+    );
+
+    final after = edited(
+      lineGraftedInto(before, host: 0, line: before.lines[1]),
+    );
+
+    final host = after.chapter.lines[0].text;
+    expect(host, contains('{Main move My note}'));
+    expect(host, contains(r'2. c4 $3 $1 {[%eval 0.2] Key idea}'));
+    expect(host, contains('e6'));
+    expect(host, isNot(contains('0.3')));
+  });
+
+  test('a folded line that adds only a note is still an edit', () {
+    final before = oneGame(
+      '[Event "A"]\n[Result "*"]\n\n1. d4 d5 2. c4 *\n\n'
+      '[Event "B"]\n[Result "*"]\n\n1. d4 d5 {Solid} *\n',
+    );
+
+    final after = edited(
+      lineGraftedInto(before, host: 0, line: before.lines[1]),
+    );
+
+    expect(after.chapter.lines[0].text, contains('1. d4 d5 {Solid} 2. c4 *'));
+  });
+
   test('the games beside a grafted host keep their bytes', () {
     final before = white();
 

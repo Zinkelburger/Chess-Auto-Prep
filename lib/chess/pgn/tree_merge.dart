@@ -1,3 +1,4 @@
+import 'comment_text.dart';
 import 'game_tree.dart';
 
 /// Merges the forest [b] into [a].
@@ -21,7 +22,16 @@ import 'game_tree.dart';
 /// move twice and is taken as it is. Looking through it again for something
 /// to fold would walk the whole tree built so far once per game added to it,
 /// which is minutes on a file of ten thousand separate games.
-List<MoveNode> mergeForests(List<MoveNode> a, List<MoveNode> b) {
+///
+/// With [joinNotes], a move present in both keeps [a]'s comments and NAGs
+/// and adds [b]'s after them instead of dropping them. That is folding a
+/// line into another for good, where the line folded in is deleted after
+/// and a note only it carried would be in neither game.
+List<MoveNode> mergeForests(
+  List<MoveNode> a,
+  List<MoveNode> b, {
+  bool joinNotes = false,
+}) {
   if (b.isEmpty) return a;
   if (a.isEmpty && !_playsAMoveTwice(b)) return b;
   final merged = [...a];
@@ -32,14 +42,45 @@ List<MoveNode> mergeForests(List<MoveNode> a, List<MoveNode> b) {
       continue;
     }
     final existing = merged[i];
-    merged[i] = existing.copyWith(
-      startingComment: existing.startingComment ?? incoming.startingComment,
-      comment: existing.comment ?? incoming.comment,
-      nags: existing.nags.isEmpty ? incoming.nags : existing.nags,
-      children: mergeForests(existing.children, incoming.children),
+    final children = mergeForests(
+      existing.children,
+      incoming.children,
+      joinNotes: joinNotes,
     );
+    merged[i] = joinNotes
+        ? existing.copyWith(
+            startingComment: joinedComment(
+              existing.startingComment,
+              incoming.startingComment,
+            ),
+            comment: joinedComment(existing.comment, incoming.comment),
+            nags: [
+              ...existing.nags,
+              for (final nag in incoming.nags)
+                if (!existing.nags.contains(nag)) nag,
+            ],
+            children: children,
+          )
+        : existing.copyWith(
+            startingComment:
+                existing.startingComment ?? incoming.startingComment,
+            comment: existing.comment ?? incoming.comment,
+            nags: existing.nags.isEmpty ? incoming.nags : existing.nags,
+            children: children,
+          );
   }
   return List.unmodifiable(merged);
+}
+
+/// [host]'s comment with the prose of [arriving] it does not already say
+/// added after it. Only [host]'s machine tokens are kept when both have a
+/// comment, so one move never carries two evals or two clocks.
+String? joinedComment(String? host, String? arriving) {
+  if (host == null) return arriving;
+  if (arriving == null) return host;
+  final prose = displayComment(arriving);
+  if (prose.isEmpty || displayComment(host).contains(prose)) return host;
+  return '$host $prose';
 }
 
 /// [node] with the moves under it folded, or [node] itself when there was

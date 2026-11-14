@@ -83,14 +83,24 @@ final class DocumentSession extends ChangeNotifier {
   void restoreDraft(RetainedDraft draft) {
     final source = _source;
     if (source == null) return;
+    final before = _chapter;
     _shown = draft.shown;
     _held = draft.held;
     _ended = null;
     _document++;
     _arrangement++;
+    _shownTo = null;
+    _clearRefusal();
     final undo = _saver.setAsideUndo();
     _saver.opened(source, draft.revision, readOnly: _readOnly);
     if (undo != null) _saver.restoreUndo(undo);
+    // The cursor follows onto the game restored: the same move when it is
+    // the game shown before, its start when it is another.
+    cursor._place(
+      before != null && before.game == draft.shown.chapter.game
+          ? samePathIn(before.tree, draft.shown.chapter.tree, cursor.value)
+          : const NodePath.root(),
+    );
     notifyListeners();
   }
 
@@ -775,6 +785,9 @@ final class DocumentSession extends ChangeNotifier {
     _held = null;
     _document++;
     _arrangement++;
+    // Opening the same file again (another game of a study) keeps its
+    // history; the saver refuses it back when the file changed meanwhile.
+    final carried = _source == ref ? _saver.setAsideUndo() : null;
     _setAsideUndo = _source != null && _source != ref
         ? _saver.setAsideUndo()
         : null;
@@ -784,6 +797,7 @@ final class DocumentSession extends ChangeNotifier {
     _shownTo = null;
     _refused = null;
     _saver.opened(ref, revision, readOnly: readOnly);
+    if (carried != null) _saver.restoreUndo(carried);
     cursor._place(const NodePath.root());
     notifyListeners();
   }

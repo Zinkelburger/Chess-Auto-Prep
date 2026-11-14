@@ -66,6 +66,7 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
   /// document changes under it.
   String? _notice;
   Object? _about;
+  Object? _aboutChapter;
 
   @override
   Listenable listenableOf(EditStrip widget) => widget.session;
@@ -74,14 +75,19 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
   void initState() {
     super.initState();
     _about = widget.session.source;
+    _aboutChapter = widget.session.chapter;
   }
 
-  /// Another document drops the answer about the last one.
+  /// Another document, or an edit to this one, drops the answer about it.
   @override
   void changed() {
-    if (widget.session.source == _about) return;
+    final session = widget.session;
+    if (session.source == _about && identical(session.chapter, _aboutChapter)) {
+      return;
+    }
     setState(() {
-      _about = widget.session.source;
+      _about = session.source;
+      _aboutChapter = session.chapter;
       _notice = null;
     });
   }
