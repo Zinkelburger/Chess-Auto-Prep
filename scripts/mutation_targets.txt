@@ -11,6 +11,21 @@
 # the third field before being reported, otherwise the score is a lower bound
 # and it sends people to write tests that already exist.
 #
+# Swept and not listed because real survivors remain (a test could kill
+# them; none does yet):
+#   lib/app/board_doors.dart:49; lib/app/player_views.dart:87-88 (a race);
+#   lib/app/workspace_wiring.dart:234 (the evaluator choice);
+#   lib/features/tactics/my_games.dart:255 (one of two username writes
+#     failing), :294/:303 (the queue-retry path), :449;
+#   lib/features/tactics/puzzle_trainer.dart:325, :634 (cancelling an
+#     alternative-answer check in flight).
+# Swept and not listed for other reasons: lib/app/app.dart and lib/main.dart
+# (native startup, integration only) and lib/features/library/
+# library_messages.dart (no mutants). Every other lib/ file not named in this
+# list has not been swept: lib/features is part done (tactics_set.dart was
+# being triaged), and both new_chapter_dialog.dart files and
+# lib/features/databases/database_library.dart are still to run.
+#
 # Not listed: files whose only survivors are equivalent mutants, which no
 # test can kill because the program behaves the same either way. Listing
 # them would report a hole that is not there on every sweep.
