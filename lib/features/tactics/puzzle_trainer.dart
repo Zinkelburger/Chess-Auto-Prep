@@ -421,7 +421,12 @@ final class PuzzleTrainer extends ChangeNotifier {
     final up = _up;
     if (up == null) return;
     _cancelTimers();
-    _up = PuzzleUp.start(up.puzzle, at: _now(), decided: up.decided);
+    // The rating just given stays: up.puzzle still holds the file's old one.
+    _up = PuzzleUp.start(
+      up.puzzle,
+      at: _now(),
+      decided: up.decided,
+    ).copyWith(stars: up.stars);
     _session.showOnlyTo(const NodePath.root());
     _session.cursor.goTo(const NodePath.root());
     notifyListeners();
@@ -522,8 +527,18 @@ final class PuzzleTrainer extends ChangeNotifier {
         (_up == null || puzzle?.fen == _up!.puzzle.fen)) {
       return;
     }
+    final sameSource = showing.source == _showing.source;
     _showing = showing;
-    if (puzzle != null && _run != null && !_parked) return _putUp(puzzle);
+    if (puzzle != null && _run != null && !_parked) {
+      // The same puzzle at another index, as when an earlier one is
+      // deleted: it keeps its progress, answer and engine.
+      if (sameSource && _up?.puzzle.fen == puzzle.fen) {
+        _up = _up!.copyWith(puzzle: puzzle);
+        notifyListeners();
+        return;
+      }
+      return _putUp(puzzle);
+    }
     if (_up == null) return;
     _cancelTimers();
     _up = null;
