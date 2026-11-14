@@ -262,7 +262,7 @@ final class GamesCache {
         final read = await _store.open(ref);
         final _Attempt outcome = switch (read) {
           Absent() => _created(
-            await _store.create(ref, '${_freshIn('', frozen).join('\n\n')}\n'),
+            await _store.create(ref, await _newFileText(frozen)),
           ),
           Opened(readOnly: null, :final text, :final revision) =>
             await _appended(ref, text, revision, frozen),
@@ -402,6 +402,14 @@ Future<List<CachedGame>> _newestOf(
 /// site id or else exact text; worked out off the UI isolate for big files.
 Future<List<String>> freshGamesOf(String text, List<String> downloaded) =>
     _offThread(text, () => _freshIn(text, downloaded));
+
+/// The text of a new file holding [games], each once; a big first download
+/// is deduplicated and joined off the UI isolate.
+Future<String> _newFileText(List<String> games) {
+  String build() => '${_freshIn('', games).join('\n\n')}\n';
+  final size = games.fold<int>(0, (n, game) => n + game.length);
+  return size < readOffThreadFrom ? Future.value(build()) : Isolate.run(build);
+}
 
 Future<T> _offThread<T>(String text, T Function() work) =>
     text.length < readOffThreadFrom ? Future.value(work()) : Isolate.run(work);
