@@ -760,3 +760,4 @@ lib/features/settings/settings_dialog.dart|test/features/settings/settings_dialo
 lib/features/settings/update_prompt.dart|test/features/settings/update_prompt_answers_test.dart test/features/settings/update_prompt_test.dart|
 lib/features/study/studies.dart|test/features/study/studies_more_test.dart test/features/study/studies_test.dart|test/features/study/study_import_preview_test.dart
 lib/features/study/study_panel.dart|test/features/study/study_panel_menus_test.dart test/features/study/study_panel_test.dart|
+lib/features/study/study_sender.dart|test/features/study/study_sender_more_test.dart test/features/study/study_sender_test.dart|
