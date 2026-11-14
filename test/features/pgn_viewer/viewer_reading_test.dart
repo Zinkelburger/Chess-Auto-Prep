@@ -27,6 +27,8 @@ void main() {
       '[Event "One"]\n\n1. e4 e5 2. Nf3 Nc6 *\n',
     );
     addTearDown(fixture.dispose);
+    // As the viewer shows a file: one game at a time.
+    await fixture.session.open(fixture.ref, game: 0);
     final filter = FileFilter(fixture.session);
     addTearDown(filter.dispose);
     final places = _Places();

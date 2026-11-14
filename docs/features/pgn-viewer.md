@@ -230,7 +230,8 @@ Ctrl+Z, Ctrl+N (Analysis tab), Ctrl+O, F11 — all from
   `pgn_collections/explorer games/`, Databases games under `database games/`.
 - **Reading place** — SharedPreferences `pgn_viewer.session:<path>` (game
   identity, cursor, variation path/FEN, sort, filter rules, followed player);
-  written only by reading changes, never touching the PGN. A reordered file
+  written only by reading changes, never touching the PGN; steps through one
+  game are written once the cursor has rested for a second. A reordered file
   finds the game by identity; a missing game does not redirect to another.
 - **Recent files** — up to 10 paths in SharedPreferences
   (`pgn_viewer_recent_files`).

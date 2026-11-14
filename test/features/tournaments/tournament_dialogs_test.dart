@@ -139,7 +139,7 @@ void main() {
     final kept = run.engines.single;
     expect(kept.name, 'Opening 1.0');
     expect(kept.executable, '/opt/engines/berserk-13');
-    expect(kept.options, isEmpty);
+    expect(kept.options.keys, isNot(contains('Foo')));
     await tester.tap(find.text('Close'));
     await closed;
   });

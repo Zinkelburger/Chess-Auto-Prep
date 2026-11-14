@@ -60,7 +60,7 @@ final class ViewerReading {
   ReadingPlace? _last;
 
   void start() {
-    session.anyChange.addListener(capture);
+    session.anyChange.addListener(_moved);
     filter.addListener(_filterChanged);
   }
 
@@ -144,7 +144,15 @@ final class ViewerReading {
     capture();
   }
 
-  void capture() {
+  /// Keeps the place now: an open, a restore, a sort, a filter or a
+  /// followed player.
+  void capture() => _capture(soon: false);
+
+  /// The cursor or the document moved: a step within the same game waits
+  /// for the cursor to settle.
+  void _moved() => _capture(soon: true);
+
+  void _capture({required bool soon}) {
     final path = activePath();
     final game = session.game;
     final lines = session.chapter?.lines;
@@ -185,7 +193,7 @@ final class ViewerReading {
         last.perspective == place.perspective;
     _lastPath = path;
     _last = place;
-    if (sameGame) return _writeSoon();
+    if (soon && sameGame) return _writeSoon();
     unawaited(retry());
   }
 
@@ -196,7 +204,7 @@ final class ViewerReading {
     _settle = Timer(settleDelay, () => unawaited(retry()));
     if (_settled == null) {
       final settled = _settled = Completer<void>();
-      pending.track(this, settled.future, label: 'Reading position');
+      unawaited(pending.track(this, settled.future, label: 'Reading position'));
     }
   }
 
@@ -251,7 +259,7 @@ final class ViewerReading {
   void dispose() {
     _disposed = true;
     if (_settle != null) unawaited(retry());
-    session.anyChange.removeListener(capture);
+    session.anyChange.removeListener(_moved);
     filter.removeListener(_filterChanged);
   }
 }
