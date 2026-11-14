@@ -74,7 +74,11 @@ final class PuzzleTrainer extends ChangeNotifier {
   final Future<EngineStart> Function()? alternativeEngine;
   final board = ValueNotifier<BoardClaim?>(null);
   AlternativeAnswer? _alternative;
-  Chapter? _checkingChapter;
+
+  /// Where the alternative answer is being checked: the set game and the
+  /// expected move's position. A save of the set that keeps both, as a My
+  /// games review adding puzzles does, does not cancel the check.
+  ({ChapterRef? source, int? game, Fen expected})? _checking;
   PvMove? _alternativeMove;
 
   PuzzleRun? _run;
@@ -254,7 +258,11 @@ final class PuzzleTrainer extends ChangeNotifier {
     }
     final check = AlternativeAnswer(launch);
     _alternative = check;
-    _checkingChapter = _session.chapter;
+    _checking = (
+      source: _session.source,
+      game: _session.game,
+      expected: expected.fen,
+    );
     _alternativeMove = move;
     _showAlternative(move);
     final checking = up.copyWith(
@@ -274,7 +282,7 @@ final class PuzzleTrainer extends ChangeNotifier {
       return;
     }
     _alternative = null;
-    _checkingChapter = null;
+    _checking = null;
     board.value = null;
     switch (verdict) {
       case AlternativeScored(accepted: true):
@@ -319,17 +327,24 @@ final class PuzzleTrainer extends ChangeNotifier {
     final up = _up;
     if (up == null ||
         _session.cursor.value != up.frontier ||
-        (_alternative != null &&
-            !identical(_checkingChapter, _session.chapter))) {
+        (_alternative != null && !_stillChecking(up))) {
       _cancelAlternative();
       notifyListeners();
     }
   }
 
+  bool _stillChecking(PuzzleUp up) {
+    final checking = _checking;
+    return checking != null &&
+        _session.source == checking.source &&
+        _session.game == checking.game &&
+        _session.tree?.nodeAt(up.frontier.mainChild)?.fen == checking.expected;
+  }
+
   void _cancelAlternative() {
     final check = _alternative;
     _alternative = null;
-    _checkingChapter = null;
+    _checking = null;
     _alternativeMove = null;
     board.value = null;
     if (check == null) return;
