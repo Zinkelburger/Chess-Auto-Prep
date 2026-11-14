@@ -59,7 +59,6 @@ final class WorkspaceWiring {
   final FileFilter _filter;
   final GamesCache _gamesCache;
   final Books _books;
-  bool _disposed = false;
 
   late final workspace = Workspace(
     jobs: _jobs,
@@ -266,7 +265,6 @@ final class WorkspaceWiring {
   /// Applies engine settings without launching analysis. Each app session
   /// starts off; the workspace switch or E enables it on demand.
   Future<void> start() async {
-    if (_disposed) return;
     final s = _env.settings.value;
     _engineRunsWith = _runsWith(s);
     _analysis
@@ -345,7 +343,6 @@ final class WorkspaceWiring {
   }
 
   void dispose() {
-    _disposed = true;
     _env.store.removeListener(_corpusChanged);
     _env.settings.removeListener(_engineSettings);
     _catalog.removeListener(_filesChanged);

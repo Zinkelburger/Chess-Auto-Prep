@@ -195,6 +195,67 @@
 #     checks after each await (the tab's own session refuses only when
 #     overtaken or disposed, and the next check catches that too), :133
 #     the disposed flag (a disposed session shows nothing either way).
+#   lib/ui and lib/app: a widget's look (dense rows, one line, no wrapping,
+#     rule heights, button sizes, autofocus where the dialog focuses its
+#     first field itself) is DESIGN.md's to judge on a screenshot, not a
+#     test's; those survivors are not listed below. lib/ui/theme.dart is
+#     nothing but such values and is not listed.
+#   lib/ui/choice_field.dart:68 the pick flag's start (set before it is
+#     read).
+#   lib/ui/check_row.dart:32 `on ?? false` (the box has no third state).
+#   lib/ui/form_dialog.dart:103, :129 `?? false` (a shown dialog has its
+#     route).
+#   lib/ui/game_stepper.dart:85 clearing the typing flag (losing the focus
+#     clears it too).
+#   lib/ui/screen_keys.dart:22-23, lib/ui/pane_tabs.dart:413,
+#     lib/app/board_doors.dart:63-64 `canRequestFocus: false` and
+#     `skipTraversal: true`: either alone keeps the node out of the Tab
+#     order and off a click.
+#   lib/ui/name_dialog.dart:102 `&&` -> `||` (an unmounted dialog hears no
+#     typing; clearing no problem changes nothing).
+#   lib/ui/navigation_pages.dart:33 the selected page's start (initState
+#     sets it).
+#   lib/ui/status_bar.dart:58, :59 one line and no wrapping (either keeps
+#     it to one line), :100 the scope's default `problem` (every caller
+#     names it), :104 `updateShouldNotify` (the scope is read without a
+#     dependency).
+#   lib/ui/choice_dialog.dart:73 the mounted check (the field calls only
+#     while mounted).
+#   lib/app/document_tabs.dart:116 `?? false` (the tab up always has a
+#     page), :207 the checks after a draft's file is read again (overtaken
+#     or taken down, the next request puts its own place up).
+#   lib/app/error_log.dart:76 the trimmed end is never 0, :84 Flutter's
+#     report never starts with the marker (a header comes first), :86 its
+#     widget block is contiguous.
+#   lib/app/exit_guard.dart:200 the cancellation's own answer (it is
+#     checked right after the race), :223 the saver never throws (it turns a
+#     store that throws into a failed save).
+#   lib/app/layout_memory.dart:55 the write's 250 ms delay: timing only.
+#   lib/app/top_bar.dart:214 `||` -> `&&` (the menu is heard once, before
+#     any rebuild could take it down).
+#   lib/app/bughouse_view.dart:141 the open counter's start (only compared
+#     with itself).
+#   lib/app/workspace_requests.dart:773 `chapter ?? 0` (a study chapters
+#     were added to always names the first of them).
+#   lib/app/trap_training.dart:136 `||` -> `&&` (a draft just read in is
+#     not blocked, so an edit it refuses never leaves the line played).
+#   lib/app/mode_wiring.dart:193 and lib/app/workspace_wiring.dart:306
+#     (`_catalogInputs = -1` -> 0): the catalog notifies only after it bumps
+#     inputsRevision (a change it admits, or a refresh), so the first
+#     revision a listener sees is at least 1.
+#   lib/app/document_views.dart:259 (`_ => false` -> true): a trainer that is
+#     not ready has no lines, so learnCount and reviewCount are 0 and both
+#     entries stay off either way.
+#   lib/app/training_visibility.dart:32,40 (`_wasSuspended = false` -> true):
+#     it only matters on the first check of a sitting, when _mode is still
+#     null, and setting it to the mode on screen is what `??=` does next.
+#   lib/app/training_visibility.dart:76 (`_puzzles.up != null` -> ==): put
+#     down with no puzzle up only parks the run, and a run out of Tactics
+#     with no puzzle up was parked when its puzzle went down.
+#   lib/app/window_keys.dart:105,107 (`by > 0` -> `>=`): ↓ and ↑ pass 1 and
+#     -1 only, never 0.
+#   lib/app/window_columns.dart:58 the workspace's `flex: 1`: it is the one
+#     flexible column, so it takes the rest whatever its flex.
 #   lib/chess/typed_move.dart:102 `>` -> `>=` (a castling king never lands
 #     on its own square), :187 `.first` -> `.last` (every candidate is then
 #     checked against the same four characters).
@@ -546,3 +607,73 @@ lib/workspace/document/document_cursor.dart|test/workspace/document_session_test
 lib/workspace/document/document_projection.dart|test/workspace/document_projection_test.dart|test/storage/catalog_lifecycle_test.dart
 lib/workspace/document/collection_analysis.dart|test/workspace/collection_analysis_test.dart|test/workspace/analysis_board_test.dart test/workspace/analysis_tab_test.dart
 lib/workspace/document/document_session.dart|test/workspace/document_session_test.dart test/workspace/held_edits_test.dart|test/workspace/document_switch_test.dart test/workspace/document_save_test.dart test/workspace/document_undo_test.dart test/workspace/read_only_document_test.dart test/workspace/stopped_save_test.dart test/workspace/chapter_on_disk_test.dart test/workspace/compound_undo_retry_test.dart test/features/compound_rename_test.dart
+lib/ui/action_context_menu.dart|test/ui/action_context_menu_test.dart|
+lib/ui/app_action.dart|test/ui/action_context_menu_test.dart|
+lib/ui/app_icons.dart|test/ui/menu_entry_test.dart|
+lib/ui/app_keys.dart|test/ui/app_keys_test.dart|test/workspace/workspace_tabs_test.dart test/features/settings/settings_dialog_test.dart
+lib/ui/attempting.dart|test/ui/attempting_test.dart|
+lib/ui/check_row.dart|test/ui/small_controls_test.dart|test/features/tournaments/setup_dialog_test.dart
+lib/ui/choice_dialog.dart|test/ui/list_row_test.dart|test/ui/status_bar_test.dart test/features/books_screen_test.dart
+lib/ui/choice_field.dart|test/ui/choice_field_test.dart|test/app/shell_books_test.dart test/workspace/explorer_pane_test.dart
+lib/ui/confirm_dialog.dart|test/ui/form_dialog_test.dart|
+lib/ui/field_row.dart|test/features/tournaments/tournament_dialogs_test.dart test/features/tournaments/setup_dialog_test.dart|test/features/database_storage_test.dart
+lib/ui/file_names.dart|test/ui/name_dialog_test.dart test/storage/platform_documents_test.dart|
+lib/ui/fold_button.dart|test/workspace/explorer_pane_test.dart|
+lib/ui/form_dialog.dart|test/ui/form_dialog_test.dart|
+lib/ui/game_stepper.dart|test/features/bughouse/bughouse_screen_test.dart|
+lib/ui/list_message.dart|test/ui/small_controls_test.dart|test/workspace/book_verdict_view_test.dart
+lib/ui/list_row.dart|test/ui/list_row_test.dart|test/app/shell_positions_test.dart test/features/my_games/my_games_panel_test.dart
+lib/ui/listening_state.dart|test/ui/listening_state_test.dart|test/ui/number_field_focus_test.dart test/workspace/hover_preview_test.dart
+lib/ui/menu_entry.dart|test/ui/menu_entry_test.dart|
+lib/ui/move_notation.dart|test/ui/move_notation_test.dart|
+lib/ui/name_dialog.dart|test/ui/name_dialog_test.dart|
+lib/ui/navigation_pages.dart|test/ui/navigation_pages_test.dart|test/app/tool_panes_fit_test.dart
+lib/ui/number_field.dart|test/ui/number_field_focus_test.dart test/ui/form_dialog_test.dart|
+lib/ui/options_dialog.dart|test/ui/form_dialog_test.dart|
+lib/ui/pane_header.dart|test/ui/list_row_test.dart|test/app/annotating_test.dart test/app/shell_positions_test.dart
+lib/ui/pane_tabs.dart|test/ui/pane_tabs_test.dart|test/app/shell_doors_test.dart test/workspace/workspace_view_test.dart
+lib/ui/problem_line.dart|test/ui/small_controls_test.dart|test/app/navigation_discovery_test.dart
+lib/ui/progress_line.dart|test/features/database_storage_test.dart test/ui/form_dialog_test.dart|
+lib/ui/relative_time.dart|test/ui/relative_time_test.dart|
+lib/ui/row_actions.dart|test/ui/menu_entry_test.dart|
+lib/ui/screen_keys.dart|test/workspace/workspace_view_test.dart test/features/bughouse/bughouse_screen_test.dart|
+lib/ui/search_field.dart|test/features/pgn_viewer/pgn_viewer_panel_test.dart|
+lib/ui/segments.dart|test/ui/small_controls_test.dart|test/features/study/new_chapter_dialog_test.dart
+lib/ui/selection.dart|test/ui/selection_test.dart|test/ui/move_notation_test.dart
+lib/ui/status_bar.dart|test/ui/status_bar_test.dart|test/features/pgn_drop_region_test.dart test/features/library_messages_test.dart test/workspace/solitaire_pane_test.dart
+lib/ui/toggle_chip.dart|test/features/tournaments/tournament_dialogs_test.dart test/features/tournaments/setup_dialog_test.dart|test/workspace/audit_pane_test.dart test/workspace/board_editor_test.dart
+lib/ui/tool_button.dart|test/ui/small_controls_test.dart|test/ui/menu_entry_test.dart
+lib/diagnostics/log.dart|test/diagnostics/log_test.dart|test/net/credential_diagnostics_test.dart test/ui/attempting_test.dart test/storage/lichess_account_persistence_test.dart
+lib/app/app_parts.dart|test/app/app_parts_test.dart|test/app/viewer_drafts_window_test.dart test/app/puzzle_shutdown_test.dart
+lib/app/books_view.dart|test/app/shell_books_test.dart|
+lib/app/bughouse_view.dart|test/app/shell_bughouse_test.dart|
+lib/app/bundled_licences.dart|test/app/bundled_licences_test.dart|
+lib/app/database_view.dart|test/app/database_view_test.dart|test/app/shell_databases_test.dart
+lib/app/document_tabs.dart|test/app/document_tabs_test.dart|test/app/viewer_drafts_window_test.dart
+lib/app/document_views.dart|test/app/document_views_test.dart|test/app/shell_test.dart test/app/shell_keys_test.dart test/app/viewer_navigation_test.dart test/app/study_training_workflow_test.dart
+lib/app/error_log.dart|test/app/error_log_test.dart|
+lib/app/exit_guard.dart|test/app/exit_guard_test.dart|test/app/native_file_requests_test.dart test/app/closing_input_test.dart test/app/app_exit_test.dart
+lib/app/full_screen.dart|test/app/full_screen_test.dart|
+lib/app/job_door.dart|test/app/job_door_test.dart test/app/tournament_view_test.dart|
+lib/app/layout_memory.dart|test/app/layout_memory_test.dart|
+lib/app/mode.dart|test/app/shell_databases_test.dart test/app/navigation_discovery_test.dart|test/app/training_workspace_test.dart test/ui/status_bar_test.dart test/app/shell_tournaments_test.dart
+lib/app/mode_view.dart|test/app/mode_defaults_test.dart|test/app/shell_test.dart
+lib/app/mode_wiring.dart|test/app/mode_wiring_test.dart|test/app/catalog_propagation_test.dart
+lib/app/native_file_requests.dart|test/app/native_file_requests_test.dart|
+lib/app/place_memory.dart|test/app/place_memory_test.dart|
+lib/app/player_wiring.dart|test/app/player_wiring_test.dart test/app/player_views_test.dart|test/app/shell_players_test.dart
+lib/app/save_held.dart|test/app/save_held_test.dart|test/app/exit_guard_test.dart test/app/copy_shutdown_test.dart test/app/window_close_test.dart test/app/viewer_drafts_window_test.dart
+lib/app/search_door.dart|test/app/search_door_test.dart|test/app/shell_positions_test.dart
+lib/app/shell.dart|test/app/shell_test.dart|
+lib/app/top_bar.dart|test/ui/status_bar_test.dart|
+lib/app/tournament_view.dart|test/app/tournament_view_test.dart|test/app/shell_tournaments_test.dart
+lib/app/train_doors.dart|test/app/train_doors_test.dart|test/app/shell_trainer_navigation_test.dart
+lib/app/training_views.dart|test/app/training_views_test.dart|test/app/shell_tactics_test.dart test/app/shell_my_games_test.dart
+lib/app/training_visibility.dart|test/app/training_visibility_test.dart|test/app/training_workspace_test.dart test/app/shell_tactics_test.dart
+lib/app/trap_training.dart|test/app/trap_training_test.dart|
+lib/app/window_actions.dart|test/app/window_actions_test.dart|test/app/shell_keys_test.dart
+lib/app/window_close.dart|test/app/window_close_test.dart|
+lib/app/window_input.dart|test/app/workspace_requests_test.dart|
+lib/app/window_keys.dart|test/app/window_keys_test.dart|test/app/shell_tactics_test.dart test/app/shell_keys_test.dart
+lib/app/workspace_requests.dart|test/app/workspace_requests_test.dart|test/app/mode_documents_test.dart
+lib/app/window_columns.dart|test/app/window_columns_test.dart|test/app/shell_positions_test.dart

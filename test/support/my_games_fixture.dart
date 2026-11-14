@@ -172,10 +172,17 @@ final class MemoryAccounts implements AccountStore {
   int _revision = 0;
   @override
   int get revision => _revision;
+
+  /// How many times the accounts were read whole.
+  int snapshots = 0;
+
   @override
-  Future<AccountsRead> snapshot() async => unavailable
-      ? const AccountsUnavailable('Account file could not be read.')
-      : AccountsSnapshot(accounts: accounts, revision: revision);
+  Future<AccountsRead> snapshot() async {
+    snapshots++;
+    return unavailable
+        ? const AccountsUnavailable('Account file could not be read.')
+        : AccountsSnapshot(accounts: accounts, revision: revision);
+  }
 
   @override
   Future<Map<GameSite, Account>> read() async =>

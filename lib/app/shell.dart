@@ -427,7 +427,10 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // Translucent: the board takes its presses without claiming the hit,
+      // and the mouse's back and forward buttons are the window's anywhere.
       body: Listener(
+        behavior: HitTestBehavior.translucent,
         onPointerDown: _keys.mouseButton,
         child: StatusScope(
           say: _requests.say,

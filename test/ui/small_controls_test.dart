@@ -91,21 +91,47 @@ void main() {
   });
 
   group('segments', () {
+    const both = [
+      ButtonSegment(value: 'read', label: Text('Read')),
+      ButtonSegment(value: 'edit', label: Text('Edit')),
+    ];
+
+    /// Left at their defaults unless said, so the defaults are what is
+    /// tested.
     Widget segments({
       String? selected,
-      bool emptyAllowed = false,
-      bool narrow = false,
+      bool? emptyAllowed,
+      bool? narrow,
       ValueChanged<String>? onChanged,
-    }) => Segments<String>(
-      segments: const [
-        ButtonSegment(value: 'read', label: Text('Read')),
-        ButtonSegment(value: 'edit', label: Text('Edit')),
-      ],
-      selected: selected,
-      onChanged: onChanged ?? (_) {},
-      emptyAllowed: emptyAllowed,
-      narrow: narrow,
-    );
+    }) {
+      final changed = onChanged ?? (_) {};
+      return switch ((emptyAllowed, narrow)) {
+        (null, null) => Segments<String>(
+          segments: both,
+          selected: selected,
+          onChanged: changed,
+        ),
+        (final empty?, null) => Segments<String>(
+          segments: both,
+          selected: selected,
+          onChanged: changed,
+          emptyAllowed: empty,
+        ),
+        (null, final tight?) => Segments<String>(
+          segments: both,
+          selected: selected,
+          onChanged: changed,
+          narrow: tight,
+        ),
+        (final empty?, final tight?) => Segments<String>(
+          segments: both,
+          selected: selected,
+          onChanged: changed,
+          emptyAllowed: empty,
+          narrow: tight,
+        ),
+      };
+    }
 
     double width(WidgetTester tester) =>
         tester.getSize(find.byType(SegmentedButton<String>)).width;
