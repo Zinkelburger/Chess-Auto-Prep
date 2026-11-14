@@ -195,7 +195,7 @@
 #     checks after each await (the tab's own session refuses only when
 #     overtaken or disposed, and the next check catches that too), :133
 #     the disposed flag (a disposed session shows nothing either way).
-#   lib/ui and lib/app: a widget's look (dense rows, one line, no wrapping,
+#   lib/ui, lib/app and lib/features: a widget's look (dense rows, one line, no wrapping,
 #     rule heights, button sizes, autofocus where the dialog focuses its
 #     first field itself) is DESIGN.md's to judge on a screenshot, not a
 #     test's; those survivors are not listed below. lib/ui/theme.dart is
@@ -256,6 +256,21 @@
 #     -1 only, never 0.
 #   lib/app/window_columns.dart:58 the workspace's `flex: 1`: it is the one
 #     flexible column, so it takes the rest whatever its flex.
+#   lib/features/bughouse/bughouse_lab.dart:190,198,199 the step's sign
+#     tests (`> 0` -> `>= 0`, `< 0` -> `<= 0`): every caller steps by 1 or
+#     -1; :366 `games.length == 1` -> `== 2`: one game's bounds are the
+#     whole text, so the game and the text are the same string.
+#   lib/features/bughouse/bughouse_screen.dart:39-50 the boards' size: the
+#     look; :130,131 the step's size (only its sign is read); :142 `||` ->
+#     `&&` (the key bindings refuse a key coming up themselves).
+#   lib/features/bughouse/bughouse_lab.dart:163-164 the `-1` for a board at
+#     its start: node numbers are never negative, so any negative orders the
+#     same.
+#   lib/features/bughouse/lab_engine.dart:81, :85, :100, :614 the search
+#     budgets, the lines asked and the memory's size: how long and how
+#     widely it looks, not what it shows.
+#   lib/features/books/books_screen.dart:557 `value ?? false`: the box has no
+#     third state.
 #   lib/chess/typed_move.dart:102 `>` -> `>=` (a castling king never lands
 #     on its own square), :187 `.first` -> `.last` (every candidate is then
 #     checked against the same four characters).
@@ -676,3 +691,7 @@ lib/app/window_input.dart|test/app/workspace_requests_test.dart|
 lib/app/window_keys.dart|test/app/window_keys_test.dart|test/app/shell_tactics_test.dart test/app/shell_keys_test.dart
 lib/app/workspace_requests.dart|test/app/workspace_requests_test.dart|test/app/mode_documents_test.dart
 lib/app/window_columns.dart|test/app/window_columns_test.dart|test/app/shell_positions_test.dart
+lib/features/books/books_screen.dart|test/features/books_screen_rows_test.dart|test/features/books_screen_test.dart
+lib/features/bughouse/bughouse_lab.dart|test/features/bughouse/bughouse_lab_focus_test.dart|test/features/bughouse/bughouse_lab_test.dart
+lib/features/bughouse/bughouse_screen.dart|test/features/bughouse/bughouse_screen_keys_test.dart|test/features/bughouse/bughouse_screen_test.dart
+lib/features/bughouse/lab_engine.dart|test/features/bughouse/lab_engine_rows_test.dart|test/features/bughouse/lab_engine_test.dart
