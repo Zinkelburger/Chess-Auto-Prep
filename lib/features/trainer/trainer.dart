@@ -352,7 +352,6 @@ class Trainer extends ChangeNotifier {
   /// A study is a file opened one game at a time, independent of readiness.
   Chapter? get studyDocument =>
       !selection.active && _session.game != null ? _session.chapter : null;
-  int? get studyChapter => _session.game;
   String? setStudySides(Chapter expected, Map<int, Side> sides) {
     if (!identical(expected, studyDocument)) {
       return 'The study changed. Choose the sides again.';
