@@ -124,6 +124,31 @@ void main() {
     second.kill();
   });
 
+  test('edits restored onto another game put the cursor at its start', () async {
+    final drafts = _MemoryDrafts();
+    final first = _Run(store, drafts);
+    await first.session.open(ref, game: 1);
+    first.session
+      ..cursor.goTo(NodePath.of(const [0, 0, 0, 0]))
+      ..playMove('b1c3');
+    await first.keeper.settle();
+    first.kill();
+
+    final second = _Run(store, drafts);
+    await second.session.open(ref, game: 0);
+    second.session.cursor.goTo(NodePath.of(const [0, 0, 0, 0, 0]));
+    expect(second.session.cursor.currentMove?.san, 'Bb5');
+    await until(() => second.offer != null);
+    second.offer!.onPressed();
+    await until(() => second.session.hasHeldEdits);
+    expect(second.session.game, 1);
+    expect(second.session.cursor.value, const NodePath.root());
+    expect(second.session.cursor.currentMove, isNull);
+    second.session.cursor.forward();
+    expect(second.session.cursor.currentMove?.san, 'd4');
+    second.kill();
+  });
+
   test('discarding the edits forgets their copy', () async {
     final drafts = _MemoryDrafts();
     final run = _Run(store, drafts);
