@@ -769,3 +769,4 @@ lib/features/study/studies.dart|test/features/study/studies_more_test.dart test/
 lib/features/study/study_panel.dart|test/features/study/study_panel_menus_test.dart test/features/study/study_panel_test.dart|
 lib/features/study/study_sender.dart|test/features/study/study_sender_more_test.dart test/features/study/study_sender_test.dart|
 lib/features/tactics/set_additions.dart|test/features/tactics/set_additions_test.dart test/features/tactics/my_games_test.dart test/features/tactics/mining_native_checkpoint_test.dart test/features/tactics/account_persistence_test.dart|
+lib/features/tactics/source_games.dart|test/features/tactics/source_games_test.dart|
