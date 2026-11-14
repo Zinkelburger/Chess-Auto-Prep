@@ -156,6 +156,9 @@ final class FileTree extends ChangeNotifier implements LocalGames {
 
   @override
   void forget() {
+    // The filter is what failed, not the index: run it again and keep the
+    // index built.
+    if (_filter.problem != null) return _filter.retry();
     _stop();
     _index = null;
     if (_lines.isNotEmpty) _indexes[_lines] = null;
