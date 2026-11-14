@@ -199,4 +199,16 @@ void main() {
     expect(HivemindInstall.bundledIn(keys), isTrue);
     expect(HivemindInstall.bundledIn(keys.skip(1)), isFalse);
   });
+
+  test('a leftover another copy of the app renamed away is skipped', () async {
+    final root = await Directory.systemTemp.createTemp('hivemind-sweep-');
+    addTearDown(() => root.delete(recursive: true));
+    final gone = File(p.join(root.path, 'hivemind.onnx.123.part'));
+    await expectLater(removeStaleLeftover(gone, DateTime.now()), completes);
+    final old = File(p.join(root.path, 'hivemind.onnx.456.part'));
+    await old.writeAsString('half');
+    await old.setLastModified(DateTime(2020));
+    await removeStaleLeftover(old, DateTime.now());
+    expect(await old.exists(), isFalse);
+  });
 }

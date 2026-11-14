@@ -78,8 +78,9 @@ class _ChoiceFieldState extends State<ChoiceField>
   /// first of every option it then offers.
   void _submit(String text, VoidCallback pick) {
     final submitted = widget.onSubmitted;
-    if (submitted != null && text.trim().isEmpty) {
-      submitted('');
+    // onChanged has heard the cleared box already.
+    if (text.trim().isEmpty) {
+      submitted?.call('');
       return;
     }
     _picked = false;

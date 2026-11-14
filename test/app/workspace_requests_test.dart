@@ -435,6 +435,25 @@ void main() {
       },
     );
 
+    test('Back to the file the viewer was reading gives the viewer that '
+        'file again', () async {
+      final games = collectionRef('games');
+      w.store.documents[games] = Opened(
+        threeGameFile,
+        scriptedRevision(threeGameFile),
+      );
+      await w.requests.openFile(games);
+      w.requests.switchTo(Mode.repertoires);
+      expect(await openListed(), isA<RequestDone>());
+      expect(w.viewer.file, isNot(games));
+      await w.requests.back();
+      expect(await w.requests.back(), isA<RequestDone>());
+      expect(w.requests.mode, Mode.pgnViewer);
+      expect(w.session.source, games);
+      expect(w.viewer.file, games);
+      expect(w.viewer.games, isNotEmpty);
+    });
+
     test('that could not be fetched is refused and nothing moves', () async {
       await w.requests.open(kid);
       w.lichess.pgn = null;
