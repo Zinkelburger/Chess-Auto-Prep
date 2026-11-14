@@ -646,8 +646,9 @@ final class Library extends ChangeNotifier {
   /// that folder is the answer. A move that does not land is returned as
   /// the failure, and nothing is added.
   Future<(String, LibraryResult?)> _folderOf(RepertoireFolder into) async {
-    if (!into.chapters.any((c) => c.path == into.path))
+    if (!into.chapters.any((c) => c.path == into.path)) {
       return (into.path, null);
+    }
     final folder = p.join(_root, into.name);
     final moved = await _relocate(
       into.chapters.first.wholeFile,

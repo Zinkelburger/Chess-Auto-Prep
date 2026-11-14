@@ -4,7 +4,6 @@ import 'package:dartchess/dartchess.dart' show Move;
 import 'package:flutter/foundation.dart';
 
 import '../../chess/fen.dart';
-import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/chapter_edits.dart' show playedAlready;
 import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/tree_edit.dart' show moveNode;
