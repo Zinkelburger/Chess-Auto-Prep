@@ -221,22 +221,40 @@ final class _Search {
 
   /// Reuses complete expansions and scores, while rebuilding path history.
   /// A deeper resume turns old horizon leaves into frontier leaves.
+  ///
+  /// A saved node nobody scored — the C builder never scores its root or
+  /// the replies it attaches — is scored here when the restored tree will
+  /// value it where it stands; one whose saved moves come back with it is
+  /// valued from them and stays unscored.
   Future<PendingNode> _restore(SearchPath path, SearchNode saved) async {
     if (_holding) await _letGo();
-    if (saved.fen != path.fen || !saved.evaluated) {
-      throw const FormatException(
-        'Saved search position or score is incomplete.',
-      );
+    if (saved.fen != path.fen) {
+      throw const FormatException('Saved search position is not this one.');
     }
     final kind = terminalKind(path.position, path.history);
     final beyond =
         (config.horizonPlies != null && path.ply >= config.horizonPlies!) ||
         path.reach < config.replyFloor;
+    var eval = saved.evaluated ? saved.evalForUs : null;
+    final hasMoves = switch (saved) {
+      OurNode(:final candidates) => candidates.isNotEmpty,
+      OpponentNode(:final replies) => replies.isNotEmpty,
+      _ => false,
+    };
+    if (kind == null && eval == null && (beyond || !hasMoves)) {
+      switch (await evaluationOf(evaluator, path.position)) {
+        case EvaluationUnavailable(:final reason):
+          _stop ??= _EvaluationFailed(path.fen, reason);
+          return PendingNode(path, FrontierNode(fen: path.fen, evalForUs: null));
+        case Evaluated(eval: final scored):
+          eval = scored.forUs(config.side, path.position.turn);
+      }
+    }
     final leaf = kind != null
         ? _terminal(path, kind)
         : beyond
-        ? HorizonNode(fen: path.fen, evalForUs: saved.evalForUs)
-        : FrontierNode(fen: path.fen, evalForUs: saved.evalForUs);
+        ? HorizonNode(fen: path.fen, evalForUs: eval)
+        : FrontierNode(fen: path.fen, evalForUs: eval);
     final pending = PendingNode(path, leaf);
     if (path.ply > _deepest) _deepest = path.ply;
     if (kind != null || beyond) return pending;
