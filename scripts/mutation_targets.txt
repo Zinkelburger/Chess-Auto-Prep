@@ -271,6 +271,14 @@
 #     widely it looks, not what it shows.
 #   lib/features/books/books_screen.dart:557 `value ?? false`: the box has no
 #     third state.
+#   lib/features/databases/twic_download.dart:148, :171 the request
+#     timeouts: timing only; :24 `_stopping`'s start (a run clears it before
+#     reading it, and Stop is heard only while one runs).
+#   lib/features/library/chapter_outline.dart:377 `tree == null` -> true:
+#     only rows are asked, and a line whose tree is not the chapter's gets no
+#     row; :446 an index that differs -> true: a step aside kept as "deeper"
+#     keeps the current line only if it plays both places, and a line is
+#     one path.
 #   lib/chess/typed_move.dart:102 `>` -> `>=` (a castling king never lands
 #     on its own square), :187 `.first` -> `.last` (every candidate is then
 #     checked against the same four characters).
@@ -695,3 +703,6 @@ lib/features/books/books_screen.dart|test/features/books_screen_rows_test.dart|t
 lib/features/bughouse/bughouse_lab.dart|test/features/bughouse/bughouse_lab_focus_test.dart|test/features/bughouse/bughouse_lab_test.dart
 lib/features/bughouse/bughouse_screen.dart|test/features/bughouse/bughouse_screen_keys_test.dart|test/features/bughouse/bughouse_screen_test.dart
 lib/features/bughouse/lab_engine.dart|test/features/bughouse/lab_engine_rows_test.dart|test/features/bughouse/lab_engine_test.dart
+lib/features/databases/twic_download.dart|test/features/twic_download_more_test.dart|test/features/twic_download_test.dart
+lib/features/library/chapter_outline.dart|test/features/chapter_outline_search_test.dart|test/features/chapter_outline_test.dart
+lib/features/library/library.dart|test/features/library_more_test.dart test/features/library_lines_test.dart|test/features/library_changes_test.dart test/features/library_follows_test.dart test/features/library_holds_test.dart test/features/library_import_recovery_test.dart test/features/library_import_test.dart test/features/library_messages_test.dart test/features/library_on_disk_test.dart test/features/library_open_course_test.dart test/features/library_panel_test.dart test/features/library_test.dart test/features/library_unfinished_move_test.dart

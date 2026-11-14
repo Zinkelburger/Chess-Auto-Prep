@@ -487,7 +487,10 @@ void main() {
       expect(fixture.saver.referencesPending, isTrue);
       expect(fixture.saver.settled, isFalse);
 
+      var told = 0;
+      fixture.library.addListener(() => told++);
       expect(await fixture.library.discardLineMove(), isTrue);
+      expect(told, greaterThan(0), reason: 'the list hears it');
       expect(fixture.library.hasPendingLineMove, isFalse);
       expect(fixture.saver.referencesPending, isFalse);
       expect(fixture.saver.settled, isTrue);
