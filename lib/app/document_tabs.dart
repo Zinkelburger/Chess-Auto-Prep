@@ -60,6 +60,7 @@ final class DocumentTabs {
         (_pages.isEmpty ? 'Analysis' : 'Analysis ${++_analysisCount}'),
     mode: requests.mode,
     source: session.source,
+    viewedFile: requests.mode == Mode.pgnViewer && session.game != null,
     board: session.isScratch ? session.analysisPage : null,
   )..remember(session);
 
@@ -188,9 +189,7 @@ final class DocumentTabs {
     _selecting = id;
     try {
       if (page.source case final source?) {
-        // The route follows the mode the tab has now, which a carry from
-        // one mode to another changes.
-        final result = mode == Mode.pgnViewer && page.game != null
+        final result = page.viewedFile
             ? await requests.openFile(source, game: page.game, keepPlace: true)
             : await requests.open(source, game: page.game);
         if (_disposed || result is! RequestDone || session.source != source) {
@@ -287,11 +286,13 @@ final class _DocumentPage {
     required this.mode,
     this.source,
     this.board,
+    required this.viewedFile,
   });
   final Object id;
   final String title;
   Mode mode;
   final ChapterRef? source;
+  final bool viewedFile;
   final KeptBoard? board;
   int? game;
   NodePath cursor = const NodePath.root();

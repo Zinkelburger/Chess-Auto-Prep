@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
 import 'app_icons.dart';
@@ -68,18 +67,6 @@ class _ChoiceFieldState extends State<ChoiceField>
   /// Whether the last Enter picked a suggestion.
   bool _picked = false;
 
-  /// Changes with [ChoiceField.options], so the suggestions are worked out
-  /// again: they are otherwise only refreshed when the text changes. Not
-  /// while the box has focus, which a fresh autocomplete would take away;
-  /// options changed then are refreshed once it is left.
-  int _optionsGeneration = 0;
-  bool _optionsChanged = false;
-
-  void _refreshOptions() {
-    _optionsChanged = false;
-    _optionsGeneration++;
-  }
-
   void _selected(String option) {
     _picked = true;
     widget.onChanged?.call(option);
@@ -111,9 +98,8 @@ class _ChoiceFieldState extends State<ChoiceField>
         baseOffset: 0,
         extentOffset: _controller.text.length,
       );
-    } else {
-      if (_controller.text != widget.text) _controller.text = widget.text;
-      if (_optionsChanged) setState(_refreshOptions);
+    } else if (_controller.text != widget.text) {
+      _controller.text = widget.text;
     }
   }
 
@@ -123,8 +109,6 @@ class _ChoiceFieldState extends State<ChoiceField>
     if (!_focus.hasFocus && _controller.text != widget.text) {
       _controller.text = widget.text;
     }
-    if (!listEquals(old.options, widget.options)) _optionsChanged = true;
-    if (_optionsChanged && !_focus.hasFocus) _refreshOptions();
   }
 
   @override
@@ -148,7 +132,6 @@ class _ChoiceFieldState extends State<ChoiceField>
   @override
   Widget build(BuildContext context) {
     return RawAutocomplete<String>(
-      key: ValueKey(_optionsGeneration),
       textEditingController: _controller,
       focusNode: _focus,
       optionsBuilder: _suggestions,

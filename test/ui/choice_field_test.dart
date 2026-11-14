@@ -82,25 +82,4 @@ void main() {
     await tester.pump();
     expect(changed, ['Car', '']);
   });
-
-  testWidgets('new options are offered though the text stayed the same', (
-    tester,
-  ) async {
-    await pump(tester, submitOnly: false, options: const ['Carlsen', 'Giri']);
-    await tester.tap(find.byType(TextField));
-    await tester.pump();
-    expect(find.text('Carlsen'), findsOneWidget);
-    FocusManager.instance.primaryFocus?.unfocus();
-    await tester.pump();
-    await pump(
-      tester,
-      submitOnly: false,
-      options: const ['Firouzja', 'Ding'],
-      clear: false,
-    );
-    await tester.tap(find.byType(TextField));
-    await tester.pump();
-    expect(find.text('Firouzja'), findsOneWidget);
-    expect(find.text('Carlsen'), findsNothing);
-  });
 }
