@@ -285,6 +285,13 @@
 #   lib/features/my_games/game_book.dart:378 the disposed flag (taking the
 #     book down closes its reads first, so none reaches it), :394 the text's
 #     size: only which isolate reads the games.
+#   lib/features/pgn_viewer/pgn_viewer_panel.dart:317 a game row's
+#     `unfolded` (only a heading reads it).
+#   lib/features/players/player_analysis.dart:139 the day in the cache key:
+#     it differs only across midnight; :213, :214, :216 the stand-ins a
+#     missing score or eval sorts by (any value out of range sorts last);
+#     :282 `.first` -> `.last` (with no game of the side shown, every game
+#     has the other side).
 #   lib/chess/typed_move.dart:102 `>` -> `>=` (a castling king never lands
 #     on its own square), :187 `.first` -> `.last` (every candidate is then
 #     checked against the same four characters).
@@ -721,3 +728,5 @@ lib/features/my_games/my_games_panel.dart|test/features/my_games/my_games_panel_
 lib/features/pgn_viewer/auto_play.dart|test/features/pgn_viewer/auto_play_timing_test.dart|test/features/pgn_viewer/auto_play_test.dart
 lib/features/pgn_viewer/filter_pane.dart|test/features/pgn_viewer/filter_pane_more_test.dart|test/features/pgn_viewer/filter_pane_test.dart
 lib/features/pgn_viewer/pgn_viewer.dart|test/features/pgn_viewer/viewer_walk_test.dart|test/features/pgn_viewer/filter_pane_test.dart test/features/pgn_viewer/pgn_viewer_panel_test.dart test/features/pgn_viewer/pgn_viewer_persistence_test.dart test/features/pgn_viewer/pgn_viewer_test.dart test/features/pgn_viewer/position_export_test.dart test/features/pgn_viewer/viewer_perspective_test.dart test/features/pgn_viewer/viewer_reading_test.dart test/features/pgn_viewer/viewer_workflows_test.dart test/app/viewer_navigation_test.dart
+lib/features/pgn_viewer/pgn_viewer_panel.dart|test/features/pgn_viewer/viewer_panel_marks_test.dart|test/features/pgn_viewer/pgn_viewer_panel_test.dart
+lib/features/players/player_analysis.dart|test/features/players/player_analysis_recent_test.dart test/features/players/player_analysis_test.dart|test/features/players/findings_row_test.dart test/features/players/player_analysis_test.dart test/features/players/player_download_test.dart test/features/players/player_hunt_test.dart test/features/players/players_owner_test.dart test/features/players/practical_probe_test.dart test/features/players/prep_sheet_test.dart test/features/players/saved_games_test.dart test/app/player_views_test.dart
