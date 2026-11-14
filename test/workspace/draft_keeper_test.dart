@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart' hide Saved;
@@ -13,6 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../storage/store_fixture.dart';
+import '../support/big_chapter.dart';
 import '../support/scripted_store.dart';
 import '../support/viewer_fixture.dart';
 
@@ -130,6 +132,25 @@ void main() {
     await until(() => drafts.kept.isNotEmpty);
     run.session.discardHeld();
     await until(() => drafts.kept.isEmpty);
+    run.kill();
+  });
+
+  test('a large collection is kept as its games joined, byte for byte', () async {
+    final big = bigChapter(games: 260);
+    final bigRef = collectionRef('big');
+    store.documents[bigRef] = Opened(big, scriptedRevision(big));
+    final drafts = _MemoryDrafts();
+    final run = _Run(store, drafts);
+    await run.session.open(bigRef, game: 3);
+    run.session.setComment(NodePath.of(const [0]), 'A note');
+    final shown = run.session.retainedDraft!.shown;
+    final file = shown.view?.file ?? shown.chapter;
+    expect(file.lines.length, greaterThanOrEqualTo(200));
+    await movesBeingRead(file.lines);
+    await run.keeper.settle();
+    final kept = drafts.kept[bigRef.path]!;
+    expect(kept.text, writeChapter(file));
+    expect(kept.text, contains('A note'));
     run.kill();
   });
 

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:isolate';
 
 import 'package:path/path.dart' as p;
 
@@ -19,7 +18,7 @@ import 'session_results.dart';
 /// the next time its file opens after a crash or a close.
 ///
 /// A checkpoint is written a second after the held edits last changed,
-/// one write per burst, its text encoded off the UI isolate; it is dropped
+/// one write per burst, its text the file's games joined; it is dropped
 /// once the edits are saved (the file took them) or discarded. Edits another
 /// reading of their file put away leave it on disk, offered back. The offer is
 /// one line in the status bar with `Restore unsaved edits`: restoring puts
@@ -222,9 +221,9 @@ final class DraftKeeper {
   ) async {
     try {
       final file = waiting.file;
-      final text = file.lines.length < 200
-          ? writeChapter(file)
-          : await _writtenElsewhere(file);
+      // A join of each game's own text: cheaper here than copying the
+      // parsed games to another isolate would be.
+      final text = writeChapter(file);
       await _drafts.keep(
         ViewerDraft(
           path: waiting.path,
@@ -377,10 +376,3 @@ final class DraftKeeper {
     _saver.removeListener(_changed);
   }
 }
-
-/// [writeChapter] on another isolate. Top level, so the closure sent carries
-/// only [file]: one made inside a [DraftKeeper] method shares its context
-/// with the closures there that hold `this`, and so would try to send the
-/// keeper and everything it holds.
-Future<String> _writtenElsewhere(Chapter file) =>
-    Isolate.run(() => writeChapter(file));

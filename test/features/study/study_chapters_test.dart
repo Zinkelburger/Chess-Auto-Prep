@@ -5,11 +5,13 @@ import 'package:chess_auto_prep/chess/pgn/line_id_pins.dart';
 import 'package:chess_auto_prep/chess/pgn/study.dart';
 import 'package:chess_auto_prep/features/study/study_commands.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
 import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/scripted_store.dart';
 import '../../support/study_fixture.dart';
 
 void main() {
@@ -58,6 +60,42 @@ void main() {
       await study.session.open(study.ref, game: 1);
       expect(study.session.tree?.children.single.san, 'd4');
       expect(study.studies.openChapter, 1);
+    },
+  );
+
+  test(
+    'opening a chapter: another chapter keeps the undo of the one left',
+    () async {
+      await open();
+      final before = study.onDisk;
+      study.session.cursor.goTo(const NodePath.root());
+      study.session.playMove('d2d4');
+      await pumpEventQueue();
+      expect(study.onDisk, isNot(before));
+      await study.session.open(study.ref, game: 1);
+      expect(study.session.canUndo, isTrue);
+      await study.session.undo();
+      await pumpEventQueue();
+      expect(study.onDisk, before);
+      expect(study.studies.openChapter, 1);
+    },
+  );
+
+  test(
+    'opening a chapter: undo of the one left is dropped once the file '
+    'changed outside',
+    () async {
+      await open();
+      study.session.cursor.goTo(const NodePath.root());
+      study.session.playMove('d2d4');
+      await pumpEventQueue();
+      final outside = '${study.onDisk}\n';
+      study.store.documents[study.ref] = Opened(
+        outside,
+        scriptedRevision(outside),
+      );
+      await study.session.open(study.ref, game: 1);
+      expect(study.session.canUndo, isFalse);
     },
   );
 

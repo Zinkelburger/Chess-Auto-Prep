@@ -775,6 +775,9 @@ final class DocumentSession extends ChangeNotifier {
     _held = null;
     _document++;
     _arrangement++;
+    // Opening the same file again (another game of a study) keeps its
+    // history; the saver refuses it back when the file changed meanwhile.
+    final carried = _source == ref ? _saver.setAsideUndo() : null;
     _setAsideUndo = _source != null && _source != ref
         ? _saver.setAsideUndo()
         : null;
@@ -784,6 +787,7 @@ final class DocumentSession extends ChangeNotifier {
     _shownTo = null;
     _refused = null;
     _saver.opened(ref, revision, readOnly: readOnly);
+    if (carried != null) _saver.restoreUndo(carried);
     cursor._place(const NodePath.root());
     notifyListeners();
   }
