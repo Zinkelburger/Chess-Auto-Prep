@@ -25,6 +25,7 @@ class PocketWell extends StatefulWidget {
     this.live = false,
     this.picked,
     this.onPick,
+    this.onDrag,
     this.onStep,
   });
 
@@ -40,6 +41,10 @@ class PocketWell extends StatefulWidget {
   final bool live;
   final Role? picked;
   final ValueChanged<Role>? onPick;
+
+  /// True when one of its pieces is picked up to drag, false when it is let
+  /// go: the board it lands on has to be told whose hand it came from.
+  final ValueChanged<bool>? onDrag;
   final void Function(Role role, int by)? onStep;
 
   @override
@@ -124,6 +129,7 @@ class _PocketWellState extends State<PocketWell> {
                 live: widget.live && pockets.of(side, role) > 0,
                 picked: widget.live && widget.picked == role,
                 onPick: () => widget.onPick?.call(role),
+                onDrag: widget.onDrag,
               ),
             ),
         ],
@@ -286,6 +292,7 @@ class _ReservePiece extends StatefulWidget {
     required this.live,
     required this.picked,
     required this.onPick,
+    this.onDrag,
   });
 
   final Piece piece;
@@ -299,6 +306,7 @@ class _ReservePiece extends StatefulWidget {
   final bool live;
   final bool picked;
   final VoidCallback onPick;
+  final ValueChanged<bool>? onDrag;
 
   @override
   State<_ReservePiece> createState() => _ReservePieceState();
@@ -370,6 +378,8 @@ class _ReservePieceState extends State<_ReservePiece> {
         button: true,
         child: Draggable<Piece>(
           data: widget.piece,
+          onDragStarted: () => widget.onDrag?.call(true),
+          onDragEnd: (_) => widget.onDrag?.call(false),
           // Held under the pointer by its middle, as a piece on the board is.
           dragAnchorStrategy: (draggable, context, position) =>
               Offset(size / 2, size / 2),

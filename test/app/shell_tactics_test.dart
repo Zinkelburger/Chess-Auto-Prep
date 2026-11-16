@@ -133,6 +133,26 @@ void main() {
     expect(w.trainer.up, isNull);
   });
 
+  testWidgets('a run with no puzzle up stays parked when the set is opened '
+      'in another mode', (tester) async {
+    await toTactics(tester);
+    await tester.tap(find.text('Play (4)'));
+    await tester.pumpAndSettle();
+    final seen = [...w.trainer.run!.seen];
+    // Another document while in Tactics takes the puzzle off the board.
+    await w.requests.open(kidMain);
+    await tester.pumpAndSettle();
+    expect(w.trainer.up, isNull);
+    w.requests.switchTo(Mode.pgnViewer);
+    await tester.pumpAndSettle();
+    await w.requests.open(tacticsRef, game: 0);
+    await tester.pumpAndSettle();
+    expect(w.session.source, tacticsRef);
+    expect(w.trainer.up, isNull);
+    expect(w.trainer.run!.seen, seen, reason: 'no puzzle was put up');
+    expect(w.session.shownTo, isNull);
+  });
+
   testWidgets('Tactics shows the puzzle and its game only; the engine and '
       'the arrows wait for the answer, and Analyze opens the game', (
     tester,

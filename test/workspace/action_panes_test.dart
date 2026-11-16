@@ -278,6 +278,31 @@ void main() {
   );
 
   testWidgets(
+    'the main pane\'s only tab dropped to split another pane moves there, '
+    'not copied',
+    (tester) async {
+      final layout = await pumpPanes(tester);
+      layout.split(0, WorkspaceTab.explorer, PaneSplitDirection.right, from: 0);
+      for (final tab in layout.pane(0).open.toList()) {
+        if (tab != WorkspaceTab.moves) layout.move(0, 1, tab);
+      }
+      expect(layout.pane(0).open, [WorkspaceTab.moves]);
+      layout.split(1, WorkspaceTab.moves, PaneSplitDirection.right, from: 0);
+      expect(layout.count, 2);
+      expect(
+        layout.visible.where(
+          (i) => layout.openIn(i).contains(WorkspaceTab.moves),
+        ),
+        hasLength(1),
+      );
+      expect(layout.active, 0);
+      expect(layout.pane(0).open, [WorkspaceTab.moves]);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'splits respect four-pane limit, preserve tools and independent explorers when joined',
     (tester) async {
       final layout = await pumpPanes(tester);

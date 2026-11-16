@@ -1,5 +1,10 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/chess/fen.dart';
+import 'package:chess_auto_prep/chess/tournament/config.dart';
+import 'package:chess_auto_prep/engines/engine.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/engines/playing_engine.dart';
 import 'package:chess_auto_prep/features/tournaments/engine_manager.dart';
 import 'package:chess_auto_prep/features/tournaments/setup_dialog.dart';
 import 'package:chess_auto_prep/features/tournaments/tournament_run.dart';
@@ -98,4 +103,92 @@ void main() {
     await tester.tap(find.text('Close'));
     await closed;
   });
+
+  testWidgets('the engine kept is the one tested, under its own name, '
+      'whatever the fields say by the time the test ends', (tester) async {
+    final store = ScriptedTournaments();
+    addTearDown(store.dispose);
+    final gate = Completer<void>();
+    final run = TournamentRun(
+      store: store,
+      pending: PendingWrites(),
+      jobs: await engineJobsFixture(),
+      pickExecutable: () async => '/opt/engines/berserk-13',
+      launch: (spec, transcript) async {
+        await gate.future;
+        return Started(_OpeningEngine());
+      },
+    );
+    addTearDown(run.dispose);
+    final context = await _host(tester);
+    final closed = manageTournamentEngines(context, run);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add UCI engine…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose file…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Test and save'));
+    await tester.pump();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'UCI options (name=value, one per line)'),
+      'Foo',
+    );
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Could not test the engine.'), findsNothing);
+    final kept = run.engines.single;
+    expect(kept.name, 'Opening 1.0');
+    expect(kept.executable, '/opt/engines/berserk-13');
+    expect(kept.options.keys, isNot(contains('Foo')));
+    await tester.tap(find.text('Close'));
+    await closed;
+  });
+
+  testWidgets('an engine row counts one core as a core', (tester) async {
+    final store = ScriptedTournaments();
+    addTearDown(store.dispose);
+    final run = TournamentRun(
+      store: store,
+      pending: PendingWrites(),
+      jobs: await engineJobsFixture(),
+      launch: (spec, transcript) async => const StartFailed('not started'),
+    );
+    addTearDown(run.dispose);
+    await tester.runAsync(
+      () => run.keepEngines([
+        TournamentEngine({'id': 'weak', 'name': 'SF weak', 'threads': 1}),
+        TournamentEngine({'id': 'big', 'name': 'SF big', 'threads': 4}),
+      ]),
+    );
+    final context = await _host(tester);
+    final closed = manageTournamentEngines(context, run);
+    await tester.pumpAndSettle();
+    expect(find.text('1 core · 128 MB · Bundled Stockfish'), findsOneWidget);
+    expect(find.text('4 cores · 128 MB · Bundled Stockfish'), findsOneWidget);
+    await tester.tap(find.text('Close'));
+    await closed;
+  });
+}
+
+/// Answers the test with 1.e4 under the name `Opening 1.0`.
+final class _OpeningEngine implements PlayingEngine {
+  final _exit = Completer<EngineExit>();
+  @override
+  String get name => 'Opening 1.0';
+  @override
+  Future<EngineExit> get exited => _exit.future;
+  @override
+  Future<void> quit() async {
+    if (!_exit.isCompleted) _exit.complete(EngineExit.ended);
+  }
+
+  @override
+  Search analyse(Fen fen, {required int multiPv, int? depth}) =>
+      throw UnimplementedError();
+  @override
+  PlayingSearch play(Fen root, List<String> history, MoveBudget budget) =>
+      PlayingSearch(
+        Search(lines: const Stream.empty(), stop: () async {}),
+        Future.value('e2e4'),
+      );
 }

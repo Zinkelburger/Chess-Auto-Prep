@@ -95,6 +95,13 @@ def _search(
     return budget.run(engine)
 
 
+def _clock_for(searched: chess.Color, dual: DualBoard, time_advantage: bool) -> bool:
+    """`time_advantage` is said of *our* team. A search from the other
+    team's seat gets the complementary stance: if we may sit, they may not
+    (the same rule `analyse` uses for its mirror search)."""
+    return time_advantage if searched == dual.team else False
+
+
 def _named(dual: DualBoard, which: int, uci: str | None) -> str | None:
     """A joint half rendered as SAN, so a reader sees `Nxf7+` not `f5f7`."""
     if uci is None:
@@ -306,7 +313,7 @@ def compare(
             after,
             # The seat changes hands: whoever must answer is now "the team".
             team=answers,
-            time_advantage=time_advantage,
+            time_advantage=_clock_for(answers, start, time_advantage),
             require_move_on=name if force_reply else "none",
             multipv=1,
             budget=budget,
@@ -438,7 +445,7 @@ def playout(
             engine,
             dual,
             team=mover,
-            time_advantage=time_advantage,
+            time_advantage=_clock_for(mover, dual, time_advantage),
             require_move_on="none",
             multipv=1,
             budget=budget,

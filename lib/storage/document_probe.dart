@@ -1,8 +1,11 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:document_file_io/document_file_io.dart';
 
+import 'atomic_write.dart';
 import 'document_ref.dart';
+import 'recovery_files.dart';
 
 /// One look at a file: its bytes and its revision, or why neither is here.
 sealed class Probe {
@@ -49,13 +52,25 @@ final class FileNotReadNow extends FileUnreadable {
 /// Reads bytes, hash and native identity from one open handle, on another
 /// isolate, so the revision describes the bytes it came with rather than
 /// whatever the name points at by the time the caller looks again.
+///
+/// A create killed between linking the file to its name and unlinking its
+/// staged name leaves the file with two names, which reads as not plain.
+/// The staged name is never the file ([discardLeftoverStage]), so it is
+/// removed and the file read again, as the next write beside it would.
 Future<Probe> probeDocument(String path) async {
   try {
+    final probe = _interpret(await observeFile(path));
+    if (probe is! FileNotPlain || !await _staged(path)) return probe;
+    await discardLeftoverStage(path);
     return _interpret(await observeFile(path));
   } on Object catch (error) {
     return FileNotReadNow('$error');
   }
 }
+
+Future<bool> _staged(String path) async =>
+    await FileSystemEntity.type(temporaryPathFor(path), followLinks: false) ==
+    FileSystemEntityType.file;
 
 Probe _interpret(NativeFileObservation observation) {
   if (observation.status == _missing) return const FileMissing();

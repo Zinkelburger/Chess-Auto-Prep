@@ -23,14 +23,19 @@ class _GroupDialog extends StatefulWidget {
 class _GroupDialogState extends State<_GroupDialog> {
   final form = GlobalKey<FormState>();
   late final name = TextEditingController(text: widget.group?.name ?? '');
-  late final date = TextEditingController(
-    text: widget.group?.fields['date'] as String? ?? '',
-  );
+  late final date = TextEditingController(text: widget.group?.date ?? '');
+
+  /// What the dialog opened with: a field left as it was is not written, so
+  /// a value this app cannot read stays in the file.
+  late final String _shownDate;
+  late final int _shownRounds;
   int rounds = 5;
+
   @override
   void initState() {
     super.initState();
-    rounds = widget.group?.fields['rounds'] as int? ?? 5;
+    _shownDate = date.text;
+    rounds = _shownRounds = widget.group?.rounds ?? 5;
   }
 
   @override
@@ -46,8 +51,9 @@ class _GroupDialogState extends State<_GroupDialog> {
       context,
       (widget.group ?? PlayerGroup.create(name.text)).edited({
         'name': name.text.trim(),
-        'date': date.text.trim().isEmpty ? null : date.text.trim(),
-        'rounds': rounds,
+        if (widget.group == null || date.text != _shownDate)
+          'date': date.text.trim().isEmpty ? null : date.text.trim(),
+        if (widget.group == null || rounds != _shownRounds) 'rounds': rounds,
       }),
     );
   }

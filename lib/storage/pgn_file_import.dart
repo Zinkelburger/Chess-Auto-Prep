@@ -1,15 +1,14 @@
 import 'dart:io';
-import 'dart:isolate';
 
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
-import '../chess/pgn/chapter.dart' show readOffThreadFrom;
 import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'document_text.dart';
 import 'file_lock.dart';
 import 'recovery_gate.dart';
+import 'save_preparation.dart' show decodedDocument;
 
 /// Where a file the user browsed to is opened from.
 ///
@@ -104,9 +103,8 @@ final class NativePgnFileImport implements PgnFileImport {
     try {
       return await _recovery.run(() async {
         final bytes = await File(path).readAsBytes();
-        final decoded = bytes.length < readOffThreadFrom
-            ? readDocumentText(bytes)
-            : await Isolate.run(() => readDocumentText(bytes));
+        // Top level: a closure made here would carry the importer along.
+        final decoded = await decodedDocument(bytes);
         return switch (decoded) {
           PlainText(:final text) => PickedText(text),
           ForeignText(:final text, :final detail) => PickedText(

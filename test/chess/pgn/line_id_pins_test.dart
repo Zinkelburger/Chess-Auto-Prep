@@ -59,6 +59,26 @@ void main() {
     expect(after.games.rewritten, {0});
   });
 
+  test('two lines given moves in one edit both keep their ids', () {
+    final longer = parseChapter(
+      name: 'Open games',
+      text: _chapter
+          .replaceFirst('2. Nf3 *', '2. Nf3 Nc6 *')
+          .replaceFirst('1. e4 c5 *', '1. e4 c5 2. Nf3 *'),
+    );
+    final after = withIdsPinned(
+      chapter,
+      longer,
+      GamesArranged(order: [0, 1, 2], rewritten: {0, 1}, before: 3),
+    );
+    expect(trainedIdsOf(after.chapter), ids);
+    expect(
+      [for (final l in after.chapter.lines) l.lineId],
+      [ids[0], ids[1], 'scotch'],
+    );
+    expect(after.games.rewritten, {0, 1});
+  });
+
   test('a game moved up under a banner keeps its trained id', () {
     // The banner is no game: B was game 1, and keeps that id at 0.
     final banner = parseChapter(

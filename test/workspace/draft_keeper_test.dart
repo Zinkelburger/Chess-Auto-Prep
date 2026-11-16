@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart' hide Saved;
@@ -13,6 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../storage/store_fixture.dart';
+import '../support/big_chapter.dart';
 import '../support/scripted_store.dart';
 import '../support/viewer_fixture.dart';
 
@@ -30,7 +32,10 @@ final class _Run {
       session: session,
       saver: saver,
       drafts: drafts,
-      say: (sentence, {action, problem = true}) => said.add((sentence, action)),
+      say: (sentence, {action, problem = true}) {
+        said.add((sentence, action));
+        problems.add(problem);
+      },
       delay: delay,
     )..start();
   }
@@ -39,6 +44,9 @@ final class _Run {
   late final DocumentSession session;
   late final DraftKeeper keeper;
   final said = <(String?, StatusAction?)>[];
+
+  /// Whether each sentence [said] was said as a problem.
+  final problems = <bool>[];
 
   StatusAction? get offer => said.lastOrNull?.$2;
 
@@ -116,6 +124,53 @@ void main() {
     second.kill();
   });
 
+  test(
+    'edits restored onto another game put the cursor at its start',
+    () async {
+      final drafts = _MemoryDrafts();
+      final first = _Run(store, drafts);
+      await first.session.open(ref, game: 1);
+      first.session
+        ..cursor.goTo(NodePath.of(const [0, 0, 0, 0]))
+        ..playMove('b1c3');
+      await first.keeper.settle();
+      first.kill();
+
+      final second = _Run(store, drafts);
+      await second.session.open(ref, game: 0);
+      second.session.cursor.goTo(NodePath.of(const [0, 0, 0, 0, 0]));
+      expect(second.session.cursor.currentMove?.san, 'Bb5');
+      await until(() => second.offer != null);
+      second.offer!.onPressed();
+      await until(() => second.session.hasHeldEdits);
+      expect(second.session.game, 1);
+      expect(second.session.cursor.value, const NodePath.root());
+      expect(second.session.cursor.currentMove, isNull);
+      second.session.cursor.forward();
+      expect(second.session.cursor.currentMove?.san, 'd4');
+      second.kill();
+    },
+  );
+
+  test('renaming the file moves its checkpoint, and discarding leaves none '
+      'under either name', () async {
+    final drafts = _MemoryDrafts();
+    final run = _Run(store, drafts);
+    await run.session.open(ref, game: 0);
+    run.session.setComment(NodePath.of(const [0]), 'A note');
+    await until(() => drafts.kept.isNotEmpty);
+    final renamed = collectionRef('games2');
+    run.session.relocated(renamed);
+    await run.keeper.settle();
+    expect(drafts.kept.keys, [renamed.path]);
+    expect(drafts.kept[renamed.path]!.text, contains('A note'));
+    run.session.discardHeld();
+    await until(() => drafts.kept.isEmpty);
+    await run.keeper.settle();
+    expect(drafts.kept, isEmpty);
+    run.kill();
+  });
+
   test('discarding the edits forgets their copy', () async {
     final drafts = _MemoryDrafts();
     final run = _Run(store, drafts);
@@ -126,6 +181,66 @@ void main() {
     await until(() => drafts.kept.isEmpty);
     run.kill();
   });
+
+  test(
+    'a large collection is kept as its games joined, byte for byte',
+    () async {
+      final big = bigChapter(games: 260);
+      final bigRef = collectionRef('big');
+      store.documents[bigRef] = Opened(big, scriptedRevision(big));
+      final drafts = _MemoryDrafts();
+      final run = _Run(store, drafts);
+      await run.session.open(bigRef, game: 3);
+      run.session.setComment(NodePath.of(const [0]), 'A note');
+      final shown = run.session.retainedDraft!.shown;
+      final file = shown.view?.file ?? shown.chapter;
+      expect(file.lines.length, greaterThanOrEqualTo(200));
+      await movesBeingRead(file.lines);
+      await run.keeper.settle();
+      final kept = drafts.kept[bigRef.path]!;
+      expect(kept.text, writeChapter(file));
+      expect(kept.text, contains('A note'));
+      run.kill();
+    },
+  );
+
+  test('a parked draft is kept only once its checkpoint is written', () async {
+    final run = _Run(store, _MemoryDrafts());
+    await run.session.open(ref, game: 0);
+    run.session.setComment(NodePath.of(const [0]), 'A note');
+    final parked = run.session.retainedDraft!;
+    await run.keeper.settle();
+    expect(await run.keeper.keeps(ref.path, parked), isTrue);
+    run.kill();
+
+    final refused = _Run(store, _RefusingDrafts());
+    await refused.session.open(ref, game: 0);
+    refused.session.setComment(NodePath.of(const [0]), 'A note');
+    final unkept = refused.session.retainedDraft!;
+    await refused.keeper.settle();
+    expect(await refused.keeper.keeps(ref.path, unkept), isFalse);
+    refused.kill();
+  });
+
+  test(
+    'a checkpoint is not offered over edits made before the offer came',
+    () async {
+      final drafts = _MemoryDrafts();
+      final first = _Run(store, drafts);
+      await first.session.open(ref, game: 0);
+      first.session.setComment(NodePath.of(const [0]), 'Old note');
+      await first.keeper.settle();
+      first.kill();
+
+      final second = _Run(store, drafts);
+      await second.session.open(ref, game: 0);
+      second.session.setComment(NodePath.of(const [0]), 'New note');
+      await second.keeper.settle();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(second.said.where((s) => s.$2 != null), isEmpty);
+      second.kill();
+    },
+  );
 
   test('new edits on a file with an offered draft set the old one aside, '
       'whole', () async {
@@ -251,7 +366,10 @@ void main() {
       );
       await app.session.open(games, game: 0);
       app.session.setComment(NodePath.of(const [0]), 'Nowhere to go');
-      expect(await app.keeper.settle(), contains('games.pgn'));
+      expect(
+        await app.keeper.settle(),
+        'Unsaved edits to games.pgn were not kept. The disk is full.',
+      );
       app.kill();
     });
 
@@ -361,6 +479,7 @@ void main() {
       expect(second.offer!.label, 'Save them as a copy');
       second.offer!.onPressed();
       await until(() => second.said.last.$1?.startsWith('Saved') ?? false);
+      expect(second.problems.last, isFalse, reason: 'the edits are safe');
       final copy = File(
         p.join(p.dirname(games.path), 'games unsaved edits.pgn'),
       );
@@ -420,8 +539,11 @@ final class _MemoryDrafts implements ViewerDrafts {
 /// A disk that takes no checkpoint.
 final class _RefusingDrafts implements ViewerDrafts {
   @override
-  Future<void> keep(ViewerDraft draft) async =>
-      throw const FileSystemException('disk full');
+  Future<void> keep(ViewerDraft draft) async => throw FileSystemException(
+    'Cannot create file',
+    draft.path,
+    OSError('No space left on device', Platform.isWindows ? 112 : 28),
+  );
 
   @override
   Future<ViewerDraft?> find(String path) async => null;

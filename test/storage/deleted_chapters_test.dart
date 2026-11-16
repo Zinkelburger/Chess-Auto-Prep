@@ -46,4 +46,24 @@ void main() {
       expect(await names(), ['Main']);
     },
   );
+
+  test(
+    'a folder that cannot be listed hides only itself',
+    () async {
+      deleted(p.join(root.path, 'KID'), 'Main');
+      final private = Directory(p.join(root.path, 'French', 'Private'))
+        ..createSync(recursive: true);
+      deleted(p.join(root.path, 'French'), 'Winawer');
+      await Process.run('chmod', ['000', private.path]);
+      addTearDown(() => Process.run('chmod', ['755', private.path]));
+      expect(await names(), unorderedEquals(['Main', 'Winawer']));
+    },
+    skip: Platform.isWindows || _isRoot()
+        ? 'needs a POSIX folder the user cannot list'
+        : false,
+  );
 }
+
+bool _isRoot() =>
+    !Platform.isWindows &&
+    (Process.runSync('id', ['-u']).stdout as String).trim() == '0';

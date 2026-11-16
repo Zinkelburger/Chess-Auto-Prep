@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/generation/eval.dart' show winningChances;
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
@@ -7,7 +9,9 @@ import 'package:chess_auto_prep/chess/tactics/analyzed_games.dart';
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/chess/tactics/mined_set.dart';
 import 'package:chess_auto_prep/chess/tactics/mining.dart';
+import 'package:chess_auto_prep/chess/tactics/mistake_counts.dart';
 import 'package:chess_auto_prep/chess/tactics/puzzle.dart';
+import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -202,6 +206,45 @@ void main() {
       expect(analyzedIn(edited.preamble), {'lichess_abc', 'lichess_AbCd1234'});
       expect(edit.games.order, [0, 1, 2, 3, 4, null]);
       expect(edit.games.heading, isTrue);
+    });
+
+    test('the store takes the edit: a game\'s counts are heading lines the '
+        'set may write, a first count included', () {
+      for (final mistakes in [
+        {'lichess_AbCd1234': const MistakeCounts(blunders: 1)},
+        <String, MistakeCounts>{},
+      ]) {
+        final edit = withMined(
+          set,
+          [puzzle],
+          analyzed: {'lichess_abc', 'lichess_AbCd1234'},
+          mistakes: mistakes,
+        );
+        final next = writeChapter((edit as ChapterEdited).chapter);
+        expect(
+          changeOutsideScope(
+            previous: utf8.encode(tacticsSet),
+            next: utf8.encode(next),
+            scope: GamesRearranged(edit.games),
+          ),
+          isNull,
+        );
+        // And a count that changes later is the same kind of edit.
+        final later = withMined(
+          (edit).chapter,
+          const [],
+          analyzed: {'lichess_abc', 'lichess_AbCd1234', 'lichess_x'},
+          mistakes: {'lichess_x': const MistakeCounts(mistakes: 2)},
+        );
+        expect(
+          changeOutsideScope(
+            previous: utf8.encode(next),
+            next: utf8.encode(writeChapter((later as ChapterEdited).chapter)),
+            scope: GamesRearranged(later.games),
+          ),
+          isNull,
+        );
+      }
     });
 
     test('what it writes is read back as the same puzzle', () {

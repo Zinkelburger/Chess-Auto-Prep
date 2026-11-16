@@ -109,7 +109,11 @@ List<SearchRow> searchRows({
         black: white ? held?.black : worth,
         trapLossCp: held?.trapLossCp ?? (prepared == side ? trap : null),
         below: prepared == side
-            ? trapsBelow(child, bestBefore: best)
+            ? trapsBelow(
+                child,
+                bestBefore: best,
+                given: best == null ? 0 : best - cp,
+              )
             : held?.below ?? noTraps,
       );
     }
@@ -364,9 +368,10 @@ class _RowView extends StatelessWidget {
   /// The share, marked `~` where Maia stood in for the database; the
   /// tooltip says who gave it.
   Widget _shareCell(double? share, TextStyle style) {
+    // A share the search does not hold is a muted dash, never a blank.
     final cell = _Cell(
       share == null
-          ? ''
+          ? '–'
           : '${row.shareFrom == RepliesFrom.maia ? '~' : ''}${_percent(share)}',
       width: searchShareWidth,
       style: style,

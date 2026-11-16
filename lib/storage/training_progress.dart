@@ -48,7 +48,7 @@ final class ProgressConflict extends ProgressWrite {
 
 /// A file holds something that is not its rows; nothing was written to any.
 final class ProgressUnreadable implements ProgressRead, ProgressWrite {
-  const ProgressUnreadable(this.file, this.line, {this.wholeFile = false});
+  const ProgressUnreadable(this.file, this.line, {required this.wholeFile});
 
   final String file;
   final int line;

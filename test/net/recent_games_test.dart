@@ -374,6 +374,29 @@ void main() {
       );
     });
 
+    test('an export that keeps breaking off keeps the whole games it sent, '
+        'and says older ones were not read', () async {
+      final clock = FakeAsync();
+      final newer = scholarsMate.replaceFirst('AbCd1234', 'Newer123');
+      final fetched = _sixMonths(
+        clock,
+        _streaming((_) async {
+          // Two whole games and the start of a third, then silence.
+          final body = StreamController<List<int>>()
+            ..add(utf8.encode('$newer\n\n$scholarsMate\n\n[Event "Cut'));
+          addTearDown(() => body.close());
+          return http.StreamedResponse(body.stream, 200);
+        }),
+      );
+      await _elapse(clock, const Duration(minutes: 10));
+
+      final kept = fetched.single as GamesFetched;
+      expect(kept.games, hasLength(2));
+      expect(kept.games.first, contains('Newer123'));
+      expect(kept.complete, isFalse);
+      expect(kept.unread, ['games older than the newest 2']);
+    });
+
     test('cancel during a 429 backoff returns promptly', () async {
       final clock = FakeAsync();
       var cancel = false, asked = 0;
@@ -465,6 +488,27 @@ void main() {
         '$_archives/2026/08/pgn': () => throw http.ClientException('offline'),
       }).recent('me', max: 2);
       expect((fetched as GamesNotFetched).problem, GamesProblem.unreachable);
+    });
+
+    test('a month that cannot be fetched leaves the other months standing, '
+        'and is named', () async {
+      final older = scholarsMate.replaceFirst('AbCd1234', 'Older123');
+      var tries = 0;
+      final fetched = await _chesscom({
+        '$_archives/archives': () =>
+            _archiveList(['2026/07', '2026/08', '2026/09']),
+        '$_archives/2026/09/pgn': () => http.Response(scholarsMate, 200),
+        '$_archives/2026/08/pgn': () {
+          tries++;
+          throw http.ClientException('offline');
+        },
+        '$_archives/2026/07/pgn': () => http.Response(older, 200),
+      }).recent('me', max: 10);
+      expect(tries, 2);
+      fetched as GamesFetched;
+      expect(fetched.games, [scholarsMate, older]);
+      expect(fetched.unread, ['2026-08']);
+      expect(fetched.complete, isFalse);
     });
 
     test('an archive list that is not one is unreadable, not empty', () {

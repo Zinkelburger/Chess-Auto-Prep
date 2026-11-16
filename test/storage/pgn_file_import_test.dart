@@ -77,6 +77,26 @@ void main() {
     expect(await File(second.path).readAsString(), '1. d4 *\n');
   });
 
+  test('a file with no extension is copied as a .pgn, into a folder made '
+      'whole', () async {
+    final source = File(p.join(root.path, 'course'));
+    await source.writeAsString('1. e4 *\n');
+    final nested = NativePgnFileImport(
+      recovery: RecoveryGate(
+        documents: documents,
+        support: Directory(p.join(root.path, 'Support')),
+      ),
+      documents: documents.path,
+      into: p.join(documents.path, 'imports', 'pgn_collections'),
+    );
+    final copy = await nested.insideDocuments(source.path) as FileToOpen;
+    expect(
+      copy.path,
+      p.join(documents.path, 'imports', 'pgn_collections', 'course.pgn'),
+    );
+    expect(await File(copy.path).readAsString(), '1. e4 *\n');
+  });
+
   test('a file that is not there cannot be copied, and says so', () async {
     final result = await import.insideDocuments(p.join(root.path, 'no.pgn'));
     expect(result, isA<ImportFailed>());

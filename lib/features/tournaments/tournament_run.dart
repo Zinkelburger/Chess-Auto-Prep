@@ -122,8 +122,9 @@ final class TournamentRun extends ChangeNotifier {
         problem = message;
     }
     switch (registry) {
-      case TournamentSaved(:final value):
+      case TournamentSaved(:final value, :final warnings):
         if (!registryBusy) engines = value;
+        if (warnings.isNotEmpty) engineReport = warnings.first;
       case TournamentFailed(:final message):
         engineReport = message;
     }

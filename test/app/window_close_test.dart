@@ -117,4 +117,40 @@ void main() {
     await clickClose();
     expect(asks, 0, reason: 'a taken-down exit is not asked');
   });
+
+  test('closing answers whether the window went', () async {
+    final refused = WindowClose(() async => AppExitResponse.cancel);
+    expect(await refused.close(), isFalse);
+    final allowed = WindowClose(() async => AppExitResponse.exit);
+    expect(await allowed.close(), isTrue);
+  });
+
+  test('a window never held, or already let go, is not let go again', () async {
+    final close = WindowClose(() async => AppExitResponse.cancel);
+    close.detach();
+    await pumpEventQueue();
+    expect(asked, isEmpty);
+    final attached = WindowClose(() async => AppExitResponse.cancel);
+    await attached.attach();
+    asked.clear();
+    attached
+      ..detach()
+      ..detach();
+    await pumpEventQueue();
+    expect(asked.where((c) => held(c, false)), hasLength(1));
+  });
+
+  test('a hold the window refused is not let go when taken down', () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      asked.add(call);
+      if (held(call, true)) throw PlatformException(code: 'unavailable');
+      return null;
+    });
+    final close = WindowClose(() async => AppExitResponse.cancel);
+    await close.attach();
+    asked.clear();
+    close.detach();
+    await pumpEventQueue();
+    expect(asked, isEmpty);
+  });
 }

@@ -24,6 +24,8 @@ import 'package:chess_auto_prep/workspace/explorer/explorer_pane.dart';
 import 'package:chess_auto_prep/workspace/explorer/game_fetcher.dart';
 import 'package:chess_auto_prep/workspace/explorer/opening_names.dart';
 import 'package:chess_auto_prep/workspace/reading/comment_field.dart';
+import 'package:chess_auto_prep/workspace/reading/edit_strip.dart';
+import 'package:chess_auto_prep/workspace/reading/move_note.dart';
 import 'package:chess_auto_prep/workspace/reading/move_tree_view.dart';
 import 'package:chess_auto_prep/workspace/reading/reading_header.dart';
 import 'package:chess_auto_prep/workspace/search/fill_gaps.dart';
@@ -461,6 +463,32 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.getSize(find.byType(BoardView)).width, lessThan(281));
     expect(find.text('of 3'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('in the builder the note is written under the board where it '
+      'fits, and in the edit strip in a window too short for it', (
+    tester,
+  ) async {
+    editing.value = true;
+    const builder = WorkspaceHooks(builder: true, noteEditing: true);
+    final inStrip = find.descendant(
+      of: find.byType(EditStrip),
+      matching: find.byType(CommentField),
+    );
+    await pump(tester, hooks: builder);
+    expect(find.byType(MoveNote), findsOneWidget);
+    expect(inStrip, findsNothing, reason: 'the note under the board');
+
+    await tester.binding.setSurfaceSize(const Size(1280, 600));
+    await tester.pumpAndSettle();
+    expect(find.byType(MoveNote), findsNothing, reason: 'no room for it');
+    expect(inStrip, findsOneWidget, reason: 'the strip writes it');
+
+    await tester.binding.setSurfaceSize(const Size(1200, 820));
+    await tester.pumpAndSettle();
+    expect(find.byType(MoveNote), findsOneWidget);
+    expect(inStrip, findsNothing);
     expect(tester.takeException(), isNull);
   });
 

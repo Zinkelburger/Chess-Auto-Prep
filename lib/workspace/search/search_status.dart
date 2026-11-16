@@ -38,6 +38,8 @@ class SearchStatusLine extends StatelessWidget {
 
   ExpectimaxOptions get _options => settings.value.expectimax;
 
+  static String _positions(int n) => n == 1 ? '1 position' : '$n positions';
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -47,7 +49,7 @@ class SearchStatusLine extends StatelessWidget {
       _ when problem != null => (problem, true),
       FillIdle() => (_summary, false),
       FillRunning(:final lastPly?, :final nodes, stopping: false) => (
-        'Pausing after depth $lastPly · $nodes positions',
+        'Pausing after depth $lastPly · ${_positions(nodes)}',
         false,
       ),
       FillRunning(
@@ -61,7 +63,7 @@ class SearchStatusLine extends StatelessWidget {
           '${stopping ? 'Pausing at depth' : 'Depth'} $depth'
               '${of == null || stopping ? '' : ' of $of'}'
               '${levelShare == null || stopping ? '' : ' (${(levelShare * 100).floor()}%)'}'
-              ' · $nodes positions',
+              ' · ${_positions(nodes)}',
           false,
         ),
       FillDone(
@@ -73,7 +75,7 @@ class SearchStatusLine extends StatelessWidget {
       ) =>
         (
           '${complete ? 'Finished depth' : 'Stopped at depth'} $depth · '
-              '$nodes positions'
+              '${_positions(nodes)}'
               '${sourceLost ? ' · ChessDB stopped answering' : ''}'
               '${stoppedBy == null ? '' : ' · $stoppedBy'}${_findsWords()}',
           false,

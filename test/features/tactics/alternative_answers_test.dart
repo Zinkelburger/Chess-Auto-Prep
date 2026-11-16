@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/chess/tactics/analyzed_games.dart';
+import 'package:chess_auto_prep/chess/tactics/mined_set.dart';
 import 'package:chess_auto_prep/chess/tactics/puzzle_run.dart';
 import 'package:chess_auto_prep/engines/engine_line.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
@@ -152,6 +154,29 @@ void main() {
       expect(w.trainer.up!.feedback, isNull);
       expect(w.trainer.up!.waiting, isFalse);
       expect(w.trainer.run!.outcomes, isEmpty);
+    }),
+  );
+
+  test(
+    'a review adding to the set keeps the check of the same puzzle',
+    () => sitting((async) {
+      w.trainer.play('e7e5');
+      async.flushMicrotasks();
+      expect(w.trainer.up!.feedback, isA<CheckingAnswer>());
+      final before = w.session.chapter;
+      w.session.apply(
+        (set) => withMined(
+          set,
+          const [],
+          analyzed: {...analyzedIn(set.preamble), 'lichess_g1'},
+        ),
+      );
+      async.flushMicrotasks();
+      expect(identical(before, w.session.chapter), isFalse);
+      expect(w.trainer.up!.feedback, isA<CheckingAnswer>());
+      finish(async, 100);
+      finish(async, 150);
+      expect(w.trainer.up!.feedback, isA<AlternativeSolved>());
     }),
   );
 

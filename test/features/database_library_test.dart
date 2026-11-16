@@ -7,6 +7,7 @@ import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:path/path.dart' as p;
 
 import '../support/scripted_store.dart';
 import '../support/viewer_fixture.dart';
@@ -101,6 +102,33 @@ void main() {
       expect(again, first);
       expect(documents.documents.length, 1);
       expect(library.opening, isNull);
+      // Named for the game, with no word or bracket cut short.
+      expect(
+        p.basenameWithoutExtension(first!.path),
+        matches(RegExp(r'^Alice - Bob \(database [0-9a-f]{12}\)$')),
+      );
+    },
+  );
+
+  test(
+    'a storage measurement that fails says so and keeps the page usable',
+    () async {
+      final measuring = DatabaseLibrary(
+        path: '/master_games.db',
+        corpus: corpus,
+        picker: ScriptedPicker(),
+        documents: documents,
+        collections: '/collections',
+        pending: PendingWrites(),
+        places: (stores: const [], support: '/support', derived: const []),
+        measureWith: (_) async => throw StateError('Isolate exited'),
+      );
+      addTearDown(measuring.dispose);
+      await measuring.measure();
+      expect(measuring.problem, 'Could not measure the storage.');
+      expect(measuring.measuring, isFalse);
+      await measuring.refresh();
+      expect(measuring.page.games.single.white, 'Alice');
     },
   );
 

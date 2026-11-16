@@ -104,6 +104,40 @@ void main() {
     expect((await lines).single.pv, ['e2e4']);
   });
 
+  test('a played move is the bestmove\'s move, with or without a ponder; '
+      'a bare bestmove is none', () async {
+    for (final (answer, move) in [
+      ('bestmove e2e4', 'e2e4'),
+      ('bestmove d2d4 ponder d7d5', 'd2d4'),
+      ('bestmove', null),
+    ]) {
+      final (engine, process) = await started();
+      final search = engine.play(
+        Fen.initial,
+        const [],
+        const MoveBudget(depth: 2),
+      );
+      search.analysis.lines.listen(null);
+      await pumpEventQueue();
+      process.say(answer);
+      expect(await search.bestMove, move, reason: answer);
+    }
+  });
+
+  test('a search asked of an engine that has gone sends it nothing and '
+      'ends', () async {
+    final (engine, process) = await started();
+    process.exit(139);
+    await engine.exited;
+    final sent = process.sent.length;
+    final search = engine.analyse(Fen.initial, multiPv: 1);
+    var done = false;
+    search.lines.listen(null, onDone: () => done = true);
+    await pumpEventQueue();
+    expect(done, isTrue);
+    expect(process.sent, hasLength(sent));
+  });
+
   test('handshakes, applies options and takes the name', () async {
     final (engine, process) = await started();
     expect(process.sent, ['uci', 'setoption name Hash value 16', 'isready']);

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:dartchess/dartchess.dart' show Position;
 
 import '../fen.dart';
+import '../pgn/tree_edit.dart' show positionOf;
 import 'eval.dart';
 import 'legal_moves.dart';
 import 'search_config.dart';
@@ -221,22 +222,32 @@ final class _Search {
 
   /// Reuses complete expansions and scores, while rebuilding path history.
   /// A deeper resume turns old horizon leaves into frontier leaves.
+  ///
+  /// A saved node nobody scored — the C builder never scores its root or
+  /// the replies it attaches — is scored here when the restored tree will
+  /// value it where it stands; one whose saved moves come back with it is
+  /// valued from them and stays unscored.
   Future<PendingNode> _restore(SearchPath path, SearchNode saved) async {
     if (_holding) await _letGo();
-    if (saved.fen != path.fen || !saved.evaluated) {
-      throw const FormatException(
-        'Saved search position or score is incomplete.',
-      );
+    if (saved.fen != path.fen && !_samePosition(saved.fen, path.fen)) {
+      throw const FormatException('Saved search position is not this one.');
     }
     final kind = terminalKind(path.position, path.history);
     final beyond =
         (config.horizonPlies != null && path.ply >= config.horizonPlies!) ||
         path.reach < config.replyFloor;
+    var eval = saved.evaluated ? saved.evalForUs : null;
+    if (kind == null && eval == null && (beyond || !_hasMoves(saved))) {
+      eval = await _scored(path);
+      if (eval == null) {
+        return PendingNode(path, FrontierNode(fen: path.fen, evalForUs: null));
+      }
+    }
     final leaf = kind != null
         ? _terminal(path, kind)
         : beyond
-        ? HorizonNode(fen: path.fen, evalForUs: saved.evalForUs)
-        : FrontierNode(fen: path.fen, evalForUs: saved.evalForUs);
+        ? HorizonNode(fen: path.fen, evalForUs: eval)
+        : FrontierNode(fen: path.fen, evalForUs: eval);
     final pending = PendingNode(path, leaf);
     if (path.ply > _deepest) _deepest = path.ply;
     if (kind != null || beyond) return pending;
@@ -289,6 +300,32 @@ final class _Search {
       _topUp.add(pending);
     }
     return pending;
+  }
+
+  static bool _hasMoves(SearchNode saved) => switch (saved) {
+    OurNode(:final candidates) => candidates.isNotEmpty,
+    OpponentNode(:final replies) => replies.isNotEmpty,
+    _ => false,
+  };
+
+  /// The engine's score for [path] for our side, or null when it has none
+  /// to give, which stops the search.
+  Future<Eval?> _scored(SearchPath path) async {
+    switch (await evaluationOf(evaluator, path.position)) {
+      case EvaluationUnavailable(:final reason):
+        _stop ??= _EvaluationFailed(path.fen, reason);
+        return null;
+      case Evaluated(:final eval):
+        return eval.forUs(config.side, path.position.turn);
+    }
+  }
+
+  /// Whether [saved] is [fen] written another way. The C builder writes the
+  /// en passant square after every double pawn push; this app writes it only
+  /// where a pawn can take there.
+  bool _samePosition(Fen saved, Fen fen) {
+    final position = positionOf(saved);
+    return position != null && fenOf(position) == fen;
   }
 
   /// The node for [path] before anything below it is expanded: a finished

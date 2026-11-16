@@ -90,6 +90,9 @@ def joint(boards, text, team, required='none'):
                 if board.turn != (colour if which == 0 else not colour):
                     raise ValueError('Wrong team')
                 move = board.parse_uci(moves[which])
+                if not move:
+                    # parse_uci returns a null move for '0000'; sitting is 'pass'.
+                    raise ValueError('Null move')
                 labels[which] = board.san(move)
                 current = bh.push(current, which, move)
             return {'A': labels[0], 'B': labels[1], 'uci': text}

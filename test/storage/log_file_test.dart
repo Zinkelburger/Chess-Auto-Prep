@@ -141,4 +141,16 @@ void main() {
       expect(lines.last, endsWith(' W log capped for this session'));
     }
   });
+
+  test('a log that could not be opened still closes', () async {
+    final logs = Directory(p.join(root.path, 'logs'));
+    await Directory(p.join(logs.path, 'app.log')).create(recursive: true);
+    final file = LogFile(logs);
+    (await file.open())(entry('nowhere to go'));
+    await pumpEventQueue();
+    await expectLater(
+      file.close().timeout(const Duration(seconds: 5)),
+      completes,
+    );
+  });
 }

@@ -1,5 +1,6 @@
 import 'package:collection/collection.dart';
 
+import '../../storage/document_ref.dart';
 import '../../storage/edit_scope.dart';
 import '../../storage/pgn_document_store.dart' as store;
 
@@ -8,6 +9,12 @@ import '../../storage/pgn_document_store.dart' as store;
 /// replaced the save changed. Kept in memory with the receipt, for as long
 /// as the receipt is.
 typedef KeptSave = ({store.Receipt receipt, EditScope scope});
+
+/// The saves of a document that can still be taken back, set aside while
+/// another document is up: the file they were written to, the revision the
+/// last write left it at, and the saves, oldest first. They are good only
+/// for that file at that revision; anything else wrote it since.
+typedef SetAsideUndo = ({String path, Revision revision, List<KeptSave> saves});
 
 /// The saves of one document that can still be taken back.
 ///
@@ -30,6 +37,18 @@ final class UndoHistory {
   /// The history of the document that was open. A new document takes none of
   /// it: the file those receipts name is not the one being written now.
   void clear() => _entries.clear();
+
+  /// Every entry, oldest first, leaving this history empty.
+  List<KeptSave> takeAll() {
+    final all = List.of(_entries);
+    _entries.clear();
+    return all;
+  }
+
+  /// [saves], taken out with [takeAll], in place of what this held.
+  void putBack(List<KeptSave> saves) => _entries
+    ..clear()
+    ..addAll(saves);
 
   /// [receipt] is the store's answer to a save made under [scope].
   void keep(store.Receipt receipt, EditScope scope) {

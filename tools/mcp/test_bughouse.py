@@ -335,6 +335,127 @@ class Wire(unittest.TestCase):
         self.assertIn("tools", reply["result"], proc.stderr)
 
 
+# ── Engine plumbing and search settings, with a stand-in engine ────────────
+
+
+class StandInEngine:
+    """Records what each search was configured with; every search sits."""
+
+    def __init__(self) -> None:
+        self.searches: list[dict] = []
+        self._settings: dict = {}
+
+    def configure(self, *, team, time_advantage, require_move_on, multipv) -> None:
+        self._settings = {"team": team, "time_advantage": time_advantage,
+                          "require_move_on": require_move_on}
+
+    def set_position(self, dual_fen, moves=None) -> None:
+        self._settings["dual_fen"] = dual_fen
+
+    def search(self, *, movetime_ms=None, nodes=None):
+        from bughouse.engine import SearchResult
+
+        self.searches.append(dict(self._settings))
+        return SearchResult(None, None, [Line(depth=1, score_cp=0)])
+
+
+class WhoMaySit(unittest.TestCase):
+    """`time_advantage` says *our* team is ahead on the clock. A search from
+    the other team's seat must not be told that they may sit."""
+
+    def test_compare_does_not_lend_our_clock_to_the_opponent(self):
+        from bughouse.analysis import compare
+
+        engine = StandInEngine()
+        compare(candidates=["e4"], time_advantage=True, engine=engine)  # type: ignore[arg-type]
+        self.assertEqual(engine.searches[0]["team"], "black")
+        self.assertFalse(engine.searches[0]["time_advantage"])
+
+    def test_compare_keeps_our_clock_when_we_answer(self):
+        from bughouse.analysis import compare
+
+        engine = StandInEngine()
+        compare(moves=["e4"], candidates=["e5"], time_advantage=True, engine=engine)  # type: ignore[arg-type]
+        self.assertEqual(engine.searches[0]["team"], "white")
+        self.assertTrue(engine.searches[0]["time_advantage"])
+
+    def test_playout_gives_the_clock_only_to_us(self):
+        from bughouse.analysis import playout
+
+        engine = StandInEngine()
+        playout(plies=2, time_advantage=True, engine=engine)  # type: ignore[arg-type]
+        stances = [(s["team"], s["time_advantage"]) for s in engine.searches]
+        self.assertEqual(stances, [("white", True), ("black", False)])
+
+
+class EngineStartup(unittest.TestCase):
+    def test_a_failed_handshake_does_not_leave_the_process_running(self):
+        import stat
+        import tempfile
+        from unittest import mock
+
+        from bughouse import engine as engine_mod
+        from bughouse.engine import EngineError
+        from bughouse.paths import EngineFiles
+
+        with tempfile.TemporaryDirectory() as tmp:
+            # Stays alive with its stdout shut: the handshake fails at once.
+            fake = Path(tmp) / "hivemind-linux"
+            fake.write_text("#!/bin/sh\nexec 1>&-\nexec sleep 30\n")
+            fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+            started: list[subprocess.Popen] = []
+            real_popen = engine_mod.subprocess.Popen
+
+            def popen(*args, **kwargs):
+                started.append(real_popen(*args, **kwargs))
+                return started[-1]
+
+            try:
+                with mock.patch.object(engine_mod.subprocess, "Popen", popen):
+                    with self.assertRaises(EngineError):
+                        HivemindEngine(EngineFiles(fake, fake, None, "test"))
+            finally:
+                for proc in started:
+                    if proc.poll() is None:
+                        proc.kill()
+                        proc.wait()
+                        self.fail("the engine process was left running")
+            self.assertEqual(len(started), 1)
+
+
+class EngineLocation(unittest.TestCase):
+    def test_a_newer_bundle_replaces_the_unpacked_copy(self):
+        import gzip
+        import os
+        import tempfile
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            assets, own, app = root / "assets", root / "own", root / "app"
+            assets.mkdir()
+            own.mkdir()
+            names = [paths.binary_name(), paths.runtime_name(), "hivemind.onnx"]
+            for name in names:  # unpacked last month
+                (own / name).write_bytes(b"old " + name.encode())
+                os.utime(own / name, (1_700_000_000, 1_700_000_000))
+            for name in names:  # fetch_assets.py brought a new bundle today
+                with gzip.open(assets / f"{name}.gz", "wb") as out:
+                    out.write(b"new " + name.encode())
+            with mock.patch.dict(os.environ, {}, clear=False), \
+                    mock.patch.object(paths, "ASSETS", assets), \
+                    mock.patch.object(paths, "OWN_SUPPORT", own), \
+                    mock.patch.object(paths, "APP_SUPPORT", app):
+                os.environ.pop("HIVEMIND_BIN", None)
+                os.environ.pop("HIVEMIND_MODEL", None)
+                found = paths.locate()
+            self.assertEqual(found.binary, own / paths.binary_name())
+            self.assertEqual((own / "hivemind.onnx").read_bytes(), b"new hivemind.onnx")
+            self.assertEqual(
+                (own / paths.binary_name()).read_bytes(), b"new " + paths.binary_name().encode()
+            )
+
+
 # ── With the real engine ───────────────────────────────────────────────────
 
 

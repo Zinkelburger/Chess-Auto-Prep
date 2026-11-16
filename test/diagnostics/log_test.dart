@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/diagnostics/log.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -29,5 +31,20 @@ void main() {
       entry.line,
       '2026-09-19T20:31:04.123 W list repertoires: Permission denied',
     );
+  });
+
+  test('the console hears warnings and errors, not the info lines', () {
+    final printed = <String>[];
+    runZoned(
+      () {
+        final log = Log();
+        log.i('start');
+        log.w('open', 'gone');
+      },
+      zoneSpecification: ZoneSpecification(
+        print: (_, _, _, line) => printed.add(line),
+      ),
+    );
+    expect(printed, [endsWith(' W open: gone')]);
   });
 }

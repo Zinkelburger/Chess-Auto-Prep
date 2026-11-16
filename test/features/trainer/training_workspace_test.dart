@@ -115,6 +115,22 @@ void main() {
     },
   );
 
+  test('a Choose lines selection left on ends with the trainer mode', () async {
+    trainer.selection.chooseLines(true);
+    expect(trainer.learnCount, 0);
+    trainer.selection.followDocument();
+    expect(trainer.selection.choosing, isFalse);
+    // Following the document reads the open chapter alone, as the builder's
+    // Train tab trains it.
+    await trainer.reload();
+    expect(trainer.scopeLines.map((l) => l.name), ['First']);
+    expect(trainer.learnCount, 1);
+    trainer.selection.choosing = true;
+    expect(trainer.learnCount, 1, reason: 'picks apply only in the trainer');
+    trainer.selection.enter(null);
+    expect(trainer.selection.choosing, isFalse);
+  });
+
   test(
     'chapter pauses preserve line pauses and apply after settings roundtrip',
     () async {

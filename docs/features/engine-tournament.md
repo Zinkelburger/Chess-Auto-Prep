@@ -23,9 +23,10 @@ running-task button while a tournament holds the engine job, and from an open
 request. Without tournament storage the screen reads `Tournament storage is
 unavailable.`
 
-- **Top row**: `Engine tournament`, `New tournament…` (filled), `Engines…`, a
+- **Top row**: `New tournament…` (filled), `Engines…`, a
   refresh icon (`Refresh tournaments`), and while a run plays `Stop` (`Stopping
-  after this move…` once pressed). After a failed save, `Retry save`.
+  after this move…` once pressed). After a failed save, `Retry save`. The
+  mode's name is the top bar's, so the row repeats no heading.
   `New tournament…` is disabled while a run plays or a save waits for retry.
 - **Problem line**: the last failure in the error colour (all of it on
   hover), then one line per unreadable tournament (`Cannot read tournament
@@ -76,8 +77,8 @@ ready; legal move verified.` Failing shows the start failure, `<name> played an
 illegal move: <uci>`, `<name> crashed while searching`, or `<name> sent no
 bestmove within 20 s`, above the first 40 lines the process printed. Edits are
 refused while a run plays (`Wait for the tournament to finish.`).
-**Remove an engine** — confirm `Remove <name> from the registry? Saved runs
-retain their engine settings.`
+**Remove an engine** — the bin icon (`Remove <name>…`) → confirm `Remove
+“<name>”?` (`Saved runs keep their engine settings.`) / `Remove`.
 **Set up a run** — `New tournament…` (or `Run again…`, titled `Configure next
 run` and prefilled from that run) opens one dialog: `Name`; `Engines` (two
 seats default, `Stockfish A` and `Stockfish B`; each a typeable choice of the
@@ -147,7 +148,8 @@ called "<id>" under Documents/engine_tournaments.`
 - `engines.json` — the registry, a JSON list of engine objects (`id`, `name`,
   `executablePath` or none for bundled Stockfish, `arguments`, `options`,
   `threads`, `hashMb`, `ponder` false). Saves refuse if the file changed since
-  it was read.
+  it was read. A registry that cannot be read is moved to
+  `recovery-quarantine` under Support and read as empty, with a warning.
 - `open_request.json` — `{tournamentId, requestedAt}` from the MCP tools; moved
   to a private name before reading, deleted after, ignored after 24 hours.
 - Registered engines with an executable also appear in Settings as the analysis

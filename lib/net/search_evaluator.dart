@@ -92,7 +92,13 @@ Eval? lichessScore(
   required bool whiteToMove,
   required int minDepth,
 }) {
-  final decoded = jsonDecode(body);
+  // A block page answering in its place is no score, not a stop.
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(body);
+  } on FormatException {
+    return null;
+  }
   if (decoded is! Map ||
       decoded['depth'] is! int ||
       (decoded['depth'] as int) < minDepth) {

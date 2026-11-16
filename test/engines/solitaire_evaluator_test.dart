@@ -258,6 +258,39 @@ void main() {
     },
   );
 
+  test('a ranking keys each line by its first move, whatever follows it, and '
+      'one line is a ranking too', () async {
+    expect(
+      SolitaireEvaluator(
+        (() async => Started(ScriptedEngine())),
+        multiPv: 1,
+      ).multiPv,
+      1,
+    );
+    final engine = ScriptedEngine();
+    final evaluator = SolitaireEvaluator(() async => Started(engine));
+    addTearDown(evaluator.cancel);
+    final ready = evaluator.prepare(Fen.initial, _white[0]);
+    await pumpEventQueue();
+    for (var i = 0; i < _white.length; i++) {
+      engine.current.emit(
+        line(
+          multiPv: i + 1,
+          depth: 14,
+          score: Centipawns(100 - i * 10),
+          pv: [_white[i], _black[i]],
+        ),
+      );
+    }
+    engine.current.end();
+    expect(await ready, isTrue);
+    final verdict =
+        await evaluator.compare(Fen.initial, _white[0], _white[1])
+            as SolitaireScored;
+    expect(verdict.guessScore, const Centipawns(90));
+    expect(engine.searches, hasLength(1));
+  });
+
   test('moving to a new position invalidates a pending verdict', () async {
     final engine = ScriptedEngine();
     final evaluator = SolitaireEvaluator(() async => Started(engine));

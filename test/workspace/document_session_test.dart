@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pv_text.dart';
@@ -102,6 +104,28 @@ void main() {
     );
   });
 
+  test(
+    'a read that throws is a sentence too, and the open chapter stays',
+    () async {
+      final ref = chapterRef('KID', 'Locked');
+      fixture.store.throwOnOpen = StateError('Internal: isolate exited');
+      expect(
+        (await session.open(ref) as OpenFailed).reason,
+        'Could not read Locked.',
+      );
+      fixture.store.throwOnOpen = FileSystemException(
+        'Cannot open file',
+        ref.path,
+        OSError('Permission denied', Platform.isWindows ? 5 : 13),
+      );
+      expect(
+        (await session.open(ref) as OpenFailed).reason,
+        'Could not read Locked. Permission was denied.',
+      );
+      expect(session.source, fixture.ref);
+    },
+  );
+
   test('a move already in the tree only moves the cursor', () async {
     session.playMove('c7c5');
     expect(session.cursor.currentMove?.san, 'c5');
@@ -163,6 +187,34 @@ void main() {
     expect(session.cursor.value, from);
     await pumpEventQueue();
     expect(fixture.store.requestedSaves, isEmpty);
+  });
+
+  test('a comment line the file plays as far as it is read follows the '
+      'file, however it goes on', () {
+    final from = NodePath.of([0]);
+    final next = NodePath.of([0, 0]);
+    session.cursor.goTo(next);
+    final played = session.cursor.currentMove!.uci;
+    session.cursor.goTo(from);
+    final line = pvMoves(session.tree!.fenAt(from), [played, 'h7h6']);
+    session.cursor.showCommentLine(from, line, 0);
+    expect(session.cursor.commentLine.value, isNull);
+    expect(session.cursor.value, next);
+  });
+
+  test('while part of the game is hidden, the moves before it can still be '
+      'gone to', () {
+    session.showOnlyTo(NodePath.of([0, 0]));
+    session.cursor.goTo(NodePath.of([0]));
+    expect(session.cursor.value, NodePath.of([0]));
+  });
+
+  test('flipping a chapter turns the board over and back', () {
+    final side = session.orientation;
+    session.flip();
+    expect(session.orientation, side.opposite);
+    session.flip();
+    expect(session.orientation, side);
   });
 
   test('moving in the file puts the board back on it', () {

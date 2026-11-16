@@ -130,6 +130,9 @@ final class PlayerFiles implements PlayerStore {
       final json = await _read(_people, 'chess-auto-prep/people@1');
       final rows = _rows(json);
       players = rows.players;
+      for (final player in players) {
+        _logUnread('people.json', 'player ${player.id}', player.unreadFields);
+      }
       if (rows.unread > 0) {
         log.w(
           'read people.json',
@@ -163,12 +166,23 @@ final class PlayerFiles implements PlayerStore {
             group.entries.any((e) => e['person'] is! String)) {
           throw const FormatException('Invalid group or member ID.');
         }
+        _logUnread(p.basename(file.path), 'the group', group.unreadFields);
         groups.add(group);
       } on Object catch (e) {
         warnings.add('Could not read ${p.basename(file.path)}: $e');
       }
     }
     return (players: players, groups: groups, warnings: warnings);
+  }
+
+  /// A field of the wrong type reads as absent and stays in the file as it
+  /// is; the log says which, so a hand edit that went wrong can be found.
+  static void _logUnread(String file, String record, List<String> fields) {
+    if (fields.isEmpty) return;
+    log.w(
+      'read $file',
+      '$record: ${fields.join(', ')} not of the expected type; read as absent',
+    );
   }
 
   @override

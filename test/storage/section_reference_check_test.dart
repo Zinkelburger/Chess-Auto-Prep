@@ -298,4 +298,39 @@ void main() {
     expect(problem(file(['A', 'X']), file(['B', 'X']), scope), isNotNull);
     expect(problem(file(['A']), file(['B', 'New']), edited(1)), isNotNull);
   });
+
+  for (final order in [
+    [0, 2],
+    [-1, 1],
+    [0, 0],
+  ]) {
+    test('a full-length arrangement naming a game that was not there is '
+        'refused as lineage: $order', () {
+      final scope = GamesRearranged(
+        GamesArranged(before: 2, order: order, rewritten: {0, 1}),
+        references: ReferenceChanges([rename]),
+      );
+      expect(
+        problem(file(['A', 'X']), file(['B', 'X']), scope),
+        'Section reference changes have invalid game lineage.',
+      );
+    });
+  }
+
+  test('a section renamed to blank or padded text is refused', () {
+    for (final to in ['', ' B']) {
+      expect(
+        problem(
+          file(['A']),
+          file(['B']),
+          edited(
+            1,
+            changes: [SectionRename(path: path, from: 'A', to: to)],
+          ),
+        ),
+        'The renamed section needs a valid name.',
+        reason: '"$to"',
+      );
+    }
+  });
 }

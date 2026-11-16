@@ -7,6 +7,7 @@ import '../../chess/tactics/mistake_counts.dart';
 import '../../ui/list_message.dart';
 import '../../ui/list_row.dart';
 import '../../ui/pane_header.dart';
+import '../../ui/problem_line.dart';
 import '../../ui/search_field.dart';
 import '../../ui/segments.dart';
 import '../../ui/theme.dart';
@@ -134,6 +135,18 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
   Widget _checked(BookChecked checked) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
+      // A later comparison that failed: the last one stays, said to be old.
+      if (widget.book.problem != null)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Space.m),
+          child: ProblemLine(
+            'Could not compare your games.',
+            action: OutlinedButton(
+              onPressed: () => unawaited(widget.book.retry()),
+              child: const Text('Try again'),
+            ),
+          ),
+        ),
       Padding(
         padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, 0),
         child: Segments<_View>(
@@ -184,7 +197,7 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
               ? ListMessage('Nothing matches "$query".')
               : ListView.builder(
                   itemCount: shown.length,
-                  itemExtent: twoLineRowHeight,
+                  itemExtent: rowExtent(context, twoLineRowHeight),
                   itemBuilder: (context, at) => _GameRow(
                     checked: shown[at],
                     mistakes: widget.book.mistakesOf(shown[at]),

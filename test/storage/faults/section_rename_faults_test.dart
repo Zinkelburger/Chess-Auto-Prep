@@ -22,7 +22,6 @@ import '../../support/faulty_disk/fault_matrix.dart';
 import '../../support/faulty_disk/fault_plan.dart';
 import '../../support/faulty_disk/faulty_disk.dart';
 import '../../support/faulty_disk/io_trace.dart';
-import '../../support/faulty_disk/known_findings.dart';
 import '../../support/faulty_disk/perturbations.dart';
 import '../../support/faulty_disk/scenario.dart';
 import '../../support/faulty_disk/stores.dart';
@@ -80,7 +79,6 @@ final _rename = StorageScenario<Stores, SaveResult>(
   firstRead: _sectionsAndSelectors,
   probes: standardProbes,
   perturbations: [booksEditedMeanwhile, courseEditedElsewhere(kidCourse)],
-  known: {...recoveryLedger('compound-writes')},
 );
 
 void main() {

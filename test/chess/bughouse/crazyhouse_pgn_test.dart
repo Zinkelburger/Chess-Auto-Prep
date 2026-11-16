@@ -36,6 +36,17 @@ void main() {
     expect(replayed(pgn), ['e4', 'd5', 'exd5']);
   });
 
+  test('a later drop on the other board, of a piece taken on this one, '
+      'does not cut the copy short', () {
+    // Board 2's Black drops the pawn White took on board 1, then board 1
+    // goes on: every board-1 move still plays.
+    final line = playedLine('1e2e4 1d7d5 1e4d5 2d2d4 2P@e4 1d8d5');
+    expect(
+      crazyhouseLinePgn(line, BoardNumber.one),
+      '[Variant "Crazyhouse"]\n\n1. e4 d5 2. exd5 Qxd5 *',
+    );
+  });
+
   test('stops at the move asked for', () {
     final line = playedLine('1e2e4 1d7d5 1e4d5');
     expect(

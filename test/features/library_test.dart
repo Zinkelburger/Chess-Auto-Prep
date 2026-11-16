@@ -108,7 +108,7 @@ void main() {
       fixture.files.releaseAll();
       await refreshing;
     }
-    expect(await creating, isA<LibraryDone>());
+    expect(await creating, isA<LibraryAdded>());
     expect(fixture.textAt('/repertoires/KID/New.pgn'), isNotNull);
   });
 
@@ -165,7 +165,7 @@ void main() {
     );
     expect(
       await fixture.library.createChapter(benko, 'Volga'),
-      isA<LibraryDone>(),
+      isA<LibraryAdded>(),
     );
     expect(
       fixture.textAt('/repertoires/benko/Volga.pgn'),
@@ -181,7 +181,7 @@ void main() {
         'Volga',
         rootMoves: const ['d4', 'Nf6', 'c4', 'c5', 'd5', 'b5'],
       ),
-      isA<LibraryDone>(),
+      isA<LibraryAdded>(),
     );
     expect(
       fixture.textAt('/repertoires/benko/Volga.pgn'),

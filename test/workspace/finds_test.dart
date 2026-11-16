@@ -172,6 +172,21 @@ void main() {
       expect(kept.elo, 1600);
     });
 
+    test('a save still running offers no retry', () async {
+      finds.load();
+      final saving = finds.record(
+        onlyMoveAt('root', 300),
+        rootFen: Fen.initial,
+        prefix: const ['e4'],
+        side: Side.white,
+        elo: 1800,
+      );
+      expect(finds.canRetry, isFalse);
+      expect(finds.recorded, isA<FindsReading>());
+      expect(await saving, isA<FindsKept>());
+      expect(finds.canRetry, isFalse);
+    });
+
     test(
       'record freezes its accepted prefix and time before awaiting',
       () async {

@@ -3,6 +3,7 @@ import 'package:chess_auto_prep/chess/game_filter.dart';
 import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/workspace/explorer/file_filter.dart';
 import 'package:chess_auto_prep/workspace/explorer/local_games.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
@@ -177,6 +178,44 @@ void main() {
     expect(tree.state, isA<TreeBuilt>());
     expect(tree.answerAt(afterD4D5)!.total, 1500);
     expect(states.whereType<TreeReading>(), isEmpty);
+  });
+
+  test('Try again after a filter that failed runs the filter again and keeps '
+      'the games read', () async {
+    final hostile = '[Event "${List.filled(32, 'a').join()}!"]\n\n1. e4 *';
+    fixture = await viewerOver(hostile);
+    await fixture.open();
+    final filter = FileFilter(
+      fixture.session,
+      timeout: const Duration(milliseconds: 100),
+    );
+    addTearDown(filter.dispose);
+    tree = FileTree(filter: filter);
+    states = [];
+    await settled(tree);
+    expect(tree.state, isA<TreeBuilt>());
+    Future<void> filtered() async {
+      while (filter.busy) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    }
+
+    filter.apply(
+      const GameFilter(
+        rules: [
+          HeaderRule(field: 'Event', rule: FilterRule.regex, value: r'^(a+)+$'),
+        ],
+      ),
+    );
+    await filtered();
+    expect(tree.state, isA<TreeFailed>());
+    tree.forget();
+    expect(filter.busy, isTrue, reason: 'the filter runs again');
+    await filtered();
+    expect(filter.problem, contains('too long'));
+    filter.apply(GameFilter.none);
+    expect(tree.state, isA<TreeBuilt>(), reason: 'nothing read again');
+    expect(movesOf(tree.answerAt(Fen.initial)), ['e2e4']);
   });
 
   test('Try again reads a file gone back to again', () async {

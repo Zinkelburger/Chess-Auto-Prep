@@ -40,4 +40,23 @@ void main() {
     expect(await export.save('study.pgn', 'mine'), isA<PgnExportCancelled>());
     expect(await export.save('../study.pgn', 'mine'), isA<PgnExportFailed>());
   });
+  test('an empty name or one with a control character is refused before the '
+      'picker opens', () async {
+    var asked = 0;
+    final export = PgnExport(
+      pickDirectory: () async {
+        asked++;
+        return folder.path;
+      },
+    );
+    for (final name in ['', 'stu\x01dy.pgn']) {
+      expect(
+        await export.save(name, 'mine'),
+        isA<PgnExportFailed>(),
+        reason: name,
+      );
+    }
+    expect(asked, 0);
+    expect(folder.listSync(), isEmpty);
+  });
 }

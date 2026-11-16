@@ -18,7 +18,6 @@ import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/faulty_disk/fault_matrix.dart';
-import '../../support/faulty_disk/known_findings.dart';
 import '../../support/faulty_disk/perturbations.dart';
 import '../../support/faulty_disk/scenario.dart';
 import '../../support/faulty_disk/stores.dart';
@@ -57,12 +56,6 @@ final _folderMove = StorageScenario<Stores, FolderMoveResult>(
     lineId: trainedIdsOf(parseChapter(name: 'Main', text: blackChapter)).first!,
     folder: true,
   ),
-  known: {
-    // No case of a folder move leaves an orphan after a read under
-    // Documents briefly misses (a full run shows none), unlike a chapter's.
-    ...recoveryLedger('relocation-writes', books: true)
-      ..remove('recoveryMissing/*/read:Documents/*/O6'),
-  },
 );
 
 const _lone = 'repertoires/Group/Lone';

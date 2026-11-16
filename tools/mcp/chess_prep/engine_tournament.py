@@ -21,6 +21,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -102,6 +103,63 @@ def dart_executable() -> str:
         "Could not find the Dart VM. Put the Flutter SDK's bin/ on PATH or "
         "set CHESS_PREP_DART to its `dart`."
     )
+
+
+# ── Files ───────────────────────────────────────────────────────────────────
+
+
+def write_json_atomic(path: Path, payload: Any) -> None:
+    """Replace `path` whole: a crash leaves the old file or the new one,
+    never a truncated mix of the two."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, stage = tempfile.mkstemp(
+        dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, indent=2)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(stage, path)
+    except BaseException:
+        Path(stage).unlink(missing_ok=True)
+        raise
+
+
+def set_aside(path: Path) -> Path:
+    """Move an unreadable file out of the way, next to where it was, and
+    say so on stderr (the MCP client's log). Never deletes it."""
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    target = path.with_name(f"{path.name}.unreadable-{stamp}")
+    n = 1
+    while target.exists():
+        target = path.with_name(f"{path.name}.unreadable-{stamp}-{n}")
+        n += 1
+    os.replace(path, target)
+    print(f"chess-prep: set aside unreadable {path} as {target}", file=sys.stderr)
+    return target
+
+
+def process_names(pid: int, path: str) -> bool:
+    """Whether a live `pid` still runs with `path` (or a file under it) on
+    its command line — that is, is the process a run file recorded and not
+    an unrelated one that reused its pid after a reboot.
+
+    True when that cannot be read (no /proc): the pid alone has to do.
+    """
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return True
+    # The same folder can be spelled through a symlink (a linked Documents).
+    targets = {path.rstrip(os.sep), os.path.realpath(path)}
+    for arg in raw.decode("utf-8", errors="replace").split("\0"):
+        spellings = {arg, os.path.realpath(arg)} if os.path.isabs(arg) else {arg}
+        for spelled in spellings:
+            for target in targets:
+                if spelled == target or spelled.startswith(target + os.sep):
+                    return True
+    return False
 
 
 # ── Reading what is on disk ────────────────────────────────────────────────
@@ -193,8 +251,10 @@ def resolve_id(root: Path, wanted: str | None) -> Path:
             f"No tournaments in {root}. Start one with tournament_run."
         )
     if wanted:
-        match = root / wanted
-        if not (match / METADATA_FILE).is_file():
+        # An id is a directory name under the root, never a path: "../x" or
+        # an absolute path would reach (and stop) whatever lives there.
+        match = next((d for d in directories if d.name == wanted), None)
+        if match is None:
             names = ", ".join(sorted(d.name for d in directories)[:12])
             raise ToolError(f'No tournament "{wanted}". Available: {names}')
         return match
@@ -219,12 +279,34 @@ def _run_state(directory: Path) -> dict:
             state = json.load(fh)
     except (OSError, json.JSONDecodeError):
         return {"running": False}
+    if not isinstance(state, dict):
+        return {"running": False}
     pid = state.get("pid")
-    state["running"] = bool(pid) and _pid_alive(int(pid))
+    running = False
+    if isinstance(pid, int) and pid > 0 and _pid_alive(pid):
+        root = _argv_root(state.get("argv"))
+        running = root is None or process_names(pid, root)
+    state["running"] = running
     return state
 
 
+def _argv_root(argv: Any) -> str | None:
+    """The `--root` a recorded runner command line was started with."""
+    if not isinstance(argv, list) or "--root" not in argv[:-1]:
+        return None
+    value = argv[argv.index("--root") + 1]
+    return value if isinstance(value, str) else None
+
+
 def _pid_alive(pid: int) -> bool:
+    # tournament_run is the runner's parent, so a finished runner is a
+    # zombie until reaped, and kill(pid, 0) succeeds on a zombie.
+    try:
+        reaped, _ = os.waitpid(pid, os.WNOHANG)
+        if reaped == pid:
+            return False
+    except (ChildProcessError, OSError, AttributeError):
+        pass  # not our child, or no waitpid on this platform
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -436,17 +518,14 @@ def register_engine_tournament_tools(registry: Any) -> None:
         handshake = _await_handshake(process, log_path, timeout)
 
         directory = Path(handshake["directory"])
-        (directory / RUN_FILE).write_text(
-            json.dumps(
-                {
-                    "pid": process.pid,
-                    "log": str(log_path),
-                    "startedAt": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                    "argv": argv,
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
+        write_json_atomic(
+            directory / RUN_FILE,
+            {
+                "pid": process.pid,
+                "log": str(log_path),
+                "startedAt": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "argv": argv,
+            },
         )
 
         opened = None
@@ -514,8 +593,19 @@ def register_engine_tournament_tools(registry: Any) -> None:
         rows = []
         for directory in _dirs(root):
             data = _read_metadata(directory)
-            if data:
+            if not data:
+                continue
+            try:
                 rows.append(_summary(directory, data))
+            except (AttributeError, TypeError, ValueError):
+                # One malformed tournament.json is that row's problem only.
+                rows.append(
+                    {
+                        "id": directory.name,
+                        "directory": str(directory),
+                        "error": f"Unreadable {METADATA_FILE}.",
+                    }
+                )
         rows.sort(key=lambda r: str(r.get("created_at") or ""), reverse=True)
         limit = int(args.get("limit") or 25)
         return {"root": str(root), "count": len(rows), "tournaments": rows[:limit]}
@@ -765,19 +855,32 @@ def register_engine_tournament_tools(registry: Any) -> None:
         root = _root()
         root.mkdir(parents=True, exist_ok=True)
         registry_path = root / ENGINES_FILE
-        entries: list[dict] = []
+        # The app's own registry. Rows this tool does not understand are
+        # kept as they are, and a file it cannot read is set aside rather
+        # than replaced by a list holding only the new engine.
+        entries: list[Any] = []
+        set_aside_as: Path | None = None
         if registry_path.is_file():
             try:
                 with registry_path.open(encoding="utf-8") as fh:
                     loaded = json.load(fh)
-                if isinstance(loaded, list):
-                    entries = [e for e in loaded if isinstance(e, dict)]
-            except (OSError, json.JSONDecodeError):
-                entries = []
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                loaded = None
+            except OSError as e:
+                raise ToolError(f"Could not read {registry_path}: {e}") from None
+            if isinstance(loaded, list):
+                entries = loaded
+            else:
+                set_aside_as = set_aside(registry_path)
 
         name = (args.get("name") or report.get("name") or Path(path).stem).strip()
         existing = next(
-            (e for e in entries if e.get("executablePath") == path), None
+            (
+                e
+                for e in entries
+                if isinstance(e, dict) and e.get("executablePath") == path
+            ),
+            None,
         )
         if existing is not None:
             existing["name"] = name
@@ -792,10 +895,13 @@ def register_engine_tournament_tools(registry: Any) -> None:
                     "ponder": False,
                 }
             )
-        registry_path.write_text(
-            json.dumps(entries, indent=2), encoding="utf-8"
-        )
+        write_json_atomic(registry_path, entries)
         return {
+            **(
+                {"unreadable_registry_set_aside_as": str(set_aside_as)}
+                if set_aside_as is not None
+                else {}
+            ),
             "added": True,
             "name": name,
             "path": path,

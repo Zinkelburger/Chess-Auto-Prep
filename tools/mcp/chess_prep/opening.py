@@ -36,6 +36,10 @@ _CHESS_ERRORS = (ValueError, AssertionError, IndexError)
 _NULL_SANS = frozenset({"--", "Z0", "0000", "@@@@"})
 _NULL_TOKEN_RE = re.compile(r"\b(Z0|0000|@@@@)\b")
 _MOVE_NUM_RE = re.compile(r"^\d+\.+$")
+#: "1.d4" and "5...c5": a move number written against its move.
+_MOVE_NUM_PREFIX_RE = re.compile(r"^\d+\.+")
+#: "e4!", "Nf3?!": annotation glyphs, which python-chess's SAN parser rejects.
+_ANNOTATION_RE = re.compile(r"[!?]+$")
 _RESULT_TOKENS = frozenset({"*", "1-0", "0-1", "1/2-1/2"})
 _NAG_NAMES = {
     1: "good",
@@ -78,7 +82,8 @@ def parse_move_list(raw: Any) -> list[str]:
     if raw is None:
         return []
     if isinstance(raw, list):
-        return [str(t).strip() for t in raw if str(t).strip()]
+        listed = (_bare_move(str(t).strip()) for t in raw)
+        return [t for t in listed if t]
     text = str(raw)
     text = re.sub(r"\{[^}]*\}", " ", text)
     tokens = text.replace("\n", " ").split()
@@ -91,8 +96,15 @@ def parse_move_list(raw: Any) -> list[str]:
             continue
         if t.startswith("$"):
             continue
-        out.append(t)
+        t = _bare_move(t)
+        if t:
+            out.append(t)
     return out
+
+
+def _bare_move(token: str) -> str:
+    """The move in a token, without a move number or annotation glyphs."""
+    return _ANNOTATION_RE.sub("", _MOVE_NUM_PREFIX_RE.sub("", token))
 
 
 def _truncate(text: str, limit: int = 400) -> str:
@@ -224,6 +236,7 @@ class OpeningGraph:
     def __init__(self, path: str, max_ply: int = 50) -> None:
         self.path = path
         self.max_ply = max_ply
+        self.include_variations = True
         self.positions: dict[str, FenStat] = {}
         self.games = 0
         self.skipped = 0
@@ -236,6 +249,7 @@ class OpeningGraph:
         import chess
         import chess.pgn
 
+        self.include_variations = include_variations
         prepared = _NULL_TOKEN_RE.sub("--", text)
         handle = io.StringIO(prepared)
         while True:
@@ -479,8 +493,16 @@ class GraphCache:
         max_ply: int = 50,
     ) -> OpeningGraph:
         resolved = str(Path(path).expanduser().resolve())
-        if not reload and resolved in self._graphs:
-            return self._graphs[resolved]
+        cached = self._graphs.get(resolved)
+        # A graph built with other options is a different tree: asking for
+        # the mainline only, or a deeper walk, must not get the old one back.
+        if (
+            not reload
+            and cached is not None
+            and cached.max_ply == max_ply
+            and cached.include_variations == include_variations
+        ):
+            return cached
         p = Path(resolved)
         if not p.is_file():
             raise ToolError(f"PGN not found: {resolved}")
@@ -610,7 +632,7 @@ def register_opening_tools(registry: Any) -> None:
         return cache.load(
             path,
             reload=bool(args.get("reload")),
-            include_variations=args.get("include_variations", True),
+            include_variations=args.get("include_variations") is not False,
             max_ply=int(args.get("max_ply") or 50),
         )
 

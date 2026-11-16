@@ -326,6 +326,37 @@ void main() {
     expect(lab.position.one.board.kingOf(Side.black), isNotNull);
   });
 
+  test('an edited board keeps the promoted mark of a piece left in place, so '
+      'taking it still gives a pawn', () {
+    lab.loadDualFen('r3k3/8/8/8/8/8/8/Q~3K3[] b - - 0 1');
+    expect(lab.problem, isNull);
+    expect(lab.position.one.board.promoted.has(Square.a1), isTrue);
+    // The editor sees the board without hands or promoted marks.
+    lab.editBoard(
+      BoardNumber.one,
+      Setup.parseFen('r3k3/8/8/8/8/8/8/Q3K3 b - - 0 1'),
+    );
+    expect(lab.problem, isNull);
+    expect(lab.position.one.board.promoted.has(Square.a1), isTrue);
+    lab.showBoards(LabBoards.two);
+    lab.play(BoardNumber.one, 'a8a1');
+    expect(lab.problem, isNull);
+    // The queen was a pawn: C's partner D, White on board 2, gets a pawn.
+    final hand = lab.position.two.pockets!;
+    expect(hand.of(Side.white, Role.pawn), 1);
+    expect(hand.of(Side.white, Role.queen), 0);
+  });
+
+  test('a square the editor changed loses its promoted mark', () {
+    lab.loadDualFen('4k3/8/8/8/8/8/8/Q~3K3[] w - - 0 1');
+    lab.editBoard(
+      BoardNumber.one,
+      Setup.parseFen('4k3/8/8/8/8/8/8/R3K3 w - - 0 1'),
+    );
+    expect(lab.problem, isNull);
+    expect(lab.position.one.board.promoted.has(Square.a1), isFalse);
+  });
+
   test('one board shown steps board 1', () {
     lab.showBoards(LabBoards.two);
     lab.play(BoardNumber.two, 'e2e4');
@@ -480,6 +511,14 @@ void main() {
       lab.showGame(2);
       expect(lab.problem, isNull);
       expect(lab.line.moves, hasLength(2));
+    });
+
+    test('pasted, the first game is shown at its end, to go on from', () {
+      lab.pasteMoves(game(1, '1A. e4 1a. d5') + game(3, '1B. c4 1b. e5'));
+      expect((lab.gameCount, lab.gameAt), (2, 0));
+      expect(lab.line.applied, hasLength(2));
+      lab.showGame(1);
+      expect(lab.line.applied, isEmpty, reason: 'a step away is at its start');
     });
 
     test('pasted, a first game that does not play takes nothing', () {

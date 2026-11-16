@@ -56,6 +56,11 @@ class _TableBoardsState extends State<TableBoards>
     with ListeningState<TableBoards> {
   _Picked? _picked;
 
+  /// The board whose hand a piece is being dragged from. Chessground takes a
+  /// dragged piece on any board where its colour is on move, so a drop on
+  /// the other board would play that board's own reserve piece.
+  BoardNumber? _draggingFrom;
+
   BughouseLab get _lab => widget.lab;
 
   @override
@@ -92,6 +97,8 @@ class _TableBoardsState extends State<TableBoards>
 
   void _moved(BoardNumber board, Move move) {
     if (!mounted) return;
+    final from = _draggingFrom;
+    if (move is DropMove && from != null && from != board) return;
     setState(() => _picked = null);
     _lab.play(board, move.uci);
   }
@@ -127,6 +134,7 @@ class _TableBoardsState extends State<TableBoards>
                 onPick: (role) => _pick(board, role),
                 onTouched: (square) => _touched(board, square),
                 onMove: (move) => _moved(board, move),
+                onDrag: (on) => _draggingFrom = on ? board : null,
               ),
             ],
           ],
@@ -146,6 +154,7 @@ class _BoardColumn extends StatelessWidget {
     required this.onPick,
     required this.onTouched,
     required this.onMove,
+    required this.onDrag,
   });
 
   final BughouseLab lab;
@@ -156,6 +165,7 @@ class _BoardColumn extends StatelessWidget {
   final ValueChanged<Role> onPick;
   final ValueChanged<Square> onTouched;
   final ValueChanged<Move> onMove;
+  final ValueChanged<bool> onDrag;
 
   @override
   Widget build(BuildContext context) {
@@ -167,6 +177,7 @@ class _BoardColumn extends StatelessWidget {
       square: size / 8,
       picked: picked,
       onPick: onPick,
+      onDrag: onDrag,
     );
     return Listener(
       onPointerDown: (_) => lab.focusOn(board),
@@ -307,6 +318,7 @@ class _SeatRow extends StatelessWidget {
     required this.square,
     required this.picked,
     required this.onPick,
+    required this.onDrag,
   });
 
   final BughouseLab lab;
@@ -317,6 +329,7 @@ class _SeatRow extends StatelessWidget {
   final double square;
   final Role? picked;
   final ValueChanged<Role> onPick;
+  final ValueChanged<bool> onDrag;
 
   @override
   Widget build(BuildContext context) {
@@ -353,6 +366,7 @@ class _SeatRow extends StatelessWidget {
             live: toMove,
             picked: picked,
             onPick: onPick,
+            onDrag: onDrag,
             onStep: (role, by) => lab.adjustHand(board, side, role, by),
           ),
           // As tall as the hand, which the board's size allows for.

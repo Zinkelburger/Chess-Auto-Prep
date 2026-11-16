@@ -561,6 +561,57 @@ void main() {
     expect(review.unreviewedGames, isEmpty);
     expect(review.canReviewAll, isFalse);
   });
+  test('a large file lists no games to review until its moves arrive, and '
+      'reads none of them here meanwhile', () async {
+    final big = StringBuffer();
+    for (var game = 0; game < 3000; game++) {
+      big.write(
+        '[Event "G$game"]\n[Result "*"]\n\n'
+        '1. e4 {[%clk 0:03:00]} e5 {[%clk 0:03:00]} '
+        '2. Nf3 {[%clk 0:02:58]} Nc6 {[%clk 0:02:57]} *\n\n',
+      );
+    }
+    final text = big.toString();
+    expect(text.length, greaterThan(readOffThreadFrom));
+    final ref = chapterRef('Study', 'Big');
+    final store = ScriptedDocumentStore()
+      ..documents[ref] = Opened(text, scriptedRevision(text));
+    final saver = DocumentSaver(store, delay: Duration.zero);
+    final session = DocumentSession(store, saver);
+    await session.open(ref, game: 0);
+    final analysis = EngineAnalysis(
+      session,
+      () async => const StartFailed('off'),
+    );
+    final jobs = EngineJobs(analysis);
+    final review = GameReview(
+      session: session,
+      jobs: jobs,
+      launch: () async => const StartFailed('off'),
+    );
+    addTearDown(() {
+      review.dispose();
+      jobs.dispose();
+      analysis.dispose();
+      session.dispose();
+      saver.dispose();
+    });
+    var heard = 0;
+    review.addListener(() => heard++);
+    final lines = session.chapter!.lines;
+    final reading = movesBeingRead(lines);
+    expect(reading, isNotNull);
+    expect(review.unreviewedGames, isEmpty);
+    expect(review.unreviewedGames, isEmpty);
+    expect(lines.skip(1).where((line) => line.isRead), isEmpty);
+    await reading;
+    await pumpEventQueue();
+    expect(heard, 1);
+    final games = review.unreviewedGames;
+    expect(games, hasLength(3000));
+    expect(review.unreviewedGames, same(games));
+  });
+
   test('a game whose main line changed while it was reviewed is left as it '
       'is, and a review after the batch still ends on an edit', () async {
     const two =

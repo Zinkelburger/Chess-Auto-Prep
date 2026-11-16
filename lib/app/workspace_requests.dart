@@ -165,18 +165,41 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// The user goes to [mode]: its left column, and on the board the
   /// document it had up last, or an empty analysis board when it had none
   /// ([DocumentTabs.entered]). Another mode's document never comes along;
-  /// a draft stays in its tab. Back comes here again.
-  void switchTo(Mode mode) {
+  /// a draft stays in its tab. Back comes here again, or to [from]: where
+  /// the user was before a tab of [mode] put its document up.
+  void switchTo(Mode mode, {Place? from}) {
     if (_disposed || mode == _mode) return;
-    _showMode(mode);
+    _showMode(mode, from: from);
     documents.entered(mode);
   }
 
   /// [mode] on screen for a document a request is about to put up in it,
+  /// and how to put the window back — the mode it was asked from, Back and
+  /// Forward as they were — when the document does not come after all.
+  VoidCallback _showModeFor(Mode mode) {
+    final left = _mode;
+    if (_disposed || mode == left) return () {};
+    final back = [..._back];
+    final forward = [..._forward];
+    _showMode(mode);
+    return () {
+      if (_disposed || _mode != mode) return;
+      _back
+        ..clear()
+        ..addAll(back);
+      _forward
+        ..clear()
+        ..addAll(forward);
+      _mode = left;
+      notifyListeners();
+    };
+  }
+
+  /// [mode] on screen for a document a request is about to put up in it,
   /// so the mode's own is not brought back first.
-  void _showMode(Mode mode) {
+  void _showMode(Mode mode, {Place? from}) {
     if (_disposed || mode == _mode) return;
-    _remember(_here);
+    _remember(from ?? _here);
     _mode = mode;
     notifyListeners();
   }
@@ -218,7 +241,8 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (_disposed || ticket.overtaken) return;
     if (result is RequestDone) {
       documents.carry(mode);
-      return documents.close(blank);
+      // Moves played on it while the file was read keep it open.
+      return documents.closeIfBlank(blank);
     }
     if (result is RequestRefused) say(null);
     documents.entered(mode);
@@ -241,6 +265,10 @@ final class WorkspaceRequests extends ChangeNotifier {
 
   /// Where Forward goes, or null when there is nowhere.
   Place? get forwardTo => _forward.lastOrNull;
+
+  /// Where the user is now, for a jump that changes the mode only once its
+  /// document is up ([switchTo]'s `from`).
+  Place get here => _here;
 
   Place get _here => Place(
     mode: _mode,
@@ -313,8 +341,24 @@ final class WorkspaceRequests extends ChangeNotifier {
     }
     final source = place.source;
     if (source == null) return const RequestDone();
+    // The viewer is told its file again, as when it was read there first,
+    // so its game list and reading place come back with it.
+    final viewing = place.mode == Mode.pgnViewer;
+    final saved = viewing ? await _viewer.savedPlace(source) : null;
+    if (_disposed || ticket.overtaken) return const RequestDropped();
     final result = await _open(ticket, source, game: place.game, left: leave);
     if (_disposed || result is! RequestDone) return stayed(result);
+    if (viewing && ticket.current && _viewer.file != source) {
+      await _viewer.opened(
+        source,
+        place: saved,
+        currentRequest: () => ticket.current,
+      );
+      if (_disposed || ticket.overtaken) return const RequestDropped();
+      if (place.game case final game? when _session.game != game) {
+        _session.showGame(game);
+      }
+    }
     documents.carry(place.mode);
     _session.cursor.goTo(place.cursor);
     return result;
@@ -352,6 +396,36 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// says where those words went.
   Future<RequestResult> open(ChapterRef ref, {int? game}) =>
       _open(_nextRequest(), ref, game: game);
+
+  /// [ref] up in [mode], whichever mode asked. The draft question comes
+  /// first, so staying leaves the window, its mode and Back as they were;
+  /// then [mode] comes on screen, so the document comes up as its own; a
+  /// document that does not come after all — refused, or overtaken by
+  /// nothing the user asked for — puts the mode it was asked from back.
+  Future<RequestResult> _openIn(
+    Mode mode,
+    Ticket ticket,
+    ChapterRef ref, {
+    int? game,
+  }) async {
+    if (ticket.overtaken) return const RequestDropped();
+    Go? left;
+    if (ref != _session.source || game != _session.game) {
+      final answer = await _leaving.mayLeaveDocument();
+      if (ticket.overtaken || answer is! Go) return const RequestDropped();
+      left = answer;
+    }
+    final undo = _showModeFor(mode);
+    final result = await _open(ticket, ref, game: game, left: left);
+    if (!ticket.current) return result;
+    if (result is RequestDone) {
+      // A document already up was handed over: it is [mode]'s from now on.
+      documents.carry(mode);
+    } else {
+      undo();
+    }
+    return result;
+  }
 
   /// [open] for the request counted as [ticket], which may have waited for
   /// something else first.
@@ -438,12 +512,18 @@ final class WorkspaceRequests extends ChangeNotifier {
 
   /// A file from the viewer's recent list: brought inside Documents if it
   /// is not, then opened in the viewer. When no copy could be made the
-  /// viewer's list says why.
-  Future<RequestResult> openFile(ChapterRef ref, {int? game}) async {
+  /// viewer's list says why. A named [game] is a handoff and leaves the
+  /// saved reading place aside, unless [keepPlace]: a file's tab coming back
+  /// keeps its order, filter rules and followed player.
+  Future<RequestResult> openFile(
+    ChapterRef ref, {
+    int? game,
+    bool keepPlace = false,
+  }) async {
     final ticket = _nextRequest();
     final inside = await _viewer.fileFor(ref.path);
     if (ticket.overtaken || inside == null) return const RequestDropped();
-    return _inViewer(ticket, inside, game: game);
+    return _inViewer(ticket, inside, game: game, keepPlace: keepPlace);
   }
 
   /// A study's chapter read in the viewer, among the study's games. A study
@@ -478,6 +558,9 @@ final class WorkspaceRequests extends ChangeNotifier {
   }) async {
     final ticket = _nextRequest();
     if (source == ExplorerSource.thisFile) return _showFileGame(game);
+    // The position explored, not its move counters: a set-up position or a
+    // game that got there by another move order is at another ply.
+    final explored = _session.cursor.fen;
     final kept = await _games.keep(game, source: source, ply: ply);
     if (ticket.overtaken) return const RequestDropped();
     switch (kept) {
@@ -486,7 +569,10 @@ final class WorkspaceRequests extends ChangeNotifier {
       case GameKept(:final ref, ply: final at):
         final result = await _inViewer(ticket, ref, game: 0);
         if (_disposed || result is! RequestDone) return result;
-        _session.cursor.goTo(NodePath.of(List.filled(at, 0)));
+        _session.cursor.goTo(
+          _session.tree?.mainLineTo(explored) ??
+              NodePath.of(List.filled(at, 0)),
+        );
         return result;
     }
   }
@@ -708,8 +794,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     final result = await _library.saveBoard(into, name, board);
     if (ticket.overtaken) return const RequestDropped();
     if (result is LibraryAdded) {
-      _showMode(Mode.repertoires);
-      return _open(ticket, result.first);
+      return _openIn(Mode.repertoires, ticket, result.first);
     }
     final sentence = libraryMessage(
       result,
@@ -729,8 +814,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     final result = await _library.saveBoardAsRepertoire(name, board);
     if (ticket.overtaken) return const RequestDropped();
     if (result is LibraryAdded) {
-      _showMode(Mode.repertoires);
-      return _open(ticket, result.first);
+      return _openIn(Mode.repertoires, ticket, result.first);
     }
     final sentence = libraryMessage(
       result,
@@ -783,10 +867,8 @@ final class WorkspaceRequests extends ChangeNotifier {
   }
 
   /// [study] in Study, on [chapter].
-  Future<RequestResult> openStudy(ChapterRef study, {int chapter = 0}) {
-    _showMode(Mode.study);
-    return open(study, game: chapter);
-  }
+  Future<RequestResult> openStudy(ChapterRef study, {int chapter = 0}) =>
+      _openIn(Mode.study, _nextRequest(), study, game: chapter);
 
   /// The answer to the draft question when a file is up, or [Go] at once
   /// when the analysis board is: it has no file to ask about. Null when the
@@ -817,11 +899,13 @@ final class WorkspaceRequests extends ChangeNotifier {
     Ticket ticket,
     ChapterRef ref, {
     int? game,
+    bool keepPlace = false,
   }) async {
-    final place = game == null ? await _viewer.savedPlace(ref) : null;
+    final place = game == null || keepPlace
+        ? await _viewer.savedPlace(ref)
+        : null;
     if (ticket.overtaken) return const RequestDropped();
-    _showMode(Mode.pgnViewer);
-    final result = await _open(ticket, ref, game: game ?? 0);
+    final result = await _openIn(Mode.pgnViewer, ticket, ref, game: game ?? 0);
     if (ticket.current && result is RequestDone) {
       await _viewer.opened(
         ref,
@@ -838,8 +922,9 @@ final class WorkspaceRequests extends ChangeNotifier {
     required String name,
   }) {
     if (result is LibraryAdded) {
-      if (!_inLibrary) _showMode(Mode.repertoires);
-      return _open(ticket, result.first);
+      return _inLibrary
+          ? _open(ticket, result.first)
+          : _openIn(Mode.repertoires, ticket, result.first);
     }
     final sentence = libraryMessage(
       result,

@@ -95,6 +95,54 @@ void main() {
     navigator.currentState!.pop();
     await tester.pumpAndSettle();
   });
+
+  testWidgets('a close under way holds the window shut to clicks and Back, '
+      'and one allowed stays closing', (tester) async {
+    final session = await openSession(blackChapter);
+    addTearDown(session.dispose);
+    final navigator = GlobalKey<NavigatorState>();
+    final pending = Completer<String?>();
+    var applied = 0;
+    var cancelled = 0;
+    final exit = AppExit(
+      navigatorKey: navigator,
+      guard: ExitGuard(
+        saver: session.saver,
+        question: DraftDialog(navigator),
+        settleFeatures: () => pending.future,
+      ),
+      onCancelled: () => cancelled++,
+      stopEngines: () async {},
+      closeLog: () async {},
+    );
+    addTearDown(exit.closing.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigator,
+        theme: darkTheme(),
+        home: Scaffold(
+          body: Center(
+            child: TextButton(
+              onPressed: () => applied++,
+              child: const Text('Apply'),
+            ),
+          ),
+        ),
+      ),
+    );
+    final closing = exit.leave();
+    await tester.pumpAndSettle();
+    expect(exit.closing.value, isTrue);
+    await tester.tapAt(const Offset(5, 5));
+    await navigator.currentState!.maybePop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apply'), warnIfMissed: false);
+    expect(applied, 0);
+    pending.complete(null);
+    expect(await closing, AppExitResponse.exit);
+    expect(exit.closing.value, isTrue);
+    expect(cancelled, 0);
+  });
 }
 
 Future<void> _window(

@@ -27,6 +27,9 @@ class _TwicDialog extends StatefulWidget {
 
 class _TwicDialogState extends State<_TwicDialog> {
   int _weeks = 52;
+
+  /// This dialog started a run, so its outcome is the dialog's own.
+  bool _started = false;
   late final _changes = Listenable.merge([
     widget.library,
     widget.library.download,
@@ -39,16 +42,27 @@ class _TwicDialogState extends State<_TwicDialog> {
       final library = widget.library;
       final download = library.download!;
       final waiting = library.busy && !download.running;
+      // A run this dialog started went through: nothing is left to do here,
+      // so the only button closes it.
+      final finished = _started && !download.running && download.finished;
       return FormDialog(
         title: 'Download TWIC',
         width: dialogMedium,
         busy: download.running,
         progress: download.total == 0 ? null : download.done / download.total,
         // While it runs the left button stops it rather than closing.
-        cancel: download.running ? 'Stop' : 'Cancel',
+        cancel: finished
+            ? null
+            : download.running
+            ? 'Stop'
+            : 'Cancel',
         onCancel: download.running ? download.stop : null,
-        confirm: 'Download',
-        onConfirm: waiting ? null : _download,
+        confirm: finished ? 'Close' : 'Download',
+        onConfirm: finished
+            ? () => Navigator.of(context).pop()
+            : waiting
+            ? null
+            : _download,
         canFail: true,
         problem: download.problem,
         body: Column(
@@ -60,7 +74,7 @@ class _TwicDialogState extends State<_TwicDialog> {
               'Issues already in the database are skipped.',
             ),
             const SizedBox(height: Space.m),
-            if (!download.running)
+            if (!download.running && !finished)
               FieldRow(
                 label: 'Weeks',
                 child: NumberField(
@@ -88,6 +102,7 @@ class _TwicDialogState extends State<_TwicDialog> {
   /// Starts the download, which waits for another job on the databases to
   /// end; a number still being typed is taken first.
   void _download() {
+    setState(() => _started = true);
     FocusScope.of(context).unfocus();
     FocusManager.instance.applyFocusChangesIfNeeded();
     unawaited(widget.library.downloadTwic(_weeks));

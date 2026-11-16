@@ -60,7 +60,12 @@ final class LogFile {
   Future<void> close() async {
     final sink = _sink;
     _sink = null;
-    await sink?.flush();
-    await sink?.close();
+    // close() drains what is buffered and returns `done`, which finishes
+    // with the stored error on a sink that failed; flush() would wait forever.
+    try {
+      await sink?.close().timeout(const Duration(seconds: 2));
+    } on Object catch (_) {
+      // A log that cannot be written is given up silently.
+    }
   }
 }

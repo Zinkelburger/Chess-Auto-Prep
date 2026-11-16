@@ -141,6 +141,26 @@ void main() {
     expect(await install().locate(), isA<StockfishMissing>());
   });
 
+  test('checksums with either half missing cannot install', () async {
+    for (final record in [
+      {'payload_sha256': sha256.convert(engine).toString()},
+      {'source_sha256': 'src1'},
+    ]) {
+      assets['tools/assets.lock.json'] = Uint8List.fromList(
+        utf8.encode(jsonEncode({'stockfish-linux': record})),
+      );
+      expect(await install().locate(), isA<StockfishMissing>());
+    }
+  });
+
+  test('installs into a support folder that is not there yet', () async {
+    final deeper = StockfishInstall(
+      supportDirectory: Directory(p.join(support.path, 'new', 'deeper')),
+      readAsset: (asset) async => assets[asset],
+    );
+    expect(await deeper.locate(), isA<StockfishReady>());
+  });
+
   test('a corrupt engine asset leaves nothing stamped as installed', () async {
     final rubbish = Uint8List.fromList(utf8.encode('not a gzip stream'));
     assets['assets/executables/stockfish-linux.gz'] = rubbish;

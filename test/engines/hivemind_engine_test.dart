@@ -132,6 +132,7 @@ void main() {
       'does not', () async {
     final (live, liveProcess) = await started(live: true);
     expect(live.streams, isTrue);
+    expect(live.provenance['streams'], isTrue);
     expect(
       liveProcess.sent,
       contains('setoption name ReportIntervalMs value 250'),
@@ -179,9 +180,12 @@ void main() {
         time.flushMicrotasks();
       }
       expect(process.killed, isFalse);
+      EngineExit? exit;
+      unawaited(engine.exited.then((e) => exit = e));
       time.elapse(const Duration(minutes: 11));
       expect(process.killed, isTrue);
       expect((answer as HivemindFailed).reason, contains('stopped answering'));
+      expect(exit, EngineExit.unresponsive);
     });
   });
 
@@ -314,9 +318,12 @@ void main() {
       time.flushMicrotasks();
       HivemindAnswer? answer;
       unawaited(engine.search(question()).then((a) => answer = a));
+      EngineExit? exit;
+      unawaited(engine.exited.then((e) => exit = e));
       time.elapse(const Duration(minutes: 11));
       expect(process.killed, isTrue);
       expect((answer as HivemindFailed).reason, contains('stopped answering'));
+      expect(exit, EngineExit.unresponsive);
     });
   });
 
@@ -349,6 +356,29 @@ void main() {
       expect(line.mate, 3);
       expect(line.q, isNull);
       expect(line.pv.single, const JointMove('P@f7', null));
+    });
+
+    test('a search on a clock is given a minute more than its time', () {
+      expect(
+        const TimeBudget(Duration(seconds: 2)).patience,
+        const Duration(seconds: 62),
+      );
+    });
+
+    test('a line needs a depth and more than one node, unless a mate, and '
+        'reads a count or a score at the very end', () {
+      expect(parseHivemindInfo('info nodes 50 score cp 3'), isNull);
+      expect(parseHivemindInfo('info depth 2 score cp 3 nodes 1'), isNull);
+      final two = parseHivemindInfo('info depth 2 score cp 3 nodes 2')!;
+      expect(two.nodes, 2);
+      expect(two.cp, 3);
+      final last = parseHivemindInfo('info depth 4 nodes 1234')!;
+      expect(last.nodes, 1234);
+      expect(last.cp, isNull);
+      expect(last.mate, isNull);
+      final cut = parseHivemindInfo('info depth 4 nodes 99 score cp')!;
+      expect(cut.cp, isNull);
+      expect(cut.nodes, 99);
     });
 
     test('an info string is not a line', () {

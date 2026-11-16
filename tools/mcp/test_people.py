@@ -83,6 +83,15 @@ class Spellings(unittest.TestCase):
         self.assertEqual(name_match("Jianchao Zhou (GM)", "Zhou, Jianchao"), "exact")
         self.assertEqual(name_match("José Martínez", "Martinez,Jose"), "exact")
 
+    def test_letters_without_a_decomposition_fold_too(self):
+        # ł, ø, æ, ß, đ and dotless ı have no accent to strip; deleting them
+        # split `Radosław` into `rados aw`.
+        self.assertEqual(name_match("Radosław Wojtaszek", "Radoslaw Wojtaszek"), "exact")
+        self.assertEqual(name_match("Bjørn Thorfinnsson", "Thorfinnsson,Bjorn"), "exact")
+        self.assertEqual(name_match("Mustafa Yılmaz", "Yilmaz,Mustafa"), "exact")
+        self.assertEqual(handle_guesses("Paweł Teclaf")[0], "pawelteclaf")
+        self.assertIn("Wojtaszek,Radoslaw", twic_forms("Radosław Wojtaszek"))
+
     def test_handle_guesses_and_twic_forms(self):
         self.assertEqual(handle_guesses("Derek Zhang")[:2], ["derekzhang", "zhangderek"])
         self.assertIn("Zhou,Jianchao", twic_forms("Jianchao Zhou"))
@@ -190,6 +199,76 @@ class PeopleFile(unittest.TestCase):
         self.assertIs(store.match(fide_id=14115433), row)
         self.assertEqual(store.upsert({"name": "Denys Shmelov"})[1], "unchanged")
         self.assertEqual([p["id"] for p in store.search("shmeliov")], [row["id"]])
+
+    def test_rows_it_cannot_read_are_written_back_untouched(self):
+        rows = [{"id": "p1", "name": "Ann"}, "a stray string", 7, {"name": "no id"}]
+        (self.root / "people.json").write_text(
+            json.dumps({"format": "chess-auto-prep/people@1", "people": rows})
+        )
+        store = PeopleStore(self.root)
+        store.upsert({"name": "Bob"})
+        store.save()
+        saved = json.loads((self.root / "people.json").read_text())["people"]
+        for row in rows:
+            self.assertIn(row, saved)
+        self.assertIn("Bob", [r.get("name") for r in saved if isinstance(r, dict)])
+
+    def test_people_that_are_not_a_list_are_never_written_over(self):
+        text = json.dumps(
+            {"format": "chess-auto-prep/people@1", "people": {"p1": {"name": "Ann"}}}
+        )
+        (self.root / "people.json").write_text(text)
+        with self.assertRaises(ValueError):
+            store = PeopleStore(self.root)
+            store.upsert({"name": "Bob"})
+            store.save()
+        self.assertEqual((self.root / "people.json").read_text(), text)
+
+    def test_rows_the_app_saved_meanwhile_survive(self):
+        def write(people):
+            (self.root / "people.json").write_text(
+                json.dumps({"format": "chess-auto-prep/people@1", "people": people})
+            )
+
+        write([{"id": "p1", "name": "Ann"}])
+        store = PeopleStore(self.root)  # a long people_populate starts...
+        store.upsert({"name": "Bob"})
+        # ...and meanwhile the app adds Carol and edits Ann.
+        write([{"id": "p1", "name": "Ann", "notes": "edited in the app"},
+               {"id": "p3", "name": "Carol"}])
+        store.save()
+        saved = {r["name"]: r for r in json.loads((self.root / "people.json").read_text())["people"]}
+        self.assertEqual(sorted(saved), ["Ann", "Bob", "Carol"])
+        self.assertEqual(saved["Ann"].get("notes"), "edited in the app")
+
+    def test_the_lock_file_is_named_as_the_app_names_it(self):
+        from chess_prep.people import _lock_name
+
+        # Printed by `_stablePathHash` in lib/storage/file_lock.dart; Dart
+        # writes a negative 64-bit int with a minus sign.
+        self.assertEqual(_lock_name("/home/x/Documents/opponents"), "44d354ad6748d70a")
+        self.assertEqual(_lock_name("/tmp/a"), "6cc13bddf2746ce7")
+        self.assertEqual(_lock_name("é/ü"), "-6147bef2cf49b32b")
+        self.assertEqual(_lock_name(""), "-340d631b7bdddcdb")
+
+    def test_a_save_waits_for_the_apps_folder_lock(self):
+        import threading
+        import time
+
+        from chess_prep.people import directory_lock
+
+        store = PeopleStore(self.root)
+        store.upsert({"name": "Bob"})
+        done = threading.Event()
+        with directory_lock(self.root):
+            worker = threading.Thread(target=lambda: (store.save(), done.set()))
+            worker.start()
+            time.sleep(0.3)
+            self.assertFalse(done.is_set(), "saved while the app held the lock")
+            self.assertFalse((self.root / "people.json").exists())
+        worker.join(5)
+        self.assertTrue(done.is_set())
+        self.assertTrue((self.root / "people.json").exists())
 
     def test_group_keeps_prepared_ticks(self):
         groups = TournamentStore(self.root)
@@ -312,6 +391,34 @@ class Populate(unittest.TestCase):
             {"name": "Denys Shmelov", "probe_handles": False, "broadcasts": False, "db": str(self.twic)},
         )
         self.assertEqual([s["source"] for s in out["otb"]["sources"]], ["twic"])
+
+    def test_a_broken_collection_is_skipped_not_fatal(self):
+        root = Path(self._dir.name) / "broadcasts"
+        (root / "broken").mkdir()
+        (root / "broken" / "broken.db").write_bytes(b"not a database at all" * 100)
+        (root / "empty").mkdir()
+        sqlite3.connect(root / "empty" / "empty.db").close()
+        out = self.registry.call(
+            "player_lookup",
+            {"name": "Denys Shmelov", "probe_handles": False, "db": str(self.twic)},
+        )
+        self.assertEqual(
+            sorted(s["source"] for s in out["otb"]["sources"]),
+            ["broadcasts:massachusetts", "twic"],
+        )
+        skipped = " ".join(out["next_steps"])
+        self.assertIn("broken.db", skipped)
+        out = self.registry.call("people_populate", {"db": str(self.twic), "player_ids": ["13433622"]})
+        self.assertEqual(out["players"][0]["otb"]["games"], 6)
+
+    def test_a_broken_twic_file_is_skipped_not_fatal(self):
+        broken = Path(self._dir.name) / "broken_twic.db"
+        broken.write_bytes(b"\x00garbage" * 200)
+        out = self.registry.call(
+            "player_lookup",
+            {"name": "Denys Shmelov", "probe_handles": False, "db": str(broken)},
+        )
+        self.assertEqual([s["source"] for s in out["otb"]["sources"]], ["broadcasts:massachusetts"])
 
     def test_confirm_moves_a_candidate_into_the_downloaded_accounts(self):
         self.registry.call("people_populate", {"db": str(self.twic)})

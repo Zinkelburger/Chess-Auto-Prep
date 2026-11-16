@@ -67,8 +67,9 @@ final class DeletedUnreadable extends DeletedListing {
 ///
 /// Only chapter files are listed: the recovery folder also holds the old
 /// app's kept versions (`<digest>.bytes`) and whatever else a lock left
-/// there. A repertoire whose recovery folder cannot be read is passed over
-/// with a log line, as the repertoire listing passes over a folder.
+/// there. A repertoire or folder that cannot be read is passed over with a
+/// log line, as the repertoire listing passes over a folder; only a [root]
+/// that cannot be listed makes the whole listing unreadable.
 Future<DeletedListing> listDeleted(Directory root) async {
   if (!await root.exists()) return const DeletedChapters([]);
   final found = <DeletedChapter>[];
@@ -89,10 +90,16 @@ Future<DeletedListing> listDeleted(Directory root) async {
 
 Future<List<DeletedChapter>> _deletedBelow(Directory directory) async {
   final found = await _deletedIn(directory.path);
-  await for (final entry in directoryEntries(directory, followLinks: false)) {
-    if (entry is Directory && !p.basename(entry.path).startsWith('.')) {
-      found.addAll(await _deletedBelow(entry));
+  try {
+    await for (final entry in directoryEntries(directory, followLinks: false)) {
+      if (entry is Directory && !p.basename(entry.path).startsWith('.')) {
+        found.addAll(await _deletedBelow(entry));
+      }
     }
+  } on FileSystemException catch (error) {
+    // One folder the system will not list is passed over by itself; the
+    // chapters already found here and in its siblings stay listed.
+    log.w('list the deleted chapters below ${directory.path}', error);
   }
   return found;
 }

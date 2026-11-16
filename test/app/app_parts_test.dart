@@ -1,18 +1,22 @@
 import 'dart:io';
 
 import 'package:chess_auto_prep/app/mode.dart';
+import 'package:chess_auto_prep/chess/players/player.dart';
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/chess/tournament/config.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/storage/my_accounts.dart';
+import 'package:chess_auto_prep/storage/player_files.dart';
 import 'package:chess_auto_prep/storage/saved_place.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
+import 'package:chess_auto_prep/storage/update_files.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../support/scripted_engine.dart';
+import '../support/scripted_releases.dart';
 import '../support/scripted_tournaments.dart';
 import '../support/window_fixture.dart';
 
@@ -76,6 +80,7 @@ void main() {
       ),
     );
     await w.parts.start();
+    await w.parts.resumed;
     expect(w.parts.requests.mode, Mode.trainer);
     expect(w.parts.session.source, benkoMain);
     expect(w.parts.requests.backTo, isNull);
@@ -95,13 +100,84 @@ void main() {
       ),
     );
     await w.parts.start();
+    await w.parts.resumed;
     expect(w.parts.requests.mode, Mode.repertoires);
     expect(w.parts.session.isScratch, isTrue);
     expect(w.parts.requests.status, isNull);
   });
 
+  group('Player analysis reopens on its player', () {
+    final alex = Player({'id': 'alex', 'name': 'Alex'});
+
+    /// The window again, over a directory holding Alex, left at [place].
+    Future<void> launch(SavedPlace place) async {
+      final players = MemoryPlayers();
+      players.players[alex.id] = alex;
+      await leftAt(Settings(lastPlace: place));
+      w.dispose();
+      w = WindowFixture(
+        settings: SettingsStore(support: support),
+        players: players,
+      );
+      await w.parts.start();
+      await w.parts.resumed;
+      await pumpEventQueue();
+    }
+
+    test(
+      'a launch on Player analysis opens the player it was left on',
+      () async {
+        await launch(
+          SavedPlace(mode: Mode.playerAnalysis.name, player: 'alex'),
+        );
+        expect(w.parts.requests.mode, Mode.playerAnalysis);
+        expect(w.parts.players.analysis.player?.id, 'alex');
+        await written();
+      },
+    );
+
+    test(
+      'a launch elsewhere reads no games until the mode is opened',
+      () async {
+        final left = SavedPlace(mode: Mode.databases.name, player: 'alex');
+        await launch(left);
+        expect(w.parts.players.analysis.player, isNull);
+        expect(w.settings.value.lastPlace, left);
+        w.parts.requests.switchTo(Mode.playerAnalysis);
+        await pumpEventQueue();
+        expect(w.parts.players.analysis.player?.id, 'alex');
+        await written();
+      },
+    );
+
+    test('a player removed since leaves the picker, and the place lets them '
+        'go', () async {
+      await launch(SavedPlace(mode: Mode.playerAnalysis.name, player: 'gone'));
+      expect(w.parts.requests.mode, Mode.playerAnalysis);
+      expect(w.parts.players.analysis.player, isNull);
+      expect(
+        w.settings.value.lastPlace,
+        SavedPlace(mode: Mode.playerAnalysis.name),
+      );
+      await written();
+    });
+
+    test('a player chosen is kept as the user moves to another mode', () async {
+      await launch(SavedPlace(mode: Mode.databases.name));
+      w.parts.players.choose(alex);
+      await pumpEventQueue();
+      w.parts.requests.switchTo(Mode.databases);
+      expect(
+        w.settings.value.lastPlace,
+        SavedPlace(mode: Mode.databases.name, player: 'alex'),
+      );
+      await written();
+    });
+  });
+
   test('the place is kept as the user moves between files and modes', () async {
     await w.parts.start();
+    await w.parts.resumed;
     await w.parts.requests.open(kidMain);
     expect(
       w.settings.value.lastPlace,
@@ -173,6 +249,76 @@ void main() {
     await w.analysis.enable();
     expect(launched, [(cores: 4, memoryMb: Settings.defaultMemoryMb)]);
     expect(w.analysis.multiPv, 3);
+  });
+
+  test('a second start reads nothing again', () async {
+    await w.parts.start();
+    await leftAt(const Settings(engineLines: 4));
+    await w.parts.start();
+    expect(w.analysis.multiPv, 2);
+  });
+
+  test(
+    'with nothing left to write, the window closes without a word',
+    () async {
+      await w.parts.start();
+      expect(await w.parts.exit.mayClose(), isTrue);
+      expect(w.question.asked, isEmpty);
+    },
+  );
+
+  group('an update that did not finish installing', () {
+    Future<WindowFixture> started({required bool failed}) async {
+      final updates = Directory(p.join(support.path, 'updates'))..createSync();
+      if (failed) {
+        File(
+          p.join(updates.path, 'last-error.txt'),
+        ).writeAsStringSync('Update installation failed (exit 1).');
+      }
+      final window = WindowFixture(
+        updates: (
+          releases: ScriptedReleases(),
+          folder: UpdateFolder(updates),
+          installer: portableInstaller(support),
+          version: () async => '1.16.1',
+          automatic: false,
+          openPage: (_) async => true,
+          showFolder: (_) {},
+        ),
+      );
+      addTearDown(window.dispose);
+      await window.parts.start();
+      for (var i = 0; i < 100 && window.requests.status == null; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      return window;
+    }
+
+    test('is said once the window starts', () async {
+      final window = await started(failed: true);
+      expect(window.requests.status, contains('did not finish'));
+    });
+
+    test('is not said when there was none', () async {
+      final window = await started(failed: false);
+      expect(window.requests.status, isNull);
+    });
+  });
+
+  test('the engine tournaments are wired only where the environment can '
+      'both keep and run them', () async {
+    final registry = ScriptedTournaments();
+    addTearDown(registry.dispose);
+    final both = WindowFixture(
+      tournaments: registry,
+      launchTournament: (_, _) async => const StartFailed('not launched'),
+    );
+    addTearDown(both.dispose);
+    expect(both.parts.tournaments, isNotNull);
+    final keepOnly = WindowFixture(tournaments: registry);
+    addTearDown(keepOnly.dispose);
+    expect(keepOnly.parts.tournaments, isNull);
+    expect(w.parts.tournaments, isNull);
   });
 
   test('a window taken down while the settings are read starts no '

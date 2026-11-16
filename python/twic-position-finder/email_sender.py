@@ -439,9 +439,15 @@ def send_verification_email(to: str, verify_token: str) -> bool:
     return send_ses_email(to, "Verify your email — TWIC Position Finder", html, text)
 
 
-def send_login_email(to: str, login_token: str) -> bool:
-    """Send a magic login link containing a one-time token."""
+def send_login_email(to: str, login_token: str, new_alert: bool = False) -> bool:
+    """Send a magic login link containing a one-time token.
+
+    [new_alert]: the link also turns on the alert just created for this
+    address, which stays off until the owner opens it.
+    """
     login_url = f"{SITE_URL}/twic-notifications?token={login_token}"
+    intro = ("Open the link to turn on your new alert and manage your TWIC alerts."
+             if new_alert else "Click to manage your TWIC alerts.")
     html = f'''<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
@@ -450,7 +456,7 @@ def send_login_email(to: str, login_token: str) -> bool:
   <div style="max-width:500px;margin:0 auto;text-align:center;">
     {_logo_header()}
     <h1 style="color:#fff;font-size:22px;">Your Login Link</h1>
-    <p style="color:#aaa;">Click to manage your TWIC alerts.</p>
+    <p style="color:#aaa;">{intro}</p>
     <a href="{login_url}" style="display:inline-block;background:#629924;color:#fff;
        padding:14px 32px;border-radius:6px;text-decoration:none;font-weight:bold;
        font-size:16px;margin:20px 0;">
@@ -462,5 +468,5 @@ def send_login_email(to: str, login_token: str) -> bool:
   </div>
 </body>
 </html>'''
-    text = f"Your TWIC Position Finder login link:\n{login_url}"
+    text = f"{intro}\nYour TWIC Position Finder login link:\n{login_url}"
     return send_ses_email(to, "Your login link — TWIC Position Finder", html, text)

@@ -11,7 +11,6 @@ import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/faulty_disk/fault_matrix.dart';
-import '../../support/faulty_disk/known_findings.dart';
 import '../../support/faulty_disk/scenario.dart';
 import '../../support/faulty_disk/stores.dart';
 import '../../support/fixtures.dart';
@@ -43,11 +42,7 @@ const _create = StorageScenario<Stores, CreateResult>(
   retry: _createChapter,
   firstRead: _opened,
   probes: standardProbes,
-  known: {
-    'crashMidway/$_publishNew/O5': twoNames,
-    'crashMidway/$_publishNew/O9': twoNames,
-    'lostAck/$_publishNew/O8': _createRetry,
-  },
+  known: {'lostAck/$_publishNew/O8': _createRetry},
 );
 
 void main() => faultMatrix(_create);

@@ -55,7 +55,10 @@ class PositionTests(unittest.TestCase):
             bh.play_line(bh.parse_dual(DUAL), "A:e2e4 A:d7d5 B:e2e4 B:P@e6")
 
     def test_bad_positions_are_refused(self):
-        for fen in ("", START, "8/8/8/8/8/8/8/8 w - - 0 1|" + START):
+        for fen in ("", START, "8/8/8/8/8/8/8/8 w - - 0 1|" + START,
+                    # two white kings; a king the side to move could capture
+                    "KK5k/8/8/8/8/8/8/8[] w - - 0 1|" + START,
+                    "k7/1Q6/8/8/8/8/8/K7[] w - - 0 1|" + START):
             with self.assertRaises(bh.BadPosition):
                 bh.parse_dual(fen)
 
@@ -163,11 +166,16 @@ class UploadTests(unittest.TestCase):
 
     def test_the_contributor_ip_ignores_forwarded_for(self):
         from starlette.requests import Request
-        def request(headers):
-            return Request({"type": "http", "client": ("10.0.0.9", 1),
+        def request(headers, peer="10.0.0.9"):
+            return Request({"type": "http", "client": (peer, 1),
                             "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()]})
         self.assertEqual(bh.client_ip(request({"X-Forwarded-For": "1.2.3.4"})), "10.0.0.9")
-        self.assertEqual(bh.client_ip(request({"CF-Connecting-IP": "5.6.7.8"})), "5.6.7.8")
+        # Only a Cloudflare edge's CF-Connecting-IP is believed: anyone who
+        # reaches the origin directly could otherwise pick any contributor.
+        self.assertEqual(bh.client_ip(request({"CF-Connecting-IP": "5.6.7.8"})), "10.0.0.9")
+        self.assertEqual(bh.client_ip(request({"CF-Connecting-IP": "5.6.7.8"}, "162.158.1.2")), "5.6.7.8")
+        self.assertEqual(bh.client_ip(request({"CF-Connecting-IP": "5.6.7.8"}, "2606:4700::1")), "5.6.7.8")
+        self.assertEqual(bh.client_ip(request({}, "162.158.1.2")), "162.158.1.2")
 
     def test_another_computer_confirms_a_stored_position(self):
         bh.store_upload(self.conn, self.upload(self.ticket()), "tester")

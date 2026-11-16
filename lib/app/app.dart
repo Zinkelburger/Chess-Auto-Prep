@@ -318,7 +318,12 @@ final class AppExit {
       if (!await _draftIsSettled()) return AppExitResponse.cancel;
       await _stopEngines();
       log.i('exit');
-      await _closeLog();
+      // A log that cannot be written never decides whether the window closes.
+      try {
+        await _closeLog().timeout(const Duration(seconds: 2));
+      } on Object catch (error) {
+        log.w('close log', error);
+      }
       exited = true;
       return AppExitResponse.exit;
     } finally {

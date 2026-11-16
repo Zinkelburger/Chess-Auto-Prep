@@ -87,6 +87,44 @@ void main() {
     expect(after.games.order, [0]);
   });
 
+  test('promoting a move reached through a variation of its game never '
+      'changes the main line above it', () {
+    const underVariation = '''
+[Event "A"]
+[Result "*"]
+
+1. d4 d5 *
+
+[Event "B"]
+[Result "*"]
+
+1. e4 (1. d4 Nf6) *
+''';
+    const mirror = '''
+[Event "A"]
+[Result "*"]
+
+1. e4 (1. d4 d5) *
+
+[Event "B"]
+[Result "*"]
+
+1. d4 Nf6 *
+''';
+    for (final (text, mainMove) in [(underVariation, 'd4'), (mirror, 'e4')]) {
+      final before = parseChapter(name: 'Mixed', text: text);
+      expect(before.tree.children.first.san, mainMove);
+
+      final edit = variationPromoted(before, at: at(before, ['d4', 'Nf6']));
+
+      if (edit case ChapterEdited(:final chapter)) {
+        expect(chapter.tree.children.first.san, mainMove);
+      } else {
+        expect(edit, isA<ChapterEditRefused>());
+      }
+    }
+  });
+
   test('promoting a move that is already first changes nothing', () {
     final before = book();
 

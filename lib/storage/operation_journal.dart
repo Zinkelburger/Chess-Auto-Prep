@@ -441,7 +441,15 @@ final class OperationJournal<R extends Recorded> {
   /// plans over one left unfinished. The first that fails for now stops
   /// the rest and is answered; one that can never finish is set aside.
   Future<Deferred?> finishOverlapping(bool Function(R record) overlaps) async {
-    for (final (file, record) in await _readAll()) {
+    final read = await _read();
+    // One that cannot be read now may be in the way.
+    if (read.unread.firstOrNull case (final file, _, final error)) {
+      return Deferred(
+        'The record ${file.path} cannot be read now: ${describe(error)}',
+        phase: Phase.pivots,
+      );
+    }
+    for (final (file, record) in read.records) {
       if (!overlaps(record)) continue;
       if (await _movedAside(file, record.id)) continue;
       if (await finish(record) case final Deferred deferred) return deferred;
@@ -451,14 +459,31 @@ final class OperationJournal<R extends Recorded> {
 
   /// Finishes the operations a stopped process or a failed command left,
   /// and tells the ledger what each came to. One that can never finish, or
-  /// whose record is damaged, is set aside and logged; the rest still run.
-  Future<void> recover() async {
-    for (final (file, record) in await _readAll()) {
+  /// whose record is damaged, is set aside and logged; one whose record
+  /// cannot be read now stays owed; the rest still run. Answers the name of
+  /// every record it met ([recordName]): one it did not meet, say in a
+  /// folder briefly missing, is still to be looked at.
+  Future<Set<String>> recover() async {
+    final read = await _read();
+    for (final (file, id, error) in read.unread) {
+      final owed = ledger.owing(name, id);
+      ledger.deferred(
+        name,
+        id,
+        paths: owed?.paths ?? const {},
+        detail: describe(error),
+        phase: owed?.phase ?? Phase.pivots,
+        now: _clock(),
+      );
+      log.w('finish the operation recorded at ${file.path}', describe(error));
+    }
+    for (final (file, record) in read.records) {
       if (await _movedAside(file, record.id)) continue;
       if (await _locked(record) case Deferred(:final detail)) {
         log.w('finish the operation recorded at ${file.path}', detail);
       }
     }
+    return read.found;
   }
 
   /// [finish] under the locks [lock] takes; one it cannot take defers it
@@ -474,8 +499,16 @@ final class OperationJournal<R extends Recorded> {
     }
   }
 
-  Future<List<(File, R)>> _readAll() async {
-    if (!await recoveryDirectory(support)) return const [];
-    return readJournal(_folder, decode: decode);
+  Future<List<(File, R)>> _readAll() async => (await _read()).records;
+
+  Future<JournalRead<R>> _read() async {
+    if (!await recoveryDirectory(support)) {
+      return (
+        records: <(File, R)>[],
+        unread: <(File, String, FileSystemException)>[],
+        found: <String>{},
+      );
+    }
+    return readJournalEntries(_folder, decode: decode);
   }
 }

@@ -11,6 +11,7 @@ import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
 import 'library.dart';
 import 'library_messages.dart';
+import 'library_state.dart';
 
 /// One repertoire in the list, and its chapters when it is open.
 class RepertoireTile extends StatelessWidget {
@@ -41,6 +42,7 @@ class RepertoireTile extends StatelessWidget {
           folder: folder,
           expanded: expanded,
           onToggle: onToggle,
+          onOpen: onOpen,
         ),
         if (expanded)
           for (final chapter in folder.chapters)
@@ -61,12 +63,16 @@ class _RepertoireRow extends StatelessWidget {
     required this.folder,
     required this.expanded,
     required this.onToggle,
+    required this.onOpen,
   });
 
   final Library library;
   final RepertoireFolder folder;
   final bool expanded;
   final VoidCallback onToggle;
+
+  /// Opens a chapter made from the row, as the list's own rows do.
+  final ValueChanged<ChapterRef> onOpen;
 
   String get _subtitle {
     final chapters = folder.chapters.length;
@@ -100,13 +106,14 @@ class _RepertoireRow extends StatelessWidget {
       confirm: 'Create',
     );
     if (name == null || !context.mounted) return;
-    await announce(
+    final result = await announce(
       context,
       library.createChapter(folder, name),
       thing: 'chapter',
       name: name,
       failed: 'Could not create the chapter.',
     );
+    if (context.mounted && result is LibraryAdded) onOpen(result.first);
   }
 
   Future<void> _delete(BuildContext context) async {

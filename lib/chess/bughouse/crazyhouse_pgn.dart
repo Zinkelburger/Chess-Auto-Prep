@@ -23,7 +23,9 @@ String crazyhouseLinePgn(TableLine line, BoardNumber board) {
       continue;
     }
     final move = entry as LineMove;
-    if (line.goTo(board, node).replay() is! LineReplayed) break;
+    // The table as it stood when the move was made: the other board's
+    // cursor may be past a drop of a piece this board took after [node].
+    if (line.asAt(node).replay() is! LineReplayed) break;
     if (move.side == Side.white) {
       words.add('${move.number}.');
     } else if (words.isEmpty || words.last.startsWith('{')) {

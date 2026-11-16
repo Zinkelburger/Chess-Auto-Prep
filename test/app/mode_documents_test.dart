@@ -2,6 +2,7 @@ import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/app/workspace_requests.dart';
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart' as store;
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
@@ -184,4 +185,68 @@ void main() {
       expect(w.session.cursor.value, const NodePath.root());
     },
   );
+
+  test('the document on the board handed to another mode goes with it, '
+      'and comes back with that mode', () async {
+    final study = studyRef('Openings');
+    w.store.documents[study] = store.Opened(
+      threeChapterStudy,
+      scriptedRevision(threeChapterStudy),
+    );
+    await w.requests.openStudy(study, chapter: 1);
+    expect(shownTitle(), 'Study · Openings');
+    // Read in PGN Viewer: the same chapter, already on the board.
+    expect(await w.requests.readInViewer(study, game: 1), isA<RequestDone>());
+    expect(w.requests.mode, Mode.pgnViewer);
+    expect(shownTitle(), 'Viewer · Openings');
+
+    await go(Mode.repertoires);
+    await go(Mode.pgnViewer);
+    expect(w.session.source, study);
+    expect(w.session.game, 1);
+  });
+
+  test('Back after picking another mode\'s tab goes to the document and '
+      'mode that were up before it', () async {
+    final study = studyRef('Openings');
+    w.store.documents[study] = store.Opened(
+      threeChapterStudy,
+      scriptedRevision(threeChapterStudy),
+    );
+    await w.requests.openStudy(study, chapter: 1);
+    await go(Mode.repertoires);
+    await w.requests.open(kidMain);
+
+    await w.requests.documents.select(study);
+    expect(w.requests.mode, Mode.study);
+    expect(w.session.source, study);
+    final back = w.requests.backTo!;
+    expect(back.mode, Mode.repertoires);
+    expect(back.source, kidMain);
+
+    expect(await w.requests.back(), isA<RequestDone>());
+    expect(w.requests.mode, Mode.repertoires);
+    expect(w.session.source, kidMain);
+  });
+
+  test('a file read in the viewer and handed to Study comes back in Study '
+      'when its tab is picked', () async {
+    // Inside Documents, so picking the viewer's tab reads it where it is.
+    final study = ChapterRef.at('/Documents/studies/Openings.pgn');
+    w.store.documents[study] = store.Opened(
+      threeChapterStudy,
+      scriptedRevision(threeChapterStudy),
+    );
+    await w.requests.readInViewer(study, game: 1);
+    expect(shownTitle(), 'Viewer · Openings');
+    // Open in Study: the same chapter, already on the board.
+    expect(await w.requests.openStudy(study, chapter: 1), isA<RequestDone>());
+    expect(shownTitle(), 'Study · Openings');
+
+    await go(Mode.repertoires);
+    await w.requests.documents.select(study);
+    expect(w.requests.mode, Mode.study);
+    expect(w.session.source, study);
+    expect(shownTitle(), 'Study · Openings');
+  });
 }

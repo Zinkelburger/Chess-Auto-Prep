@@ -18,7 +18,8 @@ book chip `lib/workspace/book/book_chip.dart` and the games cache
 
 ## Screen
 
-Reached from the mode menu (`My games`, after `Tactics`). Games column left,
+Reached from the mode menu (`My games`, under `Study & games`, after `Study`
+and before `Tactics`). Games column left,
 board middle, reading card right. No game counter under the board; ↑/↓ walk
 the list instead.
 
@@ -51,7 +52,8 @@ the list instead.
   the move` and `Open in builder`.
 - **Messages** — `Reading your games and repertoires…`; `No games saved yet.
   Get games above to download them.`; `Nothing matches "{q}".`; `None of these
-  games left your book.`; `Could not compare your games.` with `Try again`; on
+  games left your book.`; `Could not compare your games.` with `Try again`
+  (a problem line over the last comparison when an earlier one is shown); on
   the Book tab `Open one of your games from the list to compare it with your
   book.`
 

@@ -218,7 +218,28 @@ final class FillGaps extends ChangeNotifier {
 
   /// The board's position in the newest tree searched for [side], the
   /// bottom of the board unless another is asked for.
-  SearchNode? nodeAtBoard({FillRequest? request, Side? side}) {
+  SearchNode? nodeAtBoard({FillRequest? request, Side? side}) =>
+      _foundAtBoard(request: request, side: side)?.node;
+
+  /// [nodeAtBoard] as a search goes on from it, playing [pins]: a choice
+  /// its run made by a chapter move since dropped is made again.
+  SearchNode? _seedAtBoard(
+    FillRequest request,
+    Side side,
+    Map<String, Set<String>> pins,
+  ) => switch (_foundAtBoard(request: request, side: side)) {
+    (:final node, :final found) => forgetDroppedPins(
+      node,
+      found.target.pins,
+      pins,
+    ),
+    null => null,
+  };
+
+  ({SearchNode node, FillFound found})? _foundAtBoard({
+    FillRequest? request,
+    Side? side,
+  }) {
     final tree = _session.tree;
     if (tree == null) return null;
     side ??= _session.orientation;
@@ -228,7 +249,7 @@ final class FillGaps extends ChangeNotifier {
     final searches = [?_found, ?_mirror, ..._history.reversed];
     // Prefer an exact root, keeping newest-first order within each group.
     // List.sort is not stable, so sorting only by root can show an older run.
-    SearchNode? subtree;
+    ({SearchNode node, FillFound found})? subtree;
     for (final found in searches) {
       if (found.side != side ||
           (request != null && !found.request.compatibleWith(request))) {
@@ -236,8 +257,10 @@ final class FillGaps extends ChangeNotifier {
       }
       final node = found.at(tree.rootFen, sans);
       if (node == null) continue;
-      if (found.tree.fen == _session.cursor.fen) return node;
-      subtree ??= node;
+      if (found.tree.fen == _session.cursor.fen) {
+        return (node: node, found: found);
+      }
+      subtree ??= (node: node, found: found);
     }
     return subtree;
   }
@@ -296,11 +319,11 @@ final class FillGaps extends ChangeNotifier {
     if (root == null) return 'The position on the board cannot be searched.';
     final target = _boardTarget(chapter, tree);
     _starts.cancel();
-    seed ??= nodeAtBoard(request: request);
+    seed ??= _seedAtBoard(request, target.side, target.pins);
     final mirror = request.mirrored ? target.mirror : null;
     if (mirror != null) {
       mirrorSeed ??=
-          nodeAtBoard(request: request, side: mirror.side) ?? mirrorStart(seed);
+          _seedAtBoard(request, mirror.side, mirror.pins) ?? mirrorStart(seed);
     }
     _remember();
     final scope = (request.source, request.evalDepth);
@@ -407,13 +430,27 @@ final class FillGaps extends ChangeNotifier {
   /// window holds, else the newest saved beside the chapter; or why there
   /// is none.
   Future<Object> _seedFor(FillRequest request, Side side) async {
-    if (nodeAtBoard(request: request, side: side) case final node?) return node;
+    final chapter = _session.chapter;
+    final tree = _session.tree;
+    final pins = chapter == null || tree == null
+        ? const <String, Set<String>>{}
+        : _pinsFor(_boardTarget(chapter, tree), side);
+    if (_seedAtBoard(request, side, pins) case final node?) return node;
     final source = _session.source;
     final load = _loadTree;
     return source == null || load == null
         ? 'No saved search is available for this board.'
-        : savedSeed(load(source, _session.cursor.fen), request, side);
+        : savedSeed(
+            load(source, _session.cursor.fen),
+            request,
+            side,
+            pins: pins,
+          );
   }
+
+  /// The chapter's moves a search for [side] from [target] plays.
+  static Map<String, Set<String>> _pinsFor(FillTarget target, Side side) =>
+      side == target.side ? target.pins : target.mirror.pins;
 
   Future<void> _run(
     FillRequest request,
@@ -742,7 +779,7 @@ final class FillGaps extends ChangeNotifier {
       Object error,
     ) {
       log.w('generate repertoire lines', error);
-      return (DraftNotWritten('The draft could not be prepared: $error'), 0);
+      return (const DraftNotWritten('The draft could not be prepared.'), 0);
     });
     _pending.watch(this, work);
     final (result, lines) = await work;

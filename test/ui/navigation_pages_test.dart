@@ -1,6 +1,9 @@
+import 'dart:ui' show Tristate;
+
 import 'package:chess_auto_prep/ui/navigation_pages.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -150,5 +153,37 @@ void main() {
     expect(find.text('Positions'), findsOneWidget);
     expect(find.text('Chapter content'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the open page\'s tab is the one said to be selected, and the '
+      'tabs are read once', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: const Scaffold(
+          body: SizedBox(
+            width: 260,
+            child: NavigationPages(
+              trailing: SizedBox(width: 34),
+              list: Text('List content'),
+              outline: Text('Chapter content'),
+            ),
+          ),
+        ),
+      ),
+    );
+    // The tab's own node is the button's parent, which says it is selected.
+    SemanticsNode button(String label) =>
+        tester.getSemantics(find.widgetWithText(TextButton, label));
+    SemanticsData tab(String label) => button(label).parent!.getSemanticsData();
+    expect(tab('Chapters').flagsCollection.isSelected, Tristate.isTrue);
+    expect(
+      tab('Repertoires').flagsCollection.isSelected,
+      isNot(Tristate.isTrue),
+    );
+    expect(tab('Chapters').tooltip, isEmpty);
+    expect(button('Chapters').getSemanticsData().tooltip, isEmpty);
+    semantics.dispose();
   });
 }

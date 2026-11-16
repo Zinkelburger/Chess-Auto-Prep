@@ -1,8 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:chess_auto_prep/chess/fen.dart';
+import 'package:chess_auto_prep/chess/generation/eval.dart';
+import 'package:chess_auto_prep/chess/generation/search_config.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/chess/generation/sources.dart';
+import 'package:chess_auto_prep/chess/generation/tree_wire_v4.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/storage/finds_store.dart';
 import 'package:chess_auto_prep/storage/generation_trees.dart';
@@ -181,6 +185,51 @@ void main() {
         await restarted.resume(request),
         'The saved search uses different search settings or side.',
       );
+    },
+  );
+
+  test(
+    'resuming the mainline book keeps every master reply it saved',
+    () async {
+      const request = FillRequest(
+        elo: 2200,
+        depthPlies: 1,
+        method: SearchMethod.mainline,
+      );
+      const root = '4k3/8/8/8/8/8/4P3/4K3 b - - 0 1';
+      Fen after(String uci) => fenOf(afterUci(positionOf(root), uci));
+      final shares = {'e8d8': 0.625, 'e8f8': 0.25, 'e8d7': 0.075, 'e8f7': 0.05};
+      final sans = {'e8d8': 'Kd8', 'e8f8': 'Kf8', 'e8d7': 'Kd7', 'e8f7': 'Kf7'};
+      final book = OpponentNode.over(
+        fen: const Fen(root),
+        evalForUs: null,
+        replies: [
+          for (final MapEntry(key: uci, value: share) in shares.entries)
+            ReplyMove(
+              move: MoveRef(uci: uci, san: sans[uci]!),
+              probability: share,
+              child: HorizonNode(fen: after(uci), evalForUs: const Eval(300)),
+            ),
+        ],
+      );
+      final text = await encodeSearchTree(
+        book,
+        const SearchConfig(
+          side: Side.white,
+          horizonPlies: 1,
+          lossLimitCp: null,
+        ),
+        complete: true,
+        evalDepth: request.evalDepth,
+        opponentRating: request.treeRating,
+        evaluationSource: request.treeSource,
+        replySource: request.replyKey,
+      );
+
+      final seed = await savedSeed(Stream.value(text), request, Side.white);
+
+      final replies = (seed as OpponentNode).replies;
+      expect({for (final r in replies) r.move.uci: r.probability}, shares);
     },
   );
 

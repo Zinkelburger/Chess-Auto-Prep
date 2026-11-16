@@ -196,6 +196,24 @@ void main() {
     expect(r.games.accounts[GameSite.lichess]!.username, 'Other');
   });
 
+  test('a download that cannot be added to the saved games is reviewed '
+      'instead of the old ones', () async {
+    final newer = scholarsMate.replaceAll('AbCd1234', 'XyZw9876');
+    r = _Review(
+      accounts: {GameSite.lichess: const Account('Me')},
+      lichess: GamesFetched([newer, scholarsMate]),
+    );
+    await r.cache.keep(GameSite.lichess, 'Me', [scholarsMate], DateTime(2026));
+    r.store.saves.add(const IoFailure('disk full'));
+    await r.start();
+    expect(await r.cache.all(GameSite.lichess, 'Me'), [scholarsMate]);
+    expect((r.games.status as MyGamesDone).reviewed, 2);
+    expect(
+      analyzedIn(r.setText),
+      containsAll(['lichess_XyZw9876', 'lichess_AbCd1234']),
+    );
+  });
+
   test('one failed save leaves the other site saved and reviewed', () async {
     r = _Review();
     r.store.creates.add(const IoFailure('disk full'));
@@ -848,5 +866,33 @@ void main() {
     expect(r.games.status, isA<MyGamesDone>());
     expect(r.puzzlesOnDisk, hasLength(6));
     expect(r.store.requestedSaves.length, greaterThanOrEqualTo(3));
+  });
+
+  test(
+    'a username save is seen under way, and so is a running review',
+    () async {
+      r = _Review();
+      await r.games.load();
+      final saving = <bool>[];
+      final running = <bool>[];
+      r.games.addListener(() {
+        saving.add(r.games.savingAccounts);
+        if (r.games.status is MyGamesReviewing) running.add(r.games.running);
+      });
+      await r.games.saveUsernames(lichess: 'Me', chesscom: 'Me');
+      expect(saving, contains(true), reason: 'heard while it saves');
+      expect(r.games.savingAccounts, isFalse);
+      await r.games.start();
+      expect(running, isNotEmpty);
+      expect(running, everyElement(isTrue));
+    },
+  );
+
+  test('a fetched game already saved is reviewed once', () async {
+    r = _Review(chesscom: const GamesFetched([]));
+    await r.cache.keep(GameSite.lichess, 'Me', [scholarsMate], DateTime(2026));
+    await r.start();
+    final done = r.games.status as MyGamesDone;
+    expect(done.reviewed, 1);
   });
 }

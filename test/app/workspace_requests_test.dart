@@ -6,10 +6,12 @@ import 'package:chess_auto_prep/app/window_input.dart';
 import 'package:chess_auto_prep/app/workspace_requests.dart';
 import 'package:chess_auto_prep/chess/explorer_answer.dart';
 import 'package:chess_auto_prep/chess/explorer_choice.dart';
+import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/study.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/storage/saved_place.dart';
 import 'package:chess_auto_prep/workspace/document/study_choice.dart';
 import 'package:chess_auto_prep/workspace/document/study_drafts.dart';
 import 'package:chess_auto_prep/workspace/document/study_picker.dart';
@@ -318,6 +320,45 @@ void main() {
       },
     );
 
+    test('staying with a frozen draft keeps the mode it was asked from, '
+        'and Back as it was', () async {
+      await freezeKid();
+      w.question.answer = DraftChoice.keepWaiting;
+      final modes = <Mode>[];
+      w.requests.addListener(() => modes.add(w.requests.mode));
+      expect(await w.requests.openFile(games), isA<RequestDropped>());
+      expect(w.requests.mode, Mode.repertoires);
+      expect(modes, everyElement(Mode.repertoires));
+      expect(w.requests.backTo, isNull);
+      expect(w.session.source, kid);
+    });
+
+    test(
+      'a file that cannot be read leaves the mode it was asked from',
+      () async {
+        await w.requests.open(kid);
+        w.store.documents.remove(games);
+        expect(await w.requests.openFile(games), isA<RequestRefused>());
+        expect(w.requests.mode, Mode.repertoires);
+        expect(w.requests.backTo, isNull);
+        expect(w.session.source, kid);
+      },
+    );
+
+    test('a study a draft is stayed with does not bring Study up', () async {
+      final study = studyRef('Openings');
+      w.store.documents[study] = Opened(
+        twoChapterStudy,
+        scriptedRevision(twoChapterStudy),
+      );
+      await freezeKid();
+      w.question.answer = DraftChoice.keepWaiting;
+      expect(await w.requests.openStudy(study), isA<RequestDropped>());
+      expect(w.requests.mode, Mode.repertoires);
+      expect(w.requests.backTo, isNull);
+      expect(w.session.source, kid);
+    });
+
     test('a file that could not be read is not remembered', () async {
       w.store.documents.remove(games);
       final result = await w.requests.openFile(games);
@@ -379,6 +420,41 @@ void main() {
       },
     );
 
+    test(
+      'opens at the position explored, whatever its move counters say',
+      () async {
+        // After 1.e4 c5 2.Nf3 d6, set up with the counters reset.
+        const explored = Fen(
+          'rnbqkbnr/pp2pppp/3p4/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 1',
+        );
+        await w.requests.openPosition(explored, side: Side.white);
+        w.lichess.pgn =
+            '[Event "Scripted"]\n\n1. e4 c5 2. Nf3 d6 3. d4 cxd4 1-0\n';
+        expect(await openListed(), isA<RequestDone>());
+        expect(w.session.cursor.value, NodePath.of(const [0, 0, 0, 0]));
+        expect(w.session.cursor.fen.position, explored.position);
+      },
+    );
+
+    test('Back to the file the viewer was reading gives the viewer that '
+        'file again', () async {
+      final games = collectionRef('games');
+      w.store.documents[games] = Opened(
+        threeGameFile,
+        scriptedRevision(threeGameFile),
+      );
+      await w.requests.openFile(games);
+      w.requests.switchTo(Mode.repertoires);
+      expect(await openListed(), isA<RequestDone>());
+      expect(w.viewer.file, isNot(games));
+      await w.requests.back();
+      expect(await w.requests.back(), isA<RequestDone>());
+      expect(w.requests.mode, Mode.pgnViewer);
+      expect(w.session.source, games);
+      expect(w.viewer.file, games);
+      expect(w.viewer.games, isNotEmpty);
+    });
+
     test('that could not be fetched is refused and nothing moves', () async {
       await w.requests.open(kid);
       w.lichess.pgn = null;
@@ -391,9 +467,20 @@ void main() {
 
     test('is not opened over a draft the user stays with', () async {
       await freezeKid();
+      // On a sideline, where the explorer's ply down the main line is
+      // somewhere else.
+      final path = <int>[];
+      var nodes = w.session.tree!.children;
+      while (nodes.length < 2) {
+        path.add(0);
+        nodes = nodes.first.children;
+      }
+      final sideline = NodePath.of([...path, 1]);
+      w.session.cursor.goTo(sideline);
       w.question.answer = DraftChoice.keepWaiting;
       expect(await openListed(), isA<RequestDropped>());
       expect(w.session.source, kid);
+      expect(w.session.cursor.value, sideline);
     });
 
     test('that lands after the user opened another chapter is dropped, '
@@ -633,12 +720,89 @@ void main() {
       expect(notified, 1, reason: 'the same mode is not a change');
     });
 
+    test('the same sentence said again changes nothing, unless it is a '
+        'problem now and was not before', () {
+      var notified = 0;
+      w.requests.addListener(() => notified++);
+      w.requests.say('Saved a copy', problem: false);
+      w.requests.say('Saved a copy', problem: false);
+      expect(notified, 1);
+      w.requests.say('Saved a copy');
+      expect(notified, 2);
+      expect(w.requests.statusIsProblem, isTrue);
+    });
+
     test('say puts a sentence in the bar and takes it out', () {
       w.requests.say('Could not save a copy: disk full');
       expect(w.requests.status, 'Could not save a copy: disk full');
       w.requests.say(null);
       expect(w.requests.status, isNull);
     });
+  });
+
+  group('places', () {
+    test('are the same place by mode, file, game and board, not cursor', () {
+      const here = Place(mode: Mode.repertoires);
+      expect(here.scratch, isFalse);
+      expect(
+        here.sameAs(Place(mode: Mode.repertoires, cursor: NodePath.of([0]))),
+        isTrue,
+      );
+      expect(here.sameAs(const Place(mode: Mode.study)), isFalse);
+      expect(here.sameAs(Place(mode: Mode.repertoires, source: kid)), isFalse);
+      expect(
+        here.sameAs(const Place(mode: Mode.repertoires, scratch: true)),
+        isFalse,
+      );
+    });
+
+    test('a launch resumes on the mode it names, with its file', () async {
+      await w.requests.resume(const SavedPlace(mode: 'databases'));
+      expect(w.requests.mode, Mode.databases);
+      await w.requests.resume(SavedPlace(mode: 'repertoires', path: kid.path));
+      expect(w.requests.mode, Mode.repertoires);
+      expect(w.session.source, kid);
+    });
+
+    test('Back goes to the place just left, and Forward returns', () async {
+      await w.requests.open(benko);
+      await w.requests.open(kid);
+      w.requests.switchTo(Mode.databases);
+      expect(await w.requests.back(), isA<RequestDone>());
+      expect(w.requests.mode, Mode.repertoires);
+      expect(w.session.source, kid);
+      expect(w.requests.forwardTo?.mode, Mode.databases);
+    });
+
+    test('Back goes to the latest place of several', () async {
+      await w.requests.open(kid);
+      w.requests.switchTo(Mode.databases);
+      w.requests.switchTo(Mode.players);
+      expect(await w.requests.back(), isA<RequestDone>());
+      expect(w.requests.mode, Mode.databases);
+      expect(w.requests.forwardTo?.mode, Mode.players);
+    });
+
+    test('Back to an analysis board comes, and Forward is offered', () async {
+      final started = w.requests.mode;
+      w.session.playMove('e2e4');
+      w.requests.switchTo(Mode.databases);
+      expect(await w.requests.back(), isA<RequestDone>());
+      expect(w.requests.mode, started);
+      expect(w.requests.forwardTo?.mode, Mode.databases);
+      expect(w.session.cursor.currentMove?.san, 'e4');
+    });
+  });
+
+  test('a line put on a new board is done', () async {
+    final result = await w.requests.openLine(
+      root: Fen.initial,
+      sans: const ['e4', 'e5'],
+      ply: 1,
+      side: Side.white,
+    );
+    expect(result, isA<RequestDone>());
+    expect(w.session.cursor.currentMove?.san, 'e4');
   });
 }
 

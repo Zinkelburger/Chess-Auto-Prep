@@ -155,9 +155,18 @@ GameTree lineTree(Fen rootFen, List<String> sans) {
 
 /// [san] played from [position]: the node and the position after it, or
 /// null when it is not a move that can be played there.
+///
+/// dartchess throws a `RangeError` rather than answering null for a few
+/// words that are no move at all (`-`, `x`, `N`, an empty word), and a
+/// hand-edited `// Root:` heading can hold any of them.
 (MoveNode, Position)? replayed(Position position, String san) {
   if (san == nullMoveSan) return nullMovePlayed(position, spelling: san);
-  final move = position.parseSan(san);
+  final Move? move;
+  try {
+    move = position.parseSan(san);
+  } on Object {
+    return null;
+  }
   if (move == null) return null;
   final (next, spelled) = position.makeSanUnchecked(move);
   return (MoveNode(san: spelled, uci: move.uci, fen: fenOf(next)), next);

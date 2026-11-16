@@ -68,6 +68,26 @@ void main() {
       expect(analysis.evals.values, contains(-125));
     },
   );
+  // In-memory reports: a disk read is real I/O that pumpEventQueue does not
+  // wait for.
+  test('a cancelled reload of the same player restores the report', () async {
+    final running = hunt.start();
+    await pumpEventQueue();
+    engine.current.emit(
+      line(depth: 14, score: const Centipawns(-125), pv: ['g1f3']),
+    );
+    engine.current.end();
+    await running;
+    await analysis.pending.settle();
+    final reload = analysis.select(player);
+    expect(hunt.findings, isEmpty, reason: 'nothing shown while it loads');
+    analysis.cancel();
+    await reload;
+    await pumpEventQueue();
+    expect(analysis.corpus, isNotNull);
+    expect(hunt.findings.single.score.text, '-1.25');
+    expect(analysis.evals.values, contains(-125));
+  });
   test(
     'unseen best reply is evidence of an uncovered move, with correct sign',
     () async {
@@ -84,6 +104,47 @@ void main() {
       expect(hunt.findings.single.score.text, '-0.80');
     },
   );
+  test('a castle the games played is not an unseen reply', () async {
+    // The engine names castling king to its square (e8g8); the games name
+    // it king onto rook (e8h8). Both are the reply these games met.
+    const castled =
+        '[Event "Club"]\n[White "Alex"]\n[Black "Bob"]\n[Result "1-0"]\n\n'
+        '1. e4 e5 2. Nf3 Nf6 3. Bc4 Be7 4. d3 O-O 1-0';
+    final store = ScriptedDocumentStore();
+    const ref = DocumentRef('/castled.pgn');
+    store.documents[ref] = Opened(castled, scriptedRevision(castled));
+    final owner = PlayerAnalysis(
+      documents: store,
+      cache: GamesCache(store, folder: '/cache'),
+      sites: const [],
+      pending: PendingWrites(),
+    );
+    final castleHunt = PlayerHunt(
+      owner,
+      () async => Started(engine),
+      reports: reports,
+    )..configure(limit: 1);
+    addTearDown(() {
+      castleHunt.dispose();
+      owner.dispose();
+    });
+    await owner.select(
+      Player.create('Alex').edited({
+        'pgn_files': [ref.path],
+      }),
+    );
+    owner.configure(minPly: 7);
+    await pumpEventQueue();
+    final running = castleHunt.start();
+    await pumpEventQueue();
+    engine.current.emit(
+      line(depth: 14, score: const Centipawns(20), pv: ['e8g8']),
+    );
+    engine.current.end();
+    await running;
+    expect(castleHunt.error, isNull);
+    expect(castleHunt.findings, isEmpty);
+  });
   test(
     'switching colour cancels the job without publishing into the other colour',
     () async {
@@ -128,6 +189,7 @@ void main() {
   group('with reports on disk', () {
     late PlayerAnalysis owner;
     late PlayerHunt diskHunt;
+    late Player alex;
     setUp(() async {
       final folder = Directory.systemTemp.createTempSync('player_reports');
       addTearDown(() => folder.deleteSync(recursive: true));
@@ -145,11 +207,10 @@ void main() {
         () async => Started(engine),
         reports: PlayerReports(folder),
       )..configure(limit: 1);
-      await owner.select(
-        Player.create('Alex').edited({
-          'pgn_files': [ref.path],
-        }),
-      );
+      alex = Player.create('Alex').edited({
+        'pgn_files': [ref.path],
+      });
+      await owner.select(alex);
       await pumpEventQueue();
     });
     tearDown(() {

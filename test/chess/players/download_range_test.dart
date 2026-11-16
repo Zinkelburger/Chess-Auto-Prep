@@ -13,6 +13,15 @@ void main() {
     expect(PlayerDownloadRange.from(const {}).max, 500);
     expect(PlayerDownloadRange.from(const {'max': 0}).max, 1);
     expect(PlayerDownloadRange.from(const {'max': 20000}).max, 10000);
+    // Hand-edited values of the wrong type read as the defaults.
+    final odd = PlayerDownloadRange.from(const {
+      'max': '200',
+      'months': 6.5,
+      'speeds': 'blitz',
+    });
+    expect(odd.max, 500);
+    expect(odd.months, isNull);
+    expect(odd.speeds, const PlayerDownloadRange().speeds);
   });
 
   test('a window is 1 to 120 months', () {

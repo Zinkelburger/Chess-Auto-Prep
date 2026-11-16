@@ -226,14 +226,23 @@ final class BookSelectors implements Reference {
   final Future<void> Function()? written;
   final Future<void> Function(String) synchronize;
 
+  // Whether books.json was there when last read.
+  var _found = false;
+
   @override
-  Future<Holds> look() async => await readBooksText(path) == before
+  Future<Holds> look() async => await _read() == before
       ? const HoldsBefore()
       : HoldsOther('$path changed while the move was prepared.');
 
   @override
   Future<void> follow() async {
-    final books = await readBooksText(path);
+    final looked = _found;
+    final books = await _read();
+    if (looked && !_found) {
+      // Here when looked at a moment ago: it is gone only for now, and
+      // leaving it would keep selectors naming the old path.
+      throw FileSystemException('books.json is missing for now', path);
+    }
     await publishText(
       path,
       books == before || books == after
@@ -249,6 +258,19 @@ final class BookSelectors implements Reference {
       synchronize: synchronize,
     );
     await written?.call();
+  }
+
+  /// [readBooksText], noting whether the file was there.
+  Future<String?> _read() async {
+    try {
+      final books = await recoveryText(path);
+      _found = books != null;
+      return books;
+    } on FormatException catch (error) {
+      _found = true;
+      log.w('leave the unreadable $path as it is', error);
+      return null;
+    }
   }
 }
 

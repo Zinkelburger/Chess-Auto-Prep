@@ -432,8 +432,10 @@ Three consumers, one engine, sharing only files.
 
 `tools/mcp/bughouse/paths.py:locate()` finds the engine in this order:
 `HIVEMIND_BIN`/`HIVEMIND_MODEL`/`HIVEMIND_LIB` → the desktop app's support
-directory → `~/.local/share/chess-prep/bughouse/` → ungzip
-`assets/bughouse/*.gz`. It never writes inside the app's directory.
+directory → `assets/bughouse/*.gz`, ungzipped into
+`~/.local/share/chess-prep/bughouse/` whenever a bundle file is newer than
+its copy → that copy as it is (no bundle in the checkout). It never writes
+inside the app's directory.
 
 The desktop app installs its own copy into `<support>/bughouse/` from
 `assets/bughouse/` and checks each file against `manifest.json` (size and

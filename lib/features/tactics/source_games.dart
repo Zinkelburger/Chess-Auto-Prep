@@ -77,7 +77,6 @@ final class SourceGames extends ChangeNotifier {
   SourceView _view = const NoPuzzleUp();
   Puzzle? _following;
   final _reads = Latest();
-  bool _disposed = false;
 
   SourceView get view => _view;
 
@@ -151,14 +150,12 @@ final class SourceGames extends ChangeNotifier {
   }
 
   void _become(SourceView view) {
-    if (_disposed) return;
     _view = view;
     notifyListeners();
   }
 
   @override
   void dispose() {
-    _disposed = true;
     _reads.close();
     _trainer.removeListener(_trainerChanged);
     _set.removeListener(_setChanged);

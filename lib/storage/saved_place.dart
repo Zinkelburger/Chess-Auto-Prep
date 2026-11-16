@@ -1,8 +1,14 @@
 /// Where the window was when the app was last used: the mode by its name,
-/// and the file on the board, if one was. Kept in the settings so the next
-/// launch opens there rather than on an empty board.
+/// the file on the board, if one was, and the player under analysis. Kept in
+/// the settings so the next launch opens there rather than on an empty board.
 final class SavedPlace {
-  const SavedPlace({required this.mode, this.path, this.section, this.game});
+  const SavedPlace({
+    required this.mode,
+    this.path,
+    this.section,
+    this.game,
+    this.player,
+  });
 
   final String mode;
 
@@ -16,11 +22,16 @@ final class SavedPlace {
   /// The game of a file read game by game.
   final int? game;
 
+  /// The id of the player Player analysis was last on, whatever the mode,
+  /// so that mode opens on them again.
+  final String? player;
+
   Map<String, Object?> toJson() => {
     'mode': mode,
     'path': ?path,
     'section': ?section,
     'game': ?game,
+    'player': ?player,
   };
 
   /// A place read back, or null when [json] is not one.
@@ -30,12 +41,14 @@ final class SavedPlace {
     final path = json['path'];
     final section = json['section'];
     final game = json['game'];
+    final player = json['player'];
     if (mode is! String) return null;
     return SavedPlace(
       mode: mode,
       path: path is String ? path : null,
       section: section is String ? section : null,
       game: game is int && game >= 0 ? game : null,
+      player: player is String && player.isNotEmpty ? player : null,
     );
   }
 
@@ -45,8 +58,9 @@ final class SavedPlace {
       other.mode == mode &&
       other.path == path &&
       other.section == section &&
-      other.game == game;
+      other.game == game &&
+      other.player == player;
 
   @override
-  int get hashCode => Object.hash(mode, path, section, game);
+  int get hashCode => Object.hash(mode, path, section, game, player);
 }

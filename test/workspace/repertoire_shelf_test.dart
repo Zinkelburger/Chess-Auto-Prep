@@ -123,6 +123,30 @@ void main() {
     expect(shelf.stale, isTrue);
   });
 
+  test('a file parsed by a read that was overtaken is not parsed again by '
+      'the next one', () async {
+    store.hold = true;
+    var overtaken = false;
+    final first = shelf.read(gone: () => overtaken);
+    await pumpEventQueue();
+    expect(store.waiting, 1);
+    overtaken = true;
+    store
+      ..hold = false
+      ..releaseAll();
+    await first;
+    expect(shelf.refs, isEmpty);
+    // Same revision, other bytes: only a fresh parse could see them.
+    store.documents[const DocumentRef(_path)] = Opened(
+      course.replaceFirst('3. Bc4 Nf6 4. d3', '3. d4 exd4 4. Nxd4'),
+      scriptedRevision(course),
+    );
+    await shelf.read(gone: () => false);
+    expect(shelf.stale, isFalse);
+    expect(linesAt(italian), {'f1c4': 2});
+    expect(linesAt(ruy), {'f1b5': 3});
+  });
+
   test('each chapter of a course file is indexed from its own games', () async {
     await shelf.read(gone: () => false);
     expect(shelf.refs, [italian, ruy]);

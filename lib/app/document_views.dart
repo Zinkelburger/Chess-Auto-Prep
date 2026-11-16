@@ -189,6 +189,7 @@ abstract base class _LibraryView extends _DocumentModeView {
                 _modes.library,
                 _modes.outline,
                 workspace.session,
+                (ref) => unawaited(requests.open(ref)),
               ),
             ),
       icon: AppIcons.add,
@@ -570,11 +571,10 @@ final class ViewerView extends _ReadingView {
         null => null,
       }, group: 'File');
 
-  /// A file is read here, not opened or kept as a copy: its File actions
-  /// are the games list's own.
+  /// A file is read here, not kept as a copy: its File actions are opening
+  /// and closing it, then the games list's own.
   @override
-  bool _keeps(AppAction action) =>
-      action.group != 'File' && action.label != 'Save a copy…';
+  bool _keeps(AppAction action) => action.label != 'Save a copy…';
 
   @override
   List<AppAction> actions(ModeMenu menu) => [

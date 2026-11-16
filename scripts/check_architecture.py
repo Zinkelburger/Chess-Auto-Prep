@@ -401,6 +401,42 @@ def _check_listening(where, name, header, members, line, findings) -> None:
     )
 
 
+TYPE_BODY = re.compile(
+    r"^(?:(?:abstract|final|base|sealed|interface|mixin)\s+)*"
+    r"(?:class|mixin|enum|extension)\b[^{;]*\{",
+    re.M,
+)
+ISOLATE_RUN = re.compile(r"\bIsolate\.run\s*(?:<[^>]*>)?\s*\(")
+STATIC_MEMBER = re.compile(r"^(?:@[\w.]+(?:\([^)]*\))?\s*)*(?:static|factory)\b")
+
+
+def check_isolates(where: str, source: str, findings: list[str]) -> None:
+    """No `Isolate.run` in an instance member of a class, mixin, enum or
+    extension. Its closure shares the member's context with every closure
+    there, so one that uses `this` sends the whole owner with it, and an
+    owner holding a future, port or socket cannot be sent at all. Call a
+    top-level function that takes only plain data instead."""
+    clean = blank_literals(source)
+    for m in TYPE_BODY.finditer(clean):
+        depth, end = 1, m.end()
+        while end < len(clean) and depth:
+            depth += {"{": 1, "}": -1}.get(clean[end], 0)
+            end += 1
+        body, at = clean[m.end() : end - 1], 0
+        for text, _ in class_members(body):
+            start = body.find(text, at)
+            at = start + len(text)
+            run = ISOLATE_RUN.search(text)
+            if run is None or STATIC_MEMBER.match(text):
+                continue
+            line = clean.count("\n", 0, m.end() + start + run.start()) + 1
+            findings.append(
+                f"{where}:{line}: Isolate.run in an instance member sends "
+                "what its closures share, `this` included; call a top-level "
+                "function that takes plain data"
+            )
+
+
 def check_parts(path: Path, source: str, findings: list[str]) -> None:
     """Allow whole collaborator classes, not methods split out of an owner.
 
@@ -504,6 +540,7 @@ def check_file(path: Path, findings: list[str]) -> None:
         check_insets(path.relative_to(LIB).as_posix(), "\n".join(lines), findings)
         check_imports(path, lines, findings)
         check_classes(str(where), "\n".join(lines), findings)
+        check_isolates(str(where), "\n".join(lines), findings)
         check_members(str(where), "\n".join(lines), findings)
     check_functions(path, lines, findings, lengths=not is_lib)
 

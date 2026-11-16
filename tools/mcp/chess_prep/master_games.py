@@ -52,6 +52,18 @@ def _file_identity(path: Path) -> tuple[int, int] | None:
     return (st.st_dev, st.st_ino)
 
 
+def readonly_uri(path: Path) -> str:
+    """A SQLite URI that opens [path] read-only, whatever its characters.
+
+    Pasting the path into `file:{path}?mode=ro` reads `#` as the start of a
+    fragment and `?` as the start of the query, so a folder called `a#b`
+    opened (and created) a writable database named `a` in the working
+    directory, and `%41` in a name was decoded to `A`. `as_uri()`
+    percent-encodes the path, so only `mode=ro` is ever read as a parameter.
+    """
+    return f"{path.absolute().as_uri()}?mode=ro"
+
+
 def position_key(fen4: str) -> int:
     """Signed 64-bit FNV-1a of a 4-field FEN (must match Dart `positionKey`)."""
     h = _FNV_OFFSET
@@ -94,7 +106,7 @@ class MasterGamesDb:
                 "app (Settings → Master games database) or set "
                 "CHESS_PREP_MASTER_DB."
             )
-        self._conn = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)
+        self._conn = sqlite3.connect(readonly_uri(self.path), uri=True)
         self._conn.row_factory = sqlite3.Row
         self.identity = _file_identity(self.path)
         self._zdict: bytes | None = None
@@ -177,10 +189,12 @@ class MasterGamesDb:
         return _game_dict(r, self._movetext) if r else None
 
     def games_by_player(self, name: str, limit: int = 50) -> list[dict]:
-        q = f"{name.strip()}%"
+        from .app_games import _like_prefix
+
+        q = _like_prefix(name)
         rows = self._conn.execute(
-            "SELECT * FROM games WHERE white LIKE ? COLLATE NOCASE"
-            " OR black LIKE ? COLLATE NOCASE ORDER BY date DESC LIMIT ?",
+            "SELECT * FROM games WHERE white LIKE ? ESCAPE '\\' COLLATE NOCASE"
+            " OR black LIKE ? ESCAPE '\\' COLLATE NOCASE ORDER BY date DESC LIMIT ?",
             (q, q, limit),
         ).fetchall()
         return [_game_dict(r, self._movetext) for r in rows]

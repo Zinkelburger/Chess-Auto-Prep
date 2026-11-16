@@ -147,6 +147,15 @@ def _unpack_assets() -> EngineFiles | None:
     return _from_directory(OWN_SUPPORT, "unpacked from assets/bughouse")
 
 
+def _refreshed_assets() -> EngineFiles | None:
+    """[_unpack_assets], but a failed unpack (a full disk) leaves the copy
+    already there in use rather than failing the lookup."""
+    try:
+        return _unpack_assets()
+    except OSError:
+        return None
+
+
 @overload
 def locate(required: Literal[True] = True) -> EngineFiles: ...
 @overload
@@ -154,11 +163,14 @@ def locate(required: bool) -> EngineFiles | None: ...
 def locate(required: bool = True) -> EngineFiles | None:
     """The first engine that exists, or None (or a raised error) if there is
     no engine to find at all."""
+    # The bundle is unpacked (a no-op when the copy is current) before the
+    # copy is looked at: taking the copy first meant a bundle refreshed by
+    # `fetch_assets.py` was never unpacked, and the old engine ran forever.
     found = (
         _from_env()
         or _from_directory(APP_SUPPORT, "app support directory")
+        or _refreshed_assets()
         or _from_directory(OWN_SUPPORT, "chess-prep support directory")
-        or _unpack_assets()
     )
     if found is None and required:
         raise EngineNotInstalled(

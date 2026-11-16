@@ -15,7 +15,6 @@ import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/faulty_disk/fault_matrix.dart';
-import '../../support/faulty_disk/known_findings.dart';
 import '../../support/faulty_disk/perturbations.dart';
 import '../../support/faulty_disk/scenario.dart';
 import '../../support/faulty_disk/stores.dart';
@@ -52,7 +51,6 @@ final _deleteChapter = StorageScenario<Stores, DeleteResult>(
     chapters: [kidMain, _aside],
     lineId: trainedIdsOf(parseChapter(name: 'Main', text: blackChapter)).first!,
   ),
-  known: {...recoveryLedger('relocation-writes', books: true)},
 );
 
 /// The chapter the standard profile deleted while seeding, moved back to
@@ -82,7 +80,6 @@ final _restoreChapter = StorageScenario<Stores, MoveResult>(
       parseChapter(name: 'Old', text: kidDeletedText),
     ).first!,
   ),
-  known: {...recoveryLedger('relocation-writes', books: true)},
 );
 
 void main() {

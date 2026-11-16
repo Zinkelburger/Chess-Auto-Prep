@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/databases/database_library.dart';
 import 'package:chess_auto_prep/features/databases/databases_screen.dart';
 import 'package:chess_auto_prep/features/databases/twic_download.dart';
+import 'package:chess_auto_prep/storage/disk_usage.dart';
 import 'package:chess_auto_prep/storage/master_corpus.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:flutter/material.dart';
@@ -74,6 +76,68 @@ void main() {
     ]);
   });
 
+  test('a store deleted while a measurement runs is measured again, so it '
+      'does not stay in the list', () async {
+    final first = Completer<List<StoreUsage>>();
+    var measured = 0;
+    final databases = DatabaseLibrary(
+      path: master,
+      corpus: const SqliteMasterCorpus(),
+      picker: ScriptedPicker(),
+      documents: ScriptedDocumentStore(),
+      collections: p.join(support.path, 'collections'),
+      pending: PendingWrites(),
+      places: (
+        support: support.path,
+        derived: const ['master_games.db'],
+        stores: [(name: 'Master games', path: master, removable: true)],
+      ),
+      measureWith: (places) {
+        measured++;
+        if (measured == 1) return first.future;
+        return Future.value(const <StoreUsage>[]);
+      },
+    );
+    addTearDown(databases.dispose);
+    const old = (
+      name: 'Leftover master_games.db.pre-v3.bak',
+      path: '',
+      bytes: 5000,
+      removable: true,
+    );
+    final running = databases.measure();
+    // Sized before the delete, published after it.
+    await databases.measure();
+    first.complete(const [old]);
+    await running;
+    expect(measured, 2);
+    expect(databases.storage, isEmpty);
+    expect(databases.measuring, isFalse);
+  });
+
+  test('an import measures the storage again, so the total is not the size '
+      'from before it', () async {
+    final databases = DatabaseLibrary(
+      path: master,
+      corpus: _GrowingCorpus(master),
+      picker: ScriptedPicker('/games.pgn'),
+      documents: ScriptedDocumentStore(),
+      collections: p.join(support.path, 'collections'),
+      pending: PendingWrites(),
+      places: (
+        support: support.path,
+        derived: const ['master_games.db'],
+        stores: [(name: 'Master games', path: master, removable: true)],
+      ),
+    );
+    addTearDown(databases.dispose);
+    await databases.measure();
+    expect(databases.storage.first.bytes, 3100);
+    await databases.importFile();
+    await pumpEventQueue();
+    expect(databases.storage.first.bytes, 3100 + 4000);
+  });
+
   test('a running download keeps its database from being deleted', () async {
     final download = TwicDownload(master)..running = true;
     final databases = library(download: download);
@@ -133,4 +197,28 @@ void main() {
       expect(find.textContaining('Deleted Master games'), findsOneWidget);
     },
   );
+}
+
+/// A database that reads as empty, with an import that adds 4,000 bytes to
+/// its file.
+final class _GrowingCorpus implements MasterCorpus {
+  _GrowingCorpus(this.master);
+  final String master;
+
+  @override
+  Future<CorpusResult<CorpusSize>> size(String path) async =>
+      const CorpusRead(emptyCorpus);
+  @override
+  Future<CorpusResult<CorpusPage>> search(
+    String path,
+    CorpusFilter filter,
+  ) async => const CorpusRead((games: [], more: false));
+  @override
+  Future<CorpusResult<String>> game(String path, int id) async =>
+      const CorpusFailure('no games');
+  @override
+  Future<CorpusResult<(int, int)>> importPgn(String source, String path) async {
+    File(master).writeAsBytesSync(List.filled(4000, 1), mode: FileMode.append);
+    return const CorpusRead((1, 0));
+  }
 }

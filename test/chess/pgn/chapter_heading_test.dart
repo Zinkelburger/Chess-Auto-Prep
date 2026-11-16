@@ -39,6 +39,14 @@ void main() {
     expect(readHeading('// Root:\n').rootMoves, isEmpty);
   });
 
+  test('a root holding a word that is no move reads as no root, without '
+      'throwing', () {
+    expect(readHeading('// Root: 1. e4 !?\n').rootMoves, isEmpty);
+    expect(readHeading('// Root: 1. d4 - x\n').rootMoves, isEmpty);
+    expect(readHeading('// Root: 1. d4 d5 2. c4 - QGD\n').rootMoves, isEmpty);
+    expect(readHeading('// Root: 1. e4 N\n').rootFen, Fen.initial);
+  });
+
   test('the fixture chapter’s root line reads back as its moves', () {
     expect(readHeading(whiteChapter).rootMoves, ['d4', 'd5', 'c4']);
   });

@@ -411,10 +411,14 @@ final class MyGames extends ChangeNotifier {
       fetched = const GamesNotFetched(GamesProblem.unreachable);
     }
     List<String>? fetchedGames;
+    var kept = false;
     switch (fetched) {
-      case GamesFetched(:final games):
+      case GamesFetched(:final games, :final unread, :final complete):
         fetchedGames = games;
-        await _keep(site, username, games, _now());
+        if (!complete) {
+          log.w('download ${site.label} games', 'not read: $unread');
+        }
+        kept = await _keep(site, username, games, _now(), complete: complete);
       case final GamesNotFetched failed:
         problems[site] = failed;
     }
@@ -428,7 +432,20 @@ final class MyGames extends ChangeNotifier {
       speeds: speeds,
     );
     final List<String> texts;
-    if (snapshot is CachedGamesSnapshot &&
+    if (fetchedGames != null && !kept) {
+      // The saved file lacks this download: its games come first, then the
+      // saved ones it did not bring again.
+      final seen = <String>{};
+      texts = [
+        for (final game in [
+          ...fetchedGames.where((game) => keepsSpeed(speeds, game)),
+          if (snapshot is CachedGamesSnapshot)
+            for (final saved in snapshot.games) saved.text,
+        ])
+          if (gameIdIn(game) case final id when id.isEmpty || seen.add(id))
+            game,
+      ].take(reviewWindow).toList();
+    } else if (snapshot is CachedGamesSnapshot &&
         (snapshot.games.isNotEmpty || fetchedGames == null)) {
       texts = [for (final game in snapshot.games) game.text];
     } else {
@@ -448,24 +465,36 @@ final class MyGames extends ChangeNotifier {
 
   /// Saves a download and dates the account by it. The file is a cache: a
   /// save that fails is logged, and the next download simply tries again.
-  Future<void> _keep(
+  /// Whether the games were saved.
+  Future<bool> _keep(
     GameSite site,
     String username,
     List<String> games,
-    DateTime when,
-  ) async {
+    DateTime when, {
+    required bool complete,
+  }) async {
     try {
-      final kept = await _cache.keep(site, username, games, when);
+      final kept = await _cache.keep(
+        site,
+        username,
+        games,
+        when,
+        complete: complete,
+      );
       if (kept case GamesNotKept(:final detail)) {
         log.w('save the ${site.label} download', detail);
-        return;
+        return false;
       }
+      // Part of a download is kept but not recorded as one.
+      if (!complete) return true;
       if (await _store.setDownloaded(site, when, expectedUsername: username) &&
           _accounts[site]?.username == username) {
         _accounts = {..._accounts, site: Account(username, downloaded: when)};
       }
+      return true;
     } on Object catch (error) {
       log.w('save the ${site.label} download', error);
+      return false;
     }
   }
 

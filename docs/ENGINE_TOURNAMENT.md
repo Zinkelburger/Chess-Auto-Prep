@@ -51,10 +51,10 @@ tournament_open {}            # app opens on it, or jumps there if already runni
 | `tournament_crosstable` | Standings, Elo ± interval, LOS, head-to-head grid |
 | `tournament_games` | One row per game |
 | `tournament_game_pgn` | One game's PGN as saved (eval comments only if the run annotated moves; the headless runner does not) |
-| `tournament_stop` | Send the runner SIGINT: the games in flight end after their current move and are saved unfinished |
+| `tournament_stop` | Send the runner SIGINT: the games in flight end after their current move and are saved unfinished. A pid in `run.json` whose process no longer carries the tournament folder on its command line is not the runner and is left alone |
 | `tournament_open` | Open the app on a tournament |
 | `tournament_engines` | What is available to play |
-| `tournament_add_engine` | Verify a UCI binary and register it |
+| `tournament_add_engine` | Verify a UCI binary and register it; an `engines.json` it cannot read is renamed `engines.json.unreadable-<stamp>` beside it, never overwritten |
 
 `tournament_run` starts the games in a detached process and returns within
 seconds; a ten-game match at two seconds a move takes about half an hour.

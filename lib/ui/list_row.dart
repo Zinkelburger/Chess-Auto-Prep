@@ -4,6 +4,12 @@ import 'app_keys.dart';
 import 'row_actions.dart';
 import 'theme.dart';
 
+/// The extent a list gives each row [height] tall at the normal text size.
+/// A row grows with larger text, as [ListRow] does, so a list that fixes
+/// its rows' extent grows it the same way or the words overflow.
+double rowExtent(BuildContext context, double height) =>
+    MediaQuery.textScalerOf(context).scale(height);
+
 /// One row of a list: a fixed height, the whole row a click target, the
 /// selected row filled in Selection Grey and lines picked among several
 /// tinted. With a [menu], the row ends in its `⋯` button, and a right click
@@ -98,10 +104,7 @@ class _ListRowState extends State<ListRow> {
     );
     // Taller with larger text, so a two-line row never cuts its words.
     if (widget.height case final height?) {
-      content = SizedBox(
-        height: MediaQuery.textScalerOf(context).scale(height),
-        child: content,
-      );
+      content = SizedBox(height: rowExtent(context, height), child: content);
     }
     Widget row = Material(
       color: widget.selected

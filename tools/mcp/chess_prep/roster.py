@@ -18,7 +18,9 @@ import io
 import json
 import os
 import re
+import sys
 import tempfile
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -295,10 +297,41 @@ def load_roster() -> Roster:
     if not path.exists():
         return Roster()
     try:
-        return Roster.from_dict(json.loads(path.read_text()))
-    except (json.JSONDecodeError, OSError, TypeError, ValueError):
-        # A corrupt roster must not wedge the server; the user can re-import.
+        text = path.read_text()
+    except OSError:
         return Roster()
+    try:
+        return Roster.from_dict(json.loads(text))
+    except (json.JSONDecodeError, TypeError, ValueError) as e:
+        # A corrupt roster must not wedge the server, and the next save must
+        # not write over what it holds: move it aside and start empty.
+        if text.strip():
+            _move_aside(path, e)
+        return Roster()
+
+
+def _move_aside(path: Path, why: Exception) -> None:
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    for n in range(1000):
+        aside = path.with_name(f"{path.name}.unreadable-{stamp}" + (f"-{n}" if n else ""))
+        try:
+            # A hard link never replaces an existing file, unlike a rename.
+            os.link(path, aside)
+            path.unlink()
+        except FileExistsError:
+            continue
+        except OSError as e:
+            try:  # a filesystem without hard links
+                if aside.exists():
+                    continue
+                path.rename(aside)
+            except OSError:
+                print(f"roster: {path} is unreadable ({why}) and could not be moved aside: {e}",
+                      file=sys.stderr)
+                return
+        print(f"roster: {path} is unreadable ({why}); moved aside to {aside.name}",
+              file=sys.stderr)
+        return
 
 
 def save_roster(roster: Roster) -> Path:

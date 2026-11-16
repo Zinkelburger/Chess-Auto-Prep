@@ -57,7 +57,7 @@ void main() {
       expect(report['filled'], greaterThan(10), reason: 'the disk was small');
       final save = report['save'] as Map<String, Object?>;
       expect(save['result'], 'IoFailure');
-      expect(save['detail'], contains('No space left'));
+      expect(save['detail'], 'The disk is full.');
       expect(report['afterwards'], {'text': '[Event "Main"]\n\n1. d4 *\n'});
       expect(
         report['staged copies'],

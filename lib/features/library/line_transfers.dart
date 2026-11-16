@@ -83,13 +83,13 @@ final class LineTransfers {
     final prepared = await _session.externalEdits.prepare(
       (c) => linesTakenOut(c, games: moving),
     );
-    if (prepared is ExternalEditRefused) return LibraryFailure(prepared.detail);
+    if (prepared is ExternalEditRefused) return LibraryRefused(prepared.detail);
     final primary = prepared as PreparedDocumentEdit;
     final target = await _targetLines(to, pinned, sourceIds, asSidelineOf);
-    if (target is _TargetRefused) return LibraryFailure(target.reason);
+    if (target is _TargetRefused) return LibraryRefused(target.reason);
     final planned = target as _TargetPrepared;
     if (_session.source != from || !identical(_session.chapter, chapter)) {
-      return const LibraryFailure(
+      return const LibraryRefused(
         'The source chapter changed before the move.',
       );
     }

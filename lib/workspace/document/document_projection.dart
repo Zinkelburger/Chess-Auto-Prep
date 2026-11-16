@@ -2,7 +2,9 @@ import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/chapter_sections.dart';
 import '../../chess/pgn/games_written.dart';
 import '../../chess/pgn/line_id_pins.dart';
+import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
+import '../../storage/disk_problems.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/edit_scope.dart';
 import '../../storage/pgn_document_store.dart' as store;
@@ -49,7 +51,24 @@ final class DocumentUnread extends DocumentRead {
 /// study chapter is; null merges its games, or takes the chapter [ref]
 /// names in a course file. The file's bytes are always read, and name the
 /// revision; [parsed] spares parsing text it has parsed before.
+///
+/// Never throws: a read or parse that fails, off the UI isolate or not, is
+/// logged and answered [DocumentUnread], so the document already up stays.
 Future<DocumentRead> readDocument(
+  store.PgnDocumentStore documents,
+  ChapterRef ref, {
+  int? game,
+  ParsedFiles? parsed,
+}) async {
+  try {
+    return await _readDocument(documents, ref, game: game, parsed: parsed);
+  } on Object catch (error) {
+    log.w('read ${ref.path}', error);
+    return DocumentUnread(failedBecause('Could not read ${ref.name}.', error));
+  }
+}
+
+Future<DocumentRead> _readDocument(
   store.PgnDocumentStore documents,
   ChapterRef ref, {
   int? game,

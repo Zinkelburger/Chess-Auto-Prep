@@ -116,6 +116,10 @@ final class FileFilter extends ChangeNotifier {
     _apply();
   }
 
+  /// Filters the games again by the rules as they stand, after a run that
+  /// failed: one that took too long may pass the second time.
+  void retry() => apply(_filter);
+
   /// Every value [field] has in the file, sorted, each once: what a value
   /// box suggests while it is typed into. Worked out once per field until
   /// the file changes.

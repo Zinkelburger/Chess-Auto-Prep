@@ -72,4 +72,42 @@ void main() {
     expect(started.single.$1, 'mine-engine');
     expect(started.single.$2, ['--uci']);
   });
+
+  test(
+    'a seat is sent every option it names, listed by the engine or not',
+    () async {
+      final heard = File('${support.path}/heard');
+      final script = File('${support.path}/engine')
+        ..writeAsStringSync('''#!/bin/sh
+while read -r line; do
+  echo "\$line" >> "${heard.path}"
+  case "\$line" in
+    uci) echo "id name Listed"; echo "option name Hash type spin default 16 min 1 max 1024"; echo "uciok" ;;
+    isready) echo "readyok" ;;
+    quit) exit 0 ;;
+  esac
+done
+''');
+      await Process.run('chmod', ['+x', script.path]);
+      final real = EngineSupervisor();
+      addTearDown(real.dispose);
+      final start = await launchTournamentEngine(
+        TournamentEngine({
+          'id': 'mine',
+          'name': 'Mine',
+          'executablePath': script.path,
+          'threads': 2,
+        }),
+        EngineTranscript(),
+        stockfish: noStockfish,
+        engines: real,
+      );
+      await (start as Started).engine.quit();
+      expect(
+        heard.readAsLinesSync(),
+        contains('setoption name Threads value 2'),
+      );
+    },
+    skip: !Platform.isLinux,
+  );
 }

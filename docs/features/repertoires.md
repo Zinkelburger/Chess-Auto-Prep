@@ -70,8 +70,8 @@ for both, the list and the outline share one column as two pages.
   covered` (`Our candidates` at our move), a `Next gap` button, then one row
   per move, most likely first: share (`<1%` below one), move, a tick when the
   chapter plays it, and `gap`, or the name of the sibling chapter that answers
-  it (`Petroff`, `this chapter`). At our move a column shows the stored
-  `[%expectimax]` value, or `not in tree`. Hovering floats the position;
+  it (`Petroff`, `this chapter`). At our move, once any move there has a
+  stored `[%expectimax]` value, a column shows it, or `not in tree`. Hovering floats the position;
   clicking plays the move. Empty: `Open a chapter to see what they play.`
 - **Audit tab** — an `Audit` button (`Stop` while running), a `ChessDB` chip
   (off; `Also ask ChessDB for good replies (sends positions)`), a status
@@ -85,9 +85,15 @@ for both, the list and the outline share one column as two pages.
 
 ## Actions
 
-Actions ▸ File also has the list's `New repertoire…`, `New chapter…` (off until
-a repertoire is open) and `Import course PGN…`. On the analysis board
-`Train this chapter`, `Next gap` and `Play as Black` are shown off.
+The Actions menu: File — the list's `New repertoire…`, `New chapter…` (off
+until a repertoire is open), `Import course PGN…`, `Open PGN file…` (Ctrl+O),
+`Paste PGN as repertoire` (Ctrl+V); Repertoire — `Expectimax from here`,
+`Train this chapter`, `Next gap`, `Audit this chapter`, `Play as Black` /
+`Play as White`; Document — `Edit`, `Undo`, `Save a copy…` (a copy beside
+the file, under a name asked for); Board — `Flip board`, `Engine on`, `New
+analysis tab`, `Paste FEN`, `Edit position…`; then `View` and `Copy`. On the
+analysis board `Train this chapter`, `Next gap` and `Play as Black` are shown
+off.
 
 **New repertoire** — list `+` or `New repertoire…` → `Create repertoire` name
 dialog → `<name>/Main.pgn` with no side, opened at once (the side question
@@ -142,7 +148,8 @@ workspace; a line row puts the cursor on that line's last move.
 
 **Move lines** — Ctrl-click / Shift-click pick lines; drag them onto another
 chapter to make them its lines, or onto a line of the open chapter to fold
-them in as variations. `Move to chapter…` does the first by name, and also
+them in as variations; their comments and glyphs on the moves both lines
+play are added after the host's. `Move to chapter…` does the first by name, and also
 offers `New chapter…` (made with the open chapter's side). Picks last through
 moves, comments and the side changing, and go when another chapter opens or
 is read again, on an undo, or when a line is deleted, put back, moved or
@@ -194,7 +201,8 @@ time.
 - `Documents/repertoires/<repertoire>/` is a repertoire. Every `.pgn` under
   it, subfolders included, is a chapter file; dot-folders, `.import-*` staging
   folders and `*_raw_games.pgn` are skipped. A `.pgn` directly under
-  `repertoires/` is moved to `<name>/Main.pgn` when the list is read.
+  `repertoires/` is a repertoire of one chapter; adding or moving a chapter
+  into it first moves the file into a `<name>/` folder.
 - A chapter file starts with a `//` heading: `// <name>`,
   `// Color: White|Black`, `// Created on <date time>`, `// Root: 1. e4 e5
   2. f4` when it starts after moves, and `// Draft` for a proposed chapter.
@@ -205,6 +213,9 @@ time.
 - `[LineID]` is a line's training identity. A game without one is trained under an id derived from
   its moves and place, so any edit that rewrites, moves or re-places it pins
   `[LineID]` first. Losing it orphans the line's training history.
+- A move played where no line goes on is written as a new game at the end
+  of the file: `[Event "<the line it left> — 1.d4"]`, `Me` / `Training` as
+  the players (by the side), `*`, and a `[LineID]`.
 - Round trip: untouched games keep their bytes; heading, comments (with
   `[%…]` tokens), NAGs and unknown tags survive.
 - Training records in Documents, keyed by chapter path and line id:

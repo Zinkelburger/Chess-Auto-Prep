@@ -38,12 +38,14 @@ Future<void> newRepertoire(
 }
 
 /// A chapter in the open repertoire, starting from the moves on the board
-/// when they are asked for.
+/// when they are asked for. It opens at once, so the next move played goes
+/// into it rather than into the chapter the user just left.
 Future<void> newChapter(
   BuildContext context,
   Library library,
   ChapterOutline outline,
   DocumentSession session,
+  ValueChanged<ChapterRef> onOpen,
 ) async {
   final into = outline.repertoire;
   final chapter = session.chapter;
@@ -55,11 +57,13 @@ Future<void> newChapter(
         : rootMovesFromBoard(chapter, session.cursor.value),
   );
   if (wanted == null || !context.mounted) return;
-  await announce(
+  final result = await announce(
     context,
     library.createChapter(into, wanted.name, rootMoves: wanted.rootMoves),
     thing: 'chapter',
     name: wanted.name,
     failed: 'Could not create the chapter.',
   );
+  if (!context.mounted || result is! LibraryAdded) return;
+  onOpen(result.first);
 }

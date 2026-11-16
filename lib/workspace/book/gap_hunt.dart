@@ -98,9 +98,8 @@ final class GapHunt extends ChangeNotifier {
     notifyListeners();
   }
 
-  void retry() => refreshAnswers();
-
   void _failed(Object error) {
+    log.w('walk gaps', error);
     _problem = '$error';
     _walking = false;
     _highlighted = null;
@@ -248,10 +247,15 @@ final class RepertoireAnswers {
   /// when the files changed is not kept as what they answer now.
   final _reads = Latest();
 
+  /// The library as last listed, asked again after either forget: every
+  /// change that can move a chapter between folders reaches one of them.
+  Future<RepertoireListing>? _listing;
+
   /// Drops what was read; the next question reads the files again.
   void forget() {
     _reads.cancel();
     _read.clear();
+    _listing = null;
   }
 
   /// Drops what was read from the file at [path], every chapter of it; the
@@ -259,6 +263,7 @@ final class RepertoireAnswers {
   void forgetFile(String path) {
     _reads.cancel();
     _read.removeWhere((chapter, _) => chapter.path == path);
+    _listing = null;
   }
 
   /// Every position answered from [side]: [tree]'s own, named [hereLabel],
@@ -279,8 +284,23 @@ final class RepertoireAnswers {
   /// that answers it.
   Future<Map<String, String>> around(ChapterRef chapter, Side side) async {
     final ticket = _reads.now;
-    final listing = await _files.list();
-    if (listing is! Repertoires) return const {};
+    final listed = _listing ??= _files.list();
+    // A listing that failed is asked again next time.
+    void retryNextTime() {
+      if (identical(_listing, listed)) _listing = null;
+    }
+
+    final RepertoireListing listing;
+    try {
+      listing = await listed;
+    } on Object {
+      retryNextTime();
+      rethrow;
+    }
+    if (listing is! Repertoires) {
+      retryNextTime();
+      return const {};
+    }
     final folder = listing.folders
         .where((f) => f.chapters.any((c) => c.path == chapter.path))
         .firstOrNull;

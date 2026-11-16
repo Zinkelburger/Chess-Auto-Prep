@@ -91,6 +91,10 @@ void main() {
     ).expectimax;
     expect(old.rootMoves, 6);
     expect(old.candidateMoves, 1);
+    final oldChosen = Settings.fromJson(
+      '{"expectimax": {"candidateMoves": 6}}',
+    ).expectimax;
+    expect(oldChosen.candidateMoves, 6, reason: 'not the old default');
     final chosen = Settings.fromJson(
       '{"expectimax": {"laterMoves": 3, "bothSides": true}}',
     ).expectimax;
@@ -348,5 +352,26 @@ void main() {
     await store.update(Settings.defaults);
     expect(told, 0);
     expect(await file().exists(), isFalse);
+  });
+
+  test('a settings file that starts with a byte-order mark is read', () async {
+    await file().writeAsString('\uFEFF{"engineCores": 3}');
+    final store = SettingsStore(support: support);
+    addTearDown(store.dispose);
+    await store.load();
+    expect(store.value.engineCores, 3);
+  });
+
+  test('the first save makes a Support folder that is not there yet', () async {
+    final nested = Directory(p.join(support.path, 'a', 'b'));
+    final store = SettingsStore(support: nested);
+    addTearDown(store.dispose);
+    await store.load();
+    await store.update(store.value.copyWith(engineCores: 2));
+    expect(store.problem, isNull);
+    expect(
+      File(p.join(nested.path, 'settings.json')).readAsStringSync(),
+      contains('"engineCores": 2'),
+    );
   });
 }

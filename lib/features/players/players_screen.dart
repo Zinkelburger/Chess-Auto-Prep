@@ -137,7 +137,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                 group == null ? _viewSwitch() : _groupHeading(group),
                 const SizedBox(height: Space.m),
                 _toolbar(group, groups),
-                _Notices(players: owner),
+                _Notices(players: owner, saved: widget.saved),
                 Expanded(child: groups ? _groups() : _people()),
               ],
             ),
@@ -187,7 +187,10 @@ class _PlayersScreenState extends State<PlayersScreen> {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        const SizedBox(width: Space.m),
+        // The group's `⋯` sits right after its name, as on a column's
+        // header, which leaves the toolbar one line at a desktop width.
+        _more(group),
+        const SizedBox(width: Space.s),
         Flexible(
           child: Text(
             groupLine(group),
@@ -201,7 +204,8 @@ class _PlayersScreenState extends State<PlayersScreen> {
   }
 
   /// The search, the one filled button — adding to whatever is listed — and
-  /// the few things done to the list as a whole. The rest is behind `⋯`.
+  /// the few things done to the list as a whole. The rest is behind `⋯`,
+  /// which a group keeps beside its name.
   Widget _toolbar(PlayerGroup? group, bool groups) {
     final blocked = owner.busy || owner.needsRetry;
     return Wrap(
@@ -249,8 +253,8 @@ class _PlayersScreenState extends State<PlayersScreen> {
             onPressed: () => widget.onTrainGroup(group),
             child: const Text('Train group study'),
           ),
-        ],
-        _more(group),
+        ] else
+          _more(group),
       ],
     );
   }
@@ -277,7 +281,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
           () => widget.onExport(group),
           icon: AppIcons.saveCopy,
         ),
-        if (group.fields['study'] case final String study when study.isNotEmpty)
+        if (group.study.isNotEmpty)
           rowAction(
             'Unlink group study',
             () => owner.unlinkGroupStudy(group),
@@ -375,10 +379,10 @@ class _PlayersScreenState extends State<PlayersScreen> {
 String groupLine(PlayerGroup group) {
   final players = group.entries.length;
   final prepared = group.entries.where((e) => e['prepared'] == true).length;
-  final rounds = group.fields['rounds'];
+  final rounds = group.rounds;
   return [
-    if (group.fields['date'] case final String date when date.isNotEmpty) date,
-    if (rounds is int) '$rounds ${rounds == 1 ? 'round' : 'rounds'}',
+    if (group.date case final date? when date.isNotEmpty) date,
+    if (rounds != null) '$rounds ${rounds == 1 ? 'round' : 'rounds'}',
     '$players ${players == 1 ? 'player' : 'players'}',
     '$prepared prepared',
   ].join(' · ');
@@ -434,12 +438,14 @@ class _GroupRow extends StatelessWidget {
 
 /// Under the toolbar: the line that says the directory is being read or
 /// written, a rating lookup with the way to stop it, files that could not
-/// be read, and a failed save with what can be done about it. The line for
+/// be read, saved games that could not be counted, and a failed save with
+/// what can be done about it. The line for
 /// the bar is always there, so the list does not move when it shows.
 class _Notices extends StatelessWidget {
-  const _Notices({required this.players});
+  const _Notices({required this.players, required this.saved});
 
   final Players players;
+  final SavedGames saved;
 
   @override
   Widget build(BuildContext context) {
@@ -463,6 +469,14 @@ class _Notices extends StatelessWidget {
             ],
           ),
         for (final warning in players.warnings) ProblemLine(warning),
+        if (saved.problem case final problem?)
+          ProblemLine(
+            problem,
+            action: OutlinedButton(
+              onPressed: () => unawaited(saved.refresh()),
+              child: const Text('Try again'),
+            ),
+          ),
         if (players.error case final error?)
           ProblemLine(
             error,

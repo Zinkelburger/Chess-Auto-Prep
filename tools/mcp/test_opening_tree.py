@@ -56,6 +56,15 @@ class ParseMoves(unittest.TestCase):
         self.assertEqual(parse_move_list("1. d4 Nf6 2. c4 c5"), ["d4", "Nf6", "c4", "c5"])
         self.assertEqual(parse_move_list(["d4", "Nf6"]), ["d4", "Nf6"])
 
+    def test_move_numbers_written_against_the_move(self):
+        # "1.d4" (no space) was passed to the SAN parser whole and rejected.
+        self.assertEqual(parse_move_list("1.d4 Nf6 2.c4 e6"), ["d4", "Nf6", "c4", "e6"])
+        self.assertEqual(parse_move_list("1.e4 e5 2.Nf3 2...Nc6"), ["e4", "e5", "Nf3", "Nc6"])
+        self.assertEqual(parse_move_list(["1.d4", "1...Nf6"]), ["d4", "Nf6"])
+
+    def test_annotation_glyphs_are_dropped(self):
+        self.assertEqual(parse_move_list("1. e4!? e5 2. Nf3! Nc6?!"), ["e4", "e5", "Nf3", "Nc6"])
+
 
 class TranspositionGraph(unittest.TestCase):
     def setUp(self):
@@ -124,6 +133,34 @@ class RegistryTools(unittest.TestCase):
             {"path": str(self.path), "moves": ["d4", "c5", "e3", "Nf6"]},
         )
         self.assertTrue(walked["in_book_at_end"])
+
+    def test_moves_without_spaces_after_the_numbers(self):
+        self.registry.call("pgn_open", {"path": str(self.path)})
+        pos = self.registry.call(
+            "pgn_position", {"path": str(self.path), "moves": "1.d4 c5 2.e3"}
+        )
+        self.assertIn("Nf6", [m["san"] for m in pos["transposing_moves"]])
+
+    def test_reopening_with_other_options_rebuilds_the_tree(self):
+        # The cache keyed on the path alone, so asking for the mainline only
+        # after a full open silently returned the tree with variations.
+        path = _write(
+            '[Event "v"]\n[Result "*"]\n\n1. d4 Nf6 (1... d5 2. c4) 2. c4 *\n'
+        )
+        try:
+            full = self.registry.call("pgn_open", {"path": str(path)})
+            main = self.registry.call(
+                "pgn_open", {"path": str(path), "include_variations": False}
+            )
+            self.assertLess(main["positions"], full["positions"])
+            pos = self.registry.call(
+                "pgn_position", {"path": str(path), "moves": "1. d4"}
+            )
+            self.assertEqual([m["san"] for m in pos["moves"]], ["Nf6"])
+            short = self.registry.call("pgn_open", {"path": str(path), "max_ply": 1})
+            self.assertLess(short["positions"], main["positions"])
+        finally:
+            path.unlink(missing_ok=True)
 
     def test_missing_file(self):
         with self.assertRaises(ToolError):

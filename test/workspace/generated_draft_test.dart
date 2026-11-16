@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/chess/pgn/chapter_heading.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
@@ -68,6 +70,37 @@ void main() {
     },
   );
 
+  ChapterRef numbered(int n) =>
+      ChapterRef.at('/Documents/repertoires/Main/${draftName('Line', n)}.pgn');
+
+  test(
+    'a write that threw is checked, not made again, on the next try',
+    () async {
+      final store = ScriptedDocumentStore()
+        ..createGate = (Completer<void>()..completeError(StateError('lost')));
+      final draft = command(store, text: (_) => 'lines');
+      expect(await draft.write(), isA<DraftNotWritten>());
+      store.documents[first] = Opened('lines', scriptedRevision('lines'));
+      expect((await draft.write() as DraftWritten).ref, first);
+      expect(store.documents.containsKey(second), isFalse);
+    },
+  );
+
+  test('twenty drafts are the most; once one is deleted the next try takes '
+      'its name', () async {
+    final store = ScriptedDocumentStore();
+    for (var n = 1; n <= 20; n++) {
+      store.documents[numbered(n)] = Opened('x', scriptedRevision('x'));
+    }
+    final draft = command(store);
+    expect(
+      (await draft.write() as DraftNotWritten).reason,
+      contains('Too many drafts'),
+    );
+    store.documents.remove(first);
+    expect((await draft.write() as DraftWritten).ref, first);
+  });
+
   group('the draft beside a chapter', () {
     final source = ChapterRef.at('/Documents/repertoires/Main/Line.pgn');
     const marked = ChapterHeading(draft: true);
@@ -99,6 +132,12 @@ void main() {
       );
       expect((found as DraftWritten).ref, draft);
       expect(store.documents, isEmpty);
+    });
+
+    test('the twentieth name is the last one offered', () {
+      final nineteen = [for (var n = 1; n < 20; n++) numbered(n)];
+      expect(newDraftBeside(source, nineteen)?.number, 20);
+      expect(newDraftBeside(source, [...nineteen, numbered(20)]), isNull);
     });
 
     test('a new one takes the first name no file in the folder has', () {

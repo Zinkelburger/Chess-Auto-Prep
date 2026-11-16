@@ -20,10 +20,18 @@ sealed class GamesFetch {
 }
 
 final class GamesFetched extends GamesFetch {
-  const GamesFetched(this.games);
+  const GamesFetched(this.games, {this.unread = const []});
 
   /// One PGN text per game, newest first.
   final List<String> games;
+
+  /// What could not be read, in words: `2026-09` for a Chess.com month, or
+  /// `games older than the newest 1200` when a Lichess export stopped part
+  /// way. When any is listed, [games] are only part of what was asked for:
+  /// they are kept, but the download is not recorded as done.
+  final List<String> unread;
+
+  bool get complete => unread.isEmpty;
 }
 
 /// Why the games did not come down.
@@ -139,9 +147,16 @@ final class LichessGamesApi implements RangedGames {
       token: await _token(),
       accept: 'application/x-chess-pgn',
     );
+    // The games of the longest export that broke off, newest first.
+    var partial = const <String>[];
+    void broke(Uint8List body) {
+      final games = _wholeGames(body);
+      if (games.length > partial.length) partial = games;
+    }
+
     for (var attempt = 0; ; attempt++) {
       if (cancelled()) return const GamesFetched([]);
-      var answer = await _stream(url, headers, cancelled, progress);
+      var answer = await _stream(url, headers, cancelled, progress, broke);
       // Lichess refuses a stale or revoked token instead of answering as
       // if there were none, but the export needs none: ask once without.
       if (answer?.statusCode == 401 &&
@@ -149,7 +164,7 @@ final class LichessGamesApi implements RangedGames {
           !cancelled()) {
         log.w('download Lichess games', 'token refused; retrying without it');
         headers = lichessHeaders(accept: 'application/x-chess-pgn');
-        answer = await _stream(url, headers, cancelled, progress);
+        answer = await _stream(url, headers, cancelled, progress, broke);
       }
       if (cancelled()) return const GamesFetched([]);
       final last = attempt >= lichessRetries;
@@ -166,6 +181,17 @@ final class LichessGamesApi implements RangedGames {
             'Lichess download limit reached. Retrying in ${wait.inSeconds} seconds…',
           );
           await _pause(wait, cancelled);
+        case _ when partial.isNotEmpty && answer?.statusCode != 200:
+          // The export broke off and no retry finished it: keep the newest
+          // games it sent.
+          log.w(
+            'download Lichess games',
+            'export broke off; keeping ${partial.length} games',
+          );
+          return GamesFetched(
+            partial,
+            unread: ['games older than the newest ${partial.length}'],
+          );
         case _:
           return _games(answer, 'download Lichess games');
       }
@@ -176,12 +202,14 @@ final class LichessGamesApi implements RangedGames {
   /// A request that does not finish — no start, a stall, a cancel, an
   /// error — is aborted before this returns, so a retry never runs beside
   /// it: Lichess allows one request at a time. Anything but a 200 comes
-  /// back with an empty body.
+  /// back with an empty body. What an export that broke off had sent goes
+  /// to [broke].
   Future<http.Response?> _stream(
     Uri url,
     Map<String, String> headers,
     bool Function() cancelled,
     void Function(String) progress,
+    void Function(Uint8List) broke,
   ) async {
     final abort = Completer<void>();
     // A cancel aborts within a second, also while the answer has not
@@ -189,6 +217,7 @@ final class LichessGamesApi implements RangedGames {
     final watch = Timer.periodic(const Duration(seconds: 1), (_) {
       if (cancelled() && !abort.isCompleted) abort.complete();
     });
+    final body = BytesBuilder(copy: false);
     try {
       final response = await _client
           .send(
@@ -200,7 +229,6 @@ final class LichessGamesApi implements RangedGames {
         unawaited(response.stream.listen(null).cancel());
         return http.Response.bytes(const [], response.statusCode);
       }
-      final body = BytesBuilder(copy: false);
       var games = 0, tail = '';
       await for (final chunk in response.stream.timeout(exportStallTimeout)) {
         if (cancelled()) return null;
@@ -215,13 +243,23 @@ final class LichessGamesApi implements RangedGames {
       }
       return http.Response.bytes(body.takeBytes(), 200);
     } on Object catch (error) {
-      if (!cancelled()) log.w('download ${url.host}', error.runtimeType);
+      if (!cancelled()) {
+        log.w('download ${url.host}', error.runtimeType);
+        if (body.isNotEmpty) broke(body.takeBytes());
+      }
       return null;
     } finally {
       watch.cancel();
       // After a finished read the abort has nothing left to close.
       if (!abort.isCompleted) abort.complete();
     }
+  }
+
+  /// The games of an export that broke off, without the last one, which may
+  /// have been cut short: every game before it ended where the next began.
+  static List<String> _wholeGames(Uint8List body) {
+    final games = splitGames(utf8.decode(body, allowMalformed: true));
+    return games.isEmpty ? games : games.sublist(0, games.length - 1);
   }
 
   /// [_wait] for [d], cut short within a second of [cancelled].
@@ -292,7 +330,9 @@ final class ChesscomGamesApi implements RangedGames {
         }
         months = read;
     }
-    final found = <String>[];
+    final found = <String>[], unread = <String>[];
+    GamesNotFetched? firstFailure;
+    var read = 0;
     for (final month in months) {
       if (cancelled()) return const GamesFetched([]);
       if (max != null && found.length >= max) break;
@@ -304,8 +344,11 @@ final class ChesscomGamesApi implements RangedGames {
       );
       switch (await _get(Uri.parse('$month/pgn'))) {
         case final GamesNotFetched failed:
-          return failed;
+          // One month that cannot be read leaves the others standing.
+          firstFailure ??= failed;
+          unread.add(_monthWords(month, date));
         case GamesFetched(:final games):
+          read++;
           found.addAll(
             splitGames(
               games.single,
@@ -313,8 +356,16 @@ final class ChesscomGamesApi implements RangedGames {
           );
       }
     }
-    return GamesFetched(max == null ? found : found.take(max).toList());
+    if (read == 0 && firstFailure != null) return firstFailure;
+    return GamesFetched(
+      max == null ? found : found.take(max).toList(),
+      unread: unread,
+    );
   }
+
+  static String _monthWords(String url, DateTime? date) => date == null
+      ? url
+      : '${date.year}-${date.month.toString().padLeft(2, '0')}';
 
   /// One request, tried once more when it dies on the way; the body comes
   /// back as the only "game".

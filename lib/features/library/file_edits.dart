@@ -61,7 +61,7 @@ final class FileEdits {
       // Every line is checked before any is grafted: a refusal part way
       // through would leave the lines already grafted in two places.
       if (asSidelineOf != null && lines.any((line) => !line.isWhole)) {
-        return const LibraryFailure(lineNotWholeReason);
+        return const LibraryRefused(lineNotWholeReason);
       }
       return _foldedHere(moving, asSidelineOf);
     }
@@ -69,7 +69,7 @@ final class FileEdits {
       // Another chapter of the same file: the lines keep their places and
       // take the other chapter's name, one edit to one file.
       if (asSidelineOf != null) {
-        return const LibraryFailure(
+        return const LibraryRefused(
           'a line can only be folded into a line of the chapter on the board',
         );
       }
@@ -77,7 +77,7 @@ final class FileEdits {
       final reason = _session.applyToFile(
         (file) => linesNamed(file, places, to.section),
       );
-      if (reason != null) return LibraryFailure(reason);
+      if (reason != null) return LibraryRefused(reason);
       return _saved();
     }
     return _lineTransfers.move(chapter, from, moving, to, asSidelineOf);
@@ -90,10 +90,10 @@ final class FileEdits {
       final reason = _session.apply(
         (c) => lineGraftedInto(c, host: host, line: c.lines[game]),
       );
-      if (reason != null) return LibraryFailure(reason);
+      if (reason != null) return LibraryRefused(reason);
     }
     final reason = _session.apply((c) => linesTakenOut(c, games: games));
-    return reason == null ? const LibraryDone() : LibraryFailure(reason);
+    return reason == null ? const LibraryDone() : LibraryRefused(reason);
   }
 
   /// Makes [edit] to the whole file [ref] is in: through the workspace when

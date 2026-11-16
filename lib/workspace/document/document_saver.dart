@@ -141,6 +141,48 @@ final class DocumentSaver extends ChangeNotifier {
     _set(readOnly == null ? const Saved() : DocumentReadOnly(readOnly));
   }
 
+  /// The undo history of the document open now, taken out for its tab to
+  /// keep while another document is up. Null when there is none, or when
+  /// the file may not hold what this saver last wrote: a draft or a write
+  /// still on its way, or a save that failed, stopped or is unsettled.
+  SetAsideUndo? setAsideUndo() {
+    final target = _target;
+    if (target == null ||
+        _undo.isEmpty ||
+        _state is! Saved ||
+        _writing ||
+        !_pending.isEmpty ||
+        _barrier != null ||
+        _failedUndo != null) {
+      return null;
+    }
+    return (
+      path: target.ref.path,
+      revision: target.revision,
+      saves: _undo.takeAll(),
+    );
+  }
+
+  /// Gives the document just opened back the history [kept] set aside, when
+  /// it is the same file, read at the revision that history left it at and
+  /// nothing taken back since it opened. A file written by anything else
+  /// meanwhile is read as it is now, and the history is dropped. Answers
+  /// whether it was given back.
+  bool restoreUndo(SetAsideUndo kept) {
+    final target = _target;
+    if (_disposed ||
+        target == null ||
+        target.ref.path != kept.path ||
+        target.revision != kept.revision ||
+        !_undo.isEmpty ||
+        _state is! Saved) {
+      return false;
+    }
+    _undo.putBack(kept.saves);
+    notifyListeners();
+    return true;
+  }
+
   /// Takes [text] as the draft to write, unless this saver has stopped
   /// writing the file: conflicted, stopped, or not writable at all. Nothing
   /// is remembered here then — the words are on the screen, where Save a

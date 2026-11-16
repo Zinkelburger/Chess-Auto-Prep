@@ -78,7 +78,9 @@ python server.py
 ```
 
 API endpoints (Bearer token unless noted):
-- `POST /api/subscribe` — create an alert (email + CAPTCHA; sends verify or login mail)
+- `POST /api/subscribe` — create an alert (email + CAPTCHA; sends verify or login mail).
+  For an existing account the alert stays off until the emailed login link is
+  opened; that link turns on that one alert
 - `POST /api/verify` — consume email verification token
 - `POST /api/login` — request a dashboard login link
 - `POST /api/exchange-token` — swap a one-time login token for a session token
@@ -125,7 +127,7 @@ Booking uses the same API server and `PUBLIC_API_URL`. Schedule env (defaults ta
 | `BOOKING_AVAILABLE_WEEKDAYS` | `0,1,2,3,4` | Weekdays allowed (`0`=Mon … `4`=Fri) |
 | `BOOKING_AVAILABLE_DATES` | `2026-06-13,2026-06-14` | Extra bookable calendar dates (e.g. promo weekends) |
 | `BOOKING_TIMEZONE` | `America/New_York` | Slot generation timezone |
-| `BOOKING_OWNER_NAME`, `BOOKING_TAGLINE`, `BOOKING_API_KEY`, `BOOKING_DATABASE_PATH` | — | Display, admin API key, SQLite path |
+| `BOOKING_OWNER_NAME`, `BOOKING_TAGLINE`, `BOOKING_API_KEY`, `BOOKING_DATABASE_PATH` | — | Display, admin API key (unset: `GET /api/bookings` refuses every request), SQLite path |
 
 Endpoints: `GET /health`, `GET /api/slots` (returns window, `blocked_dates`, `available_weekdays`, `available_date_exceptions`, slot grid metadata, and open `slots`), `POST /api/book`, `GET /api/bookings` (admin, `X-API-Key`). Offered times use a 90-minute grid from noon; each lesson is 90 minutes and the last start is 7:30 PM (ends 9 PM). Weekends are closed except dates listed in `BOOKING_AVAILABLE_DATES`. See `booking-service/README.md` for full API notes.
 
@@ -168,8 +170,10 @@ app). The server runs no engine; no page of the current site calls this API.
 
 Uploads carry numbers and moves only: move text is rebuilt on the server
 from legal moves. A browser cannot prove it computed honestly, so each upload
-records its ticket and a hash of the uploader's IP (`CF-Connecting-IP`; keep
-the origin reachable only through Cloudflare, or the header can be forged).
+records its ticket and a hash of the uploader's IP. `CF-Connecting-IP` is
+believed only when the connecting peer is in Cloudflare's edge ranges
+(`CLOUDFLARE_NETWORKS` in `bughousedb.py`); a direct caller is counted by its
+own address. Every rate limit on the server keys on the same address.
 `python3 bughousedb.py stats` lists contributors;
 `python3 bughousedb.py purge --contributor HASH` removes one.
 

@@ -148,6 +148,23 @@ void main() {
     expect((w.store.documents[draft]! as Opened).text, contains('1. e4 f6'));
   });
 
+  testWidgets('a trap no chapter plays, the draft declined, goes nowhere', (
+    tester,
+  ) async {
+    await openWith(tester, chapterWith('1. d4 d5'));
+    await listEveryFind(tester);
+    await trainTheTrap(tester);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(w.session.source, main);
+    expect(
+      w.store.documents.keys.where((ref) => ref.path.contains('draft')),
+      isEmpty,
+    );
+    expect(w.lineTrainer.lesson, isNull);
+  });
+
   testWidgets('a trap goes into the draft already beside the chapter, as one '
       'edit', (tester) async {
     const draftText =

@@ -24,7 +24,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from .master_games import fen4_of, master_db_path, position_key
+from .master_games import fen4_of, master_db_path, position_key, readonly_uri
 from .tools import ToolError
 
 APP_GAMES_DB_NAME = "app_games.db"
@@ -47,7 +47,7 @@ class AppGamesDb:
                 f"No games database at {self.path}. It is created when the app "
                 "downloads or imports games; or set CHESS_PREP_APP_GAMES_DB."
             )
-        self._conn = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)
+        self._conn = sqlite3.connect(readonly_uri(self.path), uri=True)
         self._conn.row_factory = sqlite3.Row
 
     def close(self) -> None:

@@ -54,7 +54,7 @@ final class MaiaModel implements MovePolicy {
       );
     } catch (error) {
       log.e('load the Maia model', error);
-      return MaiaUnavailable('Maia could not be loaded: $error');
+      return const MaiaUnavailable('Maia could not be loaded.');
     }
   }
 
@@ -97,7 +97,7 @@ final class MaiaModel implements MovePolicy {
       logits = await _infer(input, elo);
     } catch (error) {
       log.e('ask Maia about a position', error);
-      return MaiaFailed('Maia could not answer: $error');
+      return const MaiaFailed('Maia could not answer.');
     }
     if (logits == null) {
       log.e('ask Maia about a position', 'the answer had an unknown shape');

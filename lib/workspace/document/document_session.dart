@@ -26,6 +26,7 @@ import 'document_projection.dart';
 import 'document_saver.dart';
 import 'parsed_files.dart';
 import 'session_results.dart';
+import 'undo_history.dart';
 
 part 'document_cursor.dart';
 part 'external_document_edits.dart';
@@ -78,17 +79,45 @@ final class DocumentSession extends ChangeNotifier {
 
   /// Restores a tab's unsaved viewer changes against their original revision.
   /// A later save still checks that revision; external edits cannot be overwritten.
+  /// The saves under them keep their undo while that revision is the file's.
   void restoreDraft(RetainedDraft draft) {
     final source = _source;
     if (source == null) return;
+    final before = _chapter;
     _shown = draft.shown;
     _held = draft.held;
     _ended = null;
     _document++;
     _arrangement++;
+    _shownTo = null;
+    _clearRefusal();
+    final undo = _saver.setAsideUndo();
     _saver.opened(source, draft.revision, readOnly: _readOnly);
+    if (undo != null) _saver.restoreUndo(undo);
+    // The cursor keeps its move on the game shown before, else its start.
+    cursor._place(
+      before != null && before.game == draft.shown.chapter.game
+          ? samePathIn(before.tree, draft.shown.chapter.tree, cursor.value)
+          : const NodePath.root(),
+    );
     notifyListeners();
   }
+
+  /// Takes the undo history of the file last put aside for another
+  /// document, for its tab to keep; null when that file had none to keep or
+  /// it was taken already. Good only for that file at that revision.
+  SetAsideUndo? takeSetAsideUndo() {
+    final undo = _setAsideUndo;
+    _setAsideUndo = null;
+    return undo;
+  }
+
+  SetAsideUndo? _setAsideUndo;
+
+  /// Gives the file up now the history its tab kept, if the file is still
+  /// what that history wrote; see [DocumentSaver.restoreUndo].
+  bool restoreUndo(SetAsideUndo kept) =>
+      _source?.path == kept.path && _saver.restoreUndo(kept);
 
   /// Where the reader is in the document, and a comment's line on the board.
   late final cursor = DocumentCursor._(() => tree, () => _shownTo);
@@ -385,6 +414,7 @@ final class DocumentSession extends ChangeNotifier {
     if (_source == null) return;
     _editors.commit();
     _opens.cancel();
+    _setAsideUndo = null;
     _saver.closed();
     _showBoard();
   }
@@ -429,6 +459,7 @@ final class DocumentSession extends ChangeNotifier {
     // Words nobody was asked about that the file will not take keep it up,
     // where the screen says why, as they do when another file is asked for.
     if (file && !leftAsIs && !_saver.settled) return false;
+    _setAsideUndo = file ? _saver.setAsideUndo() : null;
     _saver.closed();
     if (isScratch) {
       _board
@@ -753,12 +784,19 @@ final class DocumentSession extends ChangeNotifier {
     _held = null;
     _document++;
     _arrangement++;
+    // Opening the same file again (another game of a study) keeps its
+    // history; the saver refuses it back when the file changed meanwhile.
+    final carried = _source == ref ? _saver.setAsideUndo() : null;
+    _setAsideUndo = _source != null && _source != ref
+        ? _saver.setAsideUndo()
+        : null;
     _shown = (chapter: chapter, view: view);
     _file = (ref: ref, readOnly: readOnly);
     _flipped = false;
     _shownTo = null;
     _refused = null;
     _saver.opened(ref, revision, readOnly: readOnly);
+    if (carried != null) _saver.restoreUndo(carried);
     cursor._place(const NodePath.root());
     notifyListeners();
   }

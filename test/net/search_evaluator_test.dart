@@ -46,6 +46,25 @@ void main() {
   });
 
   test(
+    'a cloud answer that is not JSON falls back to the local engine',
+    () async {
+      final local = ScriptedEvaluator(fallback: 42);
+      final evaluator = SearchEvaluator(
+        source: EvaluationSource.lichess,
+        fallback: local,
+        minDepth: 14,
+        run: RemoteQueue(
+          MockClient((_) async => http.Response('<html>blocked</html>', 200)),
+        ).run(),
+      );
+      addTearDown(evaluator.close);
+      final answer = await evaluator.evaluate(positionOf(kingAndPawn));
+      expect((answer as Evaluated).eval.cp, 42);
+      expect(local.asked, hasLength(1));
+    },
+  );
+
+  test(
     'a rate limit stops remote requests for the run and falls back',
     () async {
       var calls = 0;
@@ -115,6 +134,8 @@ void main() {
     Eval? score(String body) =>
         lichessScore(body, whiteToMove: true, minDepth: 20);
     expect(score('[]'), isNull);
+    expect(score('<html>blocked</html>'), isNull);
+    expect(score(''), isNull);
     expect(score('{"depth":30}'), isNull);
     expect(score('{"depth":30,"pvs":[]}'), isNull);
     expect(score('{"depth":30,"pvs":[1]}'), isNull);

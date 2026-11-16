@@ -17,7 +17,7 @@ pure rules in `lib/chess/training/` (`schedule.dart` SM-2, `drill.dart`,
 
 The left panel has a searchable repertoire switcher and **Import course PGN…**.
 The trainer remembers its repertoire in settings, independently of the file
-being read on the board. It opens on the whole repertoire, so **Learn** starts
+being read on the board, and follows it through a rename or move. It opens on the whole repertoire, so **Learn** starts
 at the first unfinished line without a chapter or line selection. Import uses
 the normal guarded repertoire importer and leaves the downloaded original alone. Actions ▸ Training has **Learn** and **Review** (off with nothing to
 learn or review), and Actions ▸ File **Import course PGN…**.
@@ -36,7 +36,8 @@ line is available before its due date. Due/All learned and manual-rating
 preferences are remembered; temporary selections are not.
 
 **Pause line training** preserves the line's history. Chapter and repertoire
-pauses are remembered separately and cover newly added lines as well. Resuming
+pauses are remembered separately, cover newly added lines as well and follow
+a repertoire or chapter file that is renamed or moved. Resuming
 a parent keeps individually paused children paused. Learned checkboxes change
 knowledge without clearing a pause. **Stop for now** ends the current sitting;
 completed progress is saved, and the next Learn skips completed lines. An

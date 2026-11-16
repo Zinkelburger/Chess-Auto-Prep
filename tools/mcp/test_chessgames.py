@@ -180,5 +180,81 @@ class JobTest(unittest.TestCase):
         self.assertEqual(status["collections"][0]["saved"], 3)
 
 
+class DownloadToolTest(unittest.TestCase):
+    """The tool itself, with the site and the background process faked."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        os.environ["CHESS_PREP_DATA_DIR"] = self.tmp.name
+        self.addCleanup(os.environ.pop, "CHESS_PREP_DATA_DIR", None)
+        pages = {
+            "1": PAGE,
+            "2": PAGE.replace("gid=111", "gid=444").replace("gid=222", "gid=555"),
+        }
+        real = chessgames.resolve_collection
+
+        saved = Path(self.tmp.name) / "pages"
+        saved.mkdir()
+        for cid, page in pages.items():
+            (saved / f"{cid}.html").write_text(page)
+
+        def resolve(source, out_dir, fetch=None, html_file=None):
+            # A saved page, so the request ledger never makes the test wait.
+            cid = chessgames.parse_collection_id(source)
+            return real(source, out_dir, html_file=str(saved / f"{cid}.html"))
+
+        for name, value in (("resolve_collection", resolve), ("start_job_process", lambda job: 0)):
+            original = getattr(chessgames, name)
+            setattr(chessgames, name, value)
+            self.addCleanup(setattr, chessgames, name, original)
+        from chess_prep.tools import Registry
+
+        self.registry = Registry()
+        self.addCleanup(self.registry.close)
+
+    def test_two_collections_with_one_title_get_two_files(self):
+        out = Path(self.tmp.name) / "out"
+        result = self.registry.call(
+            "chessgames_download", {"collections": ["1", "2"], "out_dir": str(out)}
+        )
+        paths = [c["out"] for c in result["collections"]]
+        self.assertEqual(len(set(paths)), 2, paths)
+        spec = chessgames._read_json(chessgames.jobs_dir() / result["id"] / chessgames.JOB_FILE)
+        self.assertEqual([c["out"] for c in spec["collections"]], paths)
+
+        clock = FakeClock()
+        run_job(chessgames.jobs_dir() / result["id"],
+                fetch=lambda url, gid: (200, pgn(gid)), sleep=clock.sleep, clock=clock)
+        self.assertIn("E111", Path(paths[0]).read_text())
+        self.assertIn("E444", Path(paths[1]).read_text())
+
+
+class JobProcessTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        os.environ["CHESS_PREP_DATA_DIR"] = self.tmp.name
+        self.addCleanup(os.environ.pop, "CHESS_PREP_DATA_DIR", None)
+
+    def test_a_killed_job_reads_as_died_not_running(self):
+        import signal
+        import subprocess
+
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        os.kill(child.pid, signal.SIGKILL)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:  # dead, but not yet reaped
+            with open(f"/proc/{child.pid}/stat") as stat:
+                if stat.read().split()[2] == "Z":
+                    break
+            time.sleep(0.05)
+        job = chessgames.jobs_dir() / "job1"
+        _write_json(job / chessgames.JOB_FILE, {"collections": []})
+        _write_json(job / chessgames.STATUS_FILE, {"state": "running", "pid": child.pid})
+        self.assertEqual(chessgames.job_summary(job)["state"], "died")
+        self.assertIsNone(chessgames.running_job())
+
+
 if __name__ == "__main__":
     unittest.main()

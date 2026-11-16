@@ -572,5 +572,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(fixture.textAt('/repertoires/KID/Advance.pgn'), isNotNull);
+    expect(opened.map((chapter) => chapter.path), [
+      '/repertoires/KID/Advance.pgn',
+    ], reason: 'the new chapter opens, so the next move goes into it');
   });
 }

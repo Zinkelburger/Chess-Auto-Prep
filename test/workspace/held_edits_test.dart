@@ -1,12 +1,15 @@
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/chess/pgn/line_moves.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/document/document_history.dart';
+import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:chess_auto_prep/workspace/reading/edit_strip.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';
 import '../support/session_fixture.dart';
+import '../support/viewer_fixture.dart';
 
 /// The PGN Viewer holds its edits: moves played there are for looking, and
 /// reach the file only when the user saves them.
@@ -204,6 +207,20 @@ void main() {
       await tester.pump();
       expect(fixture.session.hasHeldEdits, isTrue);
       await tester.pumpAndSettle();
+      // The title asks about the chapter by name; the message says what
+      // follows rather than asking again.
+      expect(
+        find.text(
+          'Discard unsaved changes to “${fixture.session.chapter!.name}”?',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'The file goes back to its last save. This cannot be undone.',
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(fixture.session.hasHeldEdits, isTrue);
@@ -213,6 +230,68 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Unsaved changes'), findsNothing);
       expect(fixture.session.cursor.currentMove?.san, 'cxd4');
+    });
+  });
+
+  test(
+    'an edit applied while edits are held joins them unless it writes',
+    () async {
+      fixture.session.setComment(NodePath.of([0]), 'held');
+      fixture.session.apply((chapter) => linesTakenOut(chapter, games: {1}));
+      expect(fixture.session.hasHeldEdits, isTrue);
+      await pumpEventQueue();
+      expect(fixture.onDisk, blackChapter);
+    },
+  );
+
+  test('a writing edit on a file this app may not write keeps the edits '
+      'held', () async {
+    final readOnly = await openSession(blackChapter, readOnly: 'not UTF-8');
+    addTearDown(readOnly.dispose);
+    readOnly.session.holdsEdits = true;
+    readOnly.session.setComment(NodePath.of([0]), 'held');
+    readOnly.session.apply(
+      (chapter) => linesTakenOut(chapter, games: {1}),
+      writes: true,
+    );
+    expect(readOnly.session.hasHeldEdits, isTrue);
+  });
+
+  test('putting up the analysis board drops the held edits as left, not '
+      'discarded', () async {
+    fixture.session.setComment(NodePath.of([0]), 'held');
+    await fixture.session.showAnalysisBoard();
+    expect(fixture.session.heldEditsEnded, HeldEditsEnded.dropped);
+  });
+
+  group('a file read game by game', () {
+    late ViewerFixture viewed;
+    setUp(() async {
+      viewed = await viewerOver(threeGameFile);
+      viewed.session.holdsEdits = true;
+      await viewed.open(game: 1);
+      viewed.session.setComment(NodePath.of([0]), 'held');
+    });
+    tearDown(() => viewed.dispose());
+
+    test(
+      'keeps held edits when the same game or the first is opened again',
+      () async {
+        for (final game in [1, 0]) {
+          expect(
+            await viewed.session.open(viewed.ref, game: game),
+            isA<DocumentOpened>(),
+          );
+          expect(viewed.session.hasHeldEdits, isTrue, reason: 'game $game');
+        }
+      },
+    );
+
+    test('does not show a game it does not have over held edits', () async {
+      expect(
+        await viewed.session.open(viewed.ref, game: 5),
+        isNot(isA<DocumentOpened>()),
+      );
     });
   });
 }

@@ -41,6 +41,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from collections import Counter
 from pathlib import Path
 from typing import Any, Callable
 
@@ -399,8 +400,23 @@ def run_job(
 
 
 def _pid_alive(pid: int | None) -> bool:
+    """Whether the job process still runs.
+
+    The server started the job, so a job that died stays this process's
+    zombie until it is waited for, and `kill(pid, 0)` succeeds on a zombie:
+    a killed job read as running forever and refused every new download.
+    Reap it first when it is our child.
+    """
     if not pid:
         return False
+    if hasattr(os, "WNOHANG"):
+        try:
+            reaped, _ = os.waitpid(pid, os.WNOHANG)
+        except OSError:
+            pass  # not our child (an older server started it): ask the kernel
+        else:
+            if reaped == pid:
+                return False
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -531,6 +547,14 @@ def register_chessgames_tools(registry: Any) -> None:
             collections = [resolve_collection(s, out_dir, html_file=html_file) for s in sources]
         except (ChessgamesError, OSError) as e:
             raise ToolError(str(e)) from None
+        # Files are named after the collection's title, and two collections
+        # can share one: the job would then rewrite one file with each in
+        # turn and keep only the last. Such files carry their id as well.
+        names = Counter(c["out"] for c in collections)
+        for c in collections:
+            if names[c["out"]] > 1:
+                out = Path(c["out"])
+                c["out"] = str(out.with_name(f"{out.stem} ({c['cid']}){out.suffix}"))
 
         job = jobs_dir() / dt.datetime.now().strftime("%Y%m%d-%H%M%S")
         job.mkdir(parents=True, exist_ok=True)

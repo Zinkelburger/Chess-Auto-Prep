@@ -545,14 +545,18 @@ int? _limit(int? value, int unbounded) =>
 /// on another isolate; or why it cannot be one — a sentence for the screen.
 ///
 /// A seed must have been built with the same [evaluationSource],
-/// [replySource], [opponentRating] and [evalDepth], for [side], with no loss window and
-/// no pins: a tree built otherwise holds values this search would not have
+/// [replySource], [opponentRating] and [evalDepth], for [side], with no
+/// loss window: a tree built otherwise holds values this search would not have
 /// given, and mixing the two would change what the tree means. A finished
 /// exhaustive tree (an MCP chapter search) seeds a run; a shortlisted one
 /// must have shortlisted as this one does, [candidateMoves] of ours and
 /// replies down to [replyFloor]. A tree saved before the opponent's replies
 /// were cut to [replyMass] and [maxReplies] comes back cut ([cutReplies]);
 /// one cut differently is refused.
+///
+/// [pins] are the chapter's moves the new search plays: a choice the saved
+/// tree made by a chapter move it no longer has comes back unexpanded
+/// ([forgetDroppedPins]), to be made again.
 Future<Object> readSearchSeed(
   String text, {
   required int opponentRating,
@@ -564,6 +568,7 @@ Future<Object> readSearchSeed(
   double replyFloor = 0.01,
   double? replyMass,
   int? maxReplies,
+  Map<String, Set<String>> pins = const {},
 }) => Isolate.run(() {
   Object? json;
   try {
@@ -585,6 +590,9 @@ Future<Object> readSearchSeed(
       return 'Use the original opponent rating and evaluation settings to resume.';
     }
   }
+  final saved = json is Map<String, Object?>
+      ? _savedPins(json['v2_pins'])
+      : const <String, Set<String>>{};
   return switch (decodeTreeV4(text)) {
     TreeDecoded(:final root, :final config)
         when config.side == side &&
@@ -597,11 +605,23 @@ Future<Object> readSearchSeed(
             ((config.replyMass == replyMass &&
                     config.maxReplies == maxReplies) ||
                 (config.replyMass == null && config.maxReplies == null)) =>
-      config.replyMass == replyMass && config.maxReplies == maxReplies
-          ? root
-          : cutReplies(root, mass: replyMass, most: maxReplies),
+      forgetDroppedPins(
+        config.replyMass == replyMass && config.maxReplies == maxReplies
+            ? root
+            : cutReplies(root, mass: replyMass, most: maxReplies),
+        saved,
+        pins,
+      ),
     TreeDecoded() => 'The saved search uses different search settings or side.',
     TreeUnsupported(:final reason) => reason,
     TreeMalformed(:final detail) => detail,
   };
 });
+
+/// The chapter's moves a saved tree played (`v2_pins`); none when it does
+/// not say or says it in a shape this reader does not know.
+Map<String, Set<String>> _savedPins(Object? value) => {
+  if (value is Map)
+    for (final MapEntry(:key, :value) in value.entries)
+      if (key is String && value is List) key: {...value.whereType<String>()},
+};

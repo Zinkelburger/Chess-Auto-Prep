@@ -83,6 +83,9 @@ final class ExpectimaxOptions {
 
   static const defaults = ExpectimaxOptions();
 
+  /// The Later moves count older settings saved when none was chosen.
+  static const _oldDefaultLater = 4;
+
   /// The range a search's depth may be set to, when it is set at all.
   static const minDepth = 1;
   static const maxDepth = 64;
@@ -160,9 +163,10 @@ final class ExpectimaxOptions {
   };
 
   /// Reads [value]; a field that is missing, of the wrong type or out of
-  /// range keeps its default. Later moves are read from `laterMoves`: the
-  /// `candidateMoves` older settings wrote was the wide default of four,
-  /// saved whether or not it was chosen, and is not read.
+  /// range keeps its default. Later moves are read from `laterMoves`; older
+  /// settings wrote `candidateMoves`, saved whether or not it was chosen,
+  /// so its old default of four is not taken as a choice, but any other
+  /// count is the user's and is kept.
   factory ExpectimaxOptions.fromJson(Object? value) {
     if (value is! Map<String, Object?>) return defaults;
     int number(String key, int fallback, int min, int max) {
@@ -179,12 +183,12 @@ final class ExpectimaxOptions {
           ? depth
           : null,
       rootMoves: number('rootMoves', defaults.rootMoves, 1, maxMoves),
-      candidateMoves: number(
-        'laterMoves',
-        defaults.candidateMoves,
-        1,
-        maxMoves,
-      ),
+      candidateMoves: value.containsKey('laterMoves')
+          ? number('laterMoves', defaults.candidateMoves, 1, maxMoves)
+          : switch (number('candidateMoves', _oldDefaultLater, 1, maxMoves)) {
+              _oldDefaultLater => defaults.candidateMoves,
+              final chosen => chosen,
+            },
       bothSides: value['bothSides'] is bool
           ? value['bothSides'] as bool
           : defaults.bothSides,

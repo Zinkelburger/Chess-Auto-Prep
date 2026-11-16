@@ -96,8 +96,8 @@ sealed class MovedPath implements Pivot {
   }
 
   @override
-  Future<bool> putBack() async {
-    if (await look() is! HoldsAfter) return false;
+  Future<void> putBack() async {
+    if (await look() is! HoldsAfter) return;
     await movePathNoReplace(record.to, record.from);
     await flushRecoveryDirectory(
       p.dirname(record.from),
@@ -107,7 +107,6 @@ sealed class MovedPath implements Pivot {
       p.dirname(record.to),
       synchronize: synchronize,
     );
-    return true;
   }
 
   /// A refused native rename can leave private empty parents. Remove only

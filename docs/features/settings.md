@@ -144,13 +144,15 @@ be read is logged and left out.
 - **`<support>/settings.json`** — one JSON object written whole on every
   change through an atomic replace; the last write wins. Top-level keys:
   `boardCoordinates`, `figurines`, `tournamentFinalPositions`, `engineCores`
-  (absent = half the machine), `engineMemoryMb`, `analysisEngine`,
+  (`0` = half the machine), `engineMemoryMb`, `analysisEngine`,
   `engineLines`, `engineThreat`, `copyFilesIntoDocuments`, `opponentElo`,
   `coverOnceIn`, `expectimax`, `explorer`, `puzzles`, `autoAdvance`,
   `acceptAlternativeAnswers`, `training`, `myGameSpeeds`, `updates` (switches,
-  last check, skipped version), `workspaceLayouts`. Unknown keys are kept and
-  written back. Several have no row and are set where they are used (explorer
-  source and filters, puzzle filters, threat arrow, pane layouts).
+  last check, skipped version), `workspaceLayouts`, `lastPlace` (where the
+  window was, which the next launch opens on) and `engineOn` (the board's
+  engine switch). Unknown keys are kept and written back. Several have no row
+  and are set where they are used (explorer source and filters, puzzle
+  filters, threat arrow, pane layouts, last place, engine switch).
 - **Fail open** — settings never block startup. A file that cannot be read is
   moved into `<support>/recovery-quarantine/`, logged, and the app starts on
   the defaults. A symlinked `settings.json` is followed.

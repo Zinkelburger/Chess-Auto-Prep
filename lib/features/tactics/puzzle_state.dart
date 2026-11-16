@@ -109,6 +109,7 @@ final class PuzzleUp {
       copyWith(frontier: path, found: found + 1);
 
   PuzzleUp copyWith({
+    Puzzle? puzzle,
     NodePath? frontier,
     int? found,
     Feedback? feedback,
@@ -118,7 +119,7 @@ final class PuzzleUp {
     int? stars,
     String? saveProblem,
   }) => PuzzleUp(
-    puzzle: puzzle,
+    puzzle: puzzle ?? this.puzzle,
     startedAt: startedAt,
     frontier: frontier ?? this.frontier,
     found: found ?? this.found,

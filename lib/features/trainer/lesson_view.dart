@@ -642,10 +642,11 @@ class _Over extends StatelessWidget {
 
   List<Widget> _ways() => [
     FilledButton(onPressed: trainer.leave, child: const Text('Back to lines')),
-    if (trainer.dueCount > 0)
+    // What review() takes: all learned or the picked lines, when chosen.
+    if (trainer.reviewCount > 0)
       OutlinedButton(
         onPressed: trainer.review,
-        child: Text('Review ${trainer.dueCount} more'),
+        child: Text('Review ${trainer.reviewCount} more'),
       ),
     if (trainer.untrainedCount > 0)
       OutlinedButton(

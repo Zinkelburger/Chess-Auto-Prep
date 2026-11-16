@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 import sqlite3
 from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
@@ -25,7 +26,8 @@ TAGLINE = os.getenv(
     "BOOKING_TAGLINE",
     "Pick a time to meet the incredibly handsome, funny, wannabe chess master",
 )
-API_KEY = os.getenv("BOOKING_API_KEY", "change-me-in-production")
+# No default: an unset key turns the admin listing off instead of opening it.
+API_KEY = os.getenv("BOOKING_API_KEY", "")
 
 
 def _env_date(name: str, default: str) -> date:
@@ -111,11 +113,12 @@ def init_booking_db() -> None:
 def _parse_slot(iso: str) -> datetime:
     try:
         dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-    except ValueError as exc:
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=TIMEZONE)
+        # Converting a time at the edge of year 1 or 9999 leaves the range.
+        return dt.astimezone(TIMEZONE)
+    except (ValueError, OverflowError) as exc:
         raise HTTPException(status_code=400, detail="Invalid slot datetime") from exc
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=TIMEZONE)
-    return dt.astimezone(TIMEZONE)
 
 
 def _booked_slots(conn: sqlite3.Connection) -> set[str]:
@@ -230,7 +233,7 @@ router = APIRouter(tags=["booking"])
 
 
 def require_api_key(x_api_key: str | None = Header(None, alias="X-API-Key")) -> None:
-    if not x_api_key or x_api_key != API_KEY:
+    if not API_KEY or not x_api_key or not secrets.compare_digest(x_api_key, API_KEY):
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
@@ -245,6 +248,8 @@ def get_slots(week_start: str = Query(..., description="First day of week (YYYY-
         start = date.fromisoformat(week_start)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="week_start must be YYYY-MM-DD") from exc
+    if start > date.max - timedelta(days=6):  # the week must end inside the calendar
+        raise HTTPException(status_code=400, detail="week_start must be YYYY-MM-DD")
     return {
         "owner_name": OWNER_NAME,
         "tagline": TAGLINE,

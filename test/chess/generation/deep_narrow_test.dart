@@ -4,6 +4,8 @@ import 'package:chess_auto_prep/chess/generation/search_config.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/chess/generation/search_result.dart';
 import 'package:chess_auto_prep/chess/generation/sources.dart';
+import 'package:chess_auto_prep/chess/generation/tree_wire_v4.dart';
+import 'package:chess_auto_prep/chess/generation/tree_wire_v4_reader.dart';
 import 'package:dartchess/dartchess.dart' show NormalMove, Position, Side;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -134,6 +136,78 @@ void main() {
         policy: oneReply,
       );
       expect(laterOf(pinned).candidates.single.move.uci, 'e4e5');
+    });
+
+    test('a resumed tree whose pin the chapter has since dropped makes that '
+        'choice again, from the file and from memory alike', () async {
+      final afterReply = afterUci(afterUci(root, 'e2e4'), 'e8d8');
+      final pins = {
+        Fen(afterReply.fen).position: {'e4e5'},
+      };
+      final pinnedConfig = SearchConfig(
+        side: Side.white,
+        horizonPlies: 3,
+        lossLimitCp: null,
+        maxOurMoves: 1,
+        rootMoves: 1,
+        pins: pins,
+      );
+      final pinned = await buildSearchTree(
+        root: root,
+        config: pinnedConfig,
+        evaluator: ScriptedEvaluator(),
+        candidates: Ranking(['e2e4', 'e1d1']),
+        policy: oneReply,
+      );
+      OurNode? laterOf(SearchNode tree) =>
+          switch (((tree as OurNode).candidates.single.child as OpponentNode)
+              .replies
+              .single
+              .child) {
+            final OurNode node => node,
+            _ => null,
+          };
+      expect(laterOf(treeOf(pinned))!.candidates.single.move.uci, 'e4e5');
+
+      // Pins unchanged: the saved choice stays.
+      final kept = forgetDroppedPins(treeOf(pinned), pins, pins);
+      expect(laterOf(kept)!.candidates.single.move.uci, 'e4e5');
+
+      final seed = forgetDroppedPins(treeOf(pinned), pins, const {});
+      expect(laterOf(seed), isNull, reason: 'back to an unexpanded position');
+      final resumed = await buildSearchTree(
+        root: root,
+        seed: seed,
+        config: const SearchConfig(
+          side: Side.white,
+          horizonPlies: 3,
+          lossLimitCp: null,
+          maxOurMoves: 1,
+          rootMoves: 1,
+        ),
+        evaluator: ScriptedEvaluator(),
+        candidates: Ranking(['e2e4', 'e1d1']),
+        policy: oneReply,
+      );
+      expect(laterOf(treeOf(resumed))!.candidates.single.move.uci, 'e1d1');
+
+      final read = await readSearchSeed(
+        encodeTreeV4(
+          treeOf(pinned),
+          pinnedConfig,
+          complete: true,
+          evalDepth: 14,
+          opponentRating: 2000,
+          evaluationSource: 'stockfish',
+        ),
+        opponentRating: 2000,
+        side: Side.white,
+        evaluationSource: 'stockfish',
+        evalDepth: 14,
+        candidateMoves: 1,
+        replyFloor: 0,
+      );
+      expect(laterOf(read as SearchNode), isNull);
     });
   });
 

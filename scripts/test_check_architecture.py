@@ -17,6 +17,7 @@ from check_architecture import (
     check_icons,
     check_imports,
     check_insets,
+    check_isolates,
     check_members,
 )
 
@@ -243,6 +244,31 @@ class PartsTest(unittest.TestCase):
         found = self.findings(child)
         self.assertTrue(any("lines (max 1000)" in f for f in found))
         self.assertTrue(any("function is" in f for f in found))
+
+
+
+class IsolatesTest(unittest.TestCase):
+    def findings(self, source: str) -> list[str]:
+        findings: list[str] = []
+        check_isolates("a.dart", source, findings)
+        return findings
+
+    def test_isolate_run_in_an_instance_member_fails(self):
+        method = "class Owner {\n  Future<int> count(String t) async {\n    return Isolate.run(() => t.length);\n  }\n}"
+        found = self.findings(method)
+        self.assertEqual(len(found), 1)
+        self.assertTrue(found[0].startswith("a.dart:3: Isolate.run"))
+        arrow = "final class Owner extends ChangeNotifier {\n  @override\n  Future<int> count(String t) => Isolate.run<int>(work);\n}"
+        self.assertEqual(len(self.findings(arrow)), 1)
+        extension = "extension on Owner {\n  Future<int> count() => Isolate.run(() => 1);\n}"
+        self.assertEqual(len(self.findings(extension)), 1)
+
+    def test_top_level_static_and_text_pass(self):
+        self.assertEqual(self.findings("Future<int> count(String t) => Isolate.run(() => t.length);"), [])
+        static = "class Maia {\n  @visibleForTesting\n  static Future<int> load() => Isolate.run(() => 1);\n}"
+        self.assertEqual(self.findings(static), [])
+        quoted = "class Owner {\n  // Isolate.run(() => 1) is not used here.\n  String why() => 'Isolate.run(';\n}"
+        self.assertEqual(self.findings(quoted), [])
 
 
 if __name__ == "__main__":

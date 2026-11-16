@@ -149,6 +149,74 @@ void main() {
     },
   );
 
+  test('a receipt for other words than the edit is no success', () async {
+    final command = await prepare();
+    final primary = command.primary;
+    expect(
+      await f.session.externalEdits.commit(
+        command,
+        (_) => publish(
+          store.DocumentEdit(
+            ref: primary.ref,
+            text: '${primary.text}\n',
+            expected: primary.expected,
+            scope: primary.scope,
+          ),
+        ),
+      ),
+      isA<store.IoFailure>(),
+    );
+  });
+
+  test(
+    'a landed edit whose file cannot be read back is not taken as shown',
+    () async {
+      final command = await prepare();
+      final gate = Completer<void>();
+      final result = await f.session.externalEdits.commit(command, (
+        primary,
+      ) async {
+        final saved = await publish(primary);
+        f.store.readEarly = gate;
+        unawaited(
+          Future<void>.delayed(
+            const Duration(milliseconds: 10),
+            () => gate.completeError(const FileSystemException('read failed')),
+          ),
+        );
+        return saved;
+      });
+      expect(result, isA<store.Saved>());
+      expect(f.session.chapter, isNot(same(command.landing.chapter)));
+    },
+  );
+
+  test('giving up an unconfirmed edit lets the editor go', () async {
+    final command = await prepare();
+    await f.session.externalEdits.commit(
+      command,
+      (_) async => const store.IoFailure('lost'),
+    );
+    expect(f.saver.referencesPending, isTrue);
+    expect(f.session.externalEdits.release(command), isTrue);
+    expect(f.saver.referencesPending, isFalse);
+  });
+
+  test(
+    'an editor whose own save keeps failing takes no outside edit',
+    () async {
+      f.store.saves.addAll(List.filled(5, const store.IoFailure('disk full')));
+      f.session.setComment(NodePath.of([0]), 'unsaved');
+      final refused = await f.session.externalEdits.prepare(
+        (chapter) => linesTakenOut(chapter, games: {1}),
+      );
+      expect(
+        (refused as ExternalEditRefused).detail,
+        'The source editor changed or is not saved.',
+      );
+    },
+  );
+
   test('a superseded read on the same editor does not stop adoption', () async {
     final command = await prepare();
     final result = await f.session.externalEdits.commit(command, (primary) {

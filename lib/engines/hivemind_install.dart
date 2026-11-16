@@ -117,7 +117,7 @@ final class HivemindInstall {
       }
     } on Object catch (error) {
       log.e('install the bughouse engine', error);
-      return HivemindMissing('Could not install the bughouse engine: $error');
+      return const HivemindMissing('Could not install the bughouse engine.');
     }
     return HivemindReady((
       executable: p.join(folder.path, _binaryName),
@@ -146,16 +146,16 @@ final class HivemindInstall {
 
   /// Removes a half-written `.part` an install that was killed left behind:
   /// one an hour old is no install still running.
+  /// A sweep that fails never fails the install.
   Future<void> _sweepLeftovers(Directory folder) async {
     final stale = DateTime.now().subtract(const Duration(hours: 1));
-    await for (final entry in folder.list()) {
-      if (entry is! File || !entry.path.endsWith('.part')) continue;
-      if ((await entry.lastModified()).isAfter(stale)) continue;
-      try {
-        await entry.delete();
-      } on FileSystemException catch (error) {
-        log.w('remove ${entry.path}', error);
+    try {
+      await for (final entry in folder.list()) {
+        if (entry is! File || !entry.path.endsWith('.part')) continue;
+        await removeStaleLeftover(entry, stale);
       }
+    } on FileSystemException catch (error) {
+      log.w('sweep ${folder.path}', error);
     }
   }
 
@@ -170,7 +170,7 @@ final class HivemindInstall {
     final asset = await readAsset('$_assets/$name.gz');
     if (asset == null) return 'This build is missing $name.';
     log.i('install $name into ${folder.path}');
-    return Isolate.run(() => _unpack(asset, want, target));
+    return _unpackElsewhere(asset, want, target);
   }
 
   /// Copies the private VC++ runtime next to the engine, each DLL checked
@@ -202,7 +202,7 @@ final class HivemindInstall {
       if (await _matches(File(target), want)) continue;
       final source = File(p.join(archive.path, '$name.gz'));
       final bytes = await source.readAsBytes();
-      final problem = await Isolate.run(() => _unpack(bytes, want, target));
+      final problem = await _unpackElsewhere(bytes, want, target);
       if (problem != null) return problem;
     }
     return null;
@@ -253,6 +253,14 @@ Future<bool> _matches(File file, _Integrity want) {
     return digest.toString() == want.sha256;
   });
 }
+
+/// [_unpack] on another isolate. Top level, so the closure sent carries
+/// only these values, never the installer.
+Future<String?> _unpackElsewhere(
+  Uint8List compressed,
+  _Integrity want,
+  String target,
+) => Isolate.run(() => _unpack(compressed, want, target));
 
 /// Inflates [compressed] and checks it before it replaces [target]; runs in
 /// its own isolate, since the network alone is 54 MB. Answers the problem,
@@ -333,4 +341,16 @@ String get _runtimeName {
   if (Platform.isWindows) return 'hivemind_ort.dll';
   if (Platform.isMacOS) return 'libonnxruntime.dylib';
   return 'libonnxruntime.so.1';
+}
+
+/// Deletes [entry] when it was last written before [stale]. Another copy
+/// of the app may rename its own `.part` into place at any moment, so a
+/// file gone before it is looked at is skipped, not an error.
+Future<void> removeStaleLeftover(File entry, DateTime stale) async {
+  try {
+    if ((await entry.lastModified()).isAfter(stale)) return;
+    await entry.delete();
+  } on FileSystemException catch (error) {
+    log.w('remove ${entry.path}', error);
+  }
 }

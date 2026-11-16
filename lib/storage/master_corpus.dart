@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:sqlite3/sqlite3.dart';
 
 import '../diagnostics/log.dart';
+import 'disk_problems.dart';
 import 'master_book.dart';
 import 'master_games_import.dart';
 
@@ -78,6 +79,8 @@ final class CorpusRead<T> extends CorpusResult<T> {
 
 final class CorpusFailure<T> extends CorpusResult<T> {
   const CorpusFailure(this.detail);
+
+  /// The sentence the page shows; the error itself is in the log.
   final String detail;
 }
 
@@ -95,7 +98,7 @@ final class SqliteMasterCorpus implements MasterCorpus {
 
   @override
   Future<CorpusResult<CorpusSize>> size(String path) =>
-      _read('measure master games', () {
+      _read('measure master games', _unread, () {
         if (!File(path).existsSync()) return emptyCorpus;
         final db = _open(path);
         try {
@@ -149,32 +152,48 @@ final class SqliteMasterCorpus implements MasterCorpus {
 
   @override
   Future<CorpusResult<CorpusPage>> search(String path, CorpusFilter filter) =>
-      _read('browse master games', () => _search(path, filter));
+      _read('browse master games', _unread, () => _search(path, filter));
 
   @override
-  Future<CorpusResult<String>> game(String path, int id) =>
-      _read('open master game', () async {
-        final text = await SqliteMasterBook(path).gamePgn('$id');
-        if (text == null) throw StateError('That game is no longer available.');
-        return text;
-      });
+  Future<CorpusResult<String>> game(String path, int id) async =>
+      switch (await _read(
+        'open master game',
+        (error) => failedBecause('Could not open that game.', error),
+        () => SqliteMasterBook(path).gamePgn('$id'),
+      )) {
+        CorpusRead(value: final text?) => CorpusRead(text),
+        CorpusRead() => const CorpusFailure(
+          'That game is no longer available.',
+        ),
+        CorpusFailure(:final detail) => CorpusFailure(detail),
+      };
 
   @override
   Future<CorpusResult<(int, int)>> importPgn(String source, String path) =>
-      _read('import master games PGN', () => importMasterPgn(path, source));
+      _read(
+        'import master games PGN',
+        (error) => ['Import failed.', ?describeImportFailure(error)].join(' '),
+        () => importMasterPgn(path, source),
+      );
 }
 
+/// [work] off the UI isolate; a failure is logged and answered as the
+/// sentence [describe] writes for it.
 Future<CorpusResult<T>> _read<T>(
   String action,
+  String Function(Object error) describe,
   FutureOr<T> Function() work,
 ) async {
   try {
     return CorpusRead(await Isolate.run(work));
   } on Object catch (error) {
     log.w(action, error);
-    return CorpusFailure('$error');
+    return CorpusFailure(describe(error));
   }
 }
+
+String _unread(Object error) =>
+    failedBecause('Could not read the master games database.', error);
 
 /// A game with a real year, not `????.??.??`.
 const _dated = "date >= '1' AND date < '3'";

@@ -83,4 +83,14 @@ void main() {
     final again = await read(files, large, path: '/large.pgn');
     expect(again, isNot(same(first)));
   });
+
+  test('a file exactly the size of the budget is kept', () async {
+    final files = ParsedFiles(budget: threeGameFile.length);
+    final first = await read(files, threeGameFile);
+    expect(await read(files, threeGameFile), same(first));
+  });
+
+  test('the budget is eight megabytes of text', () {
+    expect(ParsedFiles().budget, 8 * 1024 * 1024);
+  });
 }

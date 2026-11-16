@@ -30,6 +30,7 @@ import '../chess/fen.dart';
 import '../chess/pgn/game_text.dart';
 import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/pgn_reader.dart';
+import 'disk_problems.dart';
 
 /// The `user_version` of the file this writes, and the only one it writes to.
 const masterGamesSchema = 4;
@@ -162,21 +163,14 @@ T withMasterGames<T>(
       ),
     );
 
-/// Why writing the database failed, in words the user can act on.
-String describeImportFailure(Object error) {
-  final full = switch (error) {
-    // SQLITE_FULL, or SQLITE_IOERR_SHMSIZE: no room to open the
-    // write-ahead log's shared-memory index.
-    SqliteException(:final resultCode, :final extendedResultCode) =>
-      resultCode == 13 || extendedResultCode == 4874,
-    FileSystemException(:final osError?) =>
-      Platform.isWindows
-          ? const [39, 112].contains(osError.errorCode)
-          : osError.errorCode == 28,
-    _ => false,
-  };
-  return full ? 'The disk is full.' : '$error';
-}
+/// Why writing the database failed, in words the user can act on: the
+/// import's own refusal (no games it could keep, a damaged archive, a file
+/// of another version) or what the disk says. Null when the error says
+/// nothing the user can use; the log has it.
+String? describeImportFailure(Object error) => switch (error) {
+  FormatException(:final message) || StateError(:final message) => message,
+  _ => diskProblemOf(error)?.sentence,
+};
 
 /// Creates the tables in a new file; refuses a file of another version
 /// rather than guess at its columns. A current file is only read, so listing

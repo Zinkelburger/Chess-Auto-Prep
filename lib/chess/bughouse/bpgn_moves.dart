@@ -284,7 +284,9 @@ PastedMoves readTableLineText(String text) {
   final whole = _read(moves, root, tags, const []);
   if (whole.result is PastedLine || opening.isEmpty) return whole.result;
   final after = _read(moves, root, {...tags}..remove('Opening'), opening);
-  return after.result is PastedLine || after.played > whole.played
+  // How far each got into the movetext: the tag's own moves do not count.
+  return after.result is PastedLine ||
+          after.played - opening.length > whole.played
       ? after.result
       : whole.result;
 }

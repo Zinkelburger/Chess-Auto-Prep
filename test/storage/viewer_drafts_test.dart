@@ -67,4 +67,35 @@ void main() {
     expect(file.existsSync(), isFalse);
     expect(quarantined(), hasLength(1));
   });
+
+  File draftFile() => Directory(
+    p.join(support.path, ViewerDraftFiles.folder),
+  ).listSync().whereType<File>().single;
+
+  test(
+    'a record that is not UTF-8 JSON is set aside, large or small',
+    () async {
+      final drafts = ViewerDraftFiles(support);
+      for (final size in [10, 100 * 1024]) {
+        await drafts.keep(draft);
+        draftFile().writeAsBytesSync([0xff, 0xfe, ...List.filled(size, 0x41)]);
+        expect(await drafts.find(draft.path), isNull);
+      }
+      expect(quarantined(), hasLength(2));
+    },
+  );
+
+  test('a draft that cannot be read just now stays where it is', () async {
+    final drafts = ViewerDraftFiles(support);
+    await drafts.keep(draft);
+    final file = draftFile();
+    // Unreadable for the moment: no permission to read it.
+    await Process.run('chmod', ['000', file.path]);
+    addTearDown(() => Process.run('chmod', ['600', file.path]));
+    expect(await drafts.find(draft.path), isNull);
+    expect(file.existsSync(), isTrue);
+    expect(quarantined(), isEmpty);
+    await Process.run('chmod', ['600', file.path]);
+    expect((await drafts.find(draft.path))?.text, draft.text);
+  }, skip: Platform.isWindows ? 'chmod is POSIX' : false);
 }

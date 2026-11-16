@@ -91,7 +91,7 @@ final class ViewerDraftFiles implements ViewerDrafts {
     // Encoding a large collection would hold the window.
     final bytes = draft.text.length < _offThreadFrom
         ? utf8.encode(jsonEncode(record))
-        : await Isolate.run(() => utf8.encode(jsonEncode(record)));
+        : await _encodedElsewhere(record);
     await _folder.create(recursive: true);
     await withDirectoryLock(_folder, () async {
       final file = _fileFor(draft.path);
@@ -100,25 +100,33 @@ final class ViewerDraftFiles implements ViewerDrafts {
     });
   }
 
+  /// Only a record that is not a draft — bytes that are not UTF-8 or JSON,
+  /// another format, another file's — is set aside. A read or an isolate
+  /// that fails says nothing about the record, so it stays where it is for
+  /// the next opening, and the failure is logged.
   @override
   Future<ViewerDraft?> find(String path) async {
     final file = _fileFor(path);
+    final ViewerDraft? draft;
     try {
       if (!await file.exists()) return null;
-      final text = await file.readAsString();
-      final draft = text.length < _offThreadFrom
-          ? _decoded(text)
-          : await Isolate.run(() => _decoded(text));
-      if (draft == null || draft.path != path) {
-        await quarantine(_support, file, 'unreadable viewer draft');
-        return null;
-      }
-      return draft;
-    } on Object catch (error) {
+      final bytes = await file.readAsBytes();
+      draft = bytes.length < _offThreadFrom
+          ? _decoded(bytes)
+          : await _decodedElsewhere(bytes);
+    } on FormatException catch (error) {
       log.w('read the viewer draft for $path', error);
       await quarantine(_support, file, error);
       return null;
+    } on Object catch (error) {
+      log.w('read the viewer draft for $path; it stays for now', error);
+      return null;
     }
+    if (draft == null || draft.path != path) {
+      await quarantine(_support, file, 'unreadable viewer draft');
+      return null;
+    }
+    return draft;
   }
 
   @override
@@ -139,8 +147,10 @@ final class ViewerDraftFiles implements ViewerDrafts {
     });
   }
 
-  static ViewerDraft? _decoded(String text) {
-    final data = jsonDecode(text);
+  /// [bytes] as a draft, null when they are JSON of another shape; throws
+  /// [FormatException] when they are not UTF-8 JSON at all.
+  static ViewerDraft? _decoded(List<int> bytes) {
+    final data = jsonDecode(utf8.decode(bytes));
     if (data is! Map<String, Object?> ||
         data['version'] != version ||
         data['path'] is! String ||
@@ -159,3 +169,14 @@ final class ViewerDraftFiles implements ViewerDrafts {
 
   static const _offThreadFrom = 64 * 1024;
 }
+
+// The two below are top level, so the closure each sends carries only its
+// argument, never the [ViewerDraftFiles] whose method asks for it.
+
+/// [record] as JSON bytes, worked out on another isolate.
+Future<List<int>> _encodedElsewhere(Map<String, Object?> record) =>
+    Isolate.run(() => utf8.encode(jsonEncode(record)));
+
+/// [ViewerDraftFiles._decoded] on another isolate.
+Future<ViewerDraft?> _decodedElsewhere(List<int> bytes) =>
+    Isolate.run(() => ViewerDraftFiles._decoded(bytes));

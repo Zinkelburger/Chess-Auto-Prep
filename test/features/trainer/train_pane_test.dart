@@ -64,10 +64,19 @@ void main() {
     fixture.dispose();
   });
 
-  Future<void> pump(WidgetTester tester, {bool rateReviews = false}) async {
+  Future<void> pump(
+    WidgetTester tester, {
+    bool rateReviews = false,
+    bool reviewAll = false,
+  }) async {
     reads = [];
     final settings = SettingsStore(
-      initial: Settings(training: TrainingOptions(rateReviews: rateReviews)),
+      initial: Settings(
+        training: TrainingOptions(
+          rateReviews: rateReviews,
+          reviewAll: reviewAll,
+        ),
+      ),
     );
     addTearDown(settings.dispose);
     trainer = Trainer(
@@ -293,6 +302,27 @@ void main() {
     expect(find.textContaining('Good ·'), findsNothing);
     expect(files.reviews[italian]!.lastRating, 'good');
     expect(find.text('Review session done.'), findsOneWidget);
+  });
+
+  testWidgets('the recap offers the review the button starts: all learned '
+      'lines when reviews take them all', (tester) async {
+    final italian = (
+      source: fixture.ref.path,
+      id: 'line_ZTQgZTUgTmYzIE5jNiBCYz',
+    );
+    files.reviews[italian] = dueItalian(italian);
+    await pump(tester, reviewAll: true);
+    await tester.tap(find.text('Review 1'));
+    await tester.pumpAndSettle();
+    for (final uci in ['e2e4', 'g1f3', 'f1c4']) {
+      await play(tester, uci);
+    }
+    expect(find.text('Review session done.'), findsOneWidget);
+    expect(trainer.dueCount, 0);
+    expect(trainer.reviewCount, 1);
+    await tester.tap(find.text('Review 1 more'));
+    await tester.pumpAndSettle();
+    expect(trainer.lesson, isNotNull);
   });
 
   testWidgets('a line is left out of training from its menu', (tester) async {

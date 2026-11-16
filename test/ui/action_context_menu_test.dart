@@ -52,4 +52,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(taken, ['copy']);
   });
+
+  testWidgets('a menu without symbols keeps no slot for them', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => Center(
+              child: TextButton(
+                onPressed: () => showActionContextMenu(
+                  context,
+                  const Offset(100, 100),
+                  [AppAction('Plain', () {})],
+                ),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pump();
+    final item = find.byType(PopupMenuItem<VoidCallback>);
+    expect(
+      tester.getTopLeft(find.text('Plain')).dx - tester.getTopLeft(item).dx,
+      Space.l,
+    );
+  });
+
+  test('a label names its key after it, and only when it has one', () {
+    expect(withKey('Flip board', 'F'), 'Flip board (F)');
+    expect(withKey('Flip board', null), 'Flip board');
+  });
 }

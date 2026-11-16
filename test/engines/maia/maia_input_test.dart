@@ -155,6 +155,21 @@ void main() {
     expect(mirrorFen(fen).value, '4k3/8/8/8/8/8/8/4K3 w - - 0 1');
   });
 
+  test('a FEN of the board and the side alone mirrors with no rights and no '
+      'ep square', () {
+    const fen = Fen('4k3/8/8/8/8/8/8/4K3 b');
+    expect(mirrorFen(fen).value, '4k3/8/8/8/8/8/8/4K3 w - - 0 1');
+  });
+
+  test('a rank that says too much, or names no piece, marks nothing beyond '
+      'its own squares', () {
+    int marked(String placement) =>
+        boardTokens(Fen('$placement w - - 0 1')).where((t) => t == 1).length;
+    expect(marked('8/8/8/8/8/8/PPPPPPPPP/8'), 8);
+    expect(marked('8/8/8/8/8/8/x7/8'), 0);
+    expect(marked('8/8/8/8/8/8/7xP/8'), 0);
+  });
+
   test('a move on the mirrored board', () {
     expect(mirrorUci('e7e5'), 'e2e4');
     expect(mirrorUci('a7a8q'), 'a2a1q');

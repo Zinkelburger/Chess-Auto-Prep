@@ -77,6 +77,8 @@ class SeatView:
     clocks_ms: tuple[int, ...]
     now_ms: int
     sitting: bool
+    # What this seat's partner last said (``info string hb_tell ...``), or None.
+    partner_tell: str | None = None
 
 
 class Player(Protocol):
@@ -160,6 +162,8 @@ def play_game(game: Bughouse,
     # already had one (at most one per turn, never renewed).
     wake_deadline: list[int | None] = [None, None]
     wake_used = [False, False]
+    # The last thing each seat told its partner: bughouse partners may talk.
+    tells: dict[int, str] = {}
     result = GameResult(None, "", 0, clocks, [])
 
     for index, player in players.items():
@@ -273,7 +277,8 @@ def play_game(game: Bughouse,
         result.decisions[team] += 1
         result.advantage_decisions[team] += int(advantage)
         view = SeatView(game.copy(), board, color, team, advantage,
-                        tuple(clocks), now, sitting[board])
+                        tuple(clocks), now, sitting[board],
+                        tells.get(seat_index(1 - board, not color)))
         try:
             uci = players[seat].decide(view)
         except (RuntimeError, OSError, ValueError) as error:  # engine crash: no result, not a loss
@@ -283,6 +288,10 @@ def play_game(game: Bughouse,
         # the mover; a team engine's is for its team). Not every player has one.
         score = getattr(players[seat], "last_eval", None)
         scored = {"eval": score} if score else {}
+        told = getattr(players[seat], "tell", None)
+        if told is not None:
+            tells[seat] = told
+            scored["tell"] = told
 
         if uci is None:
             if not sitting[board]:

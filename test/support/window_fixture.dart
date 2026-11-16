@@ -14,6 +14,8 @@ import 'package:chess_auto_prep/features/library/chapter_outline.dart';
 import 'package:chess_auto_prep/features/library/library.dart';
 import 'package:chess_auto_prep/features/my_games/game_book.dart';
 import 'package:chess_auto_prep/features/pgn_viewer/pgn_viewer.dart';
+import 'package:chess_auto_prep/features/settings/app_updates.dart';
+import 'package:chess_auto_prep/features/settings/setting_rows.dart';
 import 'package:chess_auto_prep/features/study/studies.dart';
 import 'package:chess_auto_prep/features/tactics/my_games.dart';
 import 'package:chess_auto_prep/features/tactics/puzzle_trainer.dart';
@@ -87,6 +89,10 @@ final class WindowFixture {
     this.tournaments,
     this.viewerPlaces,
     this.viewerDrafts,
+    this.updates,
+    this.exportText,
+    this.settingRows,
+    this.now,
     this.launchTournament,
     this._players,
     this.exitWait = const Duration(milliseconds: 20),
@@ -114,6 +120,20 @@ final class WindowFixture {
 
   /// Where held viewer edits are checkpointed; none by default.
   final ViewerDrafts? viewerDrafts;
+
+  /// The app's own updates; none unless the test gives them.
+  final UpdateOutside? updates;
+
+  /// Where a text export is saved, answering its path; none unless the
+  /// test gives one.
+  final Future<String?> Function(String name, String text)? exportText;
+
+  /// The rows the settings show; none unless the test gives them.
+  final List<SettingGroup> Function()? settingRows;
+
+  /// The clock; the tactics set's day, standing still, unless the test
+  /// gives one.
+  final DateTime Function()? now;
 
   /// How long closing waits on writes before it asks; short, so a test of
   /// the question does not wait long for it.
@@ -183,6 +203,8 @@ final class WindowFixture {
       recentFiles: ScriptedRecentFiles(),
       viewerPlaces: viewerPlaces,
       viewerDrafts: viewerDrafts,
+      updates: updates,
+      exportText: exportText,
       fileImport: ScriptedImport(),
       lichessLogin: ScriptedLogin(),
       readAccount: () async => null,
@@ -226,7 +248,7 @@ final class WindowFixture {
       keepTree: (_, _, {required runId}) async {},
       setFullScreen: (on) async => fullScreenAsked.add(on),
       bughouse: bughouse.outside,
-      now: () => tacticsToday,
+      now: now ?? () => tacticsToday,
       saveDelay: Duration.zero,
       explorerDelay: Duration.zero,
       exitWait: exitWait,
@@ -277,7 +299,10 @@ final class WindowFixture {
 
   /// The window over these parts, the library listed and both
   /// repertoires' rows opened, since the chapters are what tests click.
-  Future<void> pumpShell(WidgetTester tester) async {
+  /// The window over the parts. [openFolders] opens the benko and KID
+  /// folders of the repertoire list, which a window opening on a mode
+  /// without the list leaves out.
+  Future<void> pumpShell(WidgetTester tester, {bool openFolders = true}) async {
     // The app reads the books as it starts; the rest of the start (the
     // engine, the settings file) the tests leave out.
     unawaited(parts.books.load());
@@ -296,7 +321,7 @@ final class WindowFixture {
           databases: parts.databases,
           tournaments: parts.tournaments,
           fullScreen: parts.fullScreen,
-          settingRows: () => const [],
+          settingRows: settingRows ?? () => const [],
           settingsAlso: settings,
         ),
       ),
@@ -304,6 +329,7 @@ final class WindowFixture {
     await library.refresh();
     await parts.labs.offer(parts.env.bughouse.bundled);
     await tester.pumpAndSettle();
+    if (!openFolders) return;
     // An already-open chapter selects Chapters in compact navigation.
     // Reveal the repertoire list before opening its fixture folders.
     final navigation = find.byType(NavigationPages);

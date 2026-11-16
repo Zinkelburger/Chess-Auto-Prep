@@ -47,10 +47,15 @@ final class PlayerPosition {
     required this.line,
     required this.game,
     required this.ply,
+    this.start = Fen.initial,
   });
   final Fen fen;
   final Side side;
+
+  /// The moves from [start], the position the game they were first seen in
+  /// began at, to [fen].
   final List<String> line;
+  final Fen start;
   final int game;
   final int ply;
   final Set<int> _games = {};
@@ -85,12 +90,20 @@ final class PlayerPosition {
       ? null
       : (wins + draws / 2) / (wins + draws + losses);
   String get key => '${side.name}:${fen.position}';
-  String get label => line.isEmpty
-      ? 'Starting position'
-      : [
-          for (final (i, move) in line.indexed)
-            '${i.isEven ? '${i ~/ 2 + 1}. ' : ''}$move',
-        ].join(' ');
+  String get label {
+    if (line.isEmpty) return 'Starting position';
+    // Plies counted from White's move of the start's move number, so a
+    // game set up with Black to move reads `1... e5 2. Nf3`.
+    final first = (start.fullMove - 1) * 2 + (start.whiteToMove ? 0 : 1);
+    return [
+      for (final (i, move) in line.indexed)
+        switch (first + i) {
+          final ply when ply.isEven => '${ply ~/ 2 + 1}. $move',
+          final ply when i == 0 => '${ply ~/ 2 + 1}... $move',
+          _ => move,
+        },
+    ].join(' ');
+  }
 }
 
 final class PlayerCorpus {
@@ -171,6 +184,7 @@ PlayerCorpus buildPlayerCorpus(Set<String> names, List<PlayerGame> sources) {
             line: List.of(line),
             game: index,
             ply: ply,
+            start: tree.rootFen,
           ),
         );
         at.addGame(index, result, move: node?.uci);

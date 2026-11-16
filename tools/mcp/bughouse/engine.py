@@ -180,7 +180,17 @@ class HivemindEngine:
         self._reader = threading.Thread(target=self._pump, daemon=True)
         self._reader.start()
         threading.Thread(target=self._pump_stderr, daemon=True).start()
-        self._handshake(hash_mb, batch_size)
+        try:
+            self._handshake(hash_mb, batch_size)
+        except BaseException:
+            # Nobody holds this object to close it later, so a process that
+            # never answered `uci` would run on, and every retry adds one.
+            # It did not answer, so it is not asked to quit.
+            if self._proc.poll() is None:
+                self._proc.kill()
+                self._proc.wait(timeout=5)
+            self.close()
+            raise
 
     # ── Process plumbing ──────────────────────────────────────────────────
 
