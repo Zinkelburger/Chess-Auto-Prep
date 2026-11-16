@@ -102,6 +102,12 @@ port Hivemind's `engine/src/environment/board.cc` (unpack
   flip. Intervening wakes keep that first deadline, and each board turn gets
   at most one, so the wait cannot be renewed indefinitely. Other engines never
   print it and see no change.
+* Partners may talk, as bughouse partners do. Whatever a seat's search printed
+  last as `info string hb_tell <text>` is given to its partner seat before that
+  seat's next search, as `setoption name HBPartnerTell value <text>` (`none`
+  at the start of a game), if the partner's engine advertises `HBPartnerTell`.
+  The arena does not read the text. It is recorded as `tell` in the game's
+  events. Engines that print nothing and advertise nothing see no change.
 
 ## Engines
 

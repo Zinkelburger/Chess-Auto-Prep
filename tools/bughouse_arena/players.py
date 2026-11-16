@@ -12,7 +12,10 @@ Engine kinds (the first item of an engine spec):
 ``hypebeast``
     The HypeBeast Fairy-Stockfish fork in arena mode (``HypeBeast=true``). Same
     position format and joint answer as Hivemind, plus ``Seat`` and ``Clocks``
-    and an optional ``info string hb_wake_after_ms=N`` wake request.
+    and an optional ``info string hb_wake_after_ms=N`` wake request. A seat may
+    also tell its partner something: its last ``info string hb_tell <text>`` is
+    sent to the partner seat before that seat's next search, as the option
+    ``HBPartnerTell``, if the partner's engine advertises it.
 ``fsf``
     Unmodified Fairy-Stockfish bughouse via a UCI snapshot adapter: each
     decision sends the seat's own board as a single FEN with the real pockets
@@ -58,6 +61,8 @@ DEFAULT_NET_NAME = "bughouse-cd8cceab93fe.nnue"
 SYNC_TIMEOUT = 120.0
 NODES_TIMEOUT = 120.0
 WAKE_RE = re.compile(r"\bhb_wake_after_ms=(\d+)\b")
+TELL_PREFIX = "info string hb_tell "
+NO_TELL = "none"
 
 
 class EngineError(RuntimeError):
@@ -395,6 +400,8 @@ class UciSeat:
         self.seconds = 0.0
         self.game_stats = self._fresh_stats()
         self.requested_wake_ms: int | None = None
+        # What the last decision said to the partner seat, if anything.
+        self.tell: str | None = None
         # What the last decision's search thought of the position (see
         # _last_score); None when the seat answered without searching.
         self.last_eval: dict | None = None
@@ -528,6 +535,7 @@ class TeamEngineSeat(UciSeat):
         else:
             command = [str(spec.binary)]
         self.advantage: bool | None = None
+        self.heard = NO_TELL
         super().__init__(spec, command, env, search_timeout, log_path)
 
     def _configure(self) -> None:
@@ -554,6 +562,7 @@ class TeamEngineSeat(UciSeat):
         self._apply_spec_options()
         self.sends_seat = "Seat" in advertised
         self.sends_clocks = "Clocks" in advertised
+        self.sends_tell = "HBPartnerTell" in advertised
 
     def new_game(self, board: int, color: chess.Color) -> None:
         super().new_game(board, color)
@@ -562,6 +571,10 @@ class TeamEngineSeat(UciSeat):
         self._setoption("Team", team_name(team))
         if self.sends_seat:
             self._setoption("Seat", seat_option(board, color))
+        self.tell = None
+        if self.sends_tell:
+            self._setoption("HBPartnerTell", NO_TELL)
+        self.heard = NO_TELL
         self.advantage = None
         self._sync()
 
@@ -582,8 +595,16 @@ class TeamEngineSeat(UciSeat):
             self.advantage = view.time_advantage
         if self.sends_clocks:
             self._setoption("Clocks", ",".join(str(int(c)) for c in view.clocks_ms))
+        if self.sends_tell and (view.partner_tell or NO_TELL) != self.heard:
+            self.heard = view.partner_tell or NO_TELL
+            self._setoption("HBPartnerTell", self.heard)
         self.uci.send(self.position_command(view))
         lines, _ = self._search(self.spec.go_command)
+        # The last thing this search said to the partner; None if nothing.
+        self.tell = None
+        for line in lines:
+            if line.startswith(TELL_PREFIX):
+                self.tell = line[len(TELL_PREFIX):].strip() or None
         if self.stop_after_bestmove:
             self.uci.send("stop")
         if self.spec.kind != "hivemind" and not self.nnue_lines:

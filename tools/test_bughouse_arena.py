@@ -502,7 +502,8 @@ ADVERTISED = {{"hivemind": ["option name Hash type spin default 16 min 1 max 102
               "fsf": COMMON + FSF}}[KIND]
 ADVERTISED = [line for line in ADVERTISED
               if line.split()[2] not in BEHAVIOUR.get("hide", [])]
-ADVERTISED += [line for line in TEAM + HYPEBEAST if line.split()[2] in BEHAVIOUR.get("advertise", [])]
+TELL = ["option name HBPartnerTell type string default none"]
+ADVERTISED += [line for line in TEAM + HYPEBEAST + TELL if line.split()[2] in BEHAVIOUR.get("advertise", [])]
 options = {{}}
 position = "position startpos"
 searches = 0
@@ -533,6 +534,8 @@ def team_answer():
         halves = ["pass", "pass"]
     if "wake" in BEHAVIOUR:
         say(f"info string hb_wake_after_ms={{BEHAVIOUR['wake']}}")
+    if "tell" in BEHAVIOUR:
+        say(f"info string hb_tell {{BEHAVIOUR['tell']}} search={{searches}}")
     return f"({{halves[0]}},{{halves[1]}})"
 
 
@@ -756,6 +759,67 @@ class OptionGating(TempDir):
         finally:
             seat.close()
             mover.close()
+
+
+    def test_a_seat_hears_what_its_partner_said_before_its_next_search(self):
+        teller = TeamEngineSeat(self.fakes.spec("hypebeast", "teller", tell="n=1 -Q=M"))
+        hearer = TeamEngineSeat(self.fakes.spec("hypebeast", "hearer", advertise=["HBPartnerTell"]))
+        deaf = TeamEngineSeat(self.fakes.spec("hypebeast", "deaf"))
+        game = Bughouse()
+        try:
+            teller.new_game(BOARD_A, W)
+            hearer.new_game(BOARD_B, B)
+            deaf.new_game(BOARD_B, B)
+            teller.decide(view_of(game, BOARD_A, W))
+            self.assertEqual(teller.tell, "n=1 -Q=M search=1")
+            play(game, "2e2e4")
+            for seat in (hearer, deaf):
+                seat.decide(SeatView(game, BOARD_B, B, W, False, (120_000,) * 4, 0, False, teller.tell))
+                seat.decide(SeatView(game, BOARD_B, B, W, False, (120_000,) * 4, 0, False, teller.tell))
+                self.assertIsNone(seat.tell)
+        finally:
+            for seat in (teller, hearer, deaf):
+                seat.close()
+        heard = [c for c in self.fakes.commands("hearer") if c.startswith("setoption name HBPartnerTell")]
+        # cleared at the start of the game, then sent once: it did not change
+        self.assertEqual(heard, ["setoption name HBPartnerTell value none",
+                                 "setoption name HBPartnerTell value n=1 -Q=M search=1"])
+        commands = self.fakes.commands("hearer")
+        self.assertLess(commands.index(heard[1]), next(i for i, c in enumerate(commands) if c.startswith("go ")))
+        self.assertFalse([c for c in self.fakes.commands("deaf") if "HBPartnerTell" in c])
+
+
+class Talker(Scripted):
+    """A scripted seat that says its seat name and how often it was asked."""
+
+    def __init__(self, label):
+        super().__init__()
+        self.label = label
+        self.heard = []
+        self.tell = None
+
+    def decide(self, view):
+        self.heard.append(view.partner_tell)
+        self.tell = f"{self.label}{len(self.heard)}"
+        return super().decide(view)
+
+
+class PartnerTalk(unittest.TestCase):
+    def test_each_seat_is_shown_its_partners_last_word_and_no_one_elses(self):
+        players = {A_WHITE: Talker("aw"), A_BLACK: Talker("ab"), B_WHITE: Talker("bw"), B_BLACK: Talker("bb")}
+        config = ClockConfig(initial_ms=20_000, move_cost_ms=(1000, 1000), react_cost_ms=500)
+        result = play_game(Bughouse(), players, config, cost_key=(1, 0))
+        partner = {A_WHITE: "bb", B_BLACK: "aw", A_BLACK: "bw", B_WHITE: "ab"}
+        for seat, talker in players.items():
+            said = [h for h in talker.heard if h is not None]
+            self.assertTrue(said, talker.label)
+            self.assertTrue(all(h.startswith(partner[seat]) for h in said), (talker.label, said))
+            # never older than the partner's latest word at that moment: counts only grow
+            counts = [int(h[2:]) for h in said]
+            self.assertEqual(counts, sorted(counts))
+        self.assertIsNone(players[A_WHITE].heard[0])
+        told = [e["tell"] for e in result.events if e["kind"] in ("move", "sit") and "tell" in e]
+        self.assertEqual(len(told), sum(len(t.heard) for t in players.values()))
 
 
 class FsfFen(unittest.TestCase):
