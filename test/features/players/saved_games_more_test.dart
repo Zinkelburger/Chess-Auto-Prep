@@ -1,6 +1,8 @@
 // The saved-games counts: a changed file counted again, the count kept
 // while nothing it read has changed, a count after a delete, and nothing
 // said once taken down.
+import 'dart:async';
+
 import 'package:chess_auto_prep/chess/players/player.dart';
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/features/players/players.dart';
@@ -80,8 +82,20 @@ void main() {
     final alex = await person('Alex', {'lichess': 'alex'});
     final confirmed = (await saved.current(alex))!;
     expect(confirmed.downloaded, 3);
+    // The count after a delete reads the disk, which a fixed number of
+    // event-loop turns does not wait out; wait for the count itself.
+    final recounted = Completer<void>();
+    void heard() {
+      if ((saved.of(players.players.single)?.downloaded ?? 0) == 0 &&
+          !recounted.isCompleted) {
+        recounted.complete();
+      }
+    }
+
+    saved.addListener(heard);
     await saved.delete(alex, confirmed: confirmed);
-    await pumpEventQueue();
+    await recounted.future.timeout(const Duration(seconds: 10));
+    saved.removeListener(heard);
     expect(saved.of(players.players.single)?.downloaded ?? 0, 0);
     saved.dispose();
   });
