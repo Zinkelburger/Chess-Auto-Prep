@@ -331,19 +331,26 @@ void main() {
       expect(leftover.existsSync(), isFalse);
     });
 
-    test('a cancel that cannot remove a killed helper\'s ready file says '
-        'so', () async {
-      final installer = portableInstaller(root, helper: StandInHelper());
-      final payload = payloadIn(root);
-      File(p.join(payload.folder, helperReadyName)).writeAsStringSync('ready');
-      final folder = Directory(payload.folder);
-      await Process.run('chmod', ['555', folder.path]);
-      addTearDown(() => Process.run('chmod', ['755', folder.path]));
-      expect(
-        await installer.cancel(p.join(payload.folder, armedName)),
-        isFalse,
-      );
-    });
+    // A read-only folder is how the test keeps the file in place; Windows
+    // has no such permission bits, so there the file is removed anyway.
+    test(
+      'a cancel that cannot remove a killed helper\'s ready file says so',
+      () async {
+        final installer = portableInstaller(root, helper: StandInHelper());
+        final payload = payloadIn(root);
+        File(
+          p.join(payload.folder, helperReadyName),
+        ).writeAsStringSync('ready');
+        final folder = Directory(payload.folder);
+        await Process.run('chmod', ['555', folder.path]);
+        addTearDown(() => Process.run('chmod', ['755', folder.path]));
+        expect(
+          await installer.cancel(p.join(payload.folder, armedName)),
+          isFalse,
+        );
+      },
+      skip: Platform.isWindows,
+    );
 
     test('on Windows a lock nobody holds is no running helper', () async {
       final windows = UpdateInstaller(
