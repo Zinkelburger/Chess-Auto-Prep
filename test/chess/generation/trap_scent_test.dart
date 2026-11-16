@@ -116,6 +116,22 @@ void main() {
     expect(trapsBelow(tree), noTraps);
   });
 
+  test('what our moves give up adds up along the line, as Positions '
+      'adds it', () {
+    // Each of our moves gives up 200 (the positions they reach stand at
+    // 0): one alone is a move we might play, the two together are not.
+    final later = ours('later', [
+      ('best later', leaf('best later', 200)),
+      ('worse later', trapAt('worse', cp: 900, sound: 200)),
+    ]);
+    expect(trapsBelow(later).traps, 1, reason: 'alone it is followed');
+    final tree = ours('root', [
+      ('best', leaf('best', 200)),
+      ('second', theirs('after second', [('reply', 1, later)])),
+    ]);
+    expect(trapsBelow(tree), noTraps);
+  });
+
   test('a subtree is counted once however often it is asked about', () {
     final deep = trapAt('deep');
     final tree = ours('root', [('move', deep)]);

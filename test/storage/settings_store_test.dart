@@ -91,6 +91,10 @@ void main() {
     ).expectimax;
     expect(old.rootMoves, 6);
     expect(old.candidateMoves, 1);
+    final oldChosen = Settings.fromJson(
+      '{"expectimax": {"candidateMoves": 6}}',
+    ).expectimax;
+    expect(oldChosen.candidateMoves, 6, reason: 'not the old default');
     final chosen = Settings.fromJson(
       '{"expectimax": {"laterMoves": 3, "bothSides": true}}',
     ).expectimax;

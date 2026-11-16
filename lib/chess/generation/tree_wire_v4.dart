@@ -95,6 +95,13 @@ String encodeTreeV4(
     'build_complete': complete,
     'v2_evaluation_source': ?evaluationSource,
     if (replySource != maiaReplySource) 'v2_reply_source': replySource,
+    // The chapter's moves it played, so a search going on from it can tell
+    // which of its choices the chapter has since dropped.
+    if (config.pins.isNotEmpty)
+      'v2_pins': {
+        for (final MapEntry(:key, :value) in config.pins.entries)
+          key: value.toList()..sort(),
+      },
     if (startMoves.isNotEmpty) 'start_moves': startMoves.join(' '),
     'config': _configJson(
       config,

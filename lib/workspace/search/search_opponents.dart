@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dartchess/dartchess.dart' show Position;
 
 import '../../chess/explorer_choice.dart';
@@ -195,26 +197,22 @@ final class CandidateAnswers implements CandidateSource {
   @override
   Future<List<String>?> candidates(Position position, int count) {
     final key = (Fen(position.fen).position, count);
-    return _asked[key] ??= _ask(key, position, count);
+    if (_asked[key] case final asked?) return asked;
+    // Stored before it can fail, so a source that throws at once is
+    // forgotten too.
+    final asking = Future.sync(() => source.candidates(position, count));
+    _asked[key] = asking;
+    unawaited(
+      asking.then<void>((ranked) {
+        if (ranked == null) _forget(key, asking);
+      }, onError: (Object _) => _forget(key, asking)),
+    );
+    return asking;
   }
 
-  Future<List<String>?> _ask(
-    (String, int) key,
-    Position position,
-    int count,
-  ) async {
-    try {
-      final ranked = await source.candidates(position, count);
-      if (ranked == null) _forget(key);
-      return ranked;
-    } on Object {
-      _forget(key);
-      rethrow;
-    }
-  }
-
-  void _forget((String, int) key) {
-    _asked.removeWhere((asked, _) => asked == key);
+  /// Drops [asking], unless a later ask has already taken its place.
+  void _forget((String, int) key, Future<List<String>?> asking) {
+    if (identical(_asked[key], asking)) unawaited(_asked.remove(key));
   }
 }
 

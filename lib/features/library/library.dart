@@ -251,8 +251,32 @@ final class Library extends ChangeNotifier {
     RepertoireFolder into,
     String name,
     Chapter board,
-  ) => _run('save the analysis board as $name in ${into.name}', () async {
-    final ref = DocumentRef(p.join(into.path, '$name.pgn'));
+  ) => _run(
+    'save the analysis board as $name in ${into.name}',
+    () =>
+        _saveBoardAt(DocumentRef(p.join(into.path, '$name.pgn')), name, board),
+  );
+
+  /// [board] — the analysis board — as the first chapter of a new
+  /// repertoire [name], for the board's side: what was explored before any
+  /// repertoire was made for it is kept as it stands.
+  Future<LibraryResult> saveBoardAsRepertoire(String name, Chapter board) =>
+      _run('save the analysis board as the repertoire $name', () async {
+        if (_named(name) != null) return const LibraryNameTaken();
+        return _saveBoardAt(
+          DocumentRef(p.join(_root, name, '$firstChapter.pgn')),
+          name,
+          board,
+        );
+      });
+
+  /// [board]'s games written as a new chapter file at [ref], for the
+  /// board's side.
+  Future<LibraryResult> _saveBoardAt(
+    DocumentRef ref,
+    String name,
+    Chapter board,
+  ) async {
     final games = writeChapter(board).substring(board.preamble.length);
     final result = await _create(ref, name, board.side, games: games);
     if (result is! LibraryDone) return result;
@@ -261,24 +285,7 @@ final class Library extends ChangeNotifier {
       chapters: 1,
       lines: board.gameCount,
     );
-  });
-
-  /// [board] — the analysis board — as the first chapter of a new
-  /// repertoire [name], for the board's side: what was explored before any
-  /// repertoire was made for it is kept as it stands.
-  Future<LibraryResult> saveBoardAsRepertoire(String name, Chapter board) =>
-      _run('save the analysis board as the repertoire $name', () async {
-        if (_named(name) != null) return const LibraryNameTaken();
-        final ref = DocumentRef(p.join(_root, name, '$firstChapter.pgn'));
-        final games = writeChapter(board).substring(board.preamble.length);
-        final result = await _create(ref, name, board.side, games: games);
-        if (result is! LibraryDone) return result;
-        return LibraryAdded(
-          ChapterRef.at(ref.path),
-          chapters: 1,
-          lines: board.gameCount,
-        );
-      });
+  }
 
   /// A chapter file is renamed on disk; a chapter of a course file is its
   /// games' `[ChapterName]`, so renaming it rewrites that tag — and the

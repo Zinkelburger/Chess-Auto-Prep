@@ -156,12 +156,14 @@ final class FillRequest {
 }
 
 /// The first of [trees], newest first, [request] can go on from for
-/// [side]; or, when there is none, why the newest cannot.
+/// [side], playing the chapter's moves [pins]; or, when there is none, why
+/// the newest cannot.
 Future<Object> savedSeed(
   Stream<String> trees,
   FillRequest request,
-  Side side,
-) async {
+  Side side, {
+  Map<String, Set<String>> pins = const {},
+}) async {
   String? refused;
   try {
     await for (final text in trees) {
@@ -177,6 +179,7 @@ Future<Object> savedSeed(
             replyFloor: request.replyFloor,
             replyMass: fillReplyMass,
             maxReplies: fillMaxReplies,
+            pins: pins,
           ).catchError((Object error) {
             log.w('resume search', error);
             return 'The saved search could not be read.';
