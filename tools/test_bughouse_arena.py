@@ -45,7 +45,7 @@ from bughouse_arena.players import (FSF_LABEL, EngineError, EngineSpec, FsfSeat,
                                     _last_score)
 from bughouse_arena.referee import (BOARD_A, BOARD_B, STARTING_FEN, Bughouse,  # noqa: E402
                                     IllegalMove)
-from bughouse_arena.sim import (ClockConfig, MoveCosts, SeatView, play_game,  # noqa: E402
+from bughouse_arena.sim import (ClockConfig, MoveCosts, Player, SeatView, play_game,  # noqa: E402
                                 seat_index, time_advantage)
 from bughouse_arena.stats import (pair_interval, paired_sprt, score_to_elo,  # noqa: E402
                                   summarize)
@@ -806,20 +806,21 @@ class Talker(Scripted):
 
 class PartnerTalk(unittest.TestCase):
     def test_each_seat_is_shown_its_partners_last_word_and_no_one_elses(self):
-        players = {A_WHITE: Talker("aw"), A_BLACK: Talker("ab"), B_WHITE: Talker("bw"), B_BLACK: Talker("bb")}
+        talkers = {A_WHITE: Talker("aw"), A_BLACK: Talker("ab"), B_WHITE: Talker("bw"), B_BLACK: Talker("bb")}
+        players: dict[int, Player] = dict(talkers)
         config = ClockConfig(initial_ms=20_000, move_cost_ms=(1000, 1000), react_cost_ms=500)
-        result = play_game(Bughouse(), players, config, cost_key=(1, 0))
+        result = play_game(Bughouse(), players, config, cost_key="1:0")
         partner = {A_WHITE: "bb", B_BLACK: "aw", A_BLACK: "bw", B_WHITE: "ab"}
-        for seat, talker in players.items():
+        for seat, talker in talkers.items():
             said = [h for h in talker.heard if h is not None]
             self.assertTrue(said, talker.label)
             self.assertTrue(all(h.startswith(partner[seat]) for h in said), (talker.label, said))
             # never older than the partner's latest word at that moment: counts only grow
             counts = [int(h[2:]) for h in said]
             self.assertEqual(counts, sorted(counts))
-        self.assertIsNone(players[A_WHITE].heard[0])
+        self.assertIsNone(talkers[A_WHITE].heard[0])
         told = [e["tell"] for e in result.events if e["kind"] in ("move", "sit") and "tell" in e]
-        self.assertEqual(len(told), sum(len(t.heard) for t in players.values()))
+        self.assertEqual(len(told), sum(len(t.heard) for t in talkers.values()))
 
 
 class FsfFen(unittest.TestCase):
