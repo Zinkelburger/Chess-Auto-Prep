@@ -383,3 +383,57 @@ SearchNode cutReplies(SearchNode node, {double? mass, int? most}) =>
         }(),
       _ => node,
     };
+
+/// [node] with each choice of ours that [then] pinned, and [now] no longer
+/// pins the same way, put back to an unexpanded position, so a search that
+/// goes on from it chooses there again rather than keeping a move the
+/// chapter dropped. Both are keyed as a search's pins are. The first two plies
+/// are kept: there the pins are searched beside the engine's own moves, so
+/// a pin gone leaves only an extra move, valued truly.
+SearchNode forgetDroppedPins(
+  SearchNode node,
+  Map<String, Set<String>> then,
+  Map<String, Set<String>> now, {
+  int ply = 0,
+}) {
+  if (then.isEmpty) return node;
+  SearchNode below(SearchNode child) =>
+      forgetDroppedPins(child, then, now, ply: ply + 1);
+  switch (node) {
+    case OurNode(:final fen, :final candidates):
+      final pinned = then[fen.position] ?? const <String>{};
+      final current = now[fen.position] ?? const <String>{};
+      final changed =
+          pinned.length != current.length || !pinned.containsAll(current);
+      if (ply >= 2 && pinned.isNotEmpty && changed) {
+        return FrontierNode(
+          fen: fen,
+          evalForUs: node.evaluated ? node.evalForUs : null,
+        );
+      }
+      return OurNode.over(
+        fen: fen,
+        evalForUs: node.evaluated ? node.evalForUs : null,
+        candidates: [
+          for (final c in candidates)
+            CandidateMove(move: c.move, child: below(c.child)),
+        ],
+      );
+    case OpponentNode(:final fen, :final replies, :final repliesFrom):
+      return OpponentNode.over(
+        fen: fen,
+        evalForUs: node.evaluated ? node.evalForUs : null,
+        repliesFrom: repliesFrom,
+        replies: [
+          for (final r in replies)
+            ReplyMove(
+              move: r.move,
+              probability: r.probability,
+              child: below(r.child),
+            ),
+        ],
+      );
+    default:
+      return node;
+  }
+}
