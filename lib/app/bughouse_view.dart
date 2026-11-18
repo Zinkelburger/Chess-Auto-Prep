@@ -131,18 +131,21 @@ final class BughouseView extends ModeView {
     final path = await _labs.picker.pickPgn(extensions: bpgnExtensions);
     if (path == null) return;
     final opening = ++_opening;
+    final revision = _labs.lab.gameRevision;
+    bool current() => _current(opening) && _labs.lab.gameRevision == revision;
     final name = p.basename(path);
     try {
       switch (await _labs.files.read(path)) {
         case PickedText(:final text):
+          if (!current()) return;
           final games = await BpgnGames.index(text);
-          if (_current(opening)) _labs.lab.openGames(games, file: name);
+          if (current()) _labs.lab.openGames(games, file: name);
         case PickedUnread():
-          if (_current(opening)) _labs.lab.fileUnread(name);
+          if (current()) _labs.lab.fileUnread(name);
       }
     } on Object catch (error) {
       log.w('open the bughouse file $path', error);
-      if (_current(opening)) _labs.lab.fileUnread(name);
+      if (current()) _labs.lab.fileUnread(name);
     }
   }
 
