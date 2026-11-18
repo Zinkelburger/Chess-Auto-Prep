@@ -444,6 +444,38 @@ void main() {
   });
 
   test(
+    'Analyze again writes fresh evaluations when Annotate PGN is checked',
+    () async {
+      fixture.session.holdsEdits = false;
+      review.setAnnotate(false);
+      expect(review.annotate, isFalse);
+
+      const saved =
+          '[Event "Reviewed"]\n[Result "*"]\n\n'
+          '{[%eval +0.10] [%cap_review_eval]} '
+          '1. d4 {[%eval +0.15] [%cap_review_eval]} *';
+      final ref = chapterRef('KID', 'Reviewed');
+      fixture.store.documents[ref] = Opened(saved, scriptedRevision(saved));
+      await fixture.session.open(ref);
+      expect(review.annotate, isTrue);
+
+      final running = review.start();
+      for (final move in ['d2d4', 'd7d5']) {
+        await pumpEventQueue();
+        engine.current.emit(
+          line(depth: 14, score: const Centipawns(35), pv: [move]),
+        );
+        engine.current.end();
+      }
+      await running;
+      expect(review.problem, isNull);
+      await fixture.saver.flush();
+      final pgn = (fixture.store.documents[ref] as Opened).text;
+      expect(pgn, contains('[%eval -0.35]'));
+    },
+  );
+
+  test(
     'turning the switch on for a game that has the review keeps it',
     () async {
       final running = review.start();
