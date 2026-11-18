@@ -99,5 +99,5 @@ String _dateGroup(Tournament t) {
   final today = DateTime(now.year, now.month, now.day);
   if (day == today) return 'Today';
   if (day == DateTime(now.year, now.month, now.day - 1)) return 'Yesterday';
-  return DateFormat('MMMM yyyy', 'en').format(created);
+  return DateFormat('MMMM yyyy', 'en_US').format(created);
 }
