@@ -13,8 +13,11 @@ import 'package:chess_auto_prep/storage/player_reports.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/audit_fixture.dart' show after;
+import '../../support/my_games_fixture.dart' show AnsweringEngine;
 import '../../support/scripted_engine.dart';
 import '../../support/scripted_store.dart';
+import '../../support/window_fixture.dart';
 
 const _game =
     '[Event "Club"]\n[White "Alex"]\n[Black "Bob"]\n[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 1-0';
@@ -102,6 +105,54 @@ void main() {
       await running;
       expect(hunt.findings.single.unseen, true);
       expect(hunt.findings.single.score.text, '-0.80');
+    },
+  );
+  test(
+    'refresh does not flag a reply played under a new alias as unseen',
+    () async {
+      final afterE4 = after('e2e4').position;
+      final window = WindowFixture(
+        launchEngine: ({required cores, required memoryMb}) async => Started(
+          AnsweringEngine({
+            afterE4: line(depth: 14, pv: ['c7c5']),
+          }),
+        ),
+      );
+      addTearDown(window.dispose);
+      const games =
+          '$_game\n\n[Event "Club"]\n[White "A. Smith"]\n[Black "Bob"]\n'
+          '[Result "0-1"]\n\n1. e4 c5 0-1';
+      final ref = DocumentRef(player.files.single);
+      window.store.documents[ref] = Opened(games, scriptedRevision(games));
+      final players = window.parts.players;
+      final directory = players.directory;
+      final owner = players.analysis;
+      final report = players.hunt;
+      await directory.save(player);
+      final original = directory.players.single;
+      await owner.select(original);
+      expect(owner.corpus!.games, hasLength(1));
+      await report.start();
+      expect(report.findings.single.line, ['c7c5']);
+      expect(report.findings.single.unseen, isTrue);
+
+      await directory.save(
+        original.withStrings('aliases', ['A. Smith']),
+        expected: original,
+      );
+      await report.start();
+      await owner.pending.settle();
+      await owner.select(directory.players.single);
+      await pumpEventQueue();
+
+      final position = owner.corpus!.positions.singleWhere(
+        (p) => p.fen.position == afterE4,
+      );
+      expect(position.moves, {'e7e5': 1, 'c7c5': 1});
+      expect(
+        report.findings.where((f) => f.unseen).map((f) => f.line.first),
+        isNot(contains('c7c5')),
+      );
     },
   );
   test('a castle the games played is not an unseen reply', () async {
