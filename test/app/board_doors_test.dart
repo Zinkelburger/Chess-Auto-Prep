@@ -1,6 +1,8 @@
 // The ways a position comes onto a board from outside a file, on their
 // own: a find from the Positions, Ctrl+V on a mode's own screen, and the
 // board's entries in the Actions menu.
+import 'dart:async';
+
 import 'package:chess_auto_prep/app/board_doors.dart';
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/fen.dart';
@@ -90,6 +92,49 @@ void main() {
     await pumpEventQueue();
     expect(w.session.isScratch, isTrue);
     expect(w.requests.documents.tabs.open, hasLength(2));
+  });
+
+  test('a delayed paste preserves another scratch tab’s analysis', () async {
+    final clipboard = Completer<String>();
+    final messenger =
+        TestWidgetsFlutterBinding.ensureInitialized().defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method != 'Clipboard.getData') return null;
+      return {'text': await clipboard.future};
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+
+    final documents = w.requests.documents;
+    final inspection = w.parts.workspace.inspection!;
+    w.session.playMove('e2e4');
+    final sicilianTab = documents.tabs.selected;
+    expect(await inspection.show(), isTrue);
+    inspection.session.playMove('e7e5');
+    inspection.session.cursor.back();
+    inspection.session.playMove('c7c5');
+    final variation = inspection.session.cursor.value;
+    Iterable<String> savedLine() =>
+        inspection.session.tree!.lineTo(variation).map((move) => move.san);
+    inspection.hide();
+
+    await w.requests.newEmptyAnalysis();
+    expect(documents.tabs.selected, isNot(sicilianTab));
+    inspecting = await inspection.show();
+    expect(inspecting, isTrue);
+    final pending = doors.paste();
+
+    await documents.select(sicilianTab);
+    inspecting = await inspection.show();
+    expect(inspecting, isTrue);
+    expect(savedLine(), ['e4', 'c5']);
+    clipboard.complete('1. d4 d5 *');
+    await pending;
+
+    inspection.hide();
+    expect(await inspection.show(), isTrue);
+    expect(savedLine(), ['e4', 'c5']);
   });
 
   group('Ctrl+V on a mode\'s own screen', () {
