@@ -4,6 +4,7 @@ import '../fen.dart';
 import '../generation/eval.dart' show winningChances;
 import '../pgn/game_text.dart';
 import '../pgn/game_tree.dart';
+import '../pgn/tree_edit.dart' show positionOf;
 import '../pv_text.dart';
 import 'puzzle.dart';
 
@@ -84,8 +85,7 @@ List<PlayedMove> movesBy(GameTree tree, Side side) {
   return moves;
 }
 
-/// Whether the game is over at [fen]: a move that ends it has nothing to
-/// punish.
+/// Whether play has ended at [fen]. An unreadable position also ends play.
 bool isOver(Fen fen) {
   try {
     return Chess.fromSetup(Setup.parseFen(fen.value)).isGameOver;
@@ -93,6 +93,9 @@ bool isOver(Fen fen) {
     return true;
   }
 }
+
+/// Whether [fen] is a terminal draw on the board.
+bool isDraw(Fen fen) => positionOf(fen)?.outcome == Outcome.draw;
 
 /// Whether [move] is the engine's own first choice. Positions are compared
 /// rather than move strings, because the engine and the board spell castling
