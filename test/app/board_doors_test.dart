@@ -1,12 +1,16 @@
 // The ways a position comes onto a board from outside a file, on their
 // own: a find from the Positions, Ctrl+V on a mode's own screen, and the
 // board's entries in the Actions menu.
+import 'dart:async';
+
 import 'package:chess_auto_prep/app/board_doors.dart';
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/generation/finds.dart';
+import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/storage/finds_store.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/ui/app_action.dart';
 import 'package:chess_auto_prep/ui/app_keys.dart';
 import 'package:dartchess/dartchess.dart' show Side;
@@ -14,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/scripted_files.dart';
 import '../support/window_fixture.dart';
 
 void main() {
@@ -166,6 +171,66 @@ void main() {
         'Edit position…',
       ]);
       expect(labels(doors.entries(at, paste: false)).first, 'Paste FEN');
+    });
+
+    testWidgets('save only the scratch board chosen before a paste completes', (
+      tester,
+    ) async {
+      final at = await context(tester);
+      final clipboard = Completer<String>();
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        return switch (call.method) {
+          'Clipboard.getData' => {'text': await clipboard.future},
+          'Clipboard.hasStrings' => {'value': true},
+          _ => null,
+        };
+      });
+      addTearDown(
+        () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+
+      w.session.playMove('e2e4');
+      expect(w.session.cursor.currentMove?.san, 'e4');
+      final paste = doors.paste();
+      final actions = boardActions(
+        at,
+        doors: doors,
+        library: w.library,
+        onAnalyze: null,
+      );
+      actions
+          .singleWhere((action) => action.label == 'Save to repertoire…')
+          .run!();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('New repertoire…'));
+      await tester.pumpAndSettle();
+
+      clipboard.complete('1. d4 *');
+      await paste;
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Repertoire name'),
+        'White lines',
+      );
+      await tester.tap(find.text('Create'));
+      await tester.pumpAndSettle();
+
+      final target = ref('White lines', 'Main');
+      final saved = w.store.documents[target];
+      if (saved == null) {
+        expect(
+          w.requests.status,
+          isNotEmpty,
+          reason: 'explain the declined save',
+        );
+        expect(w.requests.statusIsProblem, isTrue);
+      } else {
+        final chapter = parseChapter(
+          name: target.name,
+          text: (saved as Opened).text,
+        );
+        expect(chapter.tree.mainLine.map((move) => move.san), ['e4']);
+      }
     });
 
     testWidgets('take a FEN only over a repertoire file, where Ctrl+V makes '
