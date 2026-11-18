@@ -45,6 +45,26 @@ void main() {
     expect(lab.focus, BoardNumber.two);
   });
 
+  test('a repeated drop replays after the variation supplies its pawn', () {
+    lab.showBoards(LabBoards.two);
+    lab.play(BoardNumber.two, 'e2e4');
+    capture();
+    lab.play(BoardNumber.two, 'P@d6');
+    expect(lab.problem, isNull);
+
+    go(BoardNumber.two, 1);
+    lab.play(BoardNumber.one, 'd2d4');
+    lab.play(BoardNumber.one, 'e7e5');
+    lab.play(BoardNumber.one, 'd4e5');
+    expect(lab.position.two.pockets!.of(Side.black, Role.pawn), 1);
+    lab.play(BoardNumber.two, 'P@d6');
+    expect(lab.problem, isNull);
+
+    final replay = lab.line.replay();
+    expect(replay, isA<LineReplayed>());
+    expect((replay as LineReplayed).position.dualFen, lab.position.dualFen);
+  });
+
   test('an illegal drop, or a move out of turn, is refused in words', () {
     lab.play(BoardNumber.two, 'N@e5');
     expect(lab.problem, isA<DropRefused>());
