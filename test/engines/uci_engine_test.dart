@@ -88,33 +88,6 @@ void main() {
     },
   );
 
-  test('a tournament move uses the entrant’s saved MultiPV', () {
-    fakeAsync((clock) {
-      final process = FakeProcess();
-      final starting = UciEngine.start(process, options: {'MultiPV': '4'});
-      late UciEngine engine;
-      unawaited(starting.then((started) => engine = started));
-      process
-        ..say('option name MultiPV type spin default 1 min 1 max 256')
-        ..answerHandshake();
-      clock.flushMicrotasks();
-
-      engine.play(Fen.initial, const [], const MoveBudget(depth: 2));
-      clock.flushMicrotasks();
-      final go = process.sent.indexOf('go depth 2');
-      expect(go, isNonNegative);
-      final beforeGo = process.sent.take(go);
-      expect(
-        beforeGo.lastWhere(
-          (line) => line.startsWith('setoption name MultiPV '),
-        ),
-        'setoption name MultiPV value 4',
-      );
-      process.exit(0);
-      clock.flushMicrotasks();
-    });
-  });
-
   test('play that exits without bestmove does not substitute a PV', () async {
     final (engine, process) = await started();
     final search = engine.play(

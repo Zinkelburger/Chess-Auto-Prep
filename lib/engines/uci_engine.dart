@@ -58,7 +58,6 @@ final class UciEngine implements PlayingEngine, EngineProcess {
         continue;
       }
       engine._send('setoption name $key value $value');
-      if (key.toLowerCase() == 'multipv') engine._playingMultiPv = value;
     }
     engine._send('isready');
     await engine
@@ -71,7 +70,6 @@ final class UciEngine implements PlayingEngine, EngineProcess {
   final Duration _finitePatience;
   final _exited = Completer<EngineExit>();
   String _name = 'UCI engine';
-  String _playingMultiPv = '1';
 
   /// The option names the engine listed in its handshake, lower case.
   final _options = <String>{};
@@ -105,7 +103,7 @@ final class UciEngine implements PlayingEngine, EngineProcess {
   Search analyse(Fen fen, {required int multiPv, int? depth}) => _queue(
     'position fen ${fen.value}',
     depth == null ? 'go infinite' : 'go depth $depth',
-    '$multiPv',
+    multiPv,
     depth == null ? null : _finitePatience,
   ).public;
 
@@ -114,19 +112,14 @@ final class UciEngine implements PlayingEngine, EngineProcess {
     final position =
         'position fen ${root.value}'
         '${moves.isEmpty ? '' : ' moves ${moves.join(' ')}'}';
-    final search = _queue(
-      position,
-      budget.command,
-      _playingMultiPv,
-      budget.deadline,
-    );
+    final search = _queue(position, budget.command, 1, budget.deadline);
     return PlayingSearch(search.public, search.move.future);
   }
 
   _UciSearch _queue(
     String position,
     String go,
-    String multiPv,
+    int multiPv,
     Duration? patience,
   ) {
     final search = _UciSearch(_send, _expired, finitePatience: patience);
@@ -153,7 +146,7 @@ final class UciEngine implements PlayingEngine, EngineProcess {
   Future<void> _begin(
     _UciSearch search,
     _UciSearch? previous,
-    ({String position, String go, String multiPv}) request,
+    ({String position, String go, int multiPv}) request,
   ) async {
     if (previous != null && !await _stopped(previous)) return search.finish();
     // A killed engine can take a while to be seen exiting, and what it
