@@ -122,6 +122,35 @@ void main() {
     expect(here, isNot(contains('[Event "Indian"]')));
   });
 
+  test('folding a line keeps its shapes alongside the host comment', () async {
+    final main = ref('KID', 'Main');
+    const annotated = '''
+[Event "Host"]
+[Result "*"]
+
+1. e4 {Control the centre.} *
+
+[Event "Shapes"]
+[Result "*"]
+
+1. e4 {[%cal Ge2e4] [%csl Rd5]} *
+''';
+    fixture = await openLibrary([kid], text: annotated, open: main);
+
+    expect(
+      await fixture.library.moveLines(games: {1}, to: main, asSidelineOf: 0),
+      isA<LibraryDone>(),
+    );
+    await fixture.saver.flush();
+    expect(await fixture.session.open(main), isA<DocumentOpened>());
+
+    final move = fixture.session.chapter!.lines.single.tree!.children.single;
+    expect(move.san, 'e4');
+    expect(move.comment, contains('Control the centre.'));
+    expect(move.comment, contains('[%cal Ge2e4]'));
+    expect(move.comment, contains('[%csl Rd5]'));
+  });
+
   const withPartial = '''
 // Main
 // Color: White

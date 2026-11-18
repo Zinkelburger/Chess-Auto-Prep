@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess/pgn/board_shapes.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/pgn_reader.dart';
@@ -38,6 +39,30 @@ void main() {
     expect(e5.san, 'e5');
     expect(e5.comment, 'alt', reason: 'the variation said something');
     expect(e5.children.single.san, 'Nf3');
+  });
+
+  test('a conflicting arrow keeps its spelling and clears on redraw', () {
+    const host = 'Plan [%cal ge2e4]';
+    final merged = joinedComment(host, '[%cal Re2e4]');
+    expect(merged, host);
+    final green = shapesIn(host).single;
+    expect(withShapeDrawn(shapesIn(merged), green), isEmpty);
+  });
+
+  test('joining notes reaches duplicate replies below a new branch', () {
+    final host = readGame('1. d4 *').tree!.children;
+    final arriving = readGame(
+      '1. e4 e5 {Plan [%csl Pd5]} '
+      '(1... e5 {[%csl Rd5,bd4,Yd4] [%cal Re7e5,Be5e7,bad]}) *',
+    ).tree!.children;
+
+    final joined = mergeForests(host, arriving, joinNotes: true);
+    expect(
+      joined.last.children.single.comment,
+      'Plan [%csl Pd5] [%csl bd4] [%cal Re7e5,Be5e7,bad]',
+    );
+    final chapter = mergeForests(host, arriving);
+    expect(chapter.last.children.single.comment, 'Plan [%csl Pd5]');
   });
 
   test('a later game adds its variation and reorders nothing', () {

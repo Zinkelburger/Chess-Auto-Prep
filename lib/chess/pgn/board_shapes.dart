@@ -71,6 +71,31 @@ List<BoardShape> shapesIn(String? comment) {
   ];
 }
 
+/// Adds entries from [arriving], keeping the first spelling for each circle
+/// or directed arrow. Entries the board cannot draw are compared as written.
+String withJoinedShapes(String host, String arriving) {
+  if (!arriving.contains('[%c')) return host;
+  Object key(String entry, BoardShape? shape) =>
+      shape == null ? entry : (shape.from, shape.to);
+
+  var joined = host;
+  for (final (pattern, name) in [(_circles, 'csl'), (_arrows, 'cal')]) {
+    final circle = name == 'csl';
+    final incoming = _written(pattern, arriving, circle: circle);
+    if (incoming.isEmpty) continue;
+    final seen = {
+      for (final (entry, shape) in _written(pattern, host, circle: circle))
+        key(entry, shape),
+    };
+    final added = [
+      for (final (entry, shape) in incoming)
+        if (seen.add(key(entry, shape))) entry,
+    ];
+    if (added.isNotEmpty) joined = '$joined [%$name ${added.join(',')}]';
+  }
+  return joined;
+}
+
 /// [comment] with its shape tokens saying exactly [shapes], its words and
 /// other tokens left as they were.
 ///
