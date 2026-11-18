@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:chess_auto_prep/app/environment.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/training/schedule.dart';
 import 'package:chess_auto_prep/features/library/library_state.dart';
@@ -36,6 +37,32 @@ const _sibling =
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'a local repertoire opens at startup when the tournament drive is offline',
+    () async {
+      final disk = await StoreFixture.create();
+      addTearDown(disk.dispose);
+      final chapter = disk.ref('repertoires/Course/Main.pgn');
+      await disk.put(chapter, _course);
+      await Link(
+        p.join(disk.documents.path, 'engine_tournaments'),
+      ).create(p.join(disk.root.path, 'disconnected-drive', 'tournaments'));
+
+      final env = AppEnvironment.native(
+        documents: disk.documents,
+        support: disk.support,
+      );
+      addTearDown(env.close);
+      final opened = await env.store.open(chapter);
+      expect(
+        opened,
+        isA<storage.Opened>().having((r) => r.text, 'text', _course),
+      );
+    },
+    skip: Platform.isWindows ? 'symlink privileges not assumed' : false,
+  );
+
   for (final selectedSibling in [false, true]) {
     test(
       'native composition ${selectedSibling ? 'refuses undo over changed book membership' : 'undoes rename after sibling removal'}',
