@@ -426,7 +426,11 @@ final class DocumentSession extends ChangeNotifier {
     if (board == null) return _selectAnalysis(_board, leftAsIs: _leftAsIs);
     final leftAsIs = _leftAsIs;
     _editors.commit();
-    final blank = isScratch && !_board.canUndo && tree!.children.isEmpty;
+    final blank =
+        isScratch &&
+        !_board.canUndo &&
+        tree!.children.isEmpty &&
+        tree!.rootFen == Fen.initial;
     return _selectAnalysis(
       blank ? _board : KeptBoard(board),
       fresh: board,
