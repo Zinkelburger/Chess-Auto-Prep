@@ -1,3 +1,4 @@
+import 'board_shapes.dart';
 import 'comment_text.dart';
 import 'game_tree.dart';
 
@@ -72,15 +73,16 @@ List<MoveNode> mergeForests(
   return List.unmodifiable(merged);
 }
 
-/// [host]'s comment with the prose of [arriving] it does not already say
-/// added after it. Only [host]'s machine tokens are kept when both have a
-/// comment, so one move never carries two evals or two clocks.
+/// [host]'s comment with the prose and board shapes [arriving] adds to it.
+/// Other machine tokens stay as [host] wrote them.
 String? joinedComment(String? host, String? arriving) {
   if (host == null) return arriving;
   if (arriving == null) return host;
   final prose = displayComment(arriving);
-  if (prose.isEmpty || displayComment(host).contains(prose)) return host;
-  return '$host $prose';
+  final joined = prose.isEmpty || displayComment(host).contains(prose)
+      ? host
+      : '$host $prose';
+  return withMissingShapes(joined, arriving);
 }
 
 /// [node] with the moves under it folded, or [node] itself when there was
