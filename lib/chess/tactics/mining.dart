@@ -84,8 +84,7 @@ List<PlayedMove> movesBy(GameTree tree, Side side) {
   return moves;
 }
 
-/// Whether the game is over at [fen]: a move that ends it has nothing to
-/// punish.
+/// Whether the game is over at [fen] or the position cannot be read.
 bool isOver(Fen fen) {
   try {
     return Chess.fromSetup(Setup.parseFen(fen.value)).isGameOver;

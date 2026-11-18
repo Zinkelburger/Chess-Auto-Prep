@@ -166,6 +166,41 @@ void main() {
     },
   );
 
+  test('stalemating with mate in one saves a blunder and its puzzle', () async {
+    const fen = '7k/5K2/8/6Q1/8/8/8/8 w - - 0 1';
+    const game =
+        '''
+[Event "Casual blitz game"]
+[Site "https://lichess.org/Draw0001"]
+[White "Me"]
+[Black "Rival"]
+[Result "1/2-1/2"]
+[Variant "From Position"]
+[SetUp "1"]
+[FEN "$fen"]
+
+1. Qg6 1/2-1/2''';
+    r = _Review(
+      accounts: {GameSite.lichess: const Account('Me')},
+      lichess: const GamesFetched([game]),
+      lines: {
+        const Fen(fen).position: const EngineLine(
+          multiPv: 1,
+          depth: reviewDepth,
+          score: MateIn(1),
+          pv: ['g5g7'],
+        ),
+      },
+    );
+    await r.start();
+
+    const id = 'lichess_Draw0001';
+    expect(analyzedIn(r.setText), contains(id));
+    expect(mistakesIn(r.setText)[id], const MistakeCounts(blunders: 1));
+    final puzzle = r.puzzlesOnDisk.singleWhere((puzzle) => puzzle.gameId == id);
+    expect(puzzle.answer, ['Qg7#']);
+  });
+
   test('only games of the chosen time controls are reviewed', () async {
     const bullet = '[TimeControl "60+0"]\n';
     r = _Review(
