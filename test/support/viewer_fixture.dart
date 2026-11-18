@@ -37,6 +37,7 @@ final class ScriptedRecentFiles implements RecentFiles {
   @override
   Future<bool> save(List<String> paths) async {
     saved.add(List.of(paths));
+    if (accepting) listing = RecentFilesListed(saved.last);
     return accepting;
   }
 }
