@@ -38,7 +38,7 @@ List<MoveNode> mergeForests(
   for (final incoming in b) {
     final i = merged.indexWhere((node) => node.san == incoming.san);
     if (i < 0) {
-      merged.add(_folded(incoming));
+      merged.add(_folded(incoming, joinNotes: joinNotes));
       continue;
     }
     final existing = merged[i];
@@ -85,8 +85,8 @@ String? joinedComment(String? host, String? arriving) {
 
 /// [node] with the moves under it folded, or [node] itself when there was
 /// nothing to fold, which is the whole of an ordinary game.
-MoveNode _folded(MoveNode node) {
-  final children = mergeForests(const [], node.children);
+MoveNode _folded(MoveNode node, {required bool joinNotes}) {
+  final children = mergeForests(const [], node.children, joinNotes: joinNotes);
   return identical(children, node.children)
       ? node
       : node.copyWith(children: children);
