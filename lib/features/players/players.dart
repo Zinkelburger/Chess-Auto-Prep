@@ -285,7 +285,8 @@ final class Players extends ChangeNotifier {
       lookupStatus = 'Looking up ${person.name} · ${i + 1} / ${people.length}';
       changed();
       try {
-        final result = await lookupRating!(person.text('uscf_id'));
+        final uscfId = person.text('uscf_id');
+        final result = await lookupRating!(uscfId);
         if (_disposed || _stopLookup) break;
         if (result.rating == null) {
           missed++;
@@ -294,6 +295,7 @@ final class Players extends ChangeNotifier {
         // The row as it is now: the user may have edited it meanwhile.
         final latest = players.where((p) => p.id == person.id).firstOrNull;
         if (latest == null ||
+            latest.text('uscf_id') != uscfId ||
             !await save(
               latest.edited({'rating': result.rating}),
               expected: latest,
