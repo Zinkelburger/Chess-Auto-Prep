@@ -336,6 +336,34 @@ void main() {
     expect(fixture.session.chapter!.lines.length, 1);
   });
 
+  test(
+    'moving a line to a new chapter leaves its sibling in the relocated PGN',
+    () async {
+      final root = ChapterRef.at('/repertoires/KID.pgn');
+      final repertoire = RepertoireFolder(
+        name: 'KID',
+        path: root.path,
+        modified: DateTime(2026),
+        chapters: [root],
+      );
+      fixture = await openLibrary([repertoire], text: twoLines, open: root);
+
+      final result = await fixture.library.moveLinesToNewChapter(
+        games: {1},
+        into: repertoire,
+        name: 'Indian',
+      );
+      expect(result, isA<LibraryDone>());
+      await fixture.saver.flush();
+      final source = fixture.textAt('/repertoires/KID/KID.pgn');
+      final destination = fixture.textAt('/repertoires/KID/Indian.pgn');
+      expect(source, contains('1. d4 d5 2. c4 e6'));
+      expect(source, isNot(contains('1. d4 Nf6')));
+      expect(destination, contains('1. d4 Nf6'));
+      expect(destination, isNot(contains('1. d4 d5')));
+    },
+  );
+
   test('a chapter edited while the new chapter is made moves nothing and '
       'leaves no empty chapter behind', () async {
     await open();
