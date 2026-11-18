@@ -73,7 +73,7 @@ final class SearchEvaluator implements PositionEvaluator {
 
 /// ChessDB scores are side-to-move, with mate packed around 30000.
 Eval? chessDbScore(String body) {
-  final match = RegExp(r'^eval:(-?\d+)$').firstMatch(body.trim());
+  final match = RegExp(r'^eval:(-?\d+)\x00?$').firstMatch(body.trim());
   return match == null ? null : chessDbCp(int.parse(match[1]!));
 }
 

@@ -212,6 +212,18 @@ void main() {
   Future<List<DeletedChapter>> deletedChapters() async =>
       (await library.deleted() as DeletedChapters).chapters;
 
+  test('a deleted root-level repertoire appears in Deleted chapters', () async {
+    final file = File(at('repertoires/French.pgn'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('[Event "French"]\n\n1. e4 e6 *\n');
+    await library.refresh();
+
+    expect(await library.deleteRepertoire(named('French')), isA<LibraryDone>());
+    expect(file.existsSync(), isFalse);
+    final deleted = await deletedChapters();
+    expect(deleted.map((chapter) => chapter.restoredAs()), [file.path]);
+  });
+
   test(
     'a deleted repertoire comes back chapter by chapter, rows and all',
     () async {

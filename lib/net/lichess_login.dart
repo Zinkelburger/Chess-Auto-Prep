@@ -138,7 +138,7 @@ final class LichessLoginApi implements LichessLogin {
   /// Opens a page in the desktop's browser and says whether it went.
   final Future<bool> Function(Uri) _openBrowser;
 
-  /// How long the browser may take before the flow gives up.
+  /// How long to wait for the launcher, then for the browser callback.
   final Duration wait;
 
   final Random _random;
@@ -175,16 +175,24 @@ final class LichessLoginApi implements LichessLogin {
       '&scope=${lichessScopes.replaceAll(' ', '+')}'
       '&state=$state',
     );
-    var opened = false;
-    try {
-      opened = await _openBrowser(page);
-    } on Object catch (error) {
-      log.w('open the browser for the Lichess login', error.runtimeType);
+    Future<void> launchAndWait() async {
+      var opened = false;
+      try {
+        opened = await _openBrowser(page);
+      } on Object catch (error) {
+        log.w('open the browser for the Lichess login', error.runtimeType);
+      }
+      if (_flow == flow && !flow.code.isCompleted) {
+        if (!opened) {
+          log.w('open the browser for the Lichess login', 'declined');
+        }
+        waiting(page, opened: opened);
+      }
     }
-    if (!opened) log.w('open the browser for the Lichess login', 'declined');
-    waiting(page, opened: opened);
 
     try {
+      // A callback or cancellation can arrive before the launcher answers.
+      await Future.any<void>([flow.code.future, launchAndWait()]).timeout(wait);
       final code = await flow.code.future.timeout(wait);
       return switch (code) {
         null => const LoginCancelled(),

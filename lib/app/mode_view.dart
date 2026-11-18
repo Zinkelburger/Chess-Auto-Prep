@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../features/databases/database_library.dart';
@@ -178,6 +180,8 @@ abstract base class ModeView {
     editing: menu.editing,
     onSaveCopy: menu.dialogs.saveCopy,
     onSaveHeld: menu.dialogs.saveHeld,
+    onDiscardHeld: () =>
+        unawaited(confirmDiscardHeld(menu.context, () => workspace.session)),
   );
 }
 

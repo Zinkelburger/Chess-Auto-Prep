@@ -171,6 +171,22 @@ void main() {
     run.kill();
   });
 
+  testWidgets('opening a scratch board with held edits reports no error', (
+    tester,
+  ) async {
+    final drafts = _MemoryDrafts();
+    final run = _Run(store, drafts);
+    addTearDown(run.kill);
+    await run.session.open(ref, game: 0);
+    run.session.setComment(NodePath.of(const [0]), 'Parked note');
+    expect(run.session.hasHeldEdits, isTrue);
+
+    expect(await run.session.showAnalysisBoard(), isTrue);
+    await run.keeper.settle();
+    expect(tester.takeException(), isNull);
+    expect(drafts.kept[ref.path]?.text, contains('Parked note'));
+  });
+
   test('discarding the edits forgets their copy', () async {
     final drafts = _MemoryDrafts();
     final run = _Run(store, drafts);

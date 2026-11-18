@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/chess/pgn/study_lichess.dart';
+import 'package:chess_auto_prep/features/study/study_actions.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/study_files.dart';
 import 'package:flutter/material.dart';
@@ -96,6 +99,55 @@ void main() {
     expect(find.text('Log in to Lichess to send a study.'), findsOneWidget);
     expect(find.text('Send again'), findsOneWidget);
     expect(lichess.created, isEmpty);
+  });
+
+  testWidgets('logging in waits for an existing study link before sending', (
+    tester,
+  ) async {
+    final lichess = ScriptedStudyWriter(loggedIn: false);
+    final study = await openStudy(twoChapterStudy, lichessWriter: lichess);
+    addTearDown(study.dispose);
+    await tester.pumpWidget(const MaterialApp(home: Scaffold()));
+    unawaited(
+      sendStudyToLichess(
+        tester.element(find.byType(Scaffold)),
+        study.studies,
+        study.session,
+        onLogIn: (_) async {
+          lichess.loggedIn = true;
+          return true;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Send 2 chapters'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Existing study'));
+    await tester.pumpAndSettle();
+    final retry = find.widgetWithText(FilledButton, 'Send again');
+    expect(tester.widget<FilledButton>(retry).onPressed, isNull);
+
+    await tester.tap(find.text('Log in to Lichess…'));
+    await tester.pumpAndSettle();
+    expect(lichess.loggedIn, isTrue);
+    expect(lichess.created, isEmpty);
+    expect(lichess.added, isEmpty);
+    expect(find.text('Log in to Lichess to send a study.'), findsNothing);
+    expect(find.text('Log in to Lichess…'), findsNothing);
+    final send = find.widgetWithText(FilledButton, 'Send 2 chapters');
+    expect(tester.widget<FilledButton>(send).onPressed, isNull);
+
+    final link = find.byType(TextField);
+    await tester.enterText(link, 'https://lichess.org/study/');
+    await tester.pump();
+    expect(tester.widget<FilledButton>(send).onPressed, isNull);
+    await tester.enterText(link, 'https://lichess.org/study/abcd1234');
+    await tester.pump();
+    expect(tester.widget<FilledButton>(send).onPressed, isNotNull);
+    await tester.tap(send);
+    await tester.pumpAndSettle();
+    expect(lichess.created, isEmpty);
+    expect(lichess.added.map((a) => a.study), ['abcd1234', 'abcd1234']);
   });
 
   testWidgets('without a way to write to Lichess there is no Send', (

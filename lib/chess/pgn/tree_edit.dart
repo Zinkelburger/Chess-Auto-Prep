@@ -2,6 +2,7 @@ import 'package:dartchess/dartchess.dart';
 
 import '../fen.dart';
 import '../position_setup.dart';
+import 'comment_text.dart';
 import 'game_tree.dart';
 
 /// Pure edits over a [GameTree]: every one returns a new tree.
@@ -174,7 +175,7 @@ GameTree lineTree(Fen rootFen, List<String> sans) {
 
 /// [tree] with [node] appended to the children of the node at [at].
 GameTree withChildAdded(GameTree tree, NodePath at, MoveNode node) =>
-    _rebuilt(tree, at.indexes, (children) => [...children, node]);
+    _withMoveEdit(tree, at, (children) => [...children, node]);
 
 /// [tree] with the child at [index] of the node at [parent] first among its
 /// siblings, the others keeping their order. That is what promoting a
@@ -192,7 +193,7 @@ GameTree withChildFirst(GameTree tree, NodePath parent, int index) =>
 /// [tree] without the child at [index] of the node at [parent], and without
 /// everything under it.
 GameTree withChildRemoved(GameTree tree, NodePath parent, int index) =>
-    _rebuilt(tree, parent.indexes, (children) {
+    _withMoveEdit(tree, parent, (children) {
       if (index < 0 || index >= children.length) return children;
       return [...children]..removeAt(index);
     });
@@ -271,6 +272,24 @@ MoveNode withNodeComment(MoveNode node, String? comment) => MoveNode(
 );
 
 typedef _ChildEdit = List<MoveNode> Function(List<MoveNode> children);
+
+GameTree _withMoveEdit(GameTree tree, NodePath at, _ChildEdit edit) {
+  final line = tree.lineTo(at);
+  if (!at.isRoot && line.isEmpty) return tree;
+  final children = line.lastOrNull?.children ?? tree.children;
+  final next = edit(children);
+  if (identical(next, children)) return tree;
+
+  // A changed variation belongs to the player, even if later edits bring
+  // it back to the number of plies the review wrote.
+  for (final (index, node) in line.indexed) {
+    final comment = node.comment;
+    if (comment == null || !reviewLineMarker.hasMatch(comment)) continue;
+    final head = NodePath.of(at.indexes.take(index + 1));
+    tree = withComment(tree, head, withoutReviewLineMarker(comment));
+  }
+  return _rebuilt(tree, at.indexes, (_) => next);
+}
 
 GameTree _rebuilt(GameTree tree, List<int> indexes, _ChildEdit edit) =>
     GameTree(

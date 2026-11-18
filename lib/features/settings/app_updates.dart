@@ -93,11 +93,17 @@ enum UpdateProblem {
   helperBusy,
 }
 
+enum UpdateRetry { check, download, install }
+
 final class UpdateFailed extends UpdateStatus {
-  const UpdateFailed(this.problem, {this.offer, this.retryInstall = false});
+  const UpdateFailed(
+    this.problem, {
+    this.offer,
+    this.retry = UpdateRetry.check,
+  });
 
   final UpdateProblem problem;
-  final bool retryInstall;
+  final UpdateRetry retry;
 
   /// The release it failed on, when it got that far; Try again goes on
   /// from there.
@@ -372,12 +378,12 @@ final class AppUpdates extends ChangeNotifier {
           HelperNotStarted() => UpdateFailed(
             UpdateProblem.helperNotStarted,
             offer: offer,
-            retryInstall: true,
+            retry: UpdateRetry.install,
           ),
           HelperBusy() => UpdateFailed(
             UpdateProblem.helperBusy,
             offer: offer,
-            retryInstall: true,
+            retry: UpdateRetry.install,
           ),
         });
       case UpdateDownloading():
@@ -483,18 +489,22 @@ final class AppUpdates extends ChangeNotifier {
   };
 
   void _fail(UpdateProblem problem, UpdateOffer offer) {
-    final retryInstall = _installWhenReady;
+    final retry = _installWhenReady
+        ? UpdateRetry.install
+        : UpdateRetry.download;
     _installWhenReady = false;
-    _set(UpdateFailed(problem, offer: offer, retryInstall: retryInstall));
+    _set(UpdateFailed(problem, offer: offer, retry: retry));
   }
 
   /// Repeats the failed operation with the original installation choice.
   Future<void> retry() async {
-    if (_status case UpdateFailed(:final offer, :final retryInstall)) {
-      if (offer == null || !offer.installable) return check();
-      if (retryInstall) return install();
-      return download();
-    }
+    final failed = _status;
+    if (failed is! UpdateFailed) return;
+    return switch (failed.retry) {
+      UpdateRetry.check => check(),
+      UpdateRetry.download => download(),
+      UpdateRetry.install => install(),
+    };
   }
 
   void _set(UpdateStatus next) {

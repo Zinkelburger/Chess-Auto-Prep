@@ -9,9 +9,12 @@ import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/line_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/move_text.dart';
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
+import 'package:chess_auto_prep/chess/training/training_line.dart';
+import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
+import '../../support/session_fixture.dart';
 
 /// Three games from the initial position, the second of them branching off
 /// the first at move 1 and the third at move 2.
@@ -75,6 +78,28 @@ void main() {
     expect(after.chapter.lines[1].text, before.lines[0].text);
   });
 
+  test('making a later game first promotes the ancestors it needs', () {
+    final before = parseChapter(
+      name: 'Book',
+      text:
+          '[Event "Open"]\n\n1. e4 e5 2. Nf3 *\n\n'
+          '[Event "Sicilian"]\n\n1. e4 c5 (1... e5 2. Bc4) *\n',
+    );
+    expect(
+      madeMainLine(before, at: at(before, ['e4', 'e5', 'Nf3'])),
+      isA<ChapterUnchanged>(),
+    );
+
+    final after = edited(
+      madeMainLine(before, at: at(before, ['e4', 'e5', 'Bc4'])),
+    );
+
+    expect(after.games.order, [1, 0]);
+    expect(after.games.rewritten, {1});
+    expect(mainlineSans(after.chapter.tree), ['e4', 'e5', 'Bc4']);
+    expect(after.chapter.lines[1].text, before.lines[0].text);
+  });
+
   test('promoting a branch inside one game rewrites that game', () {
     final before = parseChapter(name: 'One', text: oneGameWithVariation);
 
@@ -133,6 +158,50 @@ void main() {
       isA<ChapterUnchanged>(),
     );
   });
+
+  test('only the game supplying the promoted reply is rewritten', () {
+    for (final (prefix, order) in [
+      ('', [0, 1]),
+      ('[Event "First"]\n\n1. e4 d5 *\n\n', [1, 0, 2]),
+    ]) {
+      final before = parseChapter(
+        name: 'Book',
+        text:
+            '$prefix[Event "Open"]\n\n1. e4 e5 (1... c5) *\n\n'
+            '[Event "French"]\n\n1. e4 e6 (1... c5) *\n',
+      );
+      for (final edit in [variationPromoted, madeMainLine]) {
+        final after = edited(edit(before, at: at(before, ['e4', 'c5'])));
+
+        expect(mainlineSans(after.chapter.tree), ['e4', 'c5']);
+        expect(after.games.order, order);
+        expect(after.games.rewritten, {order.first});
+        expect(after.chapter.lines.last.text, before.lines.last.text);
+      }
+    }
+  });
+
+  test(
+    'promoting the first merged reply preserves the second game’s training line',
+    () async {
+      final fixture = await openSession(
+        '$oneGameWithVariation\n'
+        '[Event "Sicilian"]\n[Result "*"]\n\n1. e4 c5 (1... e5) *\n',
+      );
+      addTearDown(fixture.dispose);
+      final session = fixture.session;
+      final reply = at(session.chapter!, ['e4', 'e5']);
+      expect(reply.indexes.last, 0);
+
+      expect(promoteVariation(session, reply), isNull);
+      await fixture.saver.flush();
+
+      final saved = parseChapter(name: fixture.ref.name, text: fixture.onDisk);
+      final lines = trainingLines(saved, source: fixture.ref.path);
+      expect(lines[1].moves.map((move) => move.san), ['e4', 'c5']);
+      expect(fixture.store.requestedSaves, isEmpty);
+    },
+  );
 
   test('deleting from a move cuts every game that plays it', () {
     final before = book();

@@ -108,9 +108,11 @@ panel on the right: 440–640 px beside board 1 alone, 440–480 px beside both.
 ## Actions
 
 **Play a move or drop** — on a board, or by clicking an engine row → it
-follows the move the board is at: the continuation already there when it is
-the same move, otherwise a new one, a variation when the board already went
-on from there. A capture goes to the partner's hand. A pawn reaching the last rank waits for the piece it becomes, on either
+follows the move the board is at. An existing continuation is reused when
+it is the same move and replaying it in its recorded order reaches the
+same position as playing it now. Otherwise the move starts a variation if
+the board already went on from there. A capture goes to the partner's hand.
+A pawn reaching the last rank waits for the piece it becomes, on either
 board, with the workspace board's chooser (queen, knight, rook, bishop down
 the file); clicking away plays nothing. Underpromotions keep their piece in
 copied and pasted moves and in engine moves; an engine move without a piece is
