@@ -7,6 +7,7 @@ import '../../chess/pgn/chapter.dart';
 import '../../ui/app_action.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/app_keys.dart';
+import '../../ui/confirm_dialog.dart';
 import '../analysis/engine_analysis.dart';
 import 'document_session.dart';
 
@@ -19,6 +20,7 @@ List<AppAction> documentActions({
   required ValueNotifier<bool> editing,
   required VoidCallback onSaveCopy,
   VoidCallback? onSaveHeld,
+  VoidCallback? onDiscardHeld,
 }) {
   final open = session.chapter != null;
   VoidCallback? when(bool on, VoidCallback run) => on ? run : null;
@@ -45,7 +47,7 @@ List<AppAction> documentActions({
         group: 'Document',
         icon: AppIcons.save,
       ),
-      AppAction('Discard changes', session.discardHeld, group: 'Document'),
+      AppAction('Discard changes', onDiscardHeld, group: 'Document'),
     ],
     AppAction(
       'Save a copy…',
@@ -82,6 +84,30 @@ List<AppAction> documentActions({
       icon: AppIcons.copy,
     ),
   ];
+}
+
+Future<void> confirmDiscardHeld(
+  BuildContext context,
+  DocumentSession Function() currentSession,
+) async {
+  final session = currentSession();
+  final chapter = session.chapter;
+  if (!session.hasHeldEdits) return;
+  final yes = await confirmAction(
+    context,
+    title: switch (chapter?.name) {
+      final name? => 'Discard unsaved changes to “$name”?',
+      null => 'Discard unsaved changes?',
+    },
+    message: 'The file goes back to its last save. This cannot be undone.',
+    confirm: 'Discard changes',
+  );
+  if (yes &&
+      context.mounted &&
+      identical(currentSession(), session) &&
+      identical(session.chapter, chapter)) {
+    session.discardHeld();
+  }
 }
 
 /// The text of the game on the board: the one game of a viewed file, or
