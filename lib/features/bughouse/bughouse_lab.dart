@@ -91,7 +91,7 @@ final class BughouseLab extends ChangeNotifier {
       _refuse(_illegal(board, uci));
       return;
     }
-    _line = _line.played(played.move);
+    _line = _line.played(played);
     _show(played.after, focus: board);
   }
 
@@ -116,7 +116,7 @@ final class BughouseLab extends ChangeNotifier {
         _refuse(const LineMisfits());
         return;
       }
-      line = line.played(played.move);
+      line = line.played(played);
       position = played.after;
     }
     if (moves.isEmpty) return;
@@ -342,7 +342,7 @@ final class BughouseLab extends ChangeNotifier {
     for (final (board, uci) in moves) {
       final played = lineMove(position, board, uci);
       if (played == null) break;
-      line = line.played(played.move);
+      line = line.played(played);
       position = played.after;
     }
     return single

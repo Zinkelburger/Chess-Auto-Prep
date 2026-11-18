@@ -1,4 +1,5 @@
-import 'package:dartchess/dartchess.dart' show Move, NormalMove, Position;
+import 'package:dartchess/dartchess.dart'
+    show Move, NormalMove, Position, SquareSet;
 
 import '../fen.dart';
 import 'game_tree.dart';
@@ -315,7 +316,15 @@ List<MoveNode> _freeze(List<_Node> nodes) {
 /// caller reports it either way.
 Move? _parsed(Position position, String spelling) {
   try {
-    return position.parseSan(parseableSan(spelling));
+    final move = position.parseSan(parseableSan(spelling));
+    // dartchess accepts a legal pawn destination even if promotion is missing.
+    if (move is NormalMove &&
+        move.promotion == null &&
+        SquareSet.backranks.has(move.to) &&
+        position.board.pawns.has(move.from)) {
+      return null;
+    }
+    return move;
   } on Object {
     return null;
   }

@@ -278,15 +278,26 @@ final class TableLine {
     return last == null ? null : goTo(nodes[last].board, nodes[last].parent);
   }
 
-  /// [move] played at its board's cursor: the continuation already there
-  /// when it is the same move, or a new one, which is a variation when the
-  /// board already goes on from there. The other board stays where it is.
-  TableLine played(LineMove move) {
+  /// Plays the result of [lineMove] at its board's cursor, reusing a matching
+  /// continuation when it replays to the same table as playing the move now.
+  /// The other board stays where it is.
+  TableLine played(({TablePosition after, LineMove move}) result) {
+    final (:after, :move) = result;
     final board = move.board;
     final from = at(board);
     for (final next in children(board, from)) {
       if (nodes[next].entry case LineMove(:final uci) when uci == move.uci) {
-        return goTo(board, next);
+        final continuation = goTo(board, next);
+        // Only drops and captures can interact with later partner steps.
+        if (next > (at(board.other) ?? -1) ||
+            (!move.uci.contains('@') && !move.san.contains('x'))) {
+          return continuation;
+        }
+        if (continuation.replay() case LineReplayed(
+          :final position,
+        ) when position.one == after.one && position.two == after.two) {
+          return continuation;
+        }
       }
     }
     return _added(move);

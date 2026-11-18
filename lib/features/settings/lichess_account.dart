@@ -76,10 +76,10 @@ final class LichessAccountState extends ChangeNotifier {
     final signedIn = _status;
     if (signedIn is! SignedIn) return Future.value();
     return _once(() async {
-      final removal = _save(
-        _login.revoke(signedIn.account.token).then((_) => _write(null)),
-      );
+      // Register the local removal with shutdown before waiting on Lichess.
+      final removal = _save(_write(null));
       _set(const SigningOut());
+      await _login.revoke(signedIn.account.token);
       if (await removal) {
         _set(const SignedOut(), problem: null);
       } else {

@@ -33,6 +33,23 @@ void main() {
       }
     });
 
+    test('a pawn reaching the last rank must name its promotion piece', () {
+      const start = '[FEN "7k/P7/8/8/8/8/8/K7 w - - 0 1"]\n\n1. ';
+      for (final piece in ['Q', 'R', 'B', 'N']) {
+        final read = readGame('${start}a8=$piece *');
+        expect(read.issues, isEmpty, reason: piece);
+        expect(
+          read.tree!.children.single.fen.value.split(' ').first,
+          '${piece}6k/8/8/8/8/8/8/K7',
+        );
+      }
+      final missing = readGame('${start}a8 *');
+      expect(missing.issues, [
+        isA<IllegalMove>().having((e) => e.san, 'SAN', 'a8'),
+      ]);
+      expect(missing.tree!.children, isEmpty);
+    });
+
     test('a check or mate suffix is part of the spelling', () {
       final read = readGame('1. e4 e5 2. Bc4 Nc6 3. Qh5 Nf6 4. Qxf7# *');
       expect(mainlineSans(read.tree!).last, 'Qxf7#');

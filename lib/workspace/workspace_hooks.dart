@@ -33,6 +33,7 @@ final class WorkspaceHooks {
     this.onStudyLesson,
     this.onBoardMove,
     this.onEngineMove,
+    this.onExplorerMove,
     this.onExplorerGame,
     this.onExplorerLogin,
     this.onDownloadTwic,
@@ -120,8 +121,11 @@ final class WorkspaceHooks {
   final ValueChanged<String>? onBoardMove;
 
   /// Where the moves of a clicked engine line go when not into the
-  /// document: the explorer Book's free board. Null plays them into it.
+  /// document: the explorer Book's free board or a puzzle's stored moves.
   final ValueChanged<String>? onEngineMove;
+
+  /// Plays a database move under the same puzzle restrictions as engine moves.
+  final ValueChanged<String>? onExplorerMove;
 
   /// Whether the moves are headed with the game's players and the board has
   /// the file's game counter under it. Tactics has neither: the puzzle says

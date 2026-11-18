@@ -93,9 +93,9 @@ ChapterEdit movesDeleted(Chapter chapter, {required NodePath at}) {
 ChapterEdit variationPromoted(Chapter chapter, {required NodePath at}) {
   final sans = _sansTo(chapter, at);
   if (sans == null) return const ChapterUnchanged();
+  final index = at.indexes.last;
+  if (index == 0) return const ChapterUnchanged();
   if (chapter.game != null) {
-    final index = at.indexes.last;
-    if (index == 0) return const ChapterUnchanged();
     return _inTheOneGame(
       chapter,
       (tree) => withChildFirst(tree, at.parent, index),
@@ -108,11 +108,8 @@ ChapterEdit variationPromoted(Chapter chapter, {required NodePath at}) {
 /// which is every step of its path promoted in turn.
 ChapterEdit madeMainLine(Chapter chapter, {required NodePath at}) {
   final sans = _sansTo(chapter, at);
-  if (sans == null) return const ChapterUnchanged();
+  if (sans == null || _onMainLine(at)) return const ChapterUnchanged();
   if (chapter.game != null) {
-    if (at.indexes.every((index) => index == 0)) {
-      return const ChapterUnchanged();
-    }
     return _inTheOneGame(chapter, (tree) => _mainLineThrough(tree, at));
   }
   return _firstAtEach(chapter, [
@@ -170,8 +167,8 @@ ChapterEdit _inTheOneGame(
 ChapterEdit _firstAtEach(Chapter chapter, List<List<String>> steps) {
   var current = chapter;
   GamesArranged? arranged;
-  for (final sans in steps) {
-    final step = _madeFirst(current, sans);
+  for (final (index, sans) in steps.indexed) {
+    final step = _madeFirst(current, sans, isLast: index == steps.length - 1);
     if (step is ChapterEditRefused) return step;
     if (step is! ChapterEdited) continue;
     current = step.chapter;
@@ -191,15 +188,37 @@ ChapterEdit _firstAtEach(Chapter chapter, List<List<String>> steps) {
 typedef _Branch = ({int game, NodePath at, int child});
 
 /// [chapter] with the last move of [sans] first at the point above it.
-ChapterEdit _madeFirst(Chapter chapter, List<String> sans) {
+ChapterEdit _madeFirst(
+  Chapter chapter,
+  List<String> sans, {
+  required bool isLast,
+}) {
   final prefix = sans.sublist(0, sans.length - 1);
   final branches = _branchesAt(chapter, prefix, sans.last);
   if (branches == null) return const ChapterEditRefused(_repeatedReason);
   final playing = branches.where((branch) => branch.child >= 0).toList();
   if (branches.isEmpty || playing.isEmpty) return const ChapterUnchanged();
+  final first = branches.first;
+  var mover = first;
+  if (first.child < 0) {
+    // The merged tree shows the move first only if a game that plays it comes
+    // before [first]. Moving a game forward also puts its own main line first
+    // above this point, so that is the same line only when both games reach
+    // the point along their main lines.
+    final candidate = playing
+        .where((branch) => _onMainLine(branch.at))
+        .firstOrNull;
+    if (candidate == null || !_onMainLine(first.at)) {
+      return const ChapterEditRefused(_underVariationReason);
+    }
+    mover = candidate;
+  }
   final lines = [...chapter.lines];
   final written = <int>{};
-  for (final branch in playing.where((branch) => branch.child > 0)) {
+  // A deeper step may need to bring another game forward along its main line.
+  // At the selected move only the game supplying the first reply matters.
+  final needed = isLast ? [mover] : playing;
+  for (final branch in needed.where((branch) => branch.child > 0)) {
     final line = chapter.lines[branch.game];
     final tree = chapter.writableTree(line);
     if (tree == null) return const ChapterEditRefused(lineNotWholeReason);
@@ -210,18 +229,6 @@ ChapterEdit _madeFirst(Chapter chapter, List<String> sans) {
     }
     lines[branch.game] = (result as LineRewritten).line;
     written.add(branch.game);
-  }
-  final first = branches.first;
-  if (first.child >= 0) {
-    return _reordered(chapter, lines, written, first, first);
-  }
-  // The merged tree shows the move first only if a game that plays it comes
-  // before [first]. Moving a game forward also puts its own main line first
-  // above this point, so that is the same line only when both games reach
-  // the point along their main lines.
-  final mover = playing.where((branch) => _onMainLine(branch.at)).firstOrNull;
-  if (mover == null || !_onMainLine(first.at)) {
-    return const ChapterEditRefused(_underVariationReason);
   }
   return _reordered(chapter, lines, written, first, mover);
 }

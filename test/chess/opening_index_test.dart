@@ -34,7 +34,10 @@ String wanderingMoves(int plies) {
     final move = [
       for (final MapEntry(key: from, value: targets)
           in position.legalMoves.entries)
-        for (final to in targets.squares) NormalMove(from: from, to: to),
+        for (final to in targets.squares)
+          // A pawn reaching the last rank needs a promotion piece; skip those.
+          if (!(position.board.pawns.has(from) && SquareSet.backranks.has(to)))
+            NormalMove(from: from, to: to),
     ].firstWhere((move) => seen.add(key(position.play(move))));
     final (next, san) = position.makeSan(move);
     if (ply.isEven) text.write('${ply ~/ 2 + 1}. ');

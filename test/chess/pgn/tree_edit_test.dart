@@ -66,6 +66,27 @@ void main() {
     }
   });
 
+  test('editing a reply preserves the spacing of a marked note', () {
+    const marker = '[%cap_review_line 2]';
+    final head = NodePath.of([1]);
+    for (final (note, expected) in [
+      (' Keep the center closed. $marker ', ' Keep the center closed. '),
+      ('  $marker Plan  A.  ', '  Plan  A.  '),
+      (' Plan  A. $marker [%clk 0:05:00] ', ' Plan  A. [%clk 0:05:00] '),
+      (' Keep$marker the center closed. ', ' Keep the center closed. '),
+      (' $marker ', null),
+    ]) {
+      final tree = readGame('1. e4 (1. d4 {$note} d5) *').tree!;
+      final reply = moveNode(tree.fenAt(head), Move.parse('g8f6')!)!;
+      for (final edited in [
+        withChildAdded(tree, head, reply),
+        withChildRemoved(tree, head, 0),
+      ]) {
+        expect(edited.nodeAt(head)!.comment, expected, reason: note);
+      }
+    }
+  });
+
   test('changing a move that is not there changes nothing', () {
     final tree = threeFirstMoves();
     final changed = withNodeChanged(
