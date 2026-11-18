@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_sections.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
@@ -106,6 +107,39 @@ void main() {
 ''');
     expect(read.lines, 1);
     expect(read.chapters.single.text, contains('(1... c5)'));
+  });
+
+  test(
+    'identical moves from different starting positions both survive import',
+    () {
+      const other = Fen('7k/8/8/8/8/8/4P3/K7 w - - 0 1');
+      final read = imported(
+        '[Event "Practice"]\n\n1. e4 *\n\n'
+        '[Event "Practice"]\n[SetUp "1"]\n[FEN "${other.value}"]\n\n1. e4 *',
+      );
+      final chapter = chapterOf(read.chapters.single);
+      expect(chapter.lines.map((line) => line.tree!.rootFen), [
+        Fen.initial,
+        other,
+      ]);
+      expect(chapter.lines.map((line) => line.tree!.children.single.san), [
+        'e4',
+        'e4',
+      ]);
+    },
+  );
+
+  test('drills differing only in the halfmove clock keep the first PGN', () {
+    const position =
+        'rnbqkb1r/ppp1pppp/5n2/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq -';
+    String drill(int clock) =>
+        '[Event "Practice"]\n[SetUp "1"]\n'
+        '[FEN "$position $clock 3"]\n\n3. c4 *';
+
+    final first = drill(2);
+    final read = imported('$first\n\n${drill(0)}');
+    expect(read.lines, 1);
+    expect(chapterOf(read.chapters.single).lines.single.text, first);
   });
 
   test('a Lichess study export is one chapter per ChapterName', () {
