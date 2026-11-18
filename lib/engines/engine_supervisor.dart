@@ -146,7 +146,7 @@ final class EngineSupervisor {
       log.e('start $name', e.message);
       return StartFailed('Could not start $name: ${e.message}');
     }
-    _handshakes.add(process);
+    _trackHandshake(process);
     try {
       if (_disposed) {
         await process.kill();
@@ -187,8 +187,6 @@ final class EngineSupervisor {
       await process.kill();
       log.e('start $name', error);
       return StartFailed('$name failed to start: $error');
-    } finally {
-      _handshakes.remove(process);
     }
   }
 
@@ -228,7 +226,7 @@ final class EngineSupervisor {
       log.e('start the bughouse engine', '$e');
       return HivemindStartFailed('Could not start the bughouse engine: $e');
     }
-    _handshakes.add(process);
+    _trackHandshake(process);
     try {
       if (_disposed) {
         await process.kill();
@@ -274,16 +272,21 @@ final class EngineSupervisor {
       await process.kill();
       log.e('start the bughouse engine', error);
       return HivemindStartFailed('Could not start the bughouse engine: $error');
-    } finally {
-      _handshakes.remove(process);
     }
+  }
+
+  /// A failed handshake may outlive its kill timeout. Keep the process
+  /// available to dispose until it exits or ownership transfers in [_keep].
+  void _trackHandshake(SpawnedProcess process) {
+    _handshakes.add(process);
+    process.exitCode.then((_) => _handshakes.remove(process)).ignore();
   }
 
   /// Transfers a handshaking process to its protocol owner without a gap.
   /// On refusal the starter awaits its quit before its owned future settles.
   bool _keep(EngineProcess engine, SpawnedProcess process) {
-    _handshakes.remove(process);
     if (_disposed) return false;
+    _handshakes.remove(process);
     _running.add(engine);
     unawaited(engine.exited.then((_) => _running.remove(engine)));
     return true;
