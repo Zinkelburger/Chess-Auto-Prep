@@ -1,10 +1,34 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'settling a successful write releases its obligation identity',
+    () async {
+      final writes = PendingWrites();
+      final probe = ReceivePort();
+      addTearDown(probe.close);
+      // The VM checks the entire message graph synchronously. A ReceivePort
+      // cannot be sent, so it detects a reference without depending on GC.
+      final obligation = ReceivePort();
+      addTearDown(obligation.close);
+      probe.sendPort.send(writes);
+      await writes.track(
+        Object(),
+        Future.value(true),
+        label: 'Training progress',
+        obligation: obligation,
+        problem: (ok) => ok ? null : 'failed',
+      );
+      expect(await writes.settle(), isNull);
+      expect(() => probe.sendPort.send(writes), returnsNormally);
+    },
+  );
+
   test(
     'explicit discard cannot abandon active work and unblocks successors',
     () async {
@@ -83,6 +107,35 @@ void main() {
       expect(await writes.settle(), contains('new failure'));
     },
   );
+
+  test('a superseded write cannot clear a later retry failure', () async {
+    final writes = PendingWrites();
+    final obligation = Object();
+    Future<String?> track(Object owner, Future<String?> work) => writes.track(
+      owner,
+      work,
+      label: 'Save',
+      obligation: obligation,
+      problem: (failure) => failure,
+    );
+
+    final oldest = Completer<String?>();
+    final oldOwner = Object();
+    final oldWrite = track(oldOwner, oldest.future);
+    final owner = Object();
+    await track(owner, Future.value('failed'));
+    await writes.settleFor(owner);
+
+    final retry = Completer<String?>();
+    final retryWrite = track(owner, retry.future);
+    oldest.complete(null);
+    await oldWrite;
+    await writes.settleFor(oldOwner);
+    retry.complete('retry failed');
+    await retryWrite;
+    expect(await writes.settle(), 'Save: retry failed');
+  });
+
   test('unrelated successful work cannot clear a resource failure', () async {
     final writes = PendingWrites();
     final resource = Object();
