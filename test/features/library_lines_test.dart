@@ -122,6 +122,34 @@ void main() {
     expect(here, isNot(contains('[Event "Indian"]')));
   });
 
+  test('folding a line keeps its arrow and the host note on e4', () async {
+    const pgn = '''
+[Event "Host"]
+[Result "*"]
+
+1. e4 {Controls the center.} *
+
+[Event "Arrow"]
+[Result "*"]
+
+1. e4 {[%cal Ge2e4]} *
+''';
+    final main = ref('KID', 'Main');
+    fixture = await openLibrary([kid], text: pgn, open: main);
+
+    expect(
+      await fixture.library.moveLines(games: {1}, to: main, asSidelineOf: 0),
+      isA<LibraryDone>(),
+    );
+    await fixture.saver.flush();
+    expect(await fixture.session.open(main), isA<DocumentOpened>());
+
+    final move = fixture.session.chapter!.lines.single.tree!.children.single;
+    expect(move.san, 'e4');
+    expect(move.comment, contains('Controls the center.'));
+    expect(move.comment, contains('[%cal Ge2e4]'));
+  });
+
   const withPartial = '''
 // Main
 // Color: White
