@@ -722,6 +722,10 @@ final class DocumentSession extends ChangeNotifier {
   /// Writes the held edits to the file, as one save; read-only ones stay.
   void keepHeld() {
     _editors.commit();
+    _saveHeld();
+  }
+
+  void _saveHeld() {
     final held = _held;
     if (held == null || _readOnly != null) return;
     _held = null;
@@ -831,19 +835,14 @@ final class DocumentSession extends ChangeNotifier {
   /// games, so the cursor follows the moves it was on, not its path, and an
   /// edit that changes which game is the chapter moves the board with it.
   ///
-  /// [writes] is for a change to the document itself rather than to its
-  /// moves — a chapter renamed, moved or tagged, chapters added, a link to
-  /// where they were sent — which is written even while edits are held,
-  /// taking the held ones with it: leaving it unsaved would lose what was
-  /// asked for.
+  /// A document change with [writes] (such as a chapter rename) takes held
+  /// edits to disk with it once the change is accepted for writing.
   String? apply(
     edits.ChapterEdit Function(Chapter chapter) edit, {
     ReferenceChanges? references,
     bool writes = false,
   }) {
-    if (writes && _held != null && _readOnly == null && _chapter != null) {
-      keepHeld();
-    }
+    if (writes && _held != null && _readOnly == null) _editors.commit();
     final chapter = _chapter;
     if (chapter == null) return 'there is nothing open to edit';
     if (_editBlocked() case final reason?) return reason;
@@ -934,6 +933,7 @@ final class DocumentSession extends ChangeNotifier {
     if (landed == null) {
       return _editRefused('a new line could not be given its chapter name');
     }
+    if (writes) _saveHeld();
     if (_held case final held?) {
       held.add(_shown!, landed);
     } else if (_holdsEdits && !(writes && _readOnly == null)) {
