@@ -242,7 +242,7 @@ class _UpdateDialogState extends State<_UpdateDialog>
         child: const Text('Close'),
       ),
       OutlinedButton(
-        onPressed: () => unawaited(widget.updates.install()),
+        onPressed: () => unawaited(widget.updates.retry()),
         child: const Text('Try again'),
       ),
     ],
