@@ -19,6 +19,12 @@ import 'tree_edit.dart';
 /// What the analysis board is called wherever a chapter's name is shown.
 const analysisBoardName = 'Analysis';
 
+/// A fresh board has no games and starts at the initial position.
+bool isBlankBoard(Chapter chapter) =>
+    chapter.lines.isEmpty &&
+    chapter.tree.isEmpty &&
+    chapter.tree.rootFen == Fen.initial;
+
 /// An analysis board from [root] with [sans] played, as far as they can be.
 /// A board that starts at the start with no moves holds no game yet; one
 /// from another position holds one game with no moves, whose `[FEN]` is

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:dartchess/dartchess.dart' show Side;
 
-import '../chess/fen.dart';
+import '../chess/pgn/analysis_board.dart';
 import '../chess/pgn/game_tree.dart';
 import '../storage/chapter_files.dart';
 import '../ui/pane_tabs.dart';
@@ -167,10 +167,7 @@ final class DocumentTabs {
 
   /// Whether the board up is an analysis board nothing was done on.
   bool get _blankNow =>
-      session.isScratch &&
-      !session.canUndo &&
-      session.tree!.children.isEmpty &&
-      session.tree!.rootFen == Fen.initial;
+      session.isScratch && !session.canUndo && isBlankBoard(session.chapter!);
 
   Future<void> select(Object id) async {
     if (_disposed) return;
@@ -306,10 +303,7 @@ final class _DocumentPage {
   /// on: it is no mode's in particular.
   bool get isBlank {
     final kept = board;
-    return kept != null &&
-        !kept.canUndo &&
-        kept.chapter.tree.children.isEmpty &&
-        kept.chapter.tree.rootFen == Fen.initial;
+    return kept != null && !kept.canUndo && isBlankBoard(kept.chapter);
   }
 
   void remember(DocumentSession session) {
