@@ -47,6 +47,7 @@ BookAnswer known(Fen fen) => BookMoves(chessDb()[fen.position] ?? const []);
 
 void main() {
   Future<SearchResult> build({
+    Fen root = Fen.initial,
     int linePlies = 4,
     int branchPlies = 8,
     int maxReplies = 4,
@@ -57,7 +58,7 @@ void main() {
     List<SearchProgress>? progress,
     List<SearchNode>? snapshots,
   }) => buildMainlineBook(
-    root: positionOf(Fen.initial)!,
+    root: positionOf(root)!,
     config: MainlineConfig(
       side: Side.white,
       linePlies: linePlies,
@@ -80,6 +81,43 @@ void main() {
     );
     return (stopped as SearchIncomplete).tree;
   }
+
+  test('a repetition used as a new root gets a fresh move', () async {
+    final cycle = {
+      at(''): 'g1f3',
+      at('g1f3'): 'g8f6',
+      at('g1f3 g8f6'): 'f3g1',
+      at('g1f3 g8f6 f3g1'): 'f6g8',
+    };
+    final asked = <Fen>[];
+    Future<BookAnswer> knightMove(Fen fen) async {
+      asked.add(fen);
+      return BookMoves([(uci: cycle[fen.position]!, cp: 0)]);
+    }
+
+    final original = await build(linePlies: 9, movesAt: knightMove, played: {});
+    var node = (original as SearchComplete).tree;
+    for (var turn = 0; turn < 4; turn++) {
+      final reply = (node as OurNode).chosen.child as OpponentNode;
+      node = reply.replies.single.child;
+    }
+    expect((node as TerminalNode).kind, TerminalKind.repetition);
+
+    Future<SearchResult> fromHere({SearchNode? seed}) => build(
+      root: node.fen,
+      linePlies: 1,
+      movesAt: knightMove,
+      played: {},
+      seed: seed,
+    );
+    final fresh = (await fromHere() as SearchComplete).tree as OurNode;
+    asked.clear();
+    final resumed = (await fromHere(seed: node) as SearchComplete).tree;
+    expect(asked, contains(node.fen));
+    final move = (resumed as OurNode).chosen;
+    expect(move.move.uci, fresh.chosen.move.uci);
+    expect(move.child.fen, fresh.chosen.child.fen);
+  });
 
   test('our move is ChessDB\'s best; theirs are the masters\' replies, '
       'weighted by their games, until most of them are covered', () async {

@@ -91,6 +91,22 @@ void main() {
     },
   );
 
+  test('search uses a NUL-terminated ChessDB score', () async {
+    final local = ScriptedEvaluator(fallback: -80);
+    final evaluator = SearchEvaluator(
+      source: EvaluationSource.chessDb,
+      fallback: local,
+      minDepth: 14,
+      run: RemoteQueue(
+        MockClient((_) async => http.Response('eval:32\x00', 200)),
+      ).run(),
+    );
+    addTearDown(evaluator.close);
+    final answer = await evaluator.evaluate(positionOf(afterE4)) as Evaluated;
+    expect(answer.eval.cp, 32);
+    expect(local.asked, isEmpty);
+  });
+
   test(
     'remote hits are reused within a run and never passed to local engine',
     () async {

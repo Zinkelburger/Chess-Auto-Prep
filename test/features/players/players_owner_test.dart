@@ -41,6 +41,24 @@ void main() {
     expect(done(), isTrue);
   }
 
+  test('correcting a US Chess ID discards the old identity’s rating', () async {
+    final rating = owner.updateRatings();
+    expect(owner.lookupStatus, contains('Looking up A'));
+    final a = named('A');
+    expect(
+      await owner.save(
+        a.edited({'uscf_id': '33333333', 'rating': 1400}),
+        expected: a,
+      ),
+      isTrue,
+    );
+    lookups['11111111']!.complete((name: 'A', rating: 1950));
+    lookups['22222222']!.complete((name: 'B', rating: null));
+    await rating;
+    expect(named('A').text('uscf_id'), '33333333');
+    expect(named('A').text('rating'), '1400');
+  });
+
   test('an edit made while ratings are looked up is kept and the next '
       'rating is saved over it', () async {
     final running = owner.updateRatings();

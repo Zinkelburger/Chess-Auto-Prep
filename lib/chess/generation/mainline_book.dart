@@ -374,8 +374,7 @@ final class _Node {
 }
 
 /// [node], a book built before from [path]'s position, as nodes to go on
-/// from: what it expanded stays expanded, its frontier is what is left to
-/// do.
+/// from. A repetition in the old book may still be playable on this path.
 _Node _adopt(SearchNode node, SearchPath path) {
   final built = _Node(path, node.evaluated ? node.evalForUs : null);
   void follow(MoveRef move, double share, SearchNode child) {
@@ -388,8 +387,9 @@ _Node _adopt(SearchNode node, SearchPath path) {
   switch (node) {
     case FrontierNode():
       return built;
-    case TerminalNode(:final kind):
-      built.terminal = kind;
+    case TerminalNode():
+      built.terminal = terminalKind(path.position, path.history);
+      if (built.terminal == null) return built;
     case HorizonNode():
       break;
     case OurNode(:final candidates):

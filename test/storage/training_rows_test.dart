@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/chess/training/records.dart';
 import 'package:chess_auto_prep/chess/training/schedule.dart';
+import 'package:chess_auto_prep/features/trainer/trainer_words.dart';
 import 'package:chess_auto_prep/storage/csv_records.dart';
 import 'package:chess_auto_prep/storage/training_rows.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -43,6 +44,28 @@ void main() {
     expect(read.due, DateTime.utc(2026, 11, 20));
     expect(read.lastReviewed, DateTime.utc(2026, 11, 12, 9));
     expect(read, review);
+  });
+
+  test('a NaN review interval leaves manual ratings usable', () {
+    final rows = _records(
+      '$reviewsHeader\n'
+      '$_source,bad,Italian,2.50,NaN,2026-11-20,good,2026-11-12,4,0,false\n'
+      '$_source,ok,Scotch,2.50,4.0,2026-11-20,good,2026-11-12,4,0,false\n',
+    );
+    final reviews = [
+      for (final row in rows)
+        if (dataCells(row) case final cells?) ?decodeReview(cells),
+    ];
+    expect(reviews.map((review) => review.key.id), ['bad', 'ok']);
+    final healthy = reviews.singleWhere((r) => r.key.id == 'ok');
+    expect(healthy.intervalDays, 4);
+    expect(intervalFor(healthy, Rating.good), 10);
+    for (final review in reviews) {
+      for (final rating in Rating.values) {
+        expect(ratingLabel(rating, review), isNotEmpty);
+        expect(intervalFor(review, rating).isFinite, isTrue);
+      }
+    }
   });
 
   test('a streak row is read cell by cell', () {

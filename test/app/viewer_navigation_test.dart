@@ -1,9 +1,11 @@
+import 'package:chess_auto_prep/app/workspace_requests.dart';
 import 'package:chess_auto_prep/chess/game_filter.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_order.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/reading_place.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/storage/recent_pgn_files.dart';
 import 'package:chess_auto_prep/storage/viewer_places.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,6 +16,50 @@ import '../support/viewer_fixture.dart';
 import '../support/window_fixture.dart';
 
 void main() {
+  test(
+    'an overtaken reading-place lookup keeps the newer file first in recents',
+    () async {
+      final a = collectionRef('long');
+      final b = collectionRef('next');
+      const last = '[Event "Last"]\n\n1. d4 *';
+      final text = [
+        for (var i = 0; i < 499; i++) '[Event "Game $i"]\n\n1. e4 *',
+        last,
+      ].join('\n\n');
+      final place = ReadingPlace(
+        game: 499,
+        key: readingGameKey(
+          parseChapter(name: 'Last', text: last).lines.single,
+        ),
+        path: const NodePath.root(),
+        sort: GameOrder.fileOrder,
+      );
+      final app = WindowFixture(viewerPlaces: _StoredPlace(place));
+      addTearDown(app.dispose);
+      app.store.documents[a] = Opened(text, scriptedRevision(text));
+      app.store.documents[b] = Opened(
+        threeGameFile,
+        scriptedRevision(threeGameFile),
+      );
+
+      // Queue B's turn before A starts its isolate. A opens from memory in
+      // microtasks. B can then finish before A receives the lookup reply.
+      final next = Future(() {
+        expect(app.viewer.file, a);
+        return app.requests.openFile(b, game: 0);
+      });
+      final first = app.requests.openFile(a);
+      expect(await next, isA<RequestDone>());
+      expect(await first, isA<RequestDropped>());
+      expect(app.session.source, b);
+      expect(app.viewer.recent, [b.path, a.path]);
+      expect((await app.recent.load() as RecentFilesListed).paths, [
+        b.path,
+        a.path,
+      ]);
+    },
+  );
+
   testWidgets('named handoff overrides remembered game and header slice', (
     tester,
   ) async {

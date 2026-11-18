@@ -347,6 +347,7 @@ final class DocumentSession extends ChangeNotifier {
     await access.settled(ref.path);
     if (ticket.overtaken) return const OpenOvertaken();
     final version = access.versionOf(ref.path);
+    final receipt = _saver.lastReceipt;
     final leftAsIs = !_saver.settled;
     final read = await readDocument(_store, ref, game: game, parsed: _parsed);
     if (ticket.overtaken) return const OpenOvertaken();
@@ -363,20 +364,19 @@ final class DocumentSession extends ChangeNotifier {
     }
     _editors.commit();
     if (!leftAsIs && !_saver.settled) {
-      // The document being left could still be edited while this one was
-      // read, and nobody was asked about those words: they go to its file
-      // before the saver is handed over. Words the file will not take keep
-      // that document up, where the screen says why.
+      // Words typed during the read go to their file before the handover.
+      // If the file will not take them, keep that document on screen.
       final into = _saver.documentPath;
       await _saver.flush();
       if (ticket.overtaken || !_saver.settled) {
         return const OpenOvertaken();
       }
-      // Written into the file being opened, they are newer than the text
-      // read from it.
+      // A flush to the file being opened supersedes the read.
       if (into == ref.path) return _opened(ref, game, ticket);
     }
-    if (access.versionOf(ref.path) != version) {
+    // A same-file autosave may already have settled while the read was out.
+    if (access.versionOf(ref.path) != version ||
+        (_saver.documentPath == ref.path && _saver.lastReceipt != receipt)) {
       return _opened(ref, game, ticket);
     }
     _show(shown.chapter, ref, shown.revision, shown.readOnly, view: shown.view);
@@ -415,7 +415,6 @@ final class DocumentSession extends ChangeNotifier {
     _editors.commit();
     _opens.cancel();
     _setAsideUndo = null;
-    _saver.closed();
     _showBoard();
   }
 
@@ -426,7 +425,7 @@ final class DocumentSession extends ChangeNotifier {
     if (board == null) return _selectAnalysis(_board, leftAsIs: _leftAsIs);
     final leftAsIs = _leftAsIs;
     _editors.commit();
-    final blank = isScratch && !_board.canUndo && isBlankBoard(_chapter!);
+    final blank = isScratch && _board.isBlank(_chapter);
     return _selectAnalysis(
       blank ? _board : KeptBoard(board),
       fresh: board,
@@ -460,7 +459,6 @@ final class DocumentSession extends ChangeNotifier {
     // where the screen says why, as they do when another file is asked for.
     if (file && !leftAsIs && !_saver.settled) return false;
     _setAsideUndo = file ? _saver.setAsideUndo() : null;
-    _saver.closed();
     if (isScratch) {
       _board
         ..chapter = _chapter!
@@ -482,6 +480,7 @@ final class DocumentSession extends ChangeNotifier {
     _refused = null;
     _shownTo = null;
     _flipped = false;
+    _saver.closed();
     cursor._place(_board.cursor);
     notifyListeners();
   }
@@ -512,10 +511,10 @@ final class DocumentSession extends ChangeNotifier {
   }
 
   /// Plays [uci] from the cursor and follows it. A move already in the tree
-  /// only moves the cursor; a new one is written into the chapter and saved.
+  /// only moves the cursor; a new one is saved unless [existingOnly] is set.
   /// An illegal move is ignored — the board offers legal moves only — and one
   /// the chapter comes back without is logged rather than saved.
-  void playMove(String uci) {
+  void playMove(String uci, {bool existingOnly = false}) {
     final chapter = _chapter;
     if (chapter == null || _shownTo != null) return;
     // The board shows a comment's line, not the cursor's position.
@@ -527,7 +526,7 @@ final class DocumentSession extends ChangeNotifier {
       cursor._place(here);
       return;
     }
-    if (_editBlocked() != null) return;
+    if (existingOnly || _editBlocked() != null) return;
     switch (edits.addMove(chapter, at: cursor.value, uci: uci)) {
       case edits.MoveIllegal():
         return;
@@ -718,6 +717,10 @@ final class DocumentSession extends ChangeNotifier {
   /// Writes the held edits to the file, as one save; read-only ones stay.
   void keepHeld() {
     _editors.commit();
+    _saveHeld();
+  }
+
+  void _saveHeld() {
     final held = _held;
     if (held == null || _readOnly != null) return;
     _held = null;
@@ -827,19 +830,14 @@ final class DocumentSession extends ChangeNotifier {
   /// games, so the cursor follows the moves it was on, not its path, and an
   /// edit that changes which game is the chapter moves the board with it.
   ///
-  /// [writes] is for a change to the document itself rather than to its
-  /// moves — a chapter renamed, moved or tagged, chapters added, a link to
-  /// where they were sent — which is written even while edits are held,
-  /// taking the held ones with it: leaving it unsaved would lose what was
-  /// asked for.
+  /// A document change with [writes] (such as a chapter rename) takes held
+  /// edits to disk with it once the change is accepted for writing.
   String? apply(
     edits.ChapterEdit Function(Chapter chapter) edit, {
     ReferenceChanges? references,
     bool writes = false,
   }) {
-    if (writes && _held != null && _readOnly == null && _chapter != null) {
-      keepHeld();
-    }
+    if (writes && _held != null && _readOnly == null) _editors.commit();
     final chapter = _chapter;
     if (chapter == null) return 'there is nothing open to edit';
     if (_editBlocked() case final reason?) return reason;
@@ -930,6 +928,7 @@ final class DocumentSession extends ChangeNotifier {
     if (landed == null) {
       return _editRefused('a new line could not be given its chapter name');
     }
+    if (writes) _saveHeld();
     if (_held case final held?) {
       held.add(_shown!, landed);
     } else if (_holdsEdits && !(writes && _readOnly == null)) {

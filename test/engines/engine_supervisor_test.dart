@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/engines/hivemind_engine.dart';
 import 'package:chess_auto_prep/engines/hivemind_install.dart'
     show HivemindFiles;
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -24,6 +25,24 @@ final class StuckProcess implements Process {
   Future<int> get exitCode => Completer<int>().future;
   @override
   bool kill([ProcessSignal signal = ProcessSignal.sigterm]) => true;
+}
+
+/// The first signal leaves this process alive; the next one ends it.
+final class _SurvivesFirstKill extends StuckProcess {
+  final exit = Completer<int>();
+  int kills = 0;
+
+  @override
+  int get pid => 4100;
+
+  @override
+  Future<int> get exitCode => exit.future;
+
+  @override
+  bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
+    if (++kills == 2) exit.complete(137);
+    return true;
+  }
 }
 
 /// Takes what is written and keeps none of it.
@@ -117,6 +136,30 @@ void main() {
     skip: !Platform.isLinux,
     timeout: const Timeout(Duration(seconds: 20)),
   );
+
+  test('a failed handshake stays supervised until the process exits', () {
+    fakeAsync((time) {
+      final child = _SurvivesFirstKill();
+      final engines = EngineSupervisor(
+        startProcess: (_, _, {workingDirectory, environment}) async => child,
+      );
+      EngineStart? result;
+      unawaited(
+        engines
+            .start('engine', patience: const Duration(seconds: 1))
+            .then((value) => result = value),
+      );
+      time.elapse(const Duration(seconds: 6));
+      expect(result, isA<StartFailed>());
+      expect(child.exit.isCompleted, isFalse);
+      expect(engines.pids, contains(child.pid));
+      unawaited(engines.dispose());
+      time.flushMicrotasks();
+      expect(child.kills, 2);
+      expect(child.exit.isCompleted, isTrue);
+      expect(engines.pids, isEmpty);
+    });
+  });
 
   test('engine hashes are worked out once per file version and a missing '
       'file is no hash, not a failed start', () async {
