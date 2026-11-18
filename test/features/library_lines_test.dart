@@ -106,6 +106,32 @@ void main() {
     );
   });
 
+  test('folding a line keeps both notes on a repeated reply', () async {
+    final from = ref('KID', 'Main');
+    final to = ref('KID', 'Sidelines');
+    const source = '[Event "Notes"]\n\n1. e4 e5 {first} (1... e5 {second}) *\n';
+    const host = '[Event "Host"]\n\n1. d4 *\n';
+    await start([
+      folder('KID', ['Main', 'Sidelines']),
+    ]);
+    fixture.store.documents[from] = Opened(source, scriptedRevision(source));
+    fixture.store.documents[to] = Opened(host, scriptedRevision(host));
+    await fixture.session.open(from);
+
+    expect(
+      await fixture.library.moveLines(games: {0}, to: to, asSidelineOf: 0),
+      isA<LibraryDone>(),
+    );
+    await fixture.saver.flush();
+    expect(fixture.textAt(from.path)!, isNot(contains('[Event "Notes"]')));
+    await fixture.session.open(to);
+    final tree = fixture.session.chapter!.lines.single.tree!;
+    final e4 = tree.children.singleWhere((move) => move.san == 'e4');
+    final reply = e4.children.single;
+    expect(reply.san, 'e5');
+    expect(reply.comment, 'first second');
+  });
+
   test('dropped on a line of the same chapter, a line folds into it', () async {
     await open();
     expect(
