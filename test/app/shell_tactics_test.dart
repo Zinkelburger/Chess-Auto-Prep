@@ -1,5 +1,8 @@
 import 'package:chess_auto_prep/app/mode.dart';
+import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
+import 'package:chess_auto_prep/chess/tactics/puzzle.dart';
+import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/features/tactics/my_games.dart';
 import 'package:chess_auto_prep/features/tactics/puzzle_pane.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
@@ -11,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/scripted_engine.dart';
 import '../support/scripted_input.dart';
 import '../support/scripted_store.dart';
 import '../support/study_fixture.dart' show studiesRoot;
@@ -30,6 +34,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Tactics'));
     await tester.pumpAndSettle();
+  }
+
+  ScriptedEngine withEngine() {
+    final engine = ScriptedEngine();
+    w.dispose();
+    w = WindowFixture(
+      launchEngine: ({required cores, required memoryMb}) async =>
+          Started(engine),
+    );
+    return engine;
   }
 
   testWidgets('Play uses the searched puzzles and zero results disable it', (
@@ -190,6 +204,81 @@ void main() {
     await tester.pumpAndSettle();
     expect(w.trainer.up?.puzzle.index, 1);
     expect(w.trainer.up?.finished, isFalse);
+  });
+
+  testWidgets('clicking an engine continuation preserves the stored puzzle '
+      'solution', (tester) async {
+    final engine = withEngine();
+    await toTactics(tester);
+    await tester.tap(find.text('Black to play'));
+    await tester.pumpAndSettle();
+    final puzzle = w.trainer.up!.puzzle;
+    expect(puzzle.answer, ['d5']);
+    await tester.tap(find.text('Show solution'));
+    await tester.pumpAndSettle();
+    w.session.cursor.toStart();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(PuzzlePane),
+        matching: find.text('Analyze'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    engine.current
+      ..emit(line(pv: ['d7d5', 'c2c4']))
+      ..end();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('2. c4'));
+    await w.saver.flush();
+    expect(w.session.cursor.currentMove!.san, 'd5');
+
+    final stored = (w.store.documents[tacticsRef]! as Opened).text;
+    final chapter = parseChapter(
+      name: 'Default',
+      text: stored,
+      game: puzzle.index,
+    );
+    expect(puzzleOf(chapter.lines[puzzle.index], puzzle.index)!.answer, ['d5']);
+  });
+
+  testWidgets('an engine click after reload cannot solve the puzzle', (
+    tester,
+  ) async {
+    final engine = withEngine();
+    await toTactics(tester);
+    await tester.tap(find.text('4. Qe2??'));
+    await tester.pumpAndSettle();
+    await w.session.reloadFromDisk();
+    await tester.pumpAndSettle();
+    expect(w.session.shownTo, isNull);
+    expect(w.trainer.up!.finished, isFalse);
+
+    await w.analysis.enable();
+    engine.current
+      ..emit(line(pv: ['h5f7']))
+      ..end();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('4. Qxf7#'));
+    await w.saver.flush();
+    expect(w.session.cursor.value.isRoot, isTrue);
+    expect(w.trainer.up!.finished, isFalse);
+    expect(w.trainer.run!.outcomes, isEmpty);
+    expect(w.store.requestedSaves, isEmpty);
+  });
+
+  testWidgets('an Explorer move beyond the solution leaves the puzzle '
+      'intact', (tester) async {
+    await toTactics(tester);
+    await tester.tap(find.text('Black to play'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Show solution'));
+    await tester.pumpAndSettle();
+    await choosePanel(tester, 'Show Explorer');
+    expect(w.session.cursor.currentMove!.san, 'd5');
+    await tester.tap(find.byKey(const ValueKey('e2e4')));
+    await w.saver.flush();
+    expect(w.session.cursor.currentMove!.san, 'd5');
+    expect((w.store.documents[tacticsRef]! as Opened).text, tacticsSet);
   });
 
   testWidgets('the Explorer tab is empty while the answer is hidden', (
