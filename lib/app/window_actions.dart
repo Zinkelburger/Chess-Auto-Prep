@@ -111,6 +111,9 @@ final class WindowActions {
             analysis: _boardWorkspace.analysis,
             editing: editing,
             onSaveCopy: () {},
+            onDiscardHeld: () => unawaited(
+              confirmDiscardHeld(context, () => _boardWorkspace.session),
+            ),
           ),
           ...doors.entries(context),
           ...tabActions(_view.tabs),
