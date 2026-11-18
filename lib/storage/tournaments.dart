@@ -164,6 +164,7 @@ final class FileTournaments
       if (tournament.id != id) {
         throw const FormatException('Mismatched tournament identity.');
       }
+      _validateHistoryFields(tournament);
       return tournament;
     } on Object catch (error) {
       log.w('read tournament $id', _reason(error));
@@ -384,6 +385,28 @@ final class FileTournaments
       await _publish(path, target);
     });
   });
+}
+
+/// History reads these fields lazily, including the seats used for standings.
+/// Check them while a decoding failure can still be attributed to one file.
+void _validateHistoryFields(Tournament tournament) {
+  void check<T>(Map<String, Object?> json, String key) {
+    final value = json[key];
+    if (value != null && (value is! T || (value is num && !value.isFinite))) {
+      throw FormatException('Invalid tournament field: $key.');
+    }
+  }
+
+  check<String>(tournament.json, 'status');
+  check<String>(tournament.config.json, 'name');
+  check<num>(tournament.config.json, 'gamesPerPairing');
+  for (final engine in tournament.config.engines) {
+    check<String>(engine.json, 'name');
+  }
+  for (final game in tournament.games) {
+    check<num>(game.json, 'whiteIndex');
+    check<num>(game.json, 'blackIndex');
+  }
 }
 
 /// [tournamentPositions] on another isolate. Top level, so the closure sent
