@@ -512,10 +512,10 @@ final class DocumentSession extends ChangeNotifier {
   }
 
   /// Plays [uci] from the cursor and follows it. A move already in the tree
-  /// only moves the cursor; a new one is written into the chapter and saved.
+  /// only moves the cursor; a new one is saved unless [existingOnly] is set.
   /// An illegal move is ignored — the board offers legal moves only — and one
   /// the chapter comes back without is logged rather than saved.
-  void playMove(String uci) {
+  void playMove(String uci, {bool existingOnly = false}) {
     final chapter = _chapter;
     if (chapter == null || _shownTo != null) return;
     // The board shows a comment's line, not the cursor's position.
@@ -527,7 +527,7 @@ final class DocumentSession extends ChangeNotifier {
       cursor._place(here);
       return;
     }
-    if (_editBlocked() != null) return;
+    if (existingOnly || _editBlocked() != null) return;
     switch (edits.addMove(chapter, at: cursor.value, uci: uci)) {
       case edits.MoveIllegal():
         return;

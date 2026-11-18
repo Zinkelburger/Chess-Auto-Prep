@@ -363,10 +363,16 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     _ws.tree.watching ? _ws.tree.play(uci) : _train.puzzles.play(uci);
   }
 
-  /// A clicked engine line's moves: onto the free board while the explorer's
-  /// Book is up, into the document otherwise.
-  void _engineMove(String uci) =>
-      _ws.tree.watching ? _ws.tree.play(uci) : _ws.session.playMove(uci);
+  /// A clicked engine line goes to the Book's free board, follows stored
+  /// moves on a revealed puzzle, or plays into the document.
+  void _engineMove(String uci) => _suggestedMove(uci, book: _ws.tree.watching);
+
+  void _suggestedMove(String uci, {bool book = false}) {
+    final puzzle = _train.puzzles.up;
+    if (puzzle?.finished == false) return;
+    if (book) return _ws.tree.play(uci);
+    _ws.session.playMove(uci, existingOnly: puzzle != null);
+  }
 
   /// The body of a tab the workspace does not draw: the mode's own first,
   /// then the Train tab every mode that has it shares.
@@ -620,6 +626,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
             : null,
         onBoardMove: _inspecting ? null : _boardMove,
         onEngineMove: _inspecting ? null : _engineMove,
+        onExplorerMove: _inspecting ? null : _suggestedMove,
         onSaveHeld: _inspecting ? null : _saveHeld,
         onExplorerLogin: widget.onExplorerLogin,
         onDownloadTwic: widget.onDownloadTwic,
