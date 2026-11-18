@@ -94,9 +94,10 @@ enum UpdateProblem {
 }
 
 final class UpdateFailed extends UpdateStatus {
-  const UpdateFailed(this.problem, {this.offer});
+  const UpdateFailed(this.problem, {this.offer, this.retryInstall = false});
 
   final UpdateProblem problem;
+  final bool retryInstall;
 
   /// The release it failed on, when it got that far; Try again goes on
   /// from there.
@@ -371,8 +372,13 @@ final class AppUpdates extends ChangeNotifier {
           HelperNotStarted() => UpdateFailed(
             UpdateProblem.helperNotStarted,
             offer: offer,
+            retryInstall: true,
           ),
-          HelperBusy() => UpdateFailed(UpdateProblem.helperBusy, offer: offer),
+          HelperBusy() => UpdateFailed(
+            UpdateProblem.helperBusy,
+            offer: offer,
+            retryInstall: true,
+          ),
         });
       case UpdateDownloading():
         _installWhenReady = true;
@@ -477,8 +483,18 @@ final class AppUpdates extends ChangeNotifier {
   };
 
   void _fail(UpdateProblem problem, UpdateOffer offer) {
+    final retryInstall = _installWhenReady;
     _installWhenReady = false;
-    _set(UpdateFailed(problem, offer: offer));
+    _set(UpdateFailed(problem, offer: offer, retryInstall: retryInstall));
+  }
+
+  /// Repeats the failed operation with the original installation choice.
+  Future<void> retry() async {
+    if (_status case UpdateFailed(:final offer, :final retryInstall)) {
+      if (offer == null || !offer.installable) return check();
+      if (retryInstall) return install();
+      return download();
+    }
   }
 
   void _set(UpdateStatus next) {
