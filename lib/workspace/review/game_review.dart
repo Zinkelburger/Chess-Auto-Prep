@@ -160,7 +160,7 @@ final class GameReview extends ChangeNotifier {
     }
     final ticket = _reviews.begin();
     final requestedDepth = depth;
-    final shouldAnnotate = annotate;
+    final writeAnnotations = annotate;
     _chapter = chapter;
     running = true;
     completed = 0;
@@ -189,7 +189,7 @@ final class GameReview extends ChangeNotifier {
       try {
         problem = session.readOnly != null
             ? null
-            : shouldAnnotate
+            : writeAnnotations
             ? session.apply((now) => annotateGame(now, values))
             : session.apply(removeReview);
         _chapter = session.chapter;

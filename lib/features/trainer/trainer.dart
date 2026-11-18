@@ -714,7 +714,7 @@ class Trainer extends ChangeNotifier {
           )
         : null;
     final chapters = await _chapters.chaptersWhere(
-      (ref) => _catalog?.repertoireOf(ref.path) == root,
+      (ref) => ref.path == root || _catalog?.repertoireOf(ref.path) == root,
       open,
     );
     if (load.overtaken) return;

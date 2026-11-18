@@ -23,6 +23,25 @@ void main() {
 
   tearDown(() => study.dispose());
 
+  test('a refused chapter rename leaves other edits held', () async {
+    final text = twoChapterStudy.replaceFirst('1. d4 d5', '1. e4 e5 2. Ke3');
+    await open(text: text);
+    expect(study.session.chapter!.lines.last.isWhole, isFalse);
+    study.session
+      ..holdsEdits = true
+      ..cursor.toEnd()
+      ..playMove('b8c6');
+    expect(study.session.hasHeldEdits, isTrue);
+
+    renameStudyChapter(study.session, index: 1, name: 'Renamed');
+    final refusal = study.session.refusedEdit as EditNotWritten;
+    expect(refusal.reason, contains('not read whole'));
+    await study.saver.flush();
+    expect(study.onDisk, text);
+    expect(study.session.hasHeldEdits, isTrue);
+    expect(study.session.tree!.mainLine.last.san, 'Nc6');
+  });
+
   test('cleanup is an undoable edit confined to the chosen game', () async {
     await open(
       text: twoChapterStudy.replaceFirst(

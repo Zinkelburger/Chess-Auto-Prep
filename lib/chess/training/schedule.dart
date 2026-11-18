@@ -201,7 +201,7 @@ double _easeAfter(double ease, Rating rating) => switch (rating) {
 };
 
 double _interval(double current, Rating rating, double ease) {
-  final first = current < 1;
+  final first = !current.isFinite || current < 1;
   final next = switch (rating) {
     Rating.again => 0.0,
     Rating.hard => first ? 1.0 : max(current + 1, current * 1.2),

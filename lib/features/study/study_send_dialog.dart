@@ -88,8 +88,13 @@ class _SendState extends State<_Send> with ListeningState<_Send> {
 
   bool get _ready => !_existing || _target != null;
 
-  void _send() =>
-      unawaited(widget.sender.send(into: _existing ? _target : null));
+  void _send() {
+    if (!_ready) {
+      widget.sender.reset();
+      return;
+    }
+    unawaited(widget.sender.send(into: _existing ? _target : null));
+  }
 
   Future<void> _logIn() async {
     final logIn = widget.onLogIn;

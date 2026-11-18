@@ -273,7 +273,9 @@ final class WorkspaceWiring {
     _analysis
       ..setLines(s.engineLines)
       ..showThreat(s.engineThreat);
-    _inspection.engine.setLines(s.engineLines);
+    _inspection.engine
+      ..setLines(s.engineLines)
+      ..showThreat(s.engineThreat);
     _env.settings.addListener(_engineSettings);
     // The switch as it was left: a mode that hides an answer turns the
     // engine off for itself when the answer comes up.
@@ -295,7 +297,9 @@ final class WorkspaceWiring {
     _analysis
       ..setLines(s.engineLines)
       ..showThreat(s.engineThreat);
-    _inspection.engine.setLines(s.engineLines);
+    _inspection.engine
+      ..setLines(s.engineLines)
+      ..showThreat(s.engineThreat);
     final wanted = _runsWith(s);
     if (_engineRunsWith != wanted) {
       _engineRunsWith = wanted;

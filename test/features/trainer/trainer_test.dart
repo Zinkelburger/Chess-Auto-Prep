@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
@@ -16,6 +17,7 @@ import 'package:chess_auto_prep/features/trainer/trainer.dart';
 import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/features/trainer/training_scope.dart';
 import 'package:chess_auto_prep/storage/book_file.dart';
+import 'package:chess_auto_prep/storage/chapter_directory.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
@@ -25,9 +27,11 @@ import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/book/books.dart';
+import 'package:chess_auto_prep/workspace/book/repertoire_catalog.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../storage/store_fixture.dart';
 import '../../support/scripted_files.dart';
 import '../../support/scripted_progress.dart';
 import '../../support/scripted_store.dart';
@@ -77,14 +81,20 @@ void main() {
 
   String source() => fixture.ref.path;
 
-  Trainer trainerOver({ScriptedFiles? listing, SettingsStore? settings}) {
+  Trainer trainerOver({
+    ChapterFiles? listing,
+    PgnDocumentStore? documents,
+    RepertoireCatalog? catalog,
+    SettingsStore? settings,
+  }) {
     final trainer = Trainer(
       session: fixture.session,
       settings: settings,
       chapters: ScopeReader(
         files: listing ?? ScriptedFiles(),
-        documents: fixture.store,
+        documents: documents ?? fixture.store,
       ),
+      catalog: catalog,
       files: files,
       analysis: analysis,
       time: (now: () => _now, jitter: () => 0),
@@ -555,6 +565,44 @@ void main() {
       async.flushMicrotasks();
       expect(files.reviews[state.lines.first.key]!.excluded, isTrue);
     });
+  });
+
+  test('selecting a top-level PGN trains only its own lines', () async {
+    final disk = await StoreFixture.create();
+    addTearDown(disk.dispose);
+    final course = disk.ref('repertoires/Course.pgn');
+    await disk.put(course, _chapter);
+    await disk.put(disk.ref('repertoires/Other.pgn'), _other);
+    final root = File(course.path).parent;
+    final listing = ChapterDirectory(root, recovery: disk.store.recovery);
+    final catalog = RepertoireCatalog(files: listing, root: root.path);
+    addTearDown(catalog.dispose);
+    await catalog.refresh();
+    final trainer = trainerOver(
+      listing: listing,
+      documents: disk.store,
+      catalog: catalog,
+    );
+    final selected = trainer.selection.repertoires.singleWhere(
+      (repertoire) => repertoire.name == 'Course',
+    );
+    final loaded = Completer<void>();
+    void onLoad() {
+      if (trainer.state is TrainerLoading) return;
+      trainer.removeListener(onLoad);
+      loaded.complete();
+    }
+
+    trainer.addListener(onLoad);
+    trainer.selection.choose(selected);
+    await loaded.future;
+
+    expect(
+      trainer.scopeLines.map((line) => (line.key.source, line.name)),
+      unorderedEquals([(course.path, 'Ruy'), (course.path, 'Italian')]),
+    );
+    trainer.learn();
+    expect(trainer.lesson?.line.key.source, course.path);
   });
 
   test('the whole repertoire: the other chapters, drafts left out', () {
