@@ -415,7 +415,6 @@ final class DocumentSession extends ChangeNotifier {
     _editors.commit();
     _opens.cancel();
     _setAsideUndo = null;
-    _saver.closed();
     _showBoard();
   }
 
@@ -464,7 +463,6 @@ final class DocumentSession extends ChangeNotifier {
     // where the screen says why, as they do when another file is asked for.
     if (file && !leftAsIs && !_saver.settled) return false;
     _setAsideUndo = file ? _saver.setAsideUndo() : null;
-    _saver.closed();
     if (isScratch) {
       _board
         ..chapter = _chapter!
@@ -486,6 +484,7 @@ final class DocumentSession extends ChangeNotifier {
     _refused = null;
     _shownTo = null;
     _flipped = false;
+    _saver.closed();
     cursor._place(_board.cursor);
     notifyListeners();
   }
