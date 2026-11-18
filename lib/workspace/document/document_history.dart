@@ -1,3 +1,4 @@
+import '../../chess/fen.dart';
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/chapter_sections.dart';
 import '../../chess/pgn/game_tree.dart';
@@ -73,6 +74,13 @@ final class KeptBoard {
   final _undo = <Chapter>[];
 
   bool get canUndo => _undo.isNotEmpty;
+
+  /// Whether nothing was done on this board: nothing to undo, no moves, the
+  /// initial position. [shown] is the chapter up, when it is not [chapter].
+  bool isBlank([Chapter? shown]) {
+    final tree = (shown ?? chapter).tree;
+    return !canUndo && tree.children.isEmpty && tree.rootFen == Fen.initial;
+  }
 
   /// A new board in place of this one, with the cursor at the end of its
   /// main line and nothing to undo.
