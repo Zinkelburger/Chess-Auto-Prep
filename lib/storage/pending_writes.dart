@@ -15,6 +15,7 @@ final class PendingWrites {
   final _failures = <Object, String>{};
   final _versions = <Object, int>{};
   final _obligations = <PendingObligation<Object?>>{};
+  int _nextVersion = 0;
 
   /// Waits for [work] at shutdown. A [problem] it reports is recorded under
   /// [obligation] until a later track of the same obligation clears it, so
@@ -31,7 +32,8 @@ final class PendingWrites {
       'A reported problem needs an obligation that can clear it.',
     );
     final identity = obligation ?? Object();
-    final version = (_versions[identity] ?? 0) + 1;
+    // An older write can outlive both this write and a retry of the same key.
+    final version = obligation == null ? 0 : ++_nextVersion;
     if (obligation != null) _versions[identity] = version;
     bool current() => obligation == null || _versions[identity] == version;
     late final Future<void> watched;
@@ -51,7 +53,10 @@ final class PendingWrites {
             _failures[identity] = '$label: $error';
           },
         )
-        .whenComplete(() => _pending.remove(watched));
+        .whenComplete(() {
+          _pending.remove(watched);
+          if (obligation != null && current()) _versions.remove(identity);
+        });
     _pending[watched] = owner;
     return work;
   }
