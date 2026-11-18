@@ -695,11 +695,14 @@ Future<GameReview?> reviewGame(
   final found = <MinedPuzzle>[];
   var counts = const MistakeCounts();
   for (final move in movesBy(tree, side)) {
-    if (isOver(move.after)) continue;
+    final over = isOver(move.after);
+    if (over && !isDraw(move.after)) continue;
     final before = await verdictAt(engine, move.before, depth: reviewDepth);
     if (before == null) return null;
     if (playedBest(move, before)) continue;
-    final after = await verdictAt(engine, move.after, depth: reviewDepth);
+    final after = over
+        ? const Verdict()
+        : await verdictAt(engine, move.after, depth: reviewDepth);
     if (after == null) return null;
     final kind = judge(before, after);
     if (kind == null) continue;

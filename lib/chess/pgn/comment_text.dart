@@ -34,6 +34,23 @@ String? withProse(String? comment, String? prose) {
 bool hasToken(String? comment, String name) =>
     (comment ?? '').contains('[%$name]');
 
+/// The number of plies in a variation added by a game review.
+final reviewLineMarker = RegExp(r'\[%cap_review_line (\d+)\]');
+
+final _reviewLineWithSeparator = RegExp(
+  '^(?:${reviewLineMarker.pattern} ?)+'
+  '| ${reviewLineMarker.pattern}(?=\\s|\$)'
+  '|${reviewLineMarker.pattern}',
+);
+
+/// Remove the review marker and its separating space inside the note,
+/// leaving the padding the PGN writer put inside the braces.
+String? withoutReviewLineMarker(String comment) {
+  final body = comment.trim();
+  final kept = body.replaceAll(_reviewLineWithSeparator, '');
+  return kept.trim().isEmpty ? null : comment.replaceFirst(body, kept);
+}
+
 /// [comment] with the bare token [name] added or taken away, keeping its
 /// prose and its other tokens. A comment left with nothing in it is removed
 /// rather than written as `{}`.

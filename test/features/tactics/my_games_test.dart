@@ -166,6 +166,44 @@ void main() {
     },
   );
 
+  test('stalemating instead of mating records one blunder', () async {
+    const fen = 'k7/2Q5/2K5/8/8/8/8/8 w - - 0 1';
+    const game =
+        '''
+[Event "Rated blitz game"]
+[GameId "lichess_stalemate"]
+[White "Me"]
+[Black "Rival"]
+[Result "1/2-1/2"]
+[SetUp "1"]
+[FEN "$fen"]
+
+1. Qb6 1/2-1/2''';
+    r = _Review(
+      accounts: {GameSite.lichess: const Account('Me')},
+      lichess: const GamesFetched([game]),
+      lines: {
+        const Fen(fen).position: const EngineLine(
+          multiPv: 1,
+          depth: reviewDepth,
+          score: MateIn(1),
+          pv: ['c7b7'],
+        ),
+      },
+    );
+    await r.start();
+    expect(analyzedIn(r.setText), contains('lichess_stalemate'));
+    final counts = mistakesIn(
+      parseChapter(name: 'Default', text: r.setText).preamble,
+    );
+    final recorded = counts['lichess_stalemate'];
+    expect(recorded, const MistakeCounts(blunders: 1), reason: recorded?.words);
+    final puzzle = r.puzzlesOnDisk.singleWhere((p) => p.fen == const Fen(fen));
+    expect(puzzle.gameId, 'lichess_stalemate');
+    expect(puzzle.answer, ['Qb7#']);
+    expect(r.engine.asked, [const Fen(fen)]);
+  });
+
   test('only games of the chosen time controls are reviewed', () async {
     const bullet = '[TimeControl "60+0"]\n';
     r = _Review(

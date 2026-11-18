@@ -4,6 +4,7 @@
 // settings alone; and no pane splits while the Analysis tab holds a board
 // of its own.
 import 'package:chess_auto_prep/app/mode.dart';
+import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/features/settings/setting_rows.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:flutter/material.dart';
@@ -64,6 +65,43 @@ void main() {
     await saveCopy(tester, 'Spare');
     final collections = w.parts.documents.viewer.collections;
     expect(paths(), contains('$collections/Spare.pgn'));
+  });
+
+  testWidgets('cancelling Discard changes in Actions keeps both games’ edits '
+      'and undo history', (tester) async {
+    final ref = collectionRef('games');
+    w.store.documents[ref] = Opened(
+      threeGameFile,
+      scriptedRevision(threeGameFile),
+    );
+    await w.pumpShell(tester);
+    w.requests.switchTo(Mode.pgnViewer);
+    await w.requests.openFile(ref, game: 0);
+    await tester.pumpAndSettle();
+
+    final session = w.session;
+    final move = NodePath.of([0]);
+    session.setComment(move, 'First game note');
+    w.viewer.showGame(1);
+    session.setComment(move, 'Second game note');
+    await tester.pumpAndSettle();
+    expect(session.hasHeldEdits, isTrue);
+
+    await chooseAction(tester, 'Discard changes');
+    expect(session.hasHeldEdits, isTrue);
+    final cancel = find.widgetWithText(TextButton, 'Cancel');
+    expect(cancel, findsOneWidget);
+    await tester.tap(cancel);
+    await tester.pumpAndSettle();
+
+    expect(session.chapter!.lines[0].text, contains('First game note'));
+    expect(session.chapter!.lines[1].text, contains('Second game note'));
+    await session.undo();
+    expect(session.chapter!.lines[0].text, contains('First game note'));
+    expect(session.chapter!.lines[1].text, isNot(contains('Second game note')));
+    await session.undo();
+    expect(session.chapter!.lines[0].text, isNot(contains('First game note')));
+    expect(session.hasHeldEdits, isFalse);
   });
 
   testWidgets("the Train tab's gear shows the Training settings alone", (

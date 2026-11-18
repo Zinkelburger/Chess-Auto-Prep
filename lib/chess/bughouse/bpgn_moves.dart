@@ -310,7 +310,7 @@ PastedMoves readTableLineText(String text) {
     final uci = position.moveBySan(board, move)?.uci ?? move;
     final next = lineMove(position, board, uci, clock: clock);
     if (next == null) return false;
-    line = line.played(next.move);
+    line = line.played(next);
     position = next.after;
     played++;
     return taken = true;

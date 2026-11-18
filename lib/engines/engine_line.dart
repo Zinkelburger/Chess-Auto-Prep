@@ -123,8 +123,10 @@ final class EngineLine {
 /// checkmate, and `score cp 0` on a stalemate — and dropping it would leave
 /// a finished game with no score at all.
 EngineLine? parseInfoLine(String line) {
-  final words = line.trim().split(_spaces);
+  var words = line.trim().split(_spaces);
   if (words.first != 'info') return null;
+  final diagnostic = words.indexOf('string', 1);
+  if (diagnostic != -1) words = words.sublist(0, diagnostic);
   int? depth;
   int? nodes;
   int? nps;

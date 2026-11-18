@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/chess/fen.dart';
@@ -7,11 +8,13 @@ import 'package:chess_auto_prep/chess/tournament/result.dart';
 import 'package:chess_auto_prep/engines/engine.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/engines/playing_engine.dart';
+import 'package:chess_auto_prep/features/tournaments/history_list.dart';
 import 'package:chess_auto_prep/features/tournaments/tournament_run.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:chess_auto_prep/storage/tournaments.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
+import 'package:flutter/material.dart' show MaterialApp, Scaffold;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -131,6 +134,58 @@ void main() {
     run.dispose();
     await files.dispose();
   });
+  testWidgets('malformed tournament records leave healthy history visible', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      for (final (id, overrides) in [
+        ('healthy', {'name': 'Club match'}),
+        ('damaged-name', {'name': 7}),
+        ('damaged-count', {'gamesPerPairing': 'two'}),
+        (
+          'damaged-engine',
+          {
+            'engines': [
+              {...TournamentEngine.bundled('A').json, 'name': 7},
+              TournamentEngine.bundled('B').json,
+            ],
+          },
+        ),
+      ]) {
+        final directory = File(store.games(id).path).parent;
+        await directory.create(recursive: true);
+        await File(p.join(directory.path, 'tournament.json')).writeAsString(
+          jsonEncode({
+            'version': 1,
+            'id': id,
+            'createdAt': '2026-11-01T12:00:00Z',
+            'status': 'pending',
+            'config': {...config().json, ...overrides},
+            'games': [],
+          }),
+        );
+      }
+      await run.refresh();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: TournamentHistory(run: run)),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.text('Club match'), findsOneWidget);
+    expect(run.history.map((entry) => entry.id), ['healthy']);
+    expect(
+      run.historyWarnings,
+      unorderedEquals([
+        contains('damaged-name'),
+        contains('damaged-count'),
+        contains('damaged-engine'),
+      ]),
+    );
+  });
+
   test('does not start while another heavy engine job runs', () async {
     final audit = Object();
     jobs.take(audit, 'Audit');

@@ -22,11 +22,13 @@ import 'package:chess_auto_prep/features/tactics/puzzle_trainer.dart';
 import 'package:chess_auto_prep/features/tactics/tactics_set.dart';
 import 'package:chess_auto_prep/features/tournaments/game_runner.dart';
 import 'package:chess_auto_prep/features/trainer/trainer.dart';
+import 'package:chess_auto_prep/net/lichess_login.dart';
 import 'package:chess_auto_prep/net/lichess_studies.dart';
 import 'package:chess_auto_prep/net/lichess_study_writes.dart';
 import 'package:chess_auto_prep/storage/book_file.dart';
 import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/lichess_token.dart';
 import 'package:chess_auto_prep/storage/my_games_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/player_files.dart';
@@ -98,11 +100,17 @@ final class WindowFixture {
     this.exitWait = const Duration(milliseconds: 20),
     this._maia = const NoOpinion(),
     this.lichessWriter,
+    this.login,
+    this.readAccount,
+    this.writeAccount,
   });
 
   /// The Lichess studies are written to; none, so no Send to Lichess,
   /// unless the test gives one.
   final LichessStudyWriter? lichessWriter;
+  final LichessLogin? login;
+  final Future<LichessAccount?> Function()? readAccount;
+  final Future<bool> Function(LichessAccount?)? writeAccount;
 
   /// The pages the window asked the browser for.
   final openedPages = <Uri>[];
@@ -206,9 +214,9 @@ final class WindowFixture {
       updates: updates,
       exportText: exportText,
       fileImport: ScriptedImport(),
-      lichessLogin: ScriptedLogin(),
-      readAccount: () async => null,
-      writeAccount: (_) async => true,
+      lichessLogin: login ?? ScriptedLogin(),
+      readAccount: readAccount ?? () async => null,
+      writeAccount: writeAccount ?? (_) async => true,
       lichessStudies: ScriptedLichess(
         const StudyNotFetched(StudyFetchProblem.unreachable),
       ),

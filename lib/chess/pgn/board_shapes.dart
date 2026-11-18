@@ -71,16 +71,18 @@ List<BoardShape> shapesIn(String? comment) {
   ];
 }
 
-/// Adds entries from [arriving], keeping the first spelling for each circle
-/// or directed arrow. Entries the board cannot draw are compared as written.
-String withJoinedShapes(String host, String arriving) {
+/// Adds arrows and circles from [arriving], keeping their PGN spelling and
+/// the host's colour on squares it already annotates with the same shape.
+String withMissingShapes(String host, String arriving) {
   if (!arriving.contains('[%c')) return host;
   Object key(String entry, BoardShape? shape) =>
       shape == null ? entry : (shape.from, shape.to);
 
   var joined = host;
-  for (final (pattern, name) in [(_circles, 'csl'), (_arrows, 'cal')]) {
-    final circle = name == 'csl';
+  for (final (pattern, name, circle) in [
+    (_circles, 'csl', true),
+    (_arrows, 'cal', false),
+  ]) {
     final incoming = _written(pattern, arriving, circle: circle);
     if (incoming.isEmpty) continue;
     final seen = {

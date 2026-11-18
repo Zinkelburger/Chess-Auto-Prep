@@ -343,11 +343,10 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
     _selection = null;
     _order = null;
     _ordinals = null;
-    await _reading.restore(place, currentRequest ?? () => true);
+    // Queue the prepend in open order, before a bookmark lookup can yield.
     final intent = Object();
     _unsavedRecent[intent] = ref.path;
     _recent = _first(ref.path, _recent);
-    notifyListeners();
     final accepted = pendingWrites.accept<String?>(
       resource: _recentFiles,
       label: 'Recent files',
@@ -355,7 +354,12 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
       problem: (detail) => detail,
       blocked: () => _recentProblem ?? 'An earlier recent file was not saved.',
     );
-    return accepted.run().then<void>((_) {});
+    final opening = Future.wait<void>([
+      accepted.run().then<void>((_) {}),
+      _reading.restore(place, currentRequest ?? () => true),
+    ]);
+    notifyListeners();
+    await opening;
   }
 
   /// Applies the accepted prepend to the latest persisted list. Disposal only

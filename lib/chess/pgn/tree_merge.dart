@@ -73,9 +73,8 @@ List<MoveNode> mergeForests(
   return List.unmodifiable(merged);
 }
 
-/// [host]'s comment with any new prose and board shapes from [arriving].
-/// Other machine tokens stay with [host] when both have a comment, so one
-/// move never carries two evals or two clocks.
+/// [host]'s comment with the prose and board shapes [arriving] adds to it.
+/// Other machine tokens stay as [host] wrote them.
 String? joinedComment(String? host, String? arriving) {
   if (host == null) return arriving;
   if (arriving == null) return host;
@@ -83,7 +82,7 @@ String? joinedComment(String? host, String? arriving) {
   final joined = prose.isEmpty || displayComment(host).contains(prose)
       ? host
       : '$host $prose';
-  return withJoinedShapes(joined, arriving);
+  return withMissingShapes(joined, arriving);
 }
 
 /// [node] with the moves under it folded, or [node] itself when there was
