@@ -4,6 +4,7 @@ import '../fen.dart';
 import '../generation/eval.dart' show winningChances;
 import 'chapter.dart';
 import 'chapter_edit.dart';
+import 'comment_text.dart';
 import 'game_tree.dart';
 import 'games_written.dart';
 import 'rewrite_gate.dart';
@@ -117,7 +118,7 @@ ReviewMark? writtenReviewMark(MoveNode move) => ReviewMark.ofNag(
 /// "Mistake. Nf3 was best." note, and a variation it added. A variation's
 /// marker counts its moves.
 const _evalMarker = '[%cap_review_eval]';
-final _lineMarker = RegExp(r'\[%cap_review_line (\d+)\]');
+final _lineMarker = reviewLineMarker;
 final _nagMarker = RegExp(r'\s*\[%cap_review_nag (\d+)\]');
 final _eval = RegExp(r'\s*\[%eval\s+[^\]]*\]');
 final _prose = RegExp(

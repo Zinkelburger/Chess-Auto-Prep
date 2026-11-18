@@ -295,6 +295,24 @@ void main() {
     expect(tree.nodeAt(NodePath.of([1, 0, 0]))?.san, 'c4');
   });
 
+  test("removing a review keeps the player's replacement reply", () async {
+    final session = fixture.session;
+    await session.open(fixture.ref, game: 0);
+    expect(session.apply((chapter) => annotateGame(chapter, reviewed)), isNull);
+    final d4 = NodePath.of([1]);
+    final reply = d4.mainChild;
+    expect(session.tree!.nodeAt(reply)?.san, 'd5');
+    expect(deleteFrom(session, reply), isNull);
+    session.cursor.goTo(d4);
+    session.playMove('g8f6');
+    expect(session.tree!.nodeAt(reply)?.san, 'Nf6');
+
+    review.setAnnotate(false);
+    final tree = session.tree!;
+    expect(tree.lineTo(reply).map((node) => node.san), ['d4', 'Nf6']);
+    expect(hasReview(tree), isFalse);
+  });
+
   test("a note on the review line's first move survives removal", () {
     final marked =
         annotateGame(fixture.session.chapter!, reviewed) as ChapterEdited;
