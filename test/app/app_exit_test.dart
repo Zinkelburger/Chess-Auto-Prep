@@ -5,10 +5,17 @@ import 'dart:ui' show AppExitResponse;
 import 'package:chess_auto_prep/app/app.dart';
 import 'package:chess_auto_prep/app/exit_guard.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/net/lichess_login.dart';
+import 'package:chess_auto_prep/storage/lichess_token.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 import '../support/fixtures.dart';
+import '../support/scripted_login.dart';
 import '../support/session_fixture.dart';
+import '../support/window_fixture.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -44,6 +51,56 @@ void main() {
 
   void edit(String words) =>
       fixture.session.setComment(NodePath.of([0]), words);
+
+  test('exit honors logout while token revocation is pending', () {
+    fakeAsync((time) {
+      LichessAccount? saved = someone(personal: true);
+      final removal = Completer<void>();
+      final revoke = Completer<http.Response>();
+      final methods = <String>[];
+      final client = MockClient((request) {
+        methods.add(request.method);
+        return revoke.future;
+      });
+      final window = WindowFixture(
+        login: LichessLoginApi(client, openBrowser: (_) async => false),
+        readAccount: () async => saved,
+        writeAccount: (account) async {
+          await removal.future;
+          saved = account;
+          return true;
+        },
+      );
+      final exit = AppExit(
+        guard: window.parts.exit,
+        prepare: window.parts.prepareToClose,
+        onCancelled: window.parts.resumeAfterClose,
+        stopEngines: window.parts.env.stopEngines,
+        closeLog: () async {},
+      );
+      try {
+        unawaited(window.parts.account.load());
+        time.flushMicrotasks();
+        unawaited(window.parts.account.logOut());
+        AppExitResponse? response;
+        unawaited(exit.leave().then((value) => response = value));
+        time.elapse(Duration.zero);
+        expect(response, isNull);
+
+        removal.complete();
+        time.elapse(Duration.zero);
+        expect(response, AppExitResponse.exit);
+        expect(saved, isNull);
+        expect(methods, ['DELETE']);
+        revoke.complete(http.Response('', 204));
+        time.elapse(Duration.zero);
+        expect(saved, isNull);
+      } finally {
+        window.dispose();
+        exit.closing.dispose();
+      }
+    });
+  });
 
   test('a save still going lands before the engines stop and the log '
       'closes', () async {
