@@ -110,13 +110,13 @@ class _PlayerDialogState extends State<_PlayerDialog>
     'rating': 'Rating',
     'notes': 'Prep notes',
   };
+  String _initialText(String key) => key == 'aliases'
+      ? widget.player?.strings(key).join('; ') ?? ''
+      : widget.player?.text(key) ?? '';
+
   late final _boxes = {
     for (final key in fields.keys)
-      key: TextEditingController(
-        text: key == 'aliases'
-            ? widget.player?.strings(key).join('; ') ?? ''
-            : widget.player?.text(key) ?? '',
-      ),
+      key: TextEditingController(text: _initialText(key)),
   };
   late final _files = {...?widget.player?.files};
   @override
@@ -129,21 +129,35 @@ class _PlayerDialogState extends State<_PlayerDialog>
 
   Future<void> _save() async {
     if (!_form.currentState!.validate()) return;
-    final player = (widget.player ?? Player.create(_boxes['name']!.text))
-        .edited({
-          'pgn_files': _files.toList(),
-          for (final e in _boxes.entries)
-            e.key: switch (e.key) {
-              'aliases' =>
-                e.value.text
-                    .split(';')
-                    .map((s) => s.trim())
-                    .where((s) => s.isNotEmpty)
-                    .toList(),
-              'rating' || 'fide_id' => int.tryParse(e.value.text),
-              _ => e.value.text.trim(),
-            },
-        });
+    final original = widget.player;
+    final files = original?.fields['pgn_files'];
+    final aliases = original?.fields['aliases'];
+    final player = (original ?? Player.create(_boxes['name']!.text)).edited({
+      if (original == null)
+        'pgn_files': <String>[]
+      else if (files is List<Object?> &&
+          files.whereType<String>().any((file) => !_files.contains(file)))
+        'pgn_files': [
+          for (final file in files)
+            if (file is! String || _files.contains(file)) file,
+        ],
+      for (final e in _boxes.entries)
+        if (original == null || e.value.text != _initialText(e.key))
+          e.key: switch (e.key) {
+            'aliases' => [
+              ...e.value.text
+                  .split(';')
+                  .map((s) => s.trim())
+                  .where((s) => s.isNotEmpty),
+              if (aliases is List<Object?>)
+                ...aliases.where((entry) => entry is! String)
+              else if (aliases != null && aliases is! String)
+                aliases,
+            ],
+            'rating' || 'fide_id' => int.tryParse(e.value.text),
+            _ => e.value.text.trim(),
+          },
+    });
     const failed = 'Save could not complete. Retry from the player list.';
     final saved = await attempt(
       'save player',
