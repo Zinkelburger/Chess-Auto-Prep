@@ -295,6 +295,24 @@ void main() {
     expect(tree.nodeAt(NodePath.of([1, 0, 0]))?.san, 'c4');
   });
 
+  test("removing a review keeps the player's replacement reply", () async {
+    final session = fixture.session;
+    await session.open(fixture.ref, game: 0);
+    expect(session.apply((chapter) => annotateGame(chapter, reviewed)), isNull);
+    final d4 = NodePath.of([1]);
+    final reply = d4.mainChild;
+    expect(session.tree!.nodeAt(reply)?.san, 'd5');
+    expect(deleteFrom(session, reply), isNull);
+    session.cursor.goTo(d4);
+    session.playMove('g8f6');
+    expect(session.tree!.nodeAt(reply)?.san, 'Nf6');
+
+    review.setAnnotate(false);
+    final tree = session.tree!;
+    expect(tree.lineTo(reply).map((node) => node.san), ['d4', 'Nf6']);
+    expect(hasReview(tree), isFalse);
+  });
+
   test("a note on the review line's first move survives removal", () {
     final marked =
         annotateGame(fixture.session.chapter!, reviewed) as ChapterEdited;
@@ -424,6 +442,38 @@ void main() {
     expect(review.annotated, isTrue);
     expect(fixture.session.tree!.children.first.nags, contains(4));
   });
+
+  test(
+    'Analyze again writes fresh evaluations when Annotate PGN is checked',
+    () async {
+      fixture.session.holdsEdits = false;
+      review.setAnnotate(false);
+      expect(review.annotate, isFalse);
+
+      const saved =
+          '[Event "Reviewed"]\n[Result "*"]\n\n'
+          '{[%eval +0.10] [%cap_review_eval]} '
+          '1. d4 {[%eval +0.15] [%cap_review_eval]} *';
+      final ref = chapterRef('KID', 'Reviewed');
+      fixture.store.documents[ref] = Opened(saved, scriptedRevision(saved));
+      await fixture.session.open(ref);
+      expect(review.annotate, isTrue);
+
+      final running = review.start();
+      for (final move in ['d2d4', 'd7d5']) {
+        await pumpEventQueue();
+        engine.current.emit(
+          line(depth: 14, score: const Centipawns(35), pv: [move]),
+        );
+        engine.current.end();
+      }
+      await running;
+      expect(review.problem, isNull);
+      await fixture.saver.flush();
+      final pgn = (fixture.store.documents[ref] as Opened).text;
+      expect(pgn, contains('[%eval -0.35]'));
+    },
+  );
 
   test(
     'turning the switch on for a game that has the review keeps it',

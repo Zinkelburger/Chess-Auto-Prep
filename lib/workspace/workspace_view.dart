@@ -555,6 +555,7 @@ class _ExplorerTab extends StatelessWidget {
             tree: workspace.tree,
             books: workspace.books,
             openings: workspace.openings,
+            onMove: hooks.onExplorerMove,
             onOpenGame: hooks.onExplorerGame == null
                 ? null
                 : (game) {

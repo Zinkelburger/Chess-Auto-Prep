@@ -105,12 +105,7 @@ SettingRow? _updateRow(AppUpdates updates) {
     ),
     UpdateFailed(:final problem, :final offer) => SettingRow(
       offer == null ? 'Update' : name(offer),
-      ActionSetting(
-        'Try again',
-        offer != null && offer.installable
-            ? () => updates.install()
-            : () => updates.check(),
-      ),
+      ActionSetting('Try again', updates.retry),
       hint: problemText(problem),
       warn: true,
     ),

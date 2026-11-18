@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 
 import '../../chess/fen.dart';
 import '../../chess/pgn/pgn_reader.dart';
-import '../../chess/pgn/tree_edit.dart' show positionOf;
 import '../../chess/tactics/analyzed_games.dart' show isAnalyzed;
 import '../../chess/tactics/game_ids.dart';
 import '../../chess/tactics/mining.dart';
@@ -696,16 +695,14 @@ Future<GameReview?> reviewGame(
   final found = <MinedPuzzle>[];
   var counts = const MistakeCounts();
   for (final move in movesBy(tree, side)) {
-    final position = positionOf(move.after);
-    if (position == null) continue;
-    final outcome = position.outcome;
-    if (outcome?.winner != null) continue;
+    final over = isOver(move.after);
+    if (over && !isDraw(move.after)) continue;
     final before = await verdictAt(engine, move.before, depth: reviewDepth);
     if (before == null) return null;
     if (playedBest(move, before)) continue;
-    final after = outcome == null
-        ? await verdictAt(engine, move.after, depth: reviewDepth)
-        : const Verdict();
+    final after = over
+        ? const Verdict()
+        : await verdictAt(engine, move.after, depth: reviewDepth);
     if (after == null) return null;
     final kind = judge(before, after);
     if (kind == null) continue;

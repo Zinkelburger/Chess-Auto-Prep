@@ -92,6 +92,25 @@ void main() {
       );
     });
 
+    test('saves a game after an empty first download', () async {
+      const site = GameSite.lichess;
+      final when = DateTime.utc(2026, 9, 22);
+      expect(await cache.keep(site, 'me', const [], when), isA<GamesKept>());
+
+      final reopened = GamesCache(
+        PgnFileStore(documents: fixture.documents, support: fixture.support),
+        folder: cache.folder,
+      );
+      expect(
+        await reopened.keep(site, 'me', [scholarsMate], when),
+        isA<GamesKept>(),
+      );
+      final snapshot = await reopened.snapshotAll(site, 'me');
+      expect((snapshot as CachedGamesSnapshot).games.map((g) => g.text), [
+        scholarsMate,
+      ]);
+    });
+
     test('keeps new games at the end, once each, with when they came '
         'down', () async {
       final when = DateTime(2026, 9, 22, 10);

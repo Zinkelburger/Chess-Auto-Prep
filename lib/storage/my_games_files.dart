@@ -291,11 +291,14 @@ final class GamesCache {
   ) async {
     final fresh = await freshGamesOf(text, downloaded);
     if (fresh.isEmpty) return _done;
-    final base = text.trimRight();
+    var separator = '';
+    if (text.isNotEmpty && !text.endsWith('\n\n')) {
+      separator = text.endsWith('\n') ? '\n' : '\n\n';
+    }
     final joined = fresh.join('\n\n');
     final saved = await _store.save(
       ref,
-      base.isEmpty ? '$joined\n' : '$base\n\n$joined\n',
+      '$text$separator$joined\n',
       expected: revision,
       scope: GamesEdited(GamesWritten(appended: fresh.length)),
     );

@@ -4,9 +4,11 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:chess_auto_prep/diagnostics/log.dart';
+import 'package:chess_auto_prep/features/settings/lichess_account.dart';
 import 'package:chess_auto_prep/net/lichess_http.dart';
 import 'package:chess_auto_prep/net/lichess_login.dart';
 import 'package:crypto/crypto.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -111,6 +113,88 @@ void main() {
       expect(lines.join(), isNot(contains(secret)));
     },
   );
+
+  test('a stalled browser launcher times out and frees the account', () {
+    fakeAsync((time) {
+      final listener = _CallbackListener();
+      final launcher = Completer<bool>();
+      var launching = false;
+      final login = LichessLoginApi(
+        lichess(),
+        openBrowser: (_) {
+          launching = true;
+          return launcher.future;
+        },
+        wait: const Duration(seconds: 5),
+      );
+      final owner = LichessAccountState(
+        login: login,
+        read: () async => null,
+        write: (_) async => true,
+      );
+      try {
+        var settled = false;
+        IOOverrides.runZoned(
+          () {
+            unawaited(owner.logIn().then((_) => settled = true));
+          },
+          serverSocketBind:
+              (_, _, {backlog = 0, v6Only = false, shared = false}) async =>
+                  listener,
+        );
+        time.flushMicrotasks();
+        expect(launching, isTrue);
+        time.elapse(login.wait);
+
+        expect(settled, isTrue);
+        expect(owner.problem, LoginProblem.timedOut.sentence);
+        expect(listener.closed, isTrue);
+        bool? accepted;
+        unawaited(owner.useToken('lip_next').then((value) => accepted = value));
+        time.flushMicrotasks();
+        expect(accepted, isTrue);
+        launcher.complete(false);
+        time.flushMicrotasks();
+        expect(owner.status, isA<SignedIn>());
+      } finally {
+        owner.dispose();
+        time.flushMicrotasks();
+      }
+    });
+  });
+
+  test('Copy link gives the player a full callback window', () {
+    fakeAsync((time) {
+      final listener = _CallbackListener();
+      final launcher = Completer<bool>();
+      final login = LichessLoginApi(
+        lichess(),
+        openBrowser: (_) => launcher.future,
+      );
+      final (outcome, page) = IOOverrides.runZoned(
+        () => start(login, opens: false),
+        serverSocketBind:
+            (_, _, {backlog = 0, v6Only = false, shared = false}) async =>
+                listener,
+      );
+      var linkShown = false;
+      LoginOutcome? result;
+      unawaited(page.then((_) => linkShown = true));
+      unawaited(outcome.then((value) => result = value));
+
+      time.elapse(const Duration(minutes: 1));
+      launcher.complete(false);
+      time.flushMicrotasks();
+      expect(linkShown, isTrue);
+      time.elapse(login.wait - const Duration(seconds: 1));
+      expect(listener.closed, isFalse);
+      expect(result, isNull);
+
+      time.elapse(const Duration(seconds: 1));
+      expect((result as LoginFailed).problem, LoginProblem.timedOut);
+      expect(listener.closed, isTrue);
+    });
+  });
 
   test('the page asks Lichess with S256 and a loopback redirect', () async {
     final login = api();
@@ -356,4 +440,26 @@ void main() {
       expect(await outcome, isA<LoginCancelled>());
     }
   });
+}
+
+final class _CallbackListener extends StreamView<Socket>
+    implements ServerSocket {
+  _CallbackListener() : this._(StreamController<Socket>.broadcast());
+  _CallbackListener._(this._connections) : super(_connections.stream);
+
+  final StreamController<Socket> _connections;
+
+  bool get closed => _connections.isClosed;
+
+  @override
+  int get port => lichessCallbackPort;
+
+  @override
+  InternetAddress get address => InternetAddress.loopbackIPv4;
+
+  @override
+  Future<ServerSocket> close() async {
+    await _connections.close();
+    return this;
+  }
 }
