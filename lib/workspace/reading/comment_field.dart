@@ -144,6 +144,7 @@ class _CommentFieldState extends State<CommentField>
     // one never go into the next: the session asked for them before it
     // left ([DocumentSession.committingEditors]).
     if (at == null || text == _given || _documentOf(session) != _in) return;
+    final before = session.commentAt(at);
     _committing = true;
     try {
       session.setComment(at, text);
@@ -153,8 +154,14 @@ class _CommentFieldState extends State<CommentField>
     // Words the session refused are still the user's: until it takes them
     // the field goes on showing them, to be put right, and the strip says
     // why.
-    if (displayComment(session.commentAt(at) ?? '') == displayComment(text)) {
+    final after = session.commentAt(at);
+    final shown = displayComment(after ?? '');
+    if (shown == displayComment(text)) {
       _given = text;
+    } else if (after != before) {
+      // Clearing a merged note can reveal another game's words.
+      _given = shown;
+      _controller.text = shown;
     }
   }
 
