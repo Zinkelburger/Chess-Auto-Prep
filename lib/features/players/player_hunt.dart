@@ -255,13 +255,15 @@ final class PlayerHunt extends ChangeNotifier {
         done++;
         _notify();
       }
-      if (!await analysis.currentSources()) {
+      final current = await analysis.currentSources();
+      // A run overtaken meanwhile leaves the findings to the one after it.
+      if (ticket.overtaken) return;
+      if (!current) {
         findings = [];
         throw StateError(
           'Games changed during analysis. Reload and run again.',
         );
       }
-      if (ticket.overtaken) return;
       analysis.evals.addAll(scores);
       // Kept before the listeners hear of it, in case one ends this run.
       _keep();

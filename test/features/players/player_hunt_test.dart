@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_auto_prep/chess/players/player.dart';
@@ -23,13 +24,14 @@ const _game =
     '[Event "Club"]\n[White "Alex"]\n[Black "Bob"]\n[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 1-0';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  late ScriptedDocumentStore store;
   late PlayerAnalysis analysis;
   late PlayerHunt hunt;
   late ScriptedEngine engine;
   late PlayerReports reports;
   late Player player;
   setUp(() async {
-    final store = ScriptedDocumentStore();
+    store = ScriptedDocumentStore();
     const ref = DocumentRef('/p.pgn');
     store.documents[ref] = Opened(_game, scriptedRevision(_game));
     analysis = PlayerAnalysis(
@@ -71,6 +73,48 @@ void main() {
       expect(analysis.evals.values, contains(-125));
     },
   );
+  test(
+    'finishing obsolete analysis preserves the selected player’s cached findings',
+    () async {
+      final first = player;
+      const file = DocumentRef('/second.pgn');
+      final text = _game.replaceFirst('Alex', 'Bea');
+      store.documents[file] = Opened(text, scriptedRevision(text));
+      final second = Player.create('Bea').edited({
+        'pgn_files': [file.path],
+      });
+      await analysis.select(second);
+      final caching = hunt.start();
+      await pumpEventQueue();
+      engine.current.emit(line(depth: 14, score: const Centipawns(-180)));
+      engine.current.end();
+      await caching;
+      await analysis.pending.settle();
+      expect(hunt.findings.single.score.text, '-1.80');
+
+      await analysis.select(first);
+      engine = ScriptedEngine();
+      final oldRun = hunt.start();
+      await pumpEventQueue();
+      final release = store.readEarly = Completer<void>();
+      engine.current.emit(line(depth: 14, score: const Centipawns(-125)));
+      engine.current.end();
+      await pumpEventQueue();
+      expect(
+        store.readEarly,
+        isNull,
+        reason: 'final source validation is waiting',
+      );
+      await analysis.select(second);
+      await pumpEventQueue();
+      expect(hunt.findings.single.score.text, '-1.80');
+      release.complete();
+      await oldRun;
+      expect(analysis.player?.id, second.id);
+      expect(hunt.findings.map((finding) => finding.score.text), ['-1.80']);
+    },
+  );
+
   // In-memory reports: a disk read is real I/O that pumpEventQueue does not
   // wait for.
   test('a cancelled reload of the same player restores the report', () async {
