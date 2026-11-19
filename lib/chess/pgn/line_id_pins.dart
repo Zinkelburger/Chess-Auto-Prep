@@ -104,13 +104,15 @@ String _idSpelling(String spelling) {
   return spelling.startsWith('0') ? spelling.replaceAll('0', 'O') : spelling;
 }
 
-/// [after], an edit of [before] placed by [games], with every game the edit
-/// rewrote or moved whose id would change carrying the id it was trained
-/// under in [before], and the arrangement naming those games as rewritten.
+/// [after], an edit of [before] placed by [games], with every game it kept
+/// whose id would change carrying the id it was trained under in [before],
+/// and the arrangement naming those games as rewritten.
 ///
 /// A game whose id header another game above it also carries is trained
 /// under an id worked out from its place, so its header is rewritten to that
-/// id too. A game that had no id, having no moves, and would now take one a
+/// id too. That holds for a game the edit left alone as well: when the game
+/// above it that claimed the id first loses its moves or goes, the one left
+/// would take the id, and with it the other line's training history. A game that had no id, having no moves, and would now take one a
 /// kept line was trained under is given a new one ([newLineId]) instead.
 /// Each pin can change which game claims an id first, so the ids are asked
 /// again until the edited games all keep theirs.
@@ -134,8 +136,22 @@ String _idSpelling(String spelling) {
         (place: place, from: from),
   ];
   if (moved.isEmpty) return (chapter: after, games: games);
+  // Ids are claimed in file order, so an edit can change the id of any game
+  // it kept, not only those it wrote. A game it did not write is pinned only
+  // while its text is what it was: an undeclared change is the store's to
+  // refuse, not this to cover.
+  final kept = [
+    for (final (place, from) in games.order.indexed)
+      if (from != null &&
+          place < after.lines.length &&
+          (from != place ||
+              games.rewritten.contains(from) ||
+              (from < before.lines.length &&
+                  after.lines[place].text == before.lines[from].text)))
+        (place: place, from: from),
+  ];
   final was = trainedIdsOf(before);
-  final kept = {
+  final keptIds = {
     for (final from in games.order.nonNulls)
       if (from < was.length) ?was[from],
   };
@@ -147,7 +163,7 @@ String _idSpelling(String spelling) {
     // The ids are read off the games alone; building the chapter around them
     // would merge every game of the file again on each pass.
     final now = trainedIds(lines);
-    for (final (:place, :from) in moved) {
+    for (final (:place, :from) in kept) {
       if (pinned.contains(from)) continue;
       final id = from < was.length ? was[from] : null;
       final line = lines[place];
@@ -160,7 +176,7 @@ String _idSpelling(String spelling) {
         written = withIdHeader(line, id);
       } else {
         final claimed = now[place];
-        if (claimed == null || !kept.contains(claimed)) continue;
+        if (claimed == null || !keptIds.contains(claimed)) continue;
         taken ??= {...idsInUse(before), ...idsInUse(after)};
         final fresh = newLineId(mainLineSpellings(line.tree!), place, taken);
         written = withIdHeader(line, fresh);

@@ -213,7 +213,9 @@ time.
   (path, section).
 - `[LineID]` is a line's training identity. A game without one is trained under an id derived from
   its moves and place, so any edit that rewrites, moves or re-places it pins
-  `[LineID]` first. Losing it orphans the line's training history.
+  `[LineID]` first. Losing it orphans the line's training history. Two games
+  sharing a `[LineID]` train the first under it; when an edit takes that one's
+  moves or place, the other is pinned to the id it trained under too.
 - A move played where no line goes on is written as a new game at the end
   of the file: `[Event "<the line it left> — 1.d4"]`, `Me` / `Training` as
   the players (by the side), `*`, and a `[LineID]`.
