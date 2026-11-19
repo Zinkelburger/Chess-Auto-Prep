@@ -11,8 +11,8 @@
 /// carrying one id header only the first with moves is trained under it,
 /// so an edit that moves the other one rewrites its header the same way.
 ///
-/// Only games an edit already touches are pinned; a game the edit leaves
-/// where it was keeps its bytes and the id they give it.
+/// A game the edit leaves where it was keeps its bytes, unless the edit
+/// would hand it another game's id: then it is pinned to its own as well.
 library;
 
 import 'dart:convert';
@@ -112,8 +112,9 @@ String _idSpelling(String spelling) {
 /// under an id worked out from its place, so its header is rewritten to that
 /// id too. That holds for a game the edit left alone as well: when the game
 /// above it that claimed the id first loses its moves or goes, the one left
-/// would take the id, and with it the other line's training history. A game that had no id, having no moves, and would now take one a
-/// kept line was trained under is given a new one ([newLineId]) instead.
+/// would take the id, and with it the other line's training history. A
+/// game that had no id, having no moves, and would now take one a kept line
+/// was trained under is given a new one ([newLineId]) instead.
 /// Each pin can change which game claims an id first, so the ids are asked
 /// again until the edited games all keep theirs.
 ///
