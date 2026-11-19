@@ -107,8 +107,8 @@ Deploy `dist/` to Cloudflare Pages. Set `PUBLIC_API_URL` to `https://api.chessau
 Routes: `/twic-notifications` is the one alerts page (anonymous: create an
 alert / request a login link; signed in: manage alerts — login emails link
 here with `?token=`); `/pgn` and `/expectimax` the analysis board;
-`/tactics` the in-browser tactics trainer; `/bughouse` and
-`/bughouse-puzzles` the bughouse tools; `/charles-clock` the clock.
+`/tactics` the in-browser tactics trainer; `/bughouse`,
+`/bughouse-puzzles` and `/bughouse-games` the bughouse tools; `/charles-clock` the clock.
 `/dashboard` only forwards to `/twic-notifications`. Every page is
 documented in [frontend/README.md](frontend/README.md).
 

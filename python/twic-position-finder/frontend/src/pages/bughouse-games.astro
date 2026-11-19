@@ -1,0 +1,115 @@
+---
+import Base from '../layouts/Base.astro';
+import '../styles/trainer.css';
+import '../styles/bughouse-board.css';
+import '../styles/bughouse-puzzles.css';
+import '../styles/bughouse-games.css';
+
+const icon = {
+  back: 'M19 12H5M12 19l-7-7 7-7',
+  first: 'M18 17l-5-5 5-5M11 17l-5-5 5-5',
+  prev: 'M15 18l-6-6 6-6',
+  next: 'M9 18l6-6-6-6',
+  last: 'M6 17l5-5-5-5M13 17l5-5-5-5',
+  flip: 'M7 4v16M7 4l-3 3M7 4l3 3M17 20V4M17 20l-3-3M17 20l3-3',
+};
+const boards = ['A', 'B'] as const;
+---
+<Base
+  title="Bughouse Games"
+  description="Bughouse games played by engines, HypeBeast against itself or another engine, with notes written from the engines’ search logs. Step through both boards at once and see why a move was played."
+  full
+>
+  <div class="bg" id="bg" data-view="list" data-state="loading">
+    <section class="bg-list-view" aria-labelledby="bg-list-title">
+      <header class="bg-list-head">
+        <h1 id="bg-list-title">Bughouse Games</h1>
+        <p class="lede">
+          Bughouse between engines, both boards at once, with notes on why a move was chosen, what was expected next
+          and what was weighed instead.
+        </p>
+        <p class="bg-source" id="bg-source"></p>
+      </header>
+      <div class="bg-list-status">
+        <p class="bg-list-message" id="bg-list-message" role="status">Reading games…</p>
+        <button type="button" class="btn btn-outline btn-sm" id="bg-list-retry" hidden>Try again</button>
+      </div>
+      <ol class="bg-games" id="bg-games"></ol>
+    </section>
+
+    <section class="bg-game-view" id="bg-game-view" aria-label="Game">
+      <div class="bg-layout">
+        {boards.map((b) => (
+          <section class="bg-board" data-board={b} aria-label={`Board ${b}`}>
+            <div class="bg-board-head">
+              <span class="bg-board-name">Board {b}</span>
+              <span class="bg-var-tag" id={`bg-var-tag-${b}`} hidden>Variation</span>
+              <span class="bg-eval num" id={`bg-eval-${b}`}></span>
+            </div>
+            <div class="bg-seat" id={`bg-seat-${b}-top`}></div>
+            <div class="trainer-board bg-board-wrap">
+              <div id={`bg-cg-${b}`} class="bb-board" role="img" aria-label={`Board ${b}`}></div>
+              <div class="bp-skeleton" aria-hidden="true"></div>
+            </div>
+            <div class="bg-seat" id={`bg-seat-${b}-bottom`}></div>
+          </section>
+        ))}
+
+        <aside class="bg-side" aria-label="Moves and notes">
+          <div class="bg-head">
+            <a href="/bughouse-games" class="bg-icon bg-back" id="bg-back" title="Back to games" aria-label="Back to games">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.back}/></svg>
+            </a>
+            <h1 class="bg-title" id="bg-title">Bughouse Games</h1>
+          </div>
+          <p class="bg-meta" id="bg-meta"></p>
+
+          <div class="bg-problem" id="bg-problem" role="alert" hidden>
+            <p class="bg-problem-text" id="bg-problem-text"></p>
+            <button type="button" class="btn btn-outline btn-sm" id="bg-game-retry">Try again</button>
+          </div>
+
+          <div class="bg-var-bar" id="bg-var-bar" hidden>
+            <span id="bg-var-text"></span>
+            <button type="button" class="btn btn-outline btn-sm" id="bg-var-back" title="Back to the game (Esc)">Back to the game</button>
+          </div>
+
+          <div class="bg-note scroll-thin" id="bg-note" aria-live="polite"></div>
+
+          <div class="bg-moves scroll-thin" id="bg-moves" aria-label="Moves on both boards"></div>
+
+          <div class="bg-controls" role="toolbar" aria-label="Moves">
+            <button type="button" class="bg-icon" id="bg-first" title="Start of the game (Home or ↑)" aria-label="Start of the game">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.first}/></svg>
+            </button>
+            <button type="button" class="bg-icon" id="bg-prev" title="Previous move (←)" aria-label="Previous move">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.prev}/></svg>
+            </button>
+            <button type="button" class="bg-icon" id="bg-next" title="Next move (→)" aria-label="Next move">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.next}/></svg>
+            </button>
+            <button type="button" class="bg-icon" id="bg-last" title="End of the game (End or ↓)" aria-label="End of the game">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.last}/></svg>
+            </button>
+            <span class="bg-controls-gap"></span>
+            <button type="button" class="btn btn-text btn-sm" id="bg-prev-note" title="Previous note (P)">‹ Note</button>
+            <button type="button" class="btn btn-text btn-sm" id="bg-next-note" title="Next note (N)">Note ›</button>
+            <button type="button" class="bg-icon" id="bg-flip" title="Flip the boards (F)" aria-label="Flip the boards" aria-pressed="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.flip}/></svg>
+            </button>
+          </div>
+
+          <div class="bg-foot">
+            <a id="bg-analysis" class="link-ext" href="/bughouse">Analyse this position ↗</a>
+            <span class="bg-foot-note">Scores are each engine’s own, in pawns from White’s side of that board; beyond 20 they show as &gt;+20.</span>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </div>
+</Base>
+
+<script>
+  import { BughouseGamesApp } from '../bughouse-games/app';
+  new BughouseGamesApp();
+</script>
