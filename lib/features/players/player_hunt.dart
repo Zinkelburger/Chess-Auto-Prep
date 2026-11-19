@@ -389,7 +389,7 @@ final class PlayerHunt extends ChangeNotifier {
           );
         }
       } on Object catch (e) {
-        practicalWarning = 'Practical search skipped: $e';
+        if (ticket.current) practicalWarning = 'Practical search skipped: $e';
         return;
       }
     }

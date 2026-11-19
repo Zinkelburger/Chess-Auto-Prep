@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/players/player.dart';
 import 'package:chess_auto_prep/engines/engine_line.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/engines/maia/move_policy.dart';
 import 'package:chess_auto_prep/features/players/player_analysis.dart';
 import 'package:chess_auto_prep/features/players/player_hunt.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
@@ -199,6 +201,24 @@ void main() {
       );
     },
   );
+  test('an obsolete Maia failure leaves practical probes enabled', () async {
+    final model = _WaitingPolicy();
+    hunt.dispose();
+    hunt = PlayerHunt(analysis, () async => Started(engine), model: model)
+      ..configure(limit: 1, practical: true);
+    analysis.configure(minPly: 1);
+    await pumpEventQueue();
+    final running = hunt.start();
+    await pumpEventQueue();
+    engine.current.emit(line(depth: 14, pv: ['c7c5']));
+    engine.current.end();
+    await model.asked.future;
+    hunt.stop();
+    model.answer.complete(const MaiaFailed('late failure'));
+    await running;
+    expect(hunt.practicalWarning, isNull);
+  });
+
   test('a castle the games played is not an unseen reply', () async {
     // The engine names castling king to its square (e8g8); the games name
     // it king onto rook (e8h8). Both are the reply these games met.
@@ -332,4 +352,15 @@ void main() {
     expect((scoreFromPacked(10000) as MateIn).mating, true);
     expect((scoreFromPacked(-10000) as MateIn).mating, false);
   });
+}
+
+final class _WaitingPolicy implements MovePolicy {
+  final asked = Completer<void>();
+  final answer = Completer<MaiaAnswer>();
+
+  @override
+  Future<MaiaAnswer> policy(Fen fen, int elo) {
+    asked.complete();
+    return answer.future;
+  }
 }
