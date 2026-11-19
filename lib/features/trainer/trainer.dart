@@ -319,6 +319,10 @@ class Trainer extends ChangeNotifier {
   /// Counts loads, so an older one that finishes late is not taken for the
   /// newest when both asked for the same thing.
   final _loads = Latest();
+
+  /// Counts [trainLineThrough] requests: one that finishes after a newer
+  /// one started must not replace the newer one's lesson.
+  final _lineRequests = Latest();
   bool _disposed = false;
 
   /// The board while a sitting holds it; null otherwise.
@@ -451,12 +455,15 @@ class Trainer extends ChangeNotifier {
   /// from elsewhere, such as a trap from the Positions list. The chapter as
   /// it stands now is read first. False when no such line can be trained.
   Future<bool> trainLineThrough(List<String> sans) async {
+    final request = _lineRequests.begin();
     await _load(force: true);
     await _loadsSettled();
     final state = _state;
     final source = _session.source?.path;
     final start = _session.tree?.rootFen.position;
-    if (_disposed || state is! TrainerReady || source == null) return false;
+    if (request.overtaken || state is! TrainerReady || source == null) {
+      return false;
+    }
     if (start == null) return false;
     bool plays(TrainingLine line) =>
         line.key.source == source &&
@@ -819,6 +826,7 @@ class Trainer extends ChangeNotifier {
     // A load still reading is overtaken: it makes no progress to leak and
     // tells nobody.
     _loads.close();
+    _lineRequests.close();
     selection.removeListener(_selectionChanged);
     selection.dispose();
     settings?.removeListener(_settingsChanged);

@@ -107,6 +107,28 @@ void main() {
     },
   );
 
+  test('a late prefix request cannot replace the newer lesson', () async {
+    const text =
+        '$_text\n\n[Event "Queen pawn"]\n[LineID "queen"]\n\n1. d4 d5 *';
+    session.externalEdit(text);
+    await session.session.reloadFromDisk();
+    trainer.setScope(TrainScope.repertoire);
+    await trainer.reload();
+    chapters.hold = true;
+    final older = trainer.trainLineThrough(['e4']);
+    await pumpEventQueue();
+    final newer = trainer.trainLineThrough(['d4']);
+    await pumpEventQueue();
+    expect(chapters.pendingCalls, 2);
+    chapters.releaseLast();
+    expect(await newer, isTrue);
+    final lesson = trainer.lesson;
+    expect(lesson!.line.key.id, 'queen');
+    chapters.releaseNext();
+    expect(await older, isFalse);
+    expect(trainer.lesson, same(lesson));
+  });
+
   test('an unreadable chapter is left out and the rest are trained', () {
     fakeAsync((clock) {
       session.store.documents[ref('KID', 'Other')] = const Unreadable(
