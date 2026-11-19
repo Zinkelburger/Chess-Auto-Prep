@@ -148,7 +148,9 @@ final class DraftKeeper {
     _schedule();
     _flush();
     _inTurn(() async {
-      final old = {...?_movedFrom.remove(from), from};
+      // Renamed back, [to] is one of the old names: its checkpoint is the
+      // one just written, not one to drop.
+      final old = {...?_movedFrom.remove(from), from}..remove(to);
       if (_unkept.containsKey(to)) {
         (_movedFrom[to] ??= {}).addAll(old);
         return;

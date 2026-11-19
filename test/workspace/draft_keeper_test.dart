@@ -450,6 +450,35 @@ void main() {
       expect(draftFiles(), isEmpty);
     });
 
+    test('a file renamed back after its new checkpoint failed keeps the '
+        'checkpoint of its edits', () async {
+      final app = run();
+      addTearDown(app.kill);
+      await app.session.open(games, game: 0);
+      app.session.setComment(NodePath.of(const [0]), 'Before rename');
+      expect(await app.keeper.settle(), isNull);
+      final folder = draftFiles().single.parent.path;
+      await FaultyDisk(disk.root).run(
+        lastingFault(
+          (op) =>
+              op.kind == IoKind.publishReplace &&
+              p.isWithin(folder, op.to ?? op.path),
+          IoError.enospc,
+        ),
+        () async {
+          app.session.relocated(collectionRef('renamed'));
+          expect(await app.keeper.settle(), isNotNull);
+        },
+      );
+
+      app.session.relocated(games);
+      // Waits for the writes the rename asked for, and not for the next
+      // checkpoint, which only rewrites the edits a second later.
+      expect(await app.keeper.kept(other.path), isNull);
+      expect(app.session.hasHeldEdits, isTrue);
+      expect(checkpointText(), contains('Before rename'));
+    });
+
     test('an edit made just before the window closes is kept: settling '
         'writes it before its second is up', () async {
       final first = run();
