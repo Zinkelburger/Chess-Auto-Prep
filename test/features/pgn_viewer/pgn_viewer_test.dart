@@ -231,6 +231,20 @@ void main() {
     ]);
   });
 
+  test('a draw is found by either spelling of its result', () async {
+    fixture = await viewerOver(
+      '[Event "One"]\n[Result "1-0"]\n\n1. e4 1-0\n\n'
+      '[Event "Two"]\n[Result "1/2-1/2"]\n\n1. c4 1/2-1/2',
+    );
+    await fixture.open();
+    final viewer = fixture.viewer;
+    expect(viewer.games.map((g) => g.result), ['1-0', '½-½']);
+    for (final draw in ['½-½', '1/2-1/2']) {
+      viewer.search(draw);
+      expect(viewer.gameOrder, [1], reason: draw);
+    }
+  });
+
   test(
     'an edit to one game keeps the list and the game on the board',
     () async {
