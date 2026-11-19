@@ -87,7 +87,10 @@ callback server on port 8919 (another free port when that is busy), scopes
 Lichess…`), `state` checked on the way back; the browser
 tab ends on a plain `Logged in.` / `Not logged in.` page. While waiting the
 hint reads `Waiting for the browser…` with `Cancel`, or `The browser did not
-open. Copy the link and open it.` with `Copy link` and `Cancel`. Signed in:
+open. Copy the link and open it.` with `Copy link` and `Cancel`. `Cancel`
+puts back what the row showed before, so a login started again over a saved
+account leaves that account signed in, and a grant that arrives after it is
+not saved. Signed in:
 `Logged in as <name> · until <date>` (or `· personal access token`) with `Log
 out`. Failures replace the hint in the error colour until the next attempt:
 `Lichess said the login was declined.`, `No answer from the browser in five
