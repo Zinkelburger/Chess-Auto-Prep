@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:chess_auto_prep/net/github_releases.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -71,6 +73,44 @@ void main() {
     expect(parseRelease(releaseJson(draft: true)).stable, isFalse);
     expect(parseRelease(releaseJson(prerelease: true)).stable, isFalse);
     expect(() => parseRelease({'tag_name': 3}), throwsFormatException);
+  });
+
+  test('a download that times out before headers releases the transfer', () {
+    fakeAsync((time) {
+      final headers = Completer<http.StreamedResponse>();
+      var aborted = false;
+      var released = false;
+      final client = MockClient.streaming((request, bytes) async {
+        await bytes.drain<void>();
+        if (request case http.Abortable(:final abortTrigger?)) {
+          unawaited(
+            abortTrigger.then((_) {
+              aborted = true;
+            }),
+          );
+        }
+        return headers.future;
+      });
+      AssetDownload? result;
+      final download = GitHubReleases(
+        client,
+      ).download(Uri.https('github.com', '/asset'));
+      unawaited(download.then((value) => result = value));
+      time.elapse(downloadStartTimeout);
+      expect(result, isA<AssetRefused>());
+
+      expect(aborted, isTrue);
+      final body = StreamController<List<int>>(
+        onCancel: () {
+          released = true;
+        },
+      );
+      headers.complete(http.StreamedResponse(body.stream, 200));
+      body.add([1]);
+      unawaited(body.close());
+      time.flushMicrotasks();
+      expect(released, isTrue);
+    });
   });
 
   test('a download streams its bytes or is refused', () async {
