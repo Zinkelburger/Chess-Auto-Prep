@@ -9,7 +9,7 @@ Static Astro site deployed to Cloudflare Pages. Browser preparation tools, one s
 | `/expectimax`         | The same board on its Expectimax tab: practical moves for both sides against Maia's replies, on this device | the same |
 | `/tactics`            | Tactics Trainer — Stockfish in the browser mines puzzles from games  | `src/tactics/*`                        |
 | `/bughouse`           | Bughouse — one board or both, + and − on every piece in both hands, lila's board editor, and what one more piece is worth; HypeBeast in the browser | `src/analysis/*`, `../../../tools/prepare_hypebeast_web.py` |
-| `/bughouse-puzzles`   | Bughouse Puzzles — mates and tactics mined from FICS games, reserves frozen | `src/bughouse-puzzles/*`, `public/bughouse-puzzles/` |
+| `/bughouse-puzzles`   | Bughouse Puzzles — mates and tactics mined from FICS games and engine games, reserves frozen | `src/bughouse-puzzles/*`, `public/bughouse-puzzles/` |
 | `/charles-clock`      | Charles Clock — a full-screen phone clock with its own `<html>`      | `src/pages/charles-clock.astro`, `src/lib/charles-clock.ts` |
 | `/meow-chess/`        | Meow Chess — the Meow-Chess tournament director app, a Flutter web build copied in from its own repository | `public/meow-chess/` (built), `functions/meow-chess/fetch.js` |
 
@@ -257,11 +257,22 @@ the Dart app, and Lichess agree on what a mistake is.
 
 ## Bughouse puzzles
 
-`public/bughouse-puzzles/` is generated, not hand-edited:
-`python3 -m bughouse_db puzzles --year 2017 --games 1500 --engine PATH` from
-`tools/` (Fairy-Stockfish binary; see `tools/bughouse_db/puzzles.py`). Each
-puzzle is one board of a real game with the reserves frozen: captures go to the
-partner and nothing arrives. The engine plays that rule through
+Two sets, both generated, not hand-edited, from `tools/` with a
+Fairy-Stockfish binary:
+
+- `public/bughouse-puzzles/`, from FICS games between people:
+  `python3 -m bughouse_db puzzles --year 2017 --games 1500 --engine PATH`
+  (see `tools/bughouse_db/puzzles.py`);
+- `public/bughouse-puzzles/engine/`, from HypeBeast's engine games (the
+  arena referee's `games.bpgn` files):
+  `python3 -m bughouse_db puzzles --arena ~/Projects/HypeBeast/logs --arena ~/Projects/HypeBeast-v5/logs --engine PATH`
+  (see `tools/bughouse_db/arena.py`). The same scan and verify, plus
+  candidates from the games' own recorded evaluation swings, a cheap
+  pre-check of tactics, and deduplication against the FICS set and per
+  opening line. `--scan-cache` and `--verify-log` make a long run resumable.
+
+Each puzzle is one board of a real game with the reserves frozen: captures go
+to the partner and nothing arrives. The engine plays that rule through
 `tools/bughouse_db/frozenhouse.ini` (crazyhouse with `capturesToHand = false`);
 Fairy-Stockfish's own `bughouse` variant also searches drops of pieces a
 partner might send, which made most early tactics wrong.
@@ -304,16 +315,21 @@ boards as the archive recorded them (`dual`), the UCI and SAN line, the legal
 moves at each solver step (the page has no move generator), `mates` at the
 last step of a mate puzzle, `cp` for an advantage puzzle, and the game
 context (players, ratings, FICS game number, date, time control, what was
-played and whether the player found it).
+played and whether the player found it). In the engine set the players are
+engine names (HypeBeast, HiveMind, Fairy-Stockfish), ratings are 0, `game` is
+a stable number for the match and round, and ids start with `e`, so a deep
+link names its set.
 
 ```
 set.ts          index/shard types, pure filtering + facet counts, theme/difficulty labels,
                 deep-link hash parsing, PuzzleStore (index once, shards on demand, prefetch of the next)
 puzzle.ts       data types, frozen-reserve moves, one Attempt (pure, tested in tests/puzzles.ts)
 board.ts        one chessground board with each side's frozen reserve above and below it
-app.ts          page controller: play, reply, Solution, Retry, #<id> deep links, results in
-                localStorage (bughouse-puzzles-v2); a Settings sheet holds the filters (kind,
-                length, level, theme, missed in the game), progress and the notes on the set
+app.ts          page controller: play, reply, Solution, Retry, #<id> deep links (opening the id's
+                set), results per set in localStorage (bughouse-puzzles-v2 for FICS,
+                bughouse-puzzles-engine-v1 for engine games, the chosen set in bughouse-puzzles-set);
+                a Settings sheet holds the set (From: Human games / Engine games), the filters
+                (kind, length, level, theme, missed in the game), progress and the notes on the set
 ../bughouse/    the reserve as lila's crazyhouse pocket, the promotion picker, FEN reading
 ```
 
@@ -360,7 +376,7 @@ build` runs all three and `astro check` first). Lichess answers non-browser
 user agents with 404, so a headless run that reaches it needs
 `page.setUserAgent(...)`.
 
-Two browser checks drive the built site in headless Chrome (`puppeteer-core`
+Three browser checks drive the built site in headless Chrome (`puppeteer-core`
 is a dev dependency; Chrome must be installed, `CHROME_BIN` overrides
 `/usr/bin/google-chrome`). Both serve `dist/` on loopback with
 `public/_headers` applied (`scripts/static-server.mjs`), so an isolation
@@ -370,6 +386,7 @@ mistake fails locally. From the repository root:
 scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run build
 scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test:prep:browser
 scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test:bughouse:browser
+scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test:puzzles:browser
 ```
 
 - `test:prep:browser` uses a fresh profile, blocks external requests, and
@@ -383,3 +400,7 @@ scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test
   partner's hand, the partner board's search, switching boards), through a
   failed download and a phone's first visit, and writes screenshots to
   `build/bughouse-web/`.
+- `test:puzzles:browser` drives `/bughouse-puzzles`: the FICS set by default,
+  Settings switching to engine games, one engine puzzle solved on the board,
+  results kept per set, and deep links opening the right set; screenshots
+  also go to `build/bughouse-web/`.
