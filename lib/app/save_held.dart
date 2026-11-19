@@ -15,7 +15,12 @@ Future<void> saveHeld(
   required WorkspaceRequests requests,
   required String collections,
 }) async {
-  if (session.readOnly == null) return session.keepHeld();
+  if (session.readOnly == null) {
+    if (!session.keepHeld()) {
+      requests.say('The file cannot take your edits yet. They stay unsaved.');
+    }
+    return;
+  }
   final where = await showOptionsDialog(
     context,
     title: 'Save your moves',

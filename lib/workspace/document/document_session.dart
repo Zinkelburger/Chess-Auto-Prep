@@ -714,15 +714,16 @@ final class DocumentSession extends ChangeNotifier {
     return Restored(writeChapter(restored.chapter));
   }
 
-  /// Writes the held edits to the file, as one save; read-only ones stay.
-  void keepHeld() {
+  /// Writes the held edits as one save; false when they stay held.
+  bool keepHeld() {
     _editors.commit();
     _saveHeld();
+    return _held == null;
   }
 
   void _saveHeld() {
     final held = _held;
-    if (held == null || _readOnly != null) return;
+    if (held == null || _readOnly != null || !_saver.takesWords) return;
     _held = null;
     _ended = HeldEditsEnded.kept;
     // An edit that gave the file a chapter took the board to it, and the
