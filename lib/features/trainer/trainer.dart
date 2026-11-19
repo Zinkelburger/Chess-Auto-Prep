@@ -434,25 +434,34 @@ class Trainer extends ChangeNotifier {
         final current = lines
             .where((candidate) => candidate.key == line.key)
             .firstOrNull;
-        return current == null ||
-                current.modelGame ||
-                progress.status(current) == LineStatus.excluded
+        return current == null || !_trainable(current, progress)
             ? const []
             : [current];
       });
 
+  /// Whether a sitting can ask [line]: not a model game, not excluded, and
+  /// with some of the user's moves in it.
+  static bool _trainable(TrainingLine line, TrainingProgress progress) =>
+      !line.modelGame &&
+      line.yourMoves > 0 &&
+      progress.status(line) != LineStatus.excluded;
+
   /// Trains the line of the chapter on the board that plays [sans] from its
-  /// start, the shortest when several do: a line sent from elsewhere, such
-  /// as a trap from the Positions list. The chapter as it stands now is
-  /// read first. False when no such line can be trained.
+  /// start, the shortest that can be trained when several do: a line sent
+  /// from elsewhere, such as a trap from the Positions list. The chapter as
+  /// it stands now is read first. False when no such line can be trained.
   Future<bool> trainLineThrough(List<String> sans) async {
     await _load(force: true);
     await _loadsSettled();
     final state = _state;
     final source = _session.source?.path;
+    final start = _session.tree?.rootFen.position;
     if (_disposed || state is! TrainerReady || source == null) return false;
+    if (start == null) return false;
     bool plays(TrainingLine line) =>
         line.key.source == source &&
+        line.start.isAt(start) &&
+        _trainable(line, state.progress) &&
         line.moves.length >= sans.length &&
         [for (final move in line.moves.take(sans.length)) move.san].join(' ') ==
             sans.join(' ');

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:chess_auto_prep/chess/training/schedule.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/features/trainer/trainer.dart';
 import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
@@ -65,6 +66,46 @@ void main() {
     analysis.dispose();
     session.dispose();
   });
+
+  test(
+    'a line sent to train skips model games, excluded lines and other starts',
+    () async {
+      const text = '''
+// Color: White
+
+[Event "Playable"]
+[LineID "play"]
+
+1. e4 e5 2. Nf3 *
+
+[Event "Model"]
+[ModelGameResult "1-0"]
+
+1. e4 *
+
+[Event "Excluded"]
+[LineID "excluded"]
+
+1. e4 c5 *
+
+[Event "Different start"]
+[SetUp "1"]
+[FEN "rnbqkbnr/1ppppppp/p7/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 2"]
+
+2. e4 *
+''';
+      session.externalEdit(text);
+      await session.session.reloadFromDisk();
+      final key = (source: session.ref.path, id: 'excluded');
+      progress.reviews[key] = Review(
+        key: key,
+        lineName: 'Excluded',
+        excluded: true,
+      );
+      expect(await trainer.trainLineThrough(['e4']), isTrue);
+      expect(trainer.lesson!.line.key.id, 'play');
+    },
+  );
 
   test('an unreadable chapter is left out and the rest are trained', () {
     fakeAsync((clock) {
