@@ -155,13 +155,21 @@ Moves inside text are in SAN exactly as they appear in the data (`N@f3+`,
   previous move; `after`: after this move). Clocks and board scores in a
   variation are those of that moment.
 - `words.ts` has the phrases. `waited.why` codes with a phrase:
-  `partner_mate`, `hold_partner_mate`, `mated`, `hold_mated`, `piece`,
-  `voluntary_wait`, `stall`, `stall_deny`; any other code reads "waited N s".
+  `partner_mate`, `mated`, `deny_feed`, `wait_delivery` (the builder's four);
+  any other code reads "waited N s".
   Line kinds: `played`, `instead`, `threat`, `arrives`; any other kind is
   shown as a plain "Line".
 - Each board's header shows the last `eval`/`mate` given on that board at or
-  before the current move.
-- `public/bughouse-games/` holds the served files. Until the real collection
-  lands there are two placeholder games (their `source`, titles and events
-  say PLACEHOLDER); replace the whole directory. `npm run test:games` checks
-  whatever is there: contract, file-name hashes, the index's counts.
+  before the current move. Scores beyond ±20 pawns show as `>+20` / `<−20`
+  (the exact number on hover); a mate is `#n`. A line's score with `mate`
+  set reads in words, "White mates in 3": inside a line the SAN of a mating
+  move may end in `+`, since a bughouse mate depends on the other board.
+- The index's `source` is shown under the list's introduction; it is where
+  the collection says who wrote the notes.
+- `public/bughouse-games/` holds the served files, written by the builder;
+  replace the whole directory to update the collection. `npm run test:games`
+  checks whatever is there against what the contract guarantees (contract,
+  file-name hashes, the index's counts, known line kinds and wait codes, and
+  every line moving only its own board); exact expectations use a small game
+  inside `tests/games.ts`. `npm run test:games:browser` picks its games and
+  moves from the files at run time.

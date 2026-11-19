@@ -16,7 +16,7 @@ import {
 } from './view';
 import {
   assumePhrase, boardTitle, entryResult, formatClock, formatEval, formatGameTime, gameResult, kindTitle, lengthLine,
-  lineContext, lineTokens, moveName, moveNumber, playersLine, seatLabel, sideName, waitPhrase,
+  lineContext, lineTokens, mateWords, moveName, moveNumber, playersLine, scoreWords, seatLabel, sideName, waitPhrase,
 } from './words';
 
 type State = 'loading' | 'ready' | 'error' | 'empty';
@@ -271,8 +271,10 @@ export class BughouseGamesApp {
       this.boards![b].render({ fen: view.fen[b], bottom, last: view.last[b], check: view.check[b], seats: { white: seatView('white'), black: seatView('black') } });
       const score = evalOn(game, this.cursor, b);
       const evalEl = $(`bg-eval-${b}`);
-      evalEl.textContent = score ? formatEval(score.eval, score.mate) : '';
-      evalEl.title = score ? `The engine’s own score after ${moveName(game.moves[score.move])}, from White’s side of board ${b}` : '';
+      evalEl.textContent = score ? formatEval(score.eval, score.mate, true) : '';
+      evalEl.title = score
+        ? `${score.mate !== null ? mateWords(score.mate) : formatEval(score.eval, null)}: the engine’s own score after ${moveName(game.moves[score.move])}, from White’s side of board ${b}`
+        : '';
       $(`bg-var-tag-${b}`).hidden = view.variation !== b;
       document.querySelector<HTMLElement>(`.bg-board[data-board="${b}"]`)!.classList.toggle('in-variation', view.variation === b);
     }
@@ -400,9 +402,9 @@ export class BughouseGamesApp {
     const facts = [`${sideName(white ? 'white' : 'black')} on board ${m.board}`, game.seats[m.seat]];
     if (m.t !== null) facts.push(`at ${formatGameTime(m.t)}`);
     if (m.book) facts.push('opening book');
-    if (m.eval !== null || m.mate !== null) facts.push(`score ${formatEval(m.eval, m.mate)}`);
+    if (m.eval !== null || m.mate !== null) facts.push(m.mate !== null ? mateWords(m.mate) : `score ${formatEval(m.eval, null, true)}`);
     out.push(el('p', 'bg-note-facts', facts.join(' · ')));
-    if (m.waited) out.push(el('p', 'bg-note-wait', `${seatLabel(m.seat)} ${waitPhrase(m.waited)} before this move.`));
+    if (m.waited) out.push(el('p', 'bg-note-wait', `Before this move, ${seatLabel(m.seat)} ${waitPhrase(m.waited)}.`));
     if (m.note) out.push(el('p', 'bg-note-text', m.note));
     if (m.i === game.moves.length - 1) out.push(el('p', 'bg-note-result', gameResult(game)));
     if (m.lines.length) {
@@ -419,7 +421,9 @@ export class BughouseGamesApp {
     const block = el('section', `bg-line bg-line-${line.kind}`);
     block.dataset.lineBlock = String(index);
     const head = el('div', 'bg-line-head');
-    head.append(el('b', 'bg-line-kind', kindTitle(line, m)), el('span', 'bg-line-eval num', formatEval(line.eval, line.mate)));
+    const score = el('span', `bg-line-eval${line.mate !== null ? ' mate' : ' num'}`, scoreWords(line.eval, line.mate));
+    if (line.eval !== null && line.mate === null) score.title = `${formatEval(line.eval, null)}: the engine’s score at the end of this search, from White’s side`;
+    head.append(el('b', 'bg-line-kind', kindTitle(line, m)), score);
     block.append(head, el('p', 'bg-line-context', lineContext(line, m)));
     if (line.assume) block.append(el('p', 'bg-line-assume', assumePhrase(line.assume)));
     const moves = el('div', 'bg-line-moves');
@@ -445,6 +449,13 @@ export class BughouseGamesApp {
     const c = this.cursor.line;
     if (!c) return;
     box.querySelector(`.bg-line-move[data-line="${c.index}"][data-ply="${c.ply}"]`)?.classList.add('active');
-    box.querySelector(`.bg-line[data-line-block="${c.index}"]`)?.classList.add('active');
+    const block = box.querySelector<HTMLElement>(`.bg-line[data-line-block="${c.index}"]`);
+    if (!block) return;
+    block.classList.add('active');
+    // Keep the line being walked in view inside the card (never scroll the page).
+    const r = block.getBoundingClientRect();
+    const b = box.getBoundingClientRect();
+    if (r.top < b.top) box.scrollTop += r.top - b.top - 8;
+    else if (r.bottom > b.bottom) box.scrollTop += Math.min(r.bottom - b.bottom + 8, r.top - b.top - 8);
   }
 }

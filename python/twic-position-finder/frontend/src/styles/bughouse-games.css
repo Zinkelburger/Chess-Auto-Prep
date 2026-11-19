@@ -26,7 +26,7 @@
 .bg-game-summary { margin-top: 4px; color: var(--text-dim); font-size: 0.95rem; max-width: 46em; }
 .bg-game-facts { display: flex; flex-wrap: wrap; gap: 2px 16px; margin-top: 8px; font-size: 0.85rem; }
 .bg-game-event { margin-top: 2px; color: var(--text-faint); font-size: 0.8rem; }
-.bg-source { margin-top: 16px; color: var(--text-faint); font-size: 0.8rem; }
+.bg-source { margin-top: 12px; color: var(--text-dim); font-size: 0.92rem; max-width: 46em; }
 
 /* ── Game layout: board A, board B, the panel ──────────────────── */
 .bg {
@@ -46,7 +46,7 @@
 .bg-eval { margin-left: auto; font-family: var(--mono); font-weight: 600; color: var(--text-dim); cursor: help; }
 .bg-seat { display: flex; align-items: center; gap: 8px; padding: 4px 0; min-height: calc(var(--bg-board) / 8 + 8px); }
 .bg-who { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }
-.bg-who-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8rem; }
+.bg-who-name { max-width: 100%; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; text-align: right; font-size: 0.78rem; line-height: 1.2; }
 .bg-clock { font-family: var(--mono); font-size: 1rem; font-weight: 600; color: var(--text-dim); }
 .bg-seat.to-move .bg-clock { color: var(--text); }
 @media (max-width: 1179px) and (min-width: 701px) { .bg-who-name { font-size: 0.75rem; } }
@@ -67,8 +67,9 @@
 .bg-icon:hover:not(:disabled) { background: var(--bg-raised); color: var(--text); }
 .bg-icon:disabled { opacity: 0.35; cursor: default; }
 .bg-icon[aria-pressed="true"] { background: var(--accent-bg); color: var(--accent); }
-.bg-head { display: flex; align-items: center; gap: 4px; margin-left: -6px; }
-.bg-title { font-size: 1.05rem; font-weight: 600; letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bg-head { display: flex; align-items: flex-start; gap: 4px; margin-left: -6px; }
+.bg-head .bg-title { padding-top: 5px; }
+.bg-title { font-size: 1.05rem; font-weight: 600; letter-spacing: 0; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .bg-meta { color: var(--text-dim); font-size: 0.82rem; line-height: 1.4; }
 .bg-problem { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; color: var(--danger); font-size: 0.9rem; }
 .bg-var-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 6px 6px 12px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--accent-bg); font-size: 0.85rem; }
@@ -93,7 +94,8 @@
 .bg-line.active { border-color: var(--accent); }
 .bg-line-head { display: flex; align-items: baseline; gap: 8px; }
 .bg-line-kind { font-size: 0.88rem; }
-.bg-line-eval { margin-left: auto; font-family: var(--mono); font-size: 0.85rem; font-weight: 600; color: var(--text-dim); }
+.bg-line-eval { margin-left: auto; flex: none; font-family: var(--mono); font-size: 0.85rem; font-weight: 600; color: var(--text-dim); }
+.bg-line-eval.mate { font-family: var(--sans); color: var(--text); }
 .bg-line-context { color: var(--text-dim); font-size: 0.8rem; line-height: 1.4; }
 .bg-line-assume { margin-top: 2px; color: var(--pick); font-size: 0.82rem; }
 .bg-line-moves { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 2px; margin-top: 4px; }
@@ -104,7 +106,7 @@
 .bg-line-note { margin-top: 4px; font-size: 0.9rem; line-height: 1.5; }
 
 /* The moves of both boards, one row each in the order played: board A in the left lane, B in the right. */
-.bg-moves { flex: 1 1 0; min-height: 120px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
+.bg-moves { flex: 1 1 0; min-height: 222px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
 .bg-moves-head, .bg-mv { display: grid; grid-template-columns: 3.2em 1fr 1fr; align-items: center; }
 .bg-moves-head { position: sticky; top: 0; z-index: 1; height: 26px; background: var(--bg-input); border-bottom: 1px solid var(--border); color: var(--text-dim); font-size: 0.75rem; font-weight: 600; }
 .bg-moves-head > span { padding: 0 8px; }

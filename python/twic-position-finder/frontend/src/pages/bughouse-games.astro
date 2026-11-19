@@ -17,7 +17,7 @@ const boards = ['A', 'B'] as const;
 ---
 <Base
   title="Bughouse Games"
-  description="Bughouse games played by engines, HypeBeast against itself or another engine, with notes from the engine’s own analysis. Step through both boards at once and see why a move was played."
+  description="Bughouse games played by engines, HypeBeast against itself or another engine, with notes written from the engines’ search logs. Step through both boards at once and see why a move was played."
   full
 >
   <div class="bg" id="bg" data-view="list" data-state="loading">
@@ -25,16 +25,16 @@ const boards = ['A', 'B'] as const;
       <header class="bg-list-head">
         <h1 id="bg-list-title">Bughouse Games</h1>
         <p class="lede">
-          Bughouse games played by engines: HypeBeast against itself or another engine. The notes come from the
-          engine’s own analysis, so they say why a move was chosen, what it expected next and what it weighed instead.
+          Bughouse between engines, both boards at once, with notes on why a move was chosen, what was expected next
+          and what was weighed instead.
         </p>
+        <p class="bg-source" id="bg-source"></p>
       </header>
       <div class="bg-list-status">
         <p class="bg-list-message" id="bg-list-message" role="status">Reading games…</p>
         <button type="button" class="btn btn-outline btn-sm" id="bg-list-retry" hidden>Try again</button>
       </div>
       <ol class="bg-games" id="bg-games"></ol>
-      <p class="bg-source" id="bg-source"></p>
     </section>
 
     <section class="bg-game-view" id="bg-game-view" aria-label="Game">
@@ -101,7 +101,7 @@ const boards = ['A', 'B'] as const;
 
           <div class="bg-foot">
             <a id="bg-analysis" class="link-ext" href="/bughouse">Analyse this position ↗</a>
-            <span class="bg-foot-note">Scores are each engine’s own, in pawns from White’s side of that board.</span>
+            <span class="bg-foot-note">Scores are each engine’s own, in pawns from White’s side of that board; beyond 20 they show as &gt;+20.</span>
           </div>
         </aside>
       </div>

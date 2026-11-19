@@ -71,16 +71,15 @@ export function lineContext(line: Line, move: Move): string {
   }
 }
 
-/** `waited.why` codes with a phrase; anything else reads "waited". The builder's codes and the engine's own reasons are both known. */
+/**
+ * `waited.why` codes with a phrase; anything else reads "waited". These are
+ * the builder's four codes (HypeBeast `scripts/collection/README.md`).
+ */
 const WAITS: Record<string, (s: string) => string> = {
-  partner_mate: (s) => `sat ${s} so the partner’s mate stands`,
-  hold_partner_mate: (s) => `sat ${s} so the partner’s mate stands`,
-  mated: (s) => `sat ${s} against mate, hoping for a piece to block with`,
-  hold_mated: (s) => `sat ${s} against mate, hoping for a piece to block with`,
-  piece: (s) => `sat ${s} waiting for a piece from the partner`,
-  voluntary_wait: (s) => `sat ${s} waiting for a piece from the partner`,
-  stall: (s) => `sat ${s} so the opponents get no piece to use`,
-  stall_deny: (s) => `sat ${s} so the opponents get no piece to use`,
+  partner_mate: (s) => `sat ${s} while the partner mates, so no new piece reaches the other board`,
+  mated: (s) => `sat ${s} rather than move into mate, while the partner plays on`,
+  deny_feed: (s) => `sat ${s} so the opponent cannot capture the piece their partner needs`,
+  wait_delivery: (s) => `sat ${s} for a piece the partner is about to capture`,
 };
 export const WAIT_CODES = Object.keys(WAITS);
 
@@ -94,13 +93,33 @@ export function waitPhrase(waited: Waited): string {
   return WAITS[waited.why]?.(s) ?? `waited ${s}`;
 }
 
-/** A score as Lichess writes it: `+1.8`, `−0.4`, `#3`, `#-2`; `–` when there is none. */
-export function formatEval(cp: number | null, mate: number | null): string {
+/**
+ * Scores past this many centipawns show as `>+20` / `<−20`: near the end the
+ * engines report thousands, which say "won" and nothing more. The exact
+ * number stays on hover (`formatEval` without the cap).
+ */
+export const EVAL_CAP = 2000;
+
+/** A score as Lichess writes it: `+1.8`, `−0.4`, `#3`, `#-2`; `–` when there is none. With `cap`, `>+20` beyond ±20. */
+export function formatEval(cp: number | null, mate: number | null, cap = false): string {
   if (mate !== null) return `#${mate}`;
   if (cp === null) return '–';
+  if (cap && Math.abs(cp) > EVAL_CAP) return cp > 0 ? `>+${EVAL_CAP / 100}` : `<−${EVAL_CAP / 100}`;
   const p = cp / 100;
   const text = Math.abs(p).toFixed(1);
   return p > 0 ? `+${text}` : p < 0 && text !== '0.0' ? `−${text}` : '0.0';
+}
+
+/** A forced mate in words, from the sign rule (positive: that board's White mates): `White mates in 3`. */
+export function mateWords(mate: number): string {
+  const n = Math.abs(mate);
+  if (n === 0) return 'Mate on the board';
+  return `${mate > 0 ? 'White' : 'Black'} mates in ${n}`;
+}
+
+/** A score for reading: a mate in words, else the capped score. */
+export function scoreWords(cp: number | null, mate: number | null): string {
+  return mate !== null ? mateWords(mate) : formatEval(cp, null, true);
 }
 
 /** A clock as `1:41`; under twenty seconds with tenths, `0:09.4`. */
