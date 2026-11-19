@@ -647,6 +647,9 @@ void main() {
       expect(checkpointText(), contains('More'));
       app.session.keepHeld();
       await until(() => fileText(games).contains('Old draft note'));
+      // The file lands a moment before the saver says so, and the
+      // checkpoint goes after that.
+      await until(() => draftFiles().isEmpty);
       await app.keeper.settle();
       expect(draftFiles(), isEmpty, reason: 'the edits are in the file');
     });
