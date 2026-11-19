@@ -1,5 +1,7 @@
 import 'package:chess_auto_prep/chess/fen.dart';
+import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
 import 'package:chess_auto_prep/chess/typed_move.dart';
+import 'package:dartchess/dartchess.dart' show Move;
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -71,6 +73,14 @@ void main() {
       expect(resolved(busy, 'e8n'), 'e7e8n');
       expect(resolved(busy, 'e7e8q'), 'e7e8q');
       expect(resolved(busy, 'E7E8R'), 'e7e8r');
+    });
+
+    test('typed castling from g1 replays with the king still on g1', () {
+      const fen = Fen('k7/8/8/8/8/8/8/6KR w K - 0 1');
+      final start = positionOf(fen)!;
+      final castled = start.play(start.parseSan('O-O')!);
+      final uci = resolved(fen, 'O-O')!;
+      expect(moveNode(fen, Move.parse(uci)!)?.fen, Fen(castled.fen));
     });
 
     test('castling, every way it is written', () {

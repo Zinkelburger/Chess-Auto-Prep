@@ -104,6 +104,15 @@ void main() {
     expect(words.map((w) => w.text).join(), contains('except 1.e4.'));
   });
 
+  test('a comment preview requires the pawn’s promotion piece', () {
+    const at = Fen('7k/P7/8/8/8/8/8/K7 w - - 0 1');
+    List<CommentSpan> spans(String text) =>
+        (layoutComment(text, at: at).single as Paragraph).spans;
+    expect((spans('1. a8').single as Words).text, '1. a8');
+    final promotion = spans('1. a8=N').single as MoveRun;
+    expect(promotion.moves.single.uci, 'a7a8n');
+  });
+
   test('a short comment keeps its double space inside one paragraph', () {
     final blocks = layoutComment('Good move  2.Nf3 Nc6', at: after1e4e5);
     expect(blocks, hasLength(1));

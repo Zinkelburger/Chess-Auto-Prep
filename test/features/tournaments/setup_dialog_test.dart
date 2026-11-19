@@ -53,6 +53,81 @@ void main() {
     expect(find.text('Use a legal starting FEN.'), findsNothing);
   });
 
+  for (final id in ['registered', null]) {
+    testWidgets(
+      'choosing registered Stockfish (id $id) seats its own executable',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(1100, 1000));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: darkTheme(),
+            home: const Scaffold(body: Text('host')),
+          ),
+        );
+        final external = TournamentEngine({
+          'id': ?id,
+          'name': 'Stockfish',
+          'executablePath': '/engines/stockfish-dev',
+        });
+        final config = tournamentSetup(
+          tester.element(find.text('host')),
+          engines: [external],
+          position: Fen.initial,
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Name'),
+          'Club match',
+        );
+        final seat = find.widgetWithText(TextField, 'Engine 1');
+        await tester.enterText(seat, 'Stock');
+        await tester.pumpAndSettle();
+        // The bundled suggestion precedes the registered one, even when they
+        // share the same display name.
+        final suggestions = find.descendant(
+          of: find.byType(ListView),
+          matching: find.textContaining('Stockfish'),
+        );
+        await tester.tap(suggestions.last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(TextField, 'Name'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(seat).controller!.text,
+          'Stockfish (2)',
+        );
+        await tester.tap(find.text('Start new run'));
+        await tester.pumpAndSettle();
+        final saved = (await config)!;
+        final picked = saved.engines.first;
+        expect(
+          (picked.id, picked.executable),
+          (external.id, external.executable),
+        );
+        final reopened = tournamentSetup(
+          tester.element(find.text('host')),
+          engines: [
+            TournamentEngine({
+              ...external.json,
+              'arguments': ['new'],
+            }),
+          ],
+          position: Fen.initial,
+          previous: saved,
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(seat).controller!.text,
+          'Stockfish (3)',
+        );
+        await tester.tap(find.text('Start new run'));
+        await tester.pumpAndSettle();
+        expect((await reopened)!.engines.first.json, external.json);
+      },
+    );
+  }
+
   testWidgets('a preset or a previous run fills the time control', (
     tester,
   ) async {

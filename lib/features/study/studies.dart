@@ -79,7 +79,12 @@ final class Studies extends ChangeNotifier {
 
   /// Sends the open study to Lichess; null where the app cannot.
   late final StudySender? sender = switch (_lichessWriter) {
-    final writer? => StudySender(writer, _session, openPage: _openPage),
+    final writer? => StudySender(
+      writer,
+      _session,
+      openPage: _openPage,
+      pendingWrites: pendingWrites,
+    ),
     null => null,
   };
   final LichessStudyWriter? _lichessWriter;

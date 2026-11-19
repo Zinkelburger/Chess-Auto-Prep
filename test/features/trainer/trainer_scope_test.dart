@@ -151,6 +151,21 @@ void main() {
     });
   });
 
+  test(
+    'reloading a populated training book reports a catalog read failure',
+    () {
+      fakeAsync((clock) {
+        trainer.setScope(TrainScope.book);
+        clock.flushMicrotasks();
+        expect((trainer.state as TrainerReady).chapters, hasLength(2));
+        chapters.listing = const RepertoiresUnreadable('folder denied');
+        unawaited(trainer.reload());
+        clock.flushMicrotasks();
+        expect(trainer.state, isA<TrainerFailed>());
+      });
+    },
+  );
+
   test('a book whose last edit did not save is still trained', () {
     fakeAsync((clock) {
       bookStore.fail = true;
