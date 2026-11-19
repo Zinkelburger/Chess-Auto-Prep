@@ -18,6 +18,9 @@
 /bughouse-puzzles/index.json
   Cache-Control: public, max-age=600
 
+/bughouse-games/index.json
+  Cache-Control: public, max-age=600
+
 # The bughouse board runs HypeBeast, a multi-threaded Fairy-Stockfish fork, which needs
 # SharedArrayBuffer, so only this page and its engine files are cross-origin
 # isolated. /bughouse-engine/ holds ONNX Runtime for the Expectimax tab's Maia.

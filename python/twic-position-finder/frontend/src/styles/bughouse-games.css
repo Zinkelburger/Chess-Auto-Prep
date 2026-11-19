@@ -1,0 +1,163 @@
+/* Bughouse Games: a list of annotated engine games, and one game with both
+   boards as partners sit (board B turned the other way), each with its
+   pockets, engines and clocks, beside the current move's note, its lines and
+   the moves of both boards in one list. The board and pocket come from
+   bughouse-board.css, the skeleton from bughouse-puzzles.css. */
+
+.bg[data-view="list"] .bg-game-view, .bg[data-view="game"] .bg-list-view { display: none; }
+
+/* ── The list ──────────────────────────────────────────────────── */
+.bg-list-view { max-width: 860px; margin: 0 auto; }
+.bg-list-head { margin-bottom: 20px; }
+.bg-list-head h1 { margin-bottom: 8px; }
+.bg-list-status { display: flex; align-items: center; gap: 12px; min-height: 24px; }
+.bg-list-message { color: var(--text-dim); font-size: 0.92rem; }
+.bg-list-message[hidden] + .btn[hidden] { display: none; }
+.bg-games { list-style: none; border-top: 1px solid var(--border); margin-top: 8px; }
+.bg-game { position: relative; padding: 16px 12px; border-bottom: 1px solid var(--border); }
+.bg-game:hover { background: rgba(255, 255, 255, 0.03); }
+.bg-game:focus-within { background: rgba(255, 255, 255, 0.03); }
+.bg-game-link { color: var(--text); text-decoration: none; font-size: 1.1rem; font-weight: 600; }
+/* The whole row opens the game. */
+.bg-game-link::after { content: ''; position: absolute; inset: 0; }
+.bg-game-link:hover, .bg-game:hover .bg-game-link { color: var(--accent-hover); }
+.bg-game-link:focus-visible { outline: none; }
+.bg-game-link:focus-visible::after { outline: 2px solid var(--accent); outline-offset: -2px; }
+.bg-game-summary { margin-top: 4px; color: var(--text-dim); font-size: 0.95rem; max-width: 46em; }
+.bg-game-facts { display: flex; flex-wrap: wrap; gap: 2px 16px; margin-top: 8px; font-size: 0.85rem; }
+.bg-game-event { margin-top: 2px; color: var(--text-faint); font-size: 0.8rem; }
+.bg-source { margin-top: 12px; color: var(--text-dim); font-size: 0.92rem; max-width: 46em; }
+
+/* ── Game layout: board A, board B, the panel ──────────────────── */
+.bg {
+  --bg-side: clamp(320px, 26vw, 420px);
+  /* A board column is its head, two pockets (an eighth of the board each, plus padding) and the board. */
+  --bg-board: clamp(240px, min(calc((100dvh - var(--nav-h) - 156px) / 1.25), calc((100vw - 48px - var(--bg-side) - 48px) / 2)), 600px);
+  --bg-col: calc(var(--bg-board) * 1.25 + 48px);
+}
+.bg-layout { display: grid; grid-template-columns: var(--bg-board) var(--bg-board) var(--bg-side); gap: 24px; align-items: start; justify-content: center; }
+.bg-board { min-width: 0; }
+.bg-side { display: flex; flex-direction: column; gap: 8px; min-width: 0; height: max(var(--bg-col), calc(100dvh - var(--nav-h) - 72px)); }
+
+/* ── A board: head, pockets with engine and clock, the board ─────── */
+.bg-board-head { display: flex; align-items: baseline; gap: 8px; height: 24px; font-size: 0.85rem; }
+.bg-board-name { font-weight: 600; }
+.bg-var-tag { padding: 0 8px; border-radius: 999px; background: var(--accent-bg); color: var(--accent); font-size: 0.75rem; font-weight: 600; line-height: 1.6; }
+.bg-eval { margin-left: auto; font-family: var(--mono); font-weight: 600; color: var(--text-dim); cursor: help; }
+.bg-seat { display: flex; align-items: center; gap: 8px; padding: 4px 0; min-height: calc(var(--bg-board) / 8 + 8px); }
+.bg-who { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }
+.bg-who-name { max-width: 100%; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; text-align: right; font-size: 0.78rem; line-height: 1.2; }
+.bg-clock { font-family: var(--mono); font-size: 1rem; font-weight: 600; color: var(--text-dim); }
+.bg-seat.to-move .bg-clock { color: var(--text); }
+@media (max-width: 1179px) and (min-width: 701px) { .bg-who-name { font-size: 0.75rem; } }
+.bg-board-wrap { background: var(--bg-card); }
+.bg-board-wrap .bb-board cg-container { width: 100%; height: 100%; }
+.bg-board.in-variation .bg-board-wrap { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Loading and failed games: the boards' skeleton stands in. */
+.bg[data-state="loading"] .bp-skeleton, .bg[data-state="error"] .bp-skeleton { display: block; }
+.bg[data-state="error"] .bp-skeleton::after { animation: none; }
+.bg:not([data-state="ready"]) .bg-board .bb-board, .bg:not([data-state="ready"]) .bg-seat > * { visibility: hidden; }
+.bg:not([data-state="ready"]) .bg-eval { visibility: hidden; }
+.bg:not([data-state="ready"]) .bg-controls, .bg:not([data-state="ready"]) .bg-foot { opacity: 0.45; pointer-events: none; }
+
+/* ── The panel ─────────────────────────────────────────────────── */
+.bg-icon { display: inline-grid; place-items: center; flex: none; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--text-dim); cursor: pointer; }
+.bg-icon svg { width: 20px; height: 20px; }
+.bg-icon:hover:not(:disabled) { background: var(--bg-raised); color: var(--text); }
+.bg-icon:disabled { opacity: 0.35; cursor: default; }
+.bg-icon[aria-pressed="true"] { background: var(--accent-bg); color: var(--accent); }
+.bg-head { display: flex; align-items: flex-start; gap: 4px; margin-left: -6px; }
+.bg-head .bg-title { padding-top: 5px; }
+.bg-title { font-size: 1.05rem; font-weight: 600; letter-spacing: 0; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.bg-meta { color: var(--text-dim); font-size: 0.82rem; line-height: 1.4; }
+.bg-problem { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; color: var(--danger); font-size: 0.9rem; }
+.bg-var-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 6px 6px 12px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--accent-bg); font-size: 0.85rem; }
+.bg-var-bar .btn { flex: none; }
+
+/* The note: the one thing most readers come for. */
+.bg-note { flex: 1.6 1 0; min-height: 0; overflow-y: auto; padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
+.bg-note-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.bg-note-board { display: inline-grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--border-strong); border-radius: 4px; font-size: 0.75rem; font-weight: 700; color: var(--text-dim); align-self: center; }
+.bg-note-move { font-family: var(--mono); font-size: 1rem; }
+.bg-note-glyph-name { color: var(--text-dim); font-size: 0.8rem; }
+.bg-note-count { margin-left: auto; color: var(--text-faint); font-size: 0.75rem; }
+.bg-note-facts { margin-top: 2px; color: var(--text-dim); font-size: 0.8rem; }
+.bg-note-wait { margin-top: 6px; font-size: 0.85rem; color: var(--text); }
+.bg-note-wait::before { content: '⏸ '; color: var(--text-dim); }
+.bg-note-text { margin-top: 8px; font-size: 1rem; line-height: 1.55; max-width: 640px; white-space: pre-line; }
+.bg-note-result { margin-top: 8px; font-weight: 600; }
+.bg-note-first { margin-top: 12px; }
+
+.bg-lines { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.bg-line { padding: 8px 10px; border: 1px solid var(--border); border-left-width: 3px; border-radius: 6px; background: var(--bg); }
+.bg-line.active { border-color: var(--accent); }
+.bg-line-head { display: flex; align-items: baseline; gap: 8px; }
+.bg-line-kind { font-size: 0.88rem; }
+.bg-line-eval { margin-left: auto; flex: none; font-family: var(--mono); font-size: 0.85rem; font-weight: 600; color: var(--text-dim); }
+.bg-line-eval.mate { font-family: var(--sans); color: var(--text); }
+.bg-line-context { color: var(--text-dim); font-size: 0.8rem; line-height: 1.4; }
+.bg-line-assume { margin-top: 2px; color: var(--pick); font-size: 0.82rem; }
+.bg-line-moves { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 2px; margin-top: 4px; }
+.bg-line-num { color: var(--text-faint); font-family: var(--mono); font-size: 0.8rem; padding-left: 2px; }
+.bg-line-move { padding: 1px 5px; border: 0; border-radius: 4px; background: none; color: var(--text); font-family: var(--mono); font-size: 0.9rem; font-weight: 600; cursor: pointer; }
+.bg-line-move:hover { background: var(--bg-raised); }
+.bg-line-move.active { background: var(--accent-bg); color: var(--accent); }
+.bg-line-note { margin-top: 4px; font-size: 0.9rem; line-height: 1.5; }
+
+/* The moves of both boards, one row each in the order played: board A in the left lane, B in the right. */
+.bg-moves { flex: 1 1 0; min-height: 222px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
+.bg-moves-head, .bg-mv { display: grid; grid-template-columns: 3.2em 1fr 1fr; align-items: center; }
+.bg-moves-head { position: sticky; top: 0; z-index: 1; height: 26px; background: var(--bg-input); border-bottom: 1px solid var(--border); color: var(--text-dim); font-size: 0.75rem; font-weight: 600; }
+.bg-moves-head > span { padding: 0 8px; }
+.bg-moves-head > span + span + span { border-left: 1px solid var(--border); }
+.bg-moves-label { padding: 6px 8px 2px; color: var(--text-faint); font-size: 0.75rem; }
+.bg-mv { width: 100%; height: 28px; padding: 0; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.bg-mv:hover { background: var(--bg-raised); }
+.bg-mv:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.bg-mv.active { background: var(--accent-bg); }
+.bg-mv.active .bg-mv-san { color: var(--accent); }
+.bg-mv-time { padding-right: 6px; text-align: right; color: var(--text-faint); font-family: var(--mono); font-size: 0.75rem; }
+.bg-mv-cell { display: flex; align-items: center; gap: 4px; min-width: 0; height: 100%; padding: 0 8px; overflow: hidden; white-space: nowrap; }
+.bg-mv-cell + .bg-mv-cell { border-left: 1px solid var(--border); }
+.bg-mv-num { color: var(--text-faint); font-family: var(--mono); font-size: 0.78rem; }
+.bg-mv-san { font-family: var(--mono); font-size: 0.92rem; font-weight: 600; }
+.bg-mv.book .bg-mv-san { font-weight: 400; color: var(--text-dim); }
+.bg-mv-note { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.bg-mv-wait { flex: none; padding: 0 5px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--text-dim); font-size: 0.75rem; line-height: 1.4; }
+
+/* The game's own glyphs, in lila's colours (as on the PGN page). */
+.bg-glyph { font-weight: 700; }
+.bg-glyph-good { color: #22ac38; }
+.bg-glyph-brilliant { color: #168226; }
+.bg-glyph-interesting { color: #ea45d8; }
+.bg-glyph-inaccuracy { color: #56b4e9; }
+.bg-glyph-mistake { color: #e69f00; }
+.bg-glyph-blunder { color: #df5353; }
+.bg-note-head .bg-glyph { font-size: 1rem; }
+
+.bg-controls { display: flex; align-items: center; gap: 2px; flex: none; }
+.bg-controls-gap { flex: 1; }
+.bg-controls .btn-text { padding: 6px 8px; }
+.bg-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px; flex: none; }
+.bg-foot-note { color: var(--text-faint); font-size: 0.75rem; }
+
+@media (max-width: 700px) {
+  .bg-controls .bg-icon { width: 44px; height: 44px; }
+  .bg-note-text { font-size: 0.98rem; }
+}
+
+/* Narrower windows, after the rules they change. */
+/* Mid widths: the two boards side by side, the panel under them. */
+@media (max-width: 1179px) {
+  .bg { --bg-board: min(calc((100vw - 48px - 24px) / 2), 520px); }
+  .bg-layout { grid-template-columns: var(--bg-board) var(--bg-board); }
+  .bg-side { grid-column: 1 / -1; height: auto; }
+  .bg-note { flex: none; max-height: none; }
+  .bg-moves { flex: none; height: min(50vh, 420px); }
+}
+/* Phones: the boards one above the other. */
+@media (max-width: 700px) {
+  .bg { --bg-board: min(calc(100vw - 32px), 520px); }
+  .bg-layout { grid-template-columns: var(--bg-board); gap: 16px; }
+}
