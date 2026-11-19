@@ -10,6 +10,7 @@ import '../../diagnostics/log.dart';
 import '../../net/lichess_studies.dart';
 import '../../net/lichess_study_writes.dart';
 import '../../storage/chapter_files.dart' show ChapterRef;
+import '../../storage/pending_writes.dart';
 import '../../workspace/document/document_session.dart';
 import 'study_commands.dart' show studyNameOf;
 
@@ -23,7 +24,16 @@ import 'study_commands.dart' show studyNameOf;
 /// written into the study as `ChapterURL`, as one undoable edit, so sending
 /// again updates them instead of adding them twice.
 final class StudySender extends ChangeNotifier {
-  StudySender(this._writer, this._session, {required this.openPage});
+  StudySender(
+    this._writer,
+    this._session, {
+    required this.openPage,
+    this.pendingWrites,
+  });
+
+  /// What the app waits for at exit: a send, up to its links being written
+  /// into the study, so a send cut short does not add the chapters twice.
+  final PendingWrites? pendingWrites;
 
   final LichessStudyWriter _writer;
   final DocumentSession _session;
@@ -52,7 +62,13 @@ final class StudySender extends ChangeNotifier {
 
   /// Sends the open study: into the Lichess study [into], or into a new
   /// private one when it is null.
-  Future<void> send({String? into}) async {
+  Future<void> send({String? into}) {
+    final sending = _send(into);
+    pendingWrites?.watch(this, sending);
+    return sending;
+  }
+
+  Future<void> _send(String? into) async {
     if (_state is Sending) return;
     final chapter = _session.snapshot();
     final source = _session.source;

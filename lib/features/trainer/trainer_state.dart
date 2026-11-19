@@ -51,11 +51,17 @@ final class TrainerLoading extends TrainerState {
   const TrainerLoading();
 }
 
-/// The progress files could not be read; nothing is trained until they can.
+/// The progress files, or the repertoire list a scope is read from, could
+/// not be read; nothing is trained until they can.
 final class TrainerFailed extends TrainerState {
-  const TrainerFailed(this.failure);
+  const TrainerFailed(ProgressRead this.failure) : sourceProblem = null;
+  const TrainerFailed.source(String this.sourceProblem) : failure = null;
 
-  final ProgressRead failure;
+  /// The progress read that failed, or null when [sourceProblem] says why.
+  final ProgressRead? failure;
+
+  /// Why the repertoire list could not be read.
+  final String? sourceProblem;
 }
 
 final class TrainerReady extends TrainerState {

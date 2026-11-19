@@ -26,16 +26,25 @@ final class GameSummary {
   /// The event and the year, or whichever of them the file gave, or empty.
   final String setting;
 
-  /// The words a search over the games looks through, lowercased.
-  String get searchText => '$title $result $setting'.toLowerCase();
+  /// The words a search over the games looks through, lowercased. A draw
+  /// is found by the `1/2-1/2` a file writes as well as the `½-½` shown.
+  String get searchText {
+    final words = '$title $result $setting'.toLowerCase();
+    return result == '½-½' ? '$words 1/2-1/2' : words;
+  }
 }
 
 /// The summary of the game at [index] of a file, counting from zero.
 GameSummary summarizeGame(ChapterLine line, {required int index}) =>
-    summarizeTags(line.tags, index: index);
+    summarizeTags(line.tags, index: index, result: line.result);
 
 /// The summary of a game whose headers are [tags], at [index] of its file.
-GameSummary summarizeTags(List<PgnHeader> tags, {required int index}) {
+/// [result] is how it ended when known from more than its headers.
+GameSummary summarizeTags(
+  List<PgnHeader> tags, {
+  required int index,
+  String? result,
+}) {
   final white = _known(tagValue(tags, 'White'));
   final black = _known(tagValue(tags, 'Black'));
   final event = _known(tagValue(tags, 'Event'));
@@ -50,7 +59,7 @@ GameSummary summarizeTags(List<PgnHeader> tags, {required int index}) {
       : white ?? black;
   return GameSummary(
     title: players ?? event ?? 'Game ${index + 1}',
-    result: _result(tagValue(tags, 'Result')),
+    result: _result(result ?? tagValue(tags, 'Result')),
     setting: [
       if (players != null && played != null) played,
       ?_year(tagValue(tags, 'Date')),

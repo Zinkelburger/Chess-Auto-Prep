@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../../chess/pgn/chapter.dart' show readOffThreadFrom;
 import '../../chess/pgn/game_text.dart';
@@ -185,8 +186,9 @@ final class SavedGames extends ChangeNotifier {
   }
 
   /// Who else reads each downloads file: the user through their own
-  /// accounts, or another person. Null when the user's accounts cannot be
-  /// read, when nothing can be said to be safe to delete.
+  /// accounts, or another person, through an account or a linked PGN file.
+  /// Null when the user's accounts cannot be read, when nothing can be said
+  /// to be safe to delete.
   Future<_Shared?> _sharedDownloads(List<Player> people) async {
     final read = await mine.snapshot();
     if (read is! AccountsSnapshot) return null;
@@ -195,6 +197,9 @@ final class SavedGames extends ChangeNotifier {
       for (final account in _accountsOf(person)) {
         final path = cache.refFor(account.site, account.username).path;
         (holders[path] ??= []).add(person);
+      }
+      for (final path in person.files) {
+        (holders[p.normalize(path)] ??= []).add(person);
       }
     }
     return _Shared(

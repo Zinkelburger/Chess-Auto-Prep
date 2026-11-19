@@ -25,7 +25,9 @@ move list, engine and explorer are described in [workspace](workspace.md).
   button (`Filter games`) and, while a filter narrows, `n of N` (`Filtering…`
   while it runs) with `Clear filters`; an `Order` field (`File order`, `Newest first`,
   `Rating high`, `Rating low`; typeable) and `Follow a player`. Then the games:
-  number, players, result; the game on the board is marked. A file with
+  number, players, result (the `Result` tag, else the marker after the
+  moves; a draw is found by `½-½` or `1/2-1/2`); the game on the board is
+  marked. A finished game's players never title a chapter. A file with
   chapters (Lichess `ChapterName`, a course's player-header titles; rule in
   `chess/pgn/chapter_grouping.dart`) lists games under folding chapter
   headings with `N games`; a one-game chapter is that game's row, called by
@@ -208,8 +210,9 @@ with `Open study`.
 **Export** — `Export games…` (Actions or the Filter tab) →
 `Export games` asks a `PGN file name`, then `Choose folder` → the
 visible games in list order, with comments and variations, written to a new
-file; an existing file is never replaced; the source is untouched. Refused
-while filtering: `Wait for filtering to finish and select at least one game.`
+file; an existing file is never replaced; the source is untouched. Closing
+the app waits for an export in progress. Refused while filtering: `Wait for
+filtering to finish and select at least one game.`
 
 **Close file** — Actions ▸ `Close file` → back to the recent list.
 

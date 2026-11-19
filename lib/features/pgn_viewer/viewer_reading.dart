@@ -49,7 +49,13 @@ final class ViewerReading {
   locateElsewhere;
   final _queued = <String, ReadingPlace>{};
   Future<void>? _writing;
-  bool _disposed = false, _restoring = false;
+  bool _disposed = false;
+
+  /// The restore whose place is still being looked for; capture waits for
+  /// it. Only the newest restore counts: an older one that finishes late
+  /// must not let capture write the newer file's first game over its place.
+  Object? _restore;
+  bool get _restoring => _restore != null;
   ChapterLine? _keyOf;
   String? _key;
   String? problem;
@@ -76,6 +82,7 @@ final class ViewerReading {
   }
 
   Future<void> restore(ReadingPlace? place, bool Function() current) async {
+    _restore = null;
     if (place == null) {
       filter.apply(GameFilter.none);
       capture();
@@ -86,7 +93,7 @@ final class ViewerReading {
     final filtering = filter.filter;
     final sorting = sort();
     if (chapter == null) return;
-    _restoring = true;
+    final ticket = _restore = Object();
     var lost = false;
     try {
       final lines = chapter.lines;
@@ -100,13 +107,14 @@ final class ViewerReading {
         // left as it is for the next opening rather than overwritten.
         log.w('find the viewer reading position', error);
         lost = true;
-        if (!_disposed) {
+        if (!_disposed && identical(_restore, ticket)) {
           problem = 'Could not find your place in this file.';
           changed();
         }
         return;
       }
       if (_disposed ||
+          !identical(_restore, ticket) ||
           !current() ||
           !identical(session.chapter, chapter) ||
           session.cursor.value != cursor ||
@@ -126,8 +134,10 @@ final class ViewerReading {
         }
       }
     } finally {
-      _restoring = false;
-      if (!lost) capture();
+      if (identical(_restore, ticket)) {
+        _restore = null;
+        if (!lost) capture();
+      }
     }
     _filterChanged();
     capture();

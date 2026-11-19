@@ -12,6 +12,7 @@ import '../../chess/tactics/puzzle_queue.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/edit_scope.dart';
+import '../../storage/pending_writes.dart';
 import '../../storage/pgn_document_store.dart';
 import '../../storage/settings_store.dart';
 import '../../workspace/document/document_session.dart';
@@ -58,6 +59,7 @@ final class TacticsSet extends ChangeNotifier {
     required this._session,
     required this._settings,
     required this.ref,
+    this.pendingWrites,
     this._now = DateTime.now,
     Random? random,
   }) : _random = random ?? Random() {
@@ -66,6 +68,9 @@ final class TacticsSet extends ChangeNotifier {
     _settings.addListener(_settingsChanged);
   }
 
+  /// What the app waits for at exit: a deletion written here, while the
+  /// set is not the workspace's document.
+  final PendingWrites? pendingWrites;
   final PgnDocumentStore _documents;
   final DocumentSession _session;
   final SettingsStore _settings;
@@ -193,10 +198,12 @@ final class TacticsSet extends ChangeNotifier {
         deletePuzzle(set, index: puzzle.index, fen: puzzle.fen);
     if (isOpen) return _session.apply(edit);
     try {
-      return await _session.access.changing(
+      final deleting = _session.access.changing(
         ref.path,
         () => _deleteOnDisk(edit),
       );
+      pendingWrites?.watch(this, deleting);
+      return await deleting;
     } on Object catch (error) {
       log.w('delete a puzzle from ${ref.path}', error);
       return '$error';

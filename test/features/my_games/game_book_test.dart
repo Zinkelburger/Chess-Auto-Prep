@@ -3,9 +3,13 @@ import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/chess/tactics/mistake_counts.dart';
 import 'package:chess_auto_prep/features/my_games/book_words.dart';
 import 'package:chess_auto_prep/features/my_games/game_book.dart';
+import 'package:chess_auto_prep/storage/book_file.dart';
+import 'package:chess_auto_prep/storage/book_list.dart';
+import 'package:chess_auto_prep/storage/book_snapshot.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
+import 'package:chess_auto_prep/workspace/book/books.dart';
 import 'package:chess_auto_prep/workspace/book/repertoire_shelf.dart'
     show BookFileRef;
 import 'package:flutter_test/flutter_test.dart';
@@ -13,6 +17,23 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/book_fixture.dart';
 import '../../support/scripted_files.dart';
 import '../../support/scripted_store.dart';
+
+final class _UnreadableBooks extends Fake implements BookStore {
+  bool unavailable = true;
+
+  @override
+  Future<BookSnapshot> snapshot() async {
+    if (unavailable) throw StateError('read failed');
+    return BookSnapshot(
+      value: const BookList(
+        active: 'black',
+        books: [
+          Book(id: 'black', name: 'Black', repertoires: {'Najdorf'}),
+        ],
+      ),
+    );
+  }
+}
 
 void main() {
   late BookFixture fixture;
@@ -25,6 +46,34 @@ void main() {
     await pumpEventQueue();
     return fixture.book.state as BookChecked;
   }
+
+  test('an unavailable active book withholds game verdicts', () async {
+    final store = _UnreadableBooks();
+    final books = Books(store: store, root: '/repertoires');
+    addTearDown(books.dispose);
+    await books.load();
+    expect(books.problem, isNotNull);
+    final book = GameBook(
+      accounts: fixture.accounts,
+      cache: fixture.cache,
+      shelf: fixture.shelf,
+      books: books,
+      settings: fixture.settings,
+      mistakes: fixture.mistakes,
+      readMistakes: () async {},
+    );
+    addTearDown(book.dispose);
+    book.watch();
+    await pumpEventQueue();
+    expect(book.state, isNot(isA<BookChecked>()));
+    expect(book.problem, isNotNull);
+
+    store.unavailable = false;
+    await books.load();
+    await pumpEventQueue();
+    expect(book.state, isA<BookChecked>());
+    expect(books.includes(sicilianRef), isFalse);
+  });
 
   test('reads nothing until a pane is watching', () async {
     fixture.book.recheck();

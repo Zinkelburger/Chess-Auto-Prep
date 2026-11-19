@@ -105,6 +105,7 @@ final class TrainingWiring {
       session: session,
       settings: env.settings,
       ref: env.folders.tacticsSet,
+      pendingWrites: env.pendingWrites,
       now: env.now,
     );
     final puzzles = PuzzleTrainer(

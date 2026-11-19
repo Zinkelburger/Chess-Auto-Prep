@@ -17,6 +17,57 @@ import '../support/window_fixture.dart';
 /// The end of the plane scenario: the study made offline goes to Lichess
 /// from the Study panel, and comes back to the same Lichess study after.
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'retrying a study upload after shutdown adds the acknowledged chapter only once',
+    () async {
+      final waiting = Completer<void>();
+      final release = Completer<void>();
+      final writer = ScriptedStudyWriter()
+        ..beforeAdd = (name) async {
+          if (name == 'Pawn endings') {
+            waiting.complete();
+            await release.future;
+          }
+        };
+      final w = WindowFixture(
+        lichessWriter: writer,
+        exitWait: const Duration(minutes: 1),
+      );
+      addTearDown(w.dispose);
+      final ref = studyRef('Endgames');
+      w.store.documents[ref] = Opened(
+        twoChapterStudy,
+        scriptedRevision(twoChapterStudy),
+      );
+      w.studyFiles.listing = StudiesListed([ref]);
+      await w.requests.openStudy(ref);
+      expect(w.session.source, ref);
+      final sending = w.studies.sender!.send(into: writer.studyId);
+      await waiting.future;
+      expect(writer.added.map((a) => a.name), ['Rook endings']);
+      w.parts.prepareToClose();
+      final closing = w.parts.exit.mayClose().then((allowed) {
+        expect(allowed, isTrue);
+        final persisted = (w.store.documents[ref]! as Opened).text;
+        w.dispose();
+        return persisted;
+      });
+      await pumpEventQueue();
+      release.complete();
+      final savedAtClose = await closing;
+      await sending;
+
+      writer.beforeAdd = null;
+      final reopened = await openStudy(savedAtClose, lichessWriter: writer);
+      addTearDown(reopened.dispose);
+      await reopened.studies.sender!.send(into: writer.studyId);
+      expect(writer.added.where((a) => a.name == 'Rook endings'), hasLength(1));
+      expect(writer.replaced.map((r) => r.chapter), contains('chap0000'));
+    },
+  );
+
   testWidgets('Send to Lichess makes the study there, says where, opens it, '
       'and the next send goes back to it', (tester) async {
     final lichess = ScriptedStudyWriter();
