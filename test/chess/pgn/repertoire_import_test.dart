@@ -238,6 +238,19 @@ void main() {
     },
   );
 
+  test('spaced Black tags still distinguish lines with the same moves', () {
+    final read = imported(
+      '[Event "?"]\n[ChapterName "Main"]\n[Black "Line A" ]\n\n1. e4 *\n\n'
+      '[Event "?"]\n[ChapterName "Main"]\n[Black "Line B" ]\n\n1. e4 *\n\n'
+      '[Event "?"]\n[ChapterName "Main"]\n[Black "Line A"]\n\n1. e4 *',
+    );
+    final lines = chapterOf(read.chapters.single).lines;
+    expect(lines.map((line) => line.text), [
+      contains('[Black "Line A" ]'),
+      contains('[Black "Line B" ]'),
+    ]);
+  });
+
   test('a file the app wrote keeps the side it states', () {
     final read = imported('// Color: Black\n\n[Event "x"]\n\n1. e4 c5 *\n');
     expect(read.side, Side.black);

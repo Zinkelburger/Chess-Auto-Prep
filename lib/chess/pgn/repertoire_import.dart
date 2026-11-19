@@ -419,8 +419,10 @@ final class _Lines {
   }
 
   String _identity(String game) {
+    // Course exports sometimes pad a tag before its closing bracket; the
+    // title is the same either way.
     final title = RegExp(
-      '^\\[$titleKey "([^"]*)"\\]',
+      '^\\[$titleKey\\s+"([^"]*)"\\s*\\]',
       multiLine: true,
     ).firstMatch(game)?.group(1);
     final moves = game
