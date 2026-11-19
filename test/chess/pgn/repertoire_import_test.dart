@@ -109,6 +109,19 @@ void main() {
     expect(read.chapters.single.text, contains('(1... c5)'));
   });
 
+  test('finished games with the same moves are each kept', () {
+    String game(String white) =>
+        '[Event "Club"]\n[White "$white"]\n[Black "Sam"]\n[Result "1-0"]\n\n'
+        '1. e4 1-0';
+    final read = imported(
+      '${game('Alice')}\n\n${game('Bob')}\n\n${game('Bob')}',
+    );
+    expect(chapterOf(read.chapters.single).lines.map((l) => l.text), [
+      game('Alice'),
+      game('Bob'),
+    ]);
+  });
+
   test(
     'identical moves from different starting positions both survive import',
     () {

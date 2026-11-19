@@ -97,13 +97,13 @@ ImportRead readImport(String text, {required DateTime created}) {
         // did read would lose the rest — a move, a comment, the whole game
         // when its position is not one: it goes in as its own bytes, and the
         // chapter says what is wrong with it when it opens.
-        written.keep(game.text, rootFen);
+        written.keep(game.text, rootFen, whole: true);
         continue;
       }
       if (!game.hasMoves) continue;
       final whole = group.modelGames || game.isComplete;
       for (final line in whole ? [game.text] : _expanded(game, grouping)) {
-        written.keep(line, rootFen);
+        written.keep(line, rootFen, whole: whole);
       }
     }
     if (written.count == 0) continue;
@@ -396,21 +396,27 @@ String _moveLabel(Fen root, int ply, MoveNode node) {
   return whiteMoves ? '$number.${node.san}' : '$number...${node.san}';
 }
 
-/// Games gathered one per block, a blank line between them, a game that
+/// Games gathered one per block, a blank line between them, a line that
 /// repeats an earlier one's starting position, title and moves dropped: one
 /// course export listed each of its lines under every one of its chapter titles.
+/// A game kept whole is somebody's record, players and all, so only the same
+/// text again is a repeat of it.
 final class _Lines {
   _Lines(this.titleKey);
 
   final String titleKey;
   final _out = StringBuffer();
   final _seen = <(String?, String)>{};
+  final _records = <String>{};
   int count = 0;
 
   String get text => _out.toString();
 
-  void keep(String game, String? rootFen) {
-    if (!_seen.add((rootFen, _identity(game)))) return;
+  void keep(String game, String? rootFen, {required bool whole}) {
+    final repeat = whole
+        ? !_records.add(game)
+        : !_seen.add((rootFen, _identity(game)));
+    if (repeat) return;
     if (count > 0) _out.write('\n');
     _out
       ..write(game.trimRight())
