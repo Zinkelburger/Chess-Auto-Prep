@@ -138,7 +138,8 @@ busy timeout 0, `BEGIN IMMEDIATE` retried every 10 ms for two minutes, rolled
 back however the action ends; the OS drops it when a process dies. Never nest
 one directory's lock: the inner call fails after the deadline. Every
 document access takes the profile-wide lock keyed on
-`repertoires/.cap-directory-domain` (`storage/recovery_gate.dart`). A
+`repertoires/.cap-directory-domain` (`storage/recovery_gate.dart`); the key
+is only a name, so a file named `repertoires` blocks no other access. A
 document write then takes the Documents root, which is also the training
 files' folder and the trainer's lock, and then each folder it writes in, in
 path order (`storage/mutation_guards.dart`); a PGN copied into Documents takes
