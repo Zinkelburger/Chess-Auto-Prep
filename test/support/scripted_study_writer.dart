@@ -8,6 +8,9 @@ final class ScriptedStudyWriter implements LichessStudyWriter {
 
   bool loggedIn;
 
+  /// Thrown by [create], as a writer that fails outright would.
+  Object? createError;
+
   /// The id a new study gets.
   String studyId = 'wxyz9876';
 
@@ -16,6 +19,9 @@ final class ScriptedStudyWriter implements LichessStudyWriter {
 
   /// Chapters to refuse, by name, as Lichess refuses one it cannot read.
   final refuse = <String>{};
+
+  /// Runs before each chapter is added, by name.
+  Future<void> Function(String name)? beforeAdd;
 
   /// Chapters Lichess no longer has, by id.
   final gone = <String>{};
@@ -31,6 +37,7 @@ final class ScriptedStudyWriter implements LichessStudyWriter {
 
   @override
   Future<LichessWrite> create(String name) async {
+    if (createError case final error?) throw error;
     if (failing case final failed?) return failed;
     created.add(name);
     return LichessWritten(studyId);
@@ -45,6 +52,7 @@ final class ScriptedStudyWriter implements LichessStudyWriter {
     bool initial = false,
   }) async {
     if (failing case final failed?) return failed;
+    await beforeAdd?.call(name);
     if (refuse.contains(name)) {
       return const LichessNotWritten(
         LichessWriteProblem.rejected,

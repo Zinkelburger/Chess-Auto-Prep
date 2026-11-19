@@ -6,6 +6,7 @@ import '../../chess/pgn/game_text.dart';
 import '../../chess/pgn/study.dart';
 import '../../chess/pgn/study_cleanup.dart';
 import '../../chess/pgn/study_lichess.dart';
+import '../../diagnostics/log.dart';
 import '../../net/lichess_studies.dart';
 import '../../net/lichess_study_writes.dart';
 import '../../storage/chapter_files.dart' show ChapterRef;
@@ -70,15 +71,30 @@ final class StudySender extends ChangeNotifier {
       return;
     }
     _set(Sending(0, chapter!.lines.length));
-    final study = into ?? await _created(chapter);
+    final String? study;
+    try {
+      study = into ?? await _created(chapter);
+    } on Object catch (error) {
+      // Only the kind of failure: the error may carry the credential.
+      log.w('send the study to Lichess', error.runtimeType);
+      _set(const SendFailed('The study could not be sent.'));
+      return;
+    }
     if (study == null) return;
     final run = _Run(study, fresh: into == null);
-    for (final (index, line) in chapter.lines.indexed) {
-      if (_disposed) return;
-      _set(Sending(index, chapter.lines.length));
-      if (await _sent(run, index, line, studyNameIn(chapter.lines)) == false) {
-        break;
+    try {
+      for (final (index, line) in chapter.lines.indexed) {
+        if (_disposed) return;
+        _set(Sending(index, chapter.lines.length));
+        if (await _sent(run, index, line, studyNameIn(chapter.lines)) ==
+            false) {
+          break;
+        }
       }
+    } on Object catch (error) {
+      // The chapters Lichess already made keep their links below.
+      log.w('write a Lichess study chapter', error.runtimeType);
+      run.failure = const LichessNotWritten(LichessWriteProblem.unreachable);
     }
     if (_disposed) return;
     _record(source!, run.urls);

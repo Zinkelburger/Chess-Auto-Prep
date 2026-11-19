@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/chess/pgn/study_lichess.dart';
+import 'package:chess_auto_prep/diagnostics/log.dart';
 import 'package:chess_auto_prep/features/study/study_sender.dart';
 import 'package:chess_auto_prep/net/lichess_study_writes.dart';
 import 'package:dartchess/dartchess.dart' show Side;
@@ -65,6 +66,47 @@ void main() {
       expect(sender.linkedStudy(fixture.session.chapter!), 'wxyz9876');
     },
   );
+
+  List<LogEntry> warnings() {
+    final entries = <LogEntry>[];
+    final LogSink sink = entries.add;
+    log.install(sink);
+    addTearDown(() => log.remove(sink));
+    return entries;
+  }
+
+  test(
+    'an exception creating the study is shown and logged without its contents',
+    () async {
+      final entries = warnings();
+      lichess.createError = StateError('secret credential');
+      await sender.send();
+      expect(sender.state, isA<SendFailed>());
+      final entry = entries.singleWhere(
+        (e) => e.action == 'send the study to Lichess',
+      );
+      expect(entry.error, StateError);
+      expect(entry.line, isNot(contains('secret credential')));
+    },
+  );
+
+  test('a writer exception releases Sending and keeps earlier links', () async {
+    final entries = warnings();
+    lichess.beforeAdd = (name) async {
+      if (name == 'Round 2') throw StateError('private PGN');
+    };
+    await sender.send();
+    expect(sender.state, isA<SendFailed>());
+    final entry = entries.singleWhere(
+      (e) => e.action == 'write a Lichess study chapter',
+    );
+    expect(entry.error, StateError);
+    expect(entry.line, isNot(contains('private PGN')));
+    expect(url(0), endsWith('/chap0000'));
+    expect(url(1), isNull);
+    sender.reset();
+    expect(sender.state, isA<SendIdle>());
+  });
 
   test('sending again updates the chapters already there', () async {
     await sender.send();
