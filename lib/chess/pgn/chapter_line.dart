@@ -19,7 +19,8 @@ final class ChapterLine {
     required String? terminator,
     required String separator,
     List<PgnIssue> issues = const [],
-  }) : _read = (
+  }) : result = tagValue(tags, 'Result') ?? terminator,
+       _read = (
          tree: tree,
          terminator: terminator,
          separator: separator,
@@ -29,7 +30,9 @@ final class ChapterLine {
   /// The game [text] with its moves not read yet: [tags] is its header
   /// block ([readHeaders]), and everything below the header — [tree],
   /// [terminator], [separator], [issues] — is read from [text] the first
-  /// time one of them is asked for, or handed over by [take].
+  /// time one of them is asked for, or handed over by [take]. Only
+  /// [result] is worked out at once, so a list can group and search the
+  /// games before their moves arrive.
   ///
   /// A file of thousands of games is listed from its headers and shows one
   /// game at a time, so it opens without replaying every move of every game
@@ -39,9 +42,13 @@ final class ChapterLine {
     required this.tags,
     required this.text,
     required this.trailer,
-  });
+  }) : result = readListingResult(text, tags);
 
-  ChapterLine._(this.tags, this.text, this.trailer, this._read);
+  ChapterLine._(this.tags, this.text, this.trailer, this.result, this._read);
+
+  /// How the game ended, as a list shows it: its `Result` header, else the
+  /// marker after its moves, else null.
+  final String? result;
 
   /// Every line of the game's header block, in file order.
   final List<PgnHeader> tags;
@@ -88,7 +95,7 @@ final class ChapterLine {
   /// takes neither the blank line that followed it nor the missing newline
   /// at the end of the file.
   ChapterLine spacedBy(String trailer) =>
-      ChapterLine._(tags, text, trailer, _read);
+      ChapterLine._(tags, text, trailer, result, _read);
 
   /// Whether [tree] holds everything [text] holds.
   ///

@@ -536,9 +536,8 @@ Future<_Metadata> _readMetadata(String text) async {
     final heading = readHeading(text);
     return (
       names: List.unmodifiable(
-        text.contains('[$chapterNameTag ')
-            ? sectionsInText(text)
-            : <String?>[null],
+        // Any space can stand between a tag's name and its value.
+        text.contains(chapterNameTag) ? sectionsInText(text) : <String?>[null],
       ),
       heading: ChapterHeading(
         rootMoves: List.unmodifiable(heading.rootMoves),

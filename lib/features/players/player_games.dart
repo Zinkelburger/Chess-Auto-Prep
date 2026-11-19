@@ -159,6 +159,8 @@ PlayerCorpus buildPlayerCorpus(Set<String> names, List<PlayerGame> sources) {
     final fallback = [
       for (final key in ['White', 'Black', 'Date', 'Round', 'Result'])
         tagValue(read.tags, key),
+      // The same moves from another set-up position are another game.
+      tree.rootFen.position,
       _moves(tree).join(' '),
     ].join('|');
     if (!seen.add(

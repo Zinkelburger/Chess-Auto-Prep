@@ -1,5 +1,4 @@
-import 'package:dartchess/dartchess.dart'
-    show Move, NormalMove, Position, SquareSet;
+import 'package:dartchess/dartchess.dart' show Move, NormalMove, Position;
 
 import '../fen.dart';
 import 'game_tree.dart';
@@ -150,12 +149,12 @@ final class _Moves {
   /// The node [spelling] makes from [position], or null with an issue
   /// recorded.
   _Node? _played(Position position, String spelling, int at) {
-    final move = _parsed(position, spelling);
+    final move = parseLegalSan(position, parseableSan(spelling));
     if (move == null) {
       _say(at, (l, c) => IllegalMove(spelling, line: l, column: c));
       return null;
     }
-    // [_parsed] answers only a legal move, so it is not checked again.
+    // [parseLegalSan] answers only a legal move, so it is not checked again.
     final (next, written) = position.makeSanUnchecked(move);
     final san = _sans[written] ??= written;
     return _Node(
@@ -305,29 +304,6 @@ List<MoveNode> _freeze(List<_Node> nodes) {
     );
   }
   return List.unmodifiable([for (final node in nodes) node.frozen!]);
-}
-
-/// The move [spelling] names in [position], or null when it names none.
-///
-/// dartchess answers an unplayable move with null for most spellings and
-/// with a `RangeError` for a few — it reads the first character of a SAN it
-/// has already cut annotations off, so a token like `xe4` leaves it with
-/// nothing to read. A move nobody can play is a move nobody can play; the
-/// caller reports it either way.
-Move? _parsed(Position position, String spelling) {
-  try {
-    final move = position.parseSan(parseableSan(spelling));
-    // dartchess accepts a legal pawn destination even if promotion is missing.
-    if (move is NormalMove &&
-        move.promotion == null &&
-        SquareSet.backranks.has(move.to) &&
-        position.board.pawns.has(move.from)) {
-      return null;
-    }
-    return move;
-  } on Object {
-    return null;
-  }
 }
 
 /// [san] in the one spelling dartchess parses: letter-O castling and an

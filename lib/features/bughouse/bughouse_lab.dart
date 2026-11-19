@@ -179,6 +179,11 @@ final class BughouseLab extends ChangeNotifier {
   /// dropped a piece a move taken out had captured.
   void deleteFrom(int node) {
     final board = _line.nodes[node].board;
+    if (_line.dropBrokenByRemoving(node) case final broken?) {
+      _focus = board;
+      _refuse(DeleteRefused(broken));
+      return;
+    }
     final next = _line.without(node);
     switch (next.replay()) {
       case LineReplayed(:final position):

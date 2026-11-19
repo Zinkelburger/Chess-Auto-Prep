@@ -85,7 +85,7 @@ List<_Spelled>? _spelled(Fen fen) {
     for (final named in legalMovesOf(position))
       (
         uci: named.uci,
-        sans: _sans(position, named.move, castles: named.uci != named.move.uci),
+        sans: _sans(position, named.move),
         ucis: {named.uci, named.move.uci}.toList(),
       ),
   ];
@@ -94,12 +94,10 @@ List<_Spelled>? _spelled(Fen fen) {
 /// The SAN spellings of [move]. A piece may name the file, the rank or the
 /// square it comes from whether or not another could go there too; a pawn
 /// names its file when it takes. Castling is `OO` or `OOO`, dashes gone.
-List<String> _sans(
-  Position position,
-  NormalMove move, {
-  required bool castles,
-}) {
-  if (castles) return [move.to > move.from ? 'OO' : 'OOO'];
+List<String> _sans(Position position, NormalMove move) {
+  if (castlesOntoRook(position, move)) {
+    return [move.to > move.from ? 'OO' : 'OOO'];
+  }
   final role = position.board.pieceAt(move.from)!.role;
   final to = move.to.name;
   final promotion = move.promotion?.uppercaseLetter ?? '';

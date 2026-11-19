@@ -319,6 +319,10 @@ class Trainer extends ChangeNotifier {
   /// Counts loads, so an older one that finishes late is not taken for the
   /// newest when both asked for the same thing.
   final _loads = Latest();
+
+  /// Counts [trainLineThrough] requests: one that finishes after a newer
+  /// one started must not replace the newer one's lesson.
+  final _lineRequests = Latest();
   bool _disposed = false;
 
   /// The board while a sitting holds it; null otherwise.
@@ -434,25 +438,37 @@ class Trainer extends ChangeNotifier {
         final current = lines
             .where((candidate) => candidate.key == line.key)
             .firstOrNull;
-        return current == null ||
-                current.modelGame ||
-                progress.status(current) == LineStatus.excluded
+        return current == null || !_trainable(current, progress)
             ? const []
             : [current];
       });
 
+  /// Whether a sitting can ask [line]: not a model game, not excluded, and
+  /// with some of the user's moves in it.
+  static bool _trainable(TrainingLine line, TrainingProgress progress) =>
+      !line.modelGame &&
+      line.yourMoves > 0 &&
+      progress.status(line) != LineStatus.excluded;
+
   /// Trains the line of the chapter on the board that plays [sans] from its
-  /// start, the shortest when several do: a line sent from elsewhere, such
-  /// as a trap from the Positions list. The chapter as it stands now is
-  /// read first. False when no such line can be trained.
+  /// start, the shortest that can be trained when several do: a line sent
+  /// from elsewhere, such as a trap from the Positions list. The chapter as
+  /// it stands now is read first. False when no such line can be trained.
   Future<bool> trainLineThrough(List<String> sans) async {
+    final request = _lineRequests.begin();
     await _load(force: true);
     await _loadsSettled();
     final state = _state;
     final source = _session.source?.path;
-    if (_disposed || state is! TrainerReady || source == null) return false;
+    final start = _session.tree?.rootFen.position;
+    if (request.overtaken || state is! TrainerReady || source == null) {
+      return false;
+    }
+    if (start == null) return false;
     bool plays(TrainingLine line) =>
         line.key.source == source &&
+        line.start.isAt(start) &&
+        _trainable(line, state.progress) &&
         line.moves.length >= sans.length &&
         [for (final move in line.moves.take(sans.length)) move.san].join(' ') ==
             sans.join(' ');
@@ -713,11 +729,12 @@ class Trainer extends ChangeNotifier {
             revision: _session.trainingSourceRevision,
           )
         : null;
-    final chapters = await _chapters.chaptersWhere(
+    final (:chapters, :problem) = await _chapters.chaptersWhere(
       (ref) => ref.path == root || _catalog?.repertoireOf(ref.path) == root,
       open,
     );
     if (load.overtaken) return;
+    if (problem != null) return _become(TrainerFailed.source(problem));
     if (chapters.isEmpty) {
       return _become(const TrainerEmpty(NothingToTrain.noChapter));
     }
@@ -736,11 +753,12 @@ class Trainer extends ChangeNotifier {
             revision: _session.trainingSourceRevision,
           )
         : null;
-    final chapters = await _chapters.chaptersWhere(
+    final (:chapters, :problem) = await _chapters.chaptersWhere(
       (ref) => _books.contains(book, ref),
       open,
     );
     if (load.overtaken) return;
+    if (problem != null) return _become(TrainerFailed.source(problem));
     if (chapters.isEmpty) {
       return _become(const TrainerEmpty(NothingToTrain.emptyBook));
     }
@@ -810,6 +828,7 @@ class Trainer extends ChangeNotifier {
     // A load still reading is overtaken: it makes no progress to leak and
     // tells nobody.
     _loads.close();
+    _lineRequests.close();
     selection.removeListener(_selectionChanged);
     selection.dispose();
     settings?.removeListener(_settingsChanged);

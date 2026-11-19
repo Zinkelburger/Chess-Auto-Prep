@@ -97,13 +97,13 @@ ImportRead readImport(String text, {required DateTime created}) {
         // did read would lose the rest — a move, a comment, the whole game
         // when its position is not one: it goes in as its own bytes, and the
         // chapter says what is wrong with it when it opens.
-        written.keep(game.text, rootFen);
+        written.keep(game.text, rootFen, whole: true);
         continue;
       }
       if (!game.hasMoves) continue;
       final whole = group.modelGames || game.isComplete;
       for (final line in whole ? [game.text] : _expanded(game, grouping)) {
-        written.keep(line, rootFen);
+        written.keep(line, rootFen, whole: whole);
       }
     }
     if (written.count == 0) continue;
@@ -182,11 +182,9 @@ final class _Game {
   String? tag(String key) => tagValue(read.tags, key);
 
   /// A game with a result is somebody's finished game: its brackets are
-  /// annotation, not repertoire, and it is kept as it is.
-  bool get isComplete {
-    final result = (tag('Result') ?? '*').trim();
-    return result.isNotEmpty && result != '*';
-  }
+  /// annotation, not repertoire, and it is kept as it is. The result is the
+  /// `Result` header, or the marker after the moves when there is none.
+  bool get isComplete => isFinishedResult(tag('Result') ?? read.terminator);
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +224,9 @@ final class _Grouping {
 /// The games under their chapter titles, in the order the titles first
 /// appear; see [groupChapters].
 _Grouping _grouping(List<_Game> games) {
-  final grouping = groupChapters([for (final game in games) game.read.tags]);
+  final grouping = groupChapters([
+    for (final game in games) game.read.tags,
+  ], isComplete: (index) => games[index].isComplete);
   final groups = <String, _Group>{};
   for (final (index, title) in grouping.titles.indexed) {
     groups.putIfAbsent(title, () => _Group(title)).games.add(games[index]);
@@ -396,21 +396,27 @@ String _moveLabel(Fen root, int ply, MoveNode node) {
   return whiteMoves ? '$number.${node.san}' : '$number...${node.san}';
 }
 
-/// Games gathered one per block, a blank line between them, a game that
+/// Games gathered one per block, a blank line between them, a line that
 /// repeats an earlier one's starting position, title and moves dropped: one
 /// course export listed each of its lines under every one of its chapter titles.
+/// A game kept whole is somebody's record, players and all, so only the same
+/// text again is a repeat of it.
 final class _Lines {
   _Lines(this.titleKey);
 
   final String titleKey;
   final _out = StringBuffer();
   final _seen = <(String?, String)>{};
+  final _records = <String>{};
   int count = 0;
 
   String get text => _out.toString();
 
-  void keep(String game, String? rootFen) {
-    if (!_seen.add((rootFen, _identity(game)))) return;
+  void keep(String game, String? rootFen, {required bool whole}) {
+    final repeat = whole
+        ? !_records.add(game)
+        : !_seen.add((rootFen, _identity(game)));
+    if (repeat) return;
     if (count > 0) _out.write('\n');
     _out
       ..write(game.trimRight())
@@ -419,8 +425,10 @@ final class _Lines {
   }
 
   String _identity(String game) {
+    // Course exports sometimes pad a tag before its closing bracket; the
+    // title is the same either way.
     final title = RegExp(
-      '^\\[$titleKey "([^"]*)"\\]',
+      '^\\[$titleKey\\s+"([^"]*)"\\s*\\]',
       multiLine: true,
     ).firstMatch(game)?.group(1);
     final moves = game

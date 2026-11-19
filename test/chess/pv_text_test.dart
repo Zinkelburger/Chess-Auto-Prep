@@ -31,6 +31,12 @@ void main() {
     expect(pvText(Fen.initial, ['zz']), '');
   });
 
+  test('a PV stops at a pawn move missing its promotion piece', () {
+    const fen = Fen('7k/P7/8/8/8/8/8/K7 w - - 0 1');
+    expect(pvMoves(fen, ['a7a8']), isEmpty);
+    expect(pvMoves(fen, ['a7a8n']).single.san, 'a8=N');
+  });
+
   test('a FEN that is not a position has no line', () {
     expect(pvText(const Fen('not a position'), ['e2e4']), '');
     // Enough fields to parse, but no kings: a setup, not a chess position.

@@ -150,12 +150,19 @@ bool isEventLine(String text, int start, int end) {
 /// this before it can trust a line that starts with `[Event`.
 ///
 /// Only the movetext can open one. A `{` inside a tag value — `[Event "a {b"]`
-/// — or after a `;` is an ordinary character, and a file read as if it were a
-/// comment would have every game below it swallowed into one blob that no
-/// edit could ever touch again.
+/// — after a `;` or on a `%` escape line is an ordinary character, and a file
+/// read as if it were a comment would have every game below it swallowed into
+/// one blob that no edit could ever touch again. [start] is a line's start.
 bool commentOpenAfter(String text, int start, int end, bool commented) {
   var open = commented;
   var i = start;
+  if (!open) {
+    // The reader skips a `%` escape line whole, blanks before it or not.
+    while (i < end && isBlank(text.codeUnitAt(i))) {
+      i++;
+    }
+    if (i < end && text.codeUnitAt(i) == percent) return false;
+  }
   while (i < end) {
     final unit = text.codeUnitAt(i);
     if (open) {
@@ -188,6 +195,13 @@ int _pastQuoted(String text, int i, int end) {
     j++;
   }
   return end;
+}
+
+/// Whether [result], a `Result` header or the marker ending the moves, is
+/// a finished game's: anything but `*` or nothing.
+bool isFinishedResult(String? result) {
+  final value = result?.trim();
+  return value != null && value.isNotEmpty && value != '*';
 }
 
 /// The value of the first tag named [key], or null.

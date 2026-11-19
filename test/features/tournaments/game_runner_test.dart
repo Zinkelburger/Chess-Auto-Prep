@@ -111,6 +111,19 @@ void main() {
       );
     }
   });
+  test('a bestmove missing its promotion piece forfeits before play', () async {
+    final black = ScriptEngine([]);
+    final result = await game(
+      config(extra: {'startFen': '7k/P7/8/8/8/8/8/K7 w - - 0 1'}),
+      [
+        ScriptEngine(['a7a8']),
+        black,
+      ],
+    );
+    expect(result.record.termination, 'illegalMove');
+    expect(result.record.result, '0-1');
+    expect(black.requests, isEmpty);
+  });
   test('threefold ends before a ninth engine request', () async {
     final result = await game(config(), [
       ScriptEngine(['g1f3', 'f3g1', 'g1f3', 'f3g1']),
