@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/features/pgn_viewer/pgn_viewer.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
@@ -52,7 +54,7 @@ final class ScriptedImport implements PgnFileImport {
   final asked = <String>[];
 
   /// What [read] answers, by path; a path not here cannot be read.
-  final picked = <String, PickedRead>{};
+  final picked = <String, FutureOr<PickedRead>>{};
 
   /// Every path read, in order.
   final reads = <String>[];

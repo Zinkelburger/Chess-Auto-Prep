@@ -45,6 +45,22 @@ void main() {
     expect(lab.focus, BoardNumber.two);
   });
 
+  test('a new game and a new move each advance the game revision', () {
+    final initial = lab.gameRevision;
+    lab.newGame();
+    final fresh = lab.gameRevision;
+    expect(fresh, greaterThan(initial));
+
+    lab.play(BoardNumber.one, 'e2e4');
+    final edited = lab.gameRevision;
+    expect(edited, greaterThan(fresh));
+
+    lab.toStart();
+    lab.play(BoardNumber.one, 'e2e4');
+    expect(lab.line.applied.single.san, 'e4');
+    expect(lab.gameRevision, edited);
+  });
+
   test('a repeated drop replays after the variation supplies its pawn', () {
     lab.showBoards(LabBoards.two);
     lab.play(BoardNumber.two, 'e2e4');
