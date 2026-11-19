@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:chess_auto_prep/chess/training/schedule.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/features/trainer/trainer.dart';
 import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
@@ -64,6 +65,68 @@ void main() {
     books.dispose();
     analysis.dispose();
     session.dispose();
+  });
+
+  test(
+    'a line sent to train skips model games, excluded lines and other starts',
+    () async {
+      const text = '''
+// Color: White
+
+[Event "Playable"]
+[LineID "play"]
+
+1. e4 e5 2. Nf3 *
+
+[Event "Model"]
+[ModelGameResult "1-0"]
+
+1. e4 *
+
+[Event "Excluded"]
+[LineID "excluded"]
+
+1. e4 c5 *
+
+[Event "Different start"]
+[SetUp "1"]
+[FEN "rnbqkbnr/1ppppppp/p7/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 2"]
+
+2. e4 *
+''';
+      session.externalEdit(text);
+      await session.session.reloadFromDisk();
+      final key = (source: session.ref.path, id: 'excluded');
+      progress.reviews[key] = Review(
+        key: key,
+        lineName: 'Excluded',
+        excluded: true,
+      );
+      expect(await trainer.trainLineThrough(['e4']), isTrue);
+      expect(trainer.lesson!.line.key.id, 'play');
+    },
+  );
+
+  test('a late prefix request cannot replace the newer lesson', () async {
+    const text =
+        '$_text\n\n[Event "Queen pawn"]\n[LineID "queen"]\n\n1. d4 d5 *';
+    session.externalEdit(text);
+    await session.session.reloadFromDisk();
+    trainer.setScope(TrainScope.repertoire);
+    await trainer.reload();
+    chapters.hold = true;
+    final older = trainer.trainLineThrough(['e4']);
+    await pumpEventQueue();
+    final newer = trainer.trainLineThrough(['d4']);
+    await pumpEventQueue();
+    expect(chapters.pendingCalls, 2);
+    chapters.releaseLast();
+    expect(await newer, isTrue);
+    final lesson = trainer.lesson;
+    expect(lesson!.line.key.id, 'queen');
+    chapters.releaseNext();
+    expect(await older, isFalse);
+    expect(trainer.lesson, same(lesson));
   });
 
   test('an unreadable chapter is left out and the rest are trained', () {

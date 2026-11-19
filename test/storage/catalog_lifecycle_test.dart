@@ -212,6 +212,22 @@ void main() {
     },
   );
 
+  test('the catalog lists a tab-separated singleton chapter name', () async {
+    final disk = await StoreFixture.create();
+    addTearDown(disk.dispose);
+    final root = Directory(p.join(disk.documents.path, 'repertoires'));
+    final course = disk.ref('repertoires/KID/Course.pgn');
+    await disk.put(
+      course,
+      '[Event "Line"]\n[ChapterName\t"Italian"]\n\n1. e4 *',
+    );
+    final files = ChapterDirectory(root, recovery: disk.store.recovery);
+    final listing = await files.list() as Repertoires;
+    expect(listing.folders.single.chapters, [
+      ChapterRef.at(course.path, section: 'Italian'),
+    ]);
+  });
+
   test('nested files follow rename and recovery', () async {
     final disk = await StoreFixture.create();
     addTearDown(disk.dispose);
