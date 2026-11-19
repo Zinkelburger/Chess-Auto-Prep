@@ -248,8 +248,25 @@ final class BackupArchive {
         await flushRecoveryAncestry(folder.parent.path, through: boundary);
       }
       final index = await _readIndex(folder);
-      if (index.versions.isNotEmpty && index.versions.last.hash == hash) {
-        return const BackupSkipped();
+      final last = index.versions.lastOrNull;
+      if (last != null &&
+          last.hash == hash &&
+          p.basename(last.file) == last.file) {
+        // The index alone does not prove the copy is there: a file manager
+        // may have moved it back over the document.
+        final copy = File(p.join(folder.path, last.file));
+        final holds = await _copyHolds(copy, hash);
+        if (holds == true) {
+          // An earlier attempt may have stopped before its folder flush.
+          await flushRecoveryDirectory(folder.path);
+          return const BackupSkipped();
+        }
+        if (holds == null && _isVersion(last.file)) {
+          await discardLeftoverStage(copy.path);
+          await createFileExclusively(copy.path, bytes);
+          return const BackupRecorded();
+        }
+        // A copy changed since it was kept: these bytes become a new version.
       }
       final time = DateTime.now().toUtc();
       final name = '${_stamp(time)}-${hash.substring(0, 8)}$_versionSuffix';
@@ -269,6 +286,20 @@ final class BackupArchive {
     } on Object catch (error) {
       log.e('record the previous version of $documentPath', error);
       return BackupFailed('$error');
+    }
+  }
+
+  /// Whether [copy] holds bytes hashing to [hash]; null when it is gone. One
+  /// that cannot be read answers false, so the save keeps a new version
+  /// rather than being refused for good.
+  Future<bool?> _copyHolds(File copy, String hash) async {
+    try {
+      return sha256.convert(await copy.readAsBytes()).toString() == hash;
+    } on PathNotFoundException {
+      return null;
+    } on FileSystemException catch (error) {
+      log.w('read the kept version ${copy.path}', error);
+      return false;
     }
   }
 

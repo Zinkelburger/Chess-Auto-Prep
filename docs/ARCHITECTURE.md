@@ -434,7 +434,8 @@ The user never asks for a backup and never names one.
 - **Identity, not path.** Versions follow the document through rename and
   move; a history that cannot move at once is noted under `backup-moves/` and
   moved by the next recovery pass.
-- Unchanged content records nothing. Saves do not prune: the builder's
+- Content equal to the newest kept version records nothing while that copy
+  is still there; a copy moved away is written again. Saves do not prune: the builder's
   `Version history` previews each version (checksum-verified), restores one as
   a separate repertoire, and offers explicit cleanup keeping the newest 100
   versions and everything from the last 90 days.
