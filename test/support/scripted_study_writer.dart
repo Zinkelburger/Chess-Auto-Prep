@@ -6,6 +6,9 @@ import 'package:dartchess/dartchess.dart' show Side;
 final class ScriptedStudyWriter implements LichessStudyWriter {
   ScriptedStudyWriter({this.loggedIn = true});
 
+  /// Lets a test hold a particular chapter request before it lands.
+  Future<void> Function(String name)? beforeAdd;
+
   bool loggedIn;
 
   /// The id a new study gets.
@@ -45,6 +48,7 @@ final class ScriptedStudyWriter implements LichessStudyWriter {
     bool initial = false,
   }) async {
     if (failing case final failed?) return failed;
+    if (beforeAdd case final wait?) await wait(name);
     if (refuse.contains(name)) {
       return const LichessNotWritten(
         LichessWriteProblem.rejected,

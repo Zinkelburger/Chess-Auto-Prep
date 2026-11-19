@@ -187,6 +187,24 @@ void main() {
     expect((study.store.documents[renamed] as Opened).text, contains('Nc6'));
   });
 
+  for (final action in ['rename', 'delete']) {
+    test(
+      'a player’s linked study stays readable after a refused $action',
+      () async {
+        final path = studyRef('Endgames').path;
+        final people = MemoryPlayers();
+        await people.savePlayer(Player.create('Opponent').withStudy(path));
+        final study = await openStudy(twoChapterStudy, linkedPlayers: people);
+        addTearDown(study.dispose);
+        final result = action == 'rename'
+            ? await study.studies.rename(study.ref, 'Moved')
+            : await study.studies.delete(study.ref);
+        expect(result, isA<StudyProblem>());
+        expect(study.onDisk, twoChapterStudy);
+      },
+    );
+  }
+
   test('rename keeps the selected chapter and PGN bytes', () async {
     final study = await openStudy(twoChapterStudy, chapter: 1);
     addTearDown(study.dispose);

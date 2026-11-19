@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_order.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/reading_place.dart';
+import 'package:chess_auto_prep/storage/file_lock.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/pgn_export.dart';
 import 'package:chess_auto_prep/storage/viewer_places.dart';
@@ -80,6 +81,40 @@ void main() {
       expect(f.onDisk, threeGameFile);
     },
   );
+  test(
+    'shutdown waits for a confirmed PGN export to reach its folder',
+    () async {
+      final folder = await Directory.systemTemp.createTemp('viewer-export-');
+      addTearDown(() => folder.delete(recursive: true));
+      final f = await viewerOver(
+        threeGameFile,
+        exporter: PgnExport(pickDirectory: () async => folder.path),
+      );
+      addTearDown(f.dispose);
+      await f.open();
+      final text = f.viewer.exportText()!;
+      final file = File('${folder.path}/games.pgn');
+      final locked = Completer<void>();
+      final release = Completer<void>();
+      final holding = withDirectoryLock(folder, () {
+        locked.complete();
+        return release.future;
+      });
+      await locked.future;
+      final exporting = f.viewer.export('games.pgn', text);
+      await pumpEventQueue();
+      final onClose = f.viewer.pendingWrites.settle().then(
+        (_) => file.existsSync(),
+      );
+      await pumpEventQueue();
+      release.complete();
+      await holding;
+      expect(await exporting, isA<PgnExported>());
+      expect(await onClose, isTrue);
+      expect(await file.readAsString(), text);
+    },
+  );
+
   test(
     'reading restores game identity, cursor, sorting and filters after reordering',
     () async {

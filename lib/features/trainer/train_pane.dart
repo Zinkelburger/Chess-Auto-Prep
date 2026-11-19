@@ -146,12 +146,34 @@ class _TrainPaneState extends State<TrainPane> {
         onImport: widget.onImport,
         bookChip: widget.bookChip,
       ),
-      TrainerFailed(:final failure) => ListMessage(
+      TrainerFailed(:final failure?) => ListMessage(
         progressProblem(failure, doing: 'read the training progress'),
         inset: Space.m,
         action: OutlinedButton(
           onPressed: trainer.reload,
           child: const Text('Try again'),
+        ),
+      ),
+      // The scope stays in reach: the open chapter can still be trained.
+      TrainerFailed(:final sourceProblem) => Padding(
+        padding: const EdgeInsets.all(Space.m),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: TrainScopeButtons(trainer: trainer),
+            ),
+            const SizedBox(height: Space.s),
+            ListMessage(
+              sourceProblem ?? '',
+              inset: 0,
+              action: OutlinedButton(
+                onPressed: trainer.reload,
+                child: const Text('Try again'),
+              ),
+            ),
+          ],
         ),
       ),
       final TrainerReady ready when trainer.selection.active => TrainingHome(
