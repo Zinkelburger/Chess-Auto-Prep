@@ -321,12 +321,13 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
         for (final (i, id) in corpus.ids.indexed) id: corpus.texts[i],
       });
       _from = List.unmodifiable(corpus.from);
-      _state = index == null
-          ? const TreeEmpty(
-              'No games of yours are saved yet. '
-              'Get games in Tactics or My games.',
-            )
-          : const TreeBuilt();
+      _state = switch ((index, read.notice)) {
+        (null, final String problem) => TreeFailed(problem),
+        (null, null) => const TreeEmpty(
+          'No games of yours are saved yet. Get games in Tactics or My games.',
+        ),
+        _ => TreeBuilt(notice: read.notice),
+      };
     } on Object catch (error) {
       if (ticket.overtaken) return;
       log.w('read your games', error);
@@ -368,19 +369,26 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
     }
     final accounts = accountRead.accounts;
     final files = <(GameSite, List<String>)>[];
+    final unread = <String>[];
     for (final MapEntry(key: site, value: account) in accounts.entries) {
       final read = await _cache.snapshotAll(site, account.username);
       if (gone()) return null;
-      // One account's file that cannot be read leaves its games out; the
-      // other accounts' games are still worth an explorer.
+      // One account's file that cannot be read leaves its games out, and
+      // says so; the other accounts' games are still worth an explorer.
       if (read is! CachedGamesSnapshot) {
         log.w('read your ${site.label} games', '$read');
+        unread.add(site.label);
         continue;
       }
       files.add((site, [for (final game in read.games) game.text]));
     }
     if (gone()) return null;
-    return (corpus: myGamesCorpus(files: files));
+    return (
+      corpus: myGamesCorpus(files: files),
+      notice: unread.isEmpty
+          ? null
+          : 'Could not read your ${unread.join(' and ')} games.',
+    );
   }
 
   void _stop() {
@@ -397,7 +405,7 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
   }
 }
 
-typedef _MyGamesRead = ({MyGamesCorpus corpus});
+typedef _MyGamesRead = ({MyGamesCorpus corpus, String? notice});
 
 /// The user's games gathered from every downloaded file, each once, newest
 /// first, with the id the games list names each by.
