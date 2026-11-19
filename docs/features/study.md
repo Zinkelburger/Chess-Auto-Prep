@@ -82,7 +82,8 @@ logged in (`Log in to Lichess to send a study.`) or logged in without write
 permission (`… Log in again to give it.`) offers **Log in to Lichess**, which
 sends once the login completes. A refused chapter stops the send with Lichess's
 reason and how many went; **Send again** then goes to the study already made.
-A new study holds at most 64 chapters.
+Closing the app waits for a send in progress until its chapter links are in
+the study. A new study holds at most 64 chapters.
 
 **Copy study PGN** and **Copy chapter PGN** export the respective material.
 **Export study PGN…** writes a captured snapshot to a chosen folder and never
