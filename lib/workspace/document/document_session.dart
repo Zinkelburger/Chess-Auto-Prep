@@ -348,7 +348,7 @@ final class DocumentSession extends ChangeNotifier {
     if (ticket.overtaken) return const OpenOvertaken();
     final version = access.versionOf(ref.path);
     final receipt = _saver.lastReceipt;
-    final leftAsIs = !_saver.settled;
+    final (leftAsIs, drafts) = (!_saver.settled, _saver.drafts);
     final read = await readDocument(_store, ref, game: game, parsed: _parsed);
     if (ticket.overtaken) return const OpenOvertaken();
     if (access.versionOf(ref.path) != version) {
@@ -363,9 +363,9 @@ final class DocumentSession extends ChangeNotifier {
         shown = read;
     }
     _editors.commit();
-    if (!leftAsIs && !_saver.settled) {
-      // Words typed during the read go to their file before the handover.
-      // If the file will not take them, keep that document on screen.
+    if ((!leftAsIs || _saver.drafts != drafts) && !_saver.settled) {
+      // Words typed during the read, a Save among them, go to their file
+      // before the handover. If the file will not take them, it stays up.
       final into = _saver.documentPath;
       await _saver.flush();
       if (ticket.overtaken || !_saver.settled) {
