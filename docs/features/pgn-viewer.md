@@ -150,7 +150,10 @@ says `Unsaved edits to <file> from an earlier session.` with `Restore unsaved
 edits`; if the file changed since, `… The file has changed since.` with `Save
 them as a copy` (`<file> unsaved edits.pgn` beside it). A checkpoint edited
 past, or that is not a draft at all, is moved to the recovery quarantine; one
-that cannot be read just now stays where it is for the next opening.
+that cannot be read just now stays where it is for the next opening. One that
+cannot be moved aside is never written over or dropped: the new edits go into
+no checkpoint until a later write can move it. A renamed file's checkpoint
+stays under the old name until the one under the new name is written.
 `Unsaved edits to <file> were not kept.` (with what the disk says) when a
 checkpoint could not be written.
 

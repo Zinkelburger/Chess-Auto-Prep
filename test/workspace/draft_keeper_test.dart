@@ -171,6 +171,81 @@ void main() {
     run.kill();
   });
 
+  test('a renamed file whose new checkpoint cannot be written keeps the '
+      'old one', () async {
+    final drafts = _MemoryDrafts();
+    final run = _Run(store, drafts);
+    addTearDown(run.kill);
+    await run.session.open(ref, game: 0);
+    run.session.setComment(NodePath.of(const [0]), 'Held through rename');
+    expect(await run.keeper.settle(), isNull);
+    final old = drafts.kept[ref.path]!.text;
+    expect(old, contains('Held through rename'));
+
+    final renamed = collectionRef('games2');
+    drafts.unwritablePath = renamed.path;
+    run.session.relocated(renamed);
+    expect(await run.keeper.settle(), isNotNull);
+    expect(drafts.kept[ref.path]?.text, old);
+  });
+
+  test('a checkpoint that cannot be set aside is neither written over nor '
+      'dropped', () async {
+    final drafts = ViewerDraftFiles(support);
+    final first = _Run(store, drafts);
+    await first.session.open(ref, game: 0);
+    first.session.setComment(NodePath.of(const [0]), 'Old note');
+    await first.keeper.settle();
+    first.kill();
+
+    final checkpoint = (await drafts.find(ref.path))!.text;
+    expect(checkpoint, contains('Old note'));
+    // A file where the quarantine folder goes: nothing can be moved there.
+    await File(p.join(support.path, quarantineFolder)).create();
+    final next = _Run(store, drafts);
+    addTearDown(next.kill);
+    await next.session.open(ref, game: 0);
+    await next.keeper.settle();
+    expect(next.keeper.offered?.text, checkpoint);
+
+    next.session.setComment(NodePath.of(const [0]), 'New note');
+    expect(await next.keeper.settle(), isNotNull);
+    expect((await drafts.find(ref.path))?.text, checkpoint);
+    next.session.discardHeld();
+    expect(await next.keeper.settle(), isNull);
+    expect((await drafts.find(ref.path))?.text, checkpoint);
+  });
+
+  test('a later edit sets the old checkpoint aside once it can', () async {
+    final drafts = ViewerDraftFiles(support);
+    final run = _Run(store, drafts);
+    addTearDown(run.kill);
+    await run.session.open(ref, game: 0);
+    final old = threeGameFile.replaceFirst('3. Bb5', '3. Bb5 {Older note}');
+    await drafts.keep(
+      ViewerDraft(
+        path: ref.path,
+        game: 0,
+        revision: scriptedRevision(threeGameFile),
+        text: old,
+      ),
+    );
+    final obstruction = File(p.join(support.path, quarantineFolder));
+    await obstruction.create();
+    run.session.setComment(NodePath.of(const [0]), 'New note');
+    expect(await run.keeper.kept(ref.path), isNotNull);
+    expect((await drafts.find(ref.path))?.text, old);
+
+    await obstruction.delete();
+    run.session.setComment(NodePath.of(const [0]), 'Newer note');
+    expect(await run.keeper.settle(), isNull);
+    expect((await drafts.find(ref.path))?.text, contains('Newer note'));
+    final quarantined = Directory(
+      obstruction.path,
+    ).listSync(recursive: true).whereType<File>().single;
+    expect(quarantined.readAsStringSync(), contains('Older note'));
+  });
+
   testWidgets('opening a scratch board with held edits reports no error', (
     tester,
   ) async {
@@ -536,8 +611,16 @@ final class _MemoryDrafts implements ViewerDrafts {
   final kept = <String, ViewerDraft>{};
   final setAsideFor = <String>[];
 
+  /// A file whose checkpoint the disk will not take.
+  String? unwritablePath;
+
   @override
-  Future<void> keep(ViewerDraft draft) async => kept[draft.path] = draft;
+  Future<void> keep(ViewerDraft draft) async {
+    if (draft.path == unwritablePath) {
+      throw FileSystemException('Cannot write checkpoint', draft.path);
+    }
+    kept[draft.path] = draft;
+  }
 
   @override
   Future<ViewerDraft?> find(String path) async => kept[path];
