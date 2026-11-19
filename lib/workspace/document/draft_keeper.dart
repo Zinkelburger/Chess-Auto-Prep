@@ -336,8 +336,10 @@ final class DraftKeeper {
       draft.game < file.lines.length ? draft.game : 0,
     );
     _withdraw();
-    // These edits are the checkpoint: it is theirs to replace.
+    // These edits are the checkpoint: it is theirs to replace, even one
+    // that could not be set aside earlier.
     _owns = true;
+    _notSetAside.remove(draft.path);
     _session.restoreDraft(
       RetainedDraft(
         shown: (chapter: restored, view: null),
@@ -376,6 +378,8 @@ final class DraftKeeper {
         if (_offered == draft) {
           _offered = null;
           _kept.remove(draft.path);
+          // The copy holds it: it may go, though it was not set aside.
+          _notSetAside.remove(draft.path);
           _inTurn(() => _drop(draft.path));
         }
         say('Saved the unsaved edits as $name', problem: false);

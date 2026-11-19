@@ -587,6 +587,69 @@ void main() {
       await until(() => second.saver.state is Saved);
       second.kill();
     });
+
+    /// An earlier session's checkpoint that this run once failed to set
+    /// aside, offered again when [games] is opened anew.
+    Future<_Run> offeredAfterFailedSetAside(File obstruction) async {
+      final first = run();
+      await first.session.open(games, game: 0);
+      first.session.setComment(NodePath.of(const [0]), 'Old draft note');
+      await first.keeper.settle();
+      first.kill();
+
+      await obstruction.create();
+      final second = run();
+      await second.session.open(games, game: 0);
+      await until(() => second.offer != null);
+      second.session.setComment(NodePath.of(const [0]), 'Discarded note');
+      expect(await second.keeper.settle(), isNotNull);
+      second.session.discardHeld();
+      await second.keeper.settle();
+      expect(checkpointText(), contains('Old draft note'));
+
+      await second.session.open(other, game: 0);
+      second.said.clear();
+      await second.session.open(games, game: 0);
+      await until(() => second.offer != null);
+      return second;
+    }
+
+    test('an offered checkpoint saved as a copy is dropped, though setting '
+        'it aside failed earlier in the run', () async {
+      final obstruction = File(p.join(disk.support.path, quarantineFolder));
+      final changed = threeGameFile.replaceFirst('3. Bb5', '3. Bc4');
+      final app = await offeredAfterFailedSetAside(obstruction);
+      addTearDown(app.kill);
+      await disk.replace(games, changed, await disk.revisionOf(games));
+      await app.session.open(other, game: 0);
+      app.said.clear();
+      await app.session.open(games, game: 0);
+      await until(() => app.offer?.label == 'Save them as a copy');
+      await obstruction.delete();
+
+      app.offer!.onPressed();
+      await until(() => app.said.last.$1?.startsWith('Saved') ?? false);
+      await app.keeper.settle();
+      expect(draftFiles(), isEmpty, reason: 'the copy holds those edits');
+    });
+
+    test('an offered checkpoint restored is this visit\'s to replace, though '
+        'setting it aside failed earlier in the run', () async {
+      final obstruction = File(p.join(disk.support.path, quarantineFolder));
+      final app = await offeredAfterFailedSetAside(obstruction);
+      addTearDown(app.kill);
+      expect(app.offer!.label, 'Restore unsaved edits');
+
+      app.offer!.onPressed();
+      await until(() => app.session.hasHeldEdits);
+      app.session.setComment(NodePath.of(const [0, 0]), 'More');
+      expect(await app.keeper.settle(), isNull);
+      expect(checkpointText(), contains('More'));
+      app.session.keepHeld();
+      await until(() => fileText(games).contains('Old draft note'));
+      await app.keeper.settle();
+      expect(draftFiles(), isEmpty, reason: 'the edits are in the file');
+    });
   });
 }
 
