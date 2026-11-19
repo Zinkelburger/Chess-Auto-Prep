@@ -229,6 +229,28 @@ void main() {
     expect(w.session.source, kidMain);
   });
 
+  test('Back and Forward bring back the analysis board each mode had, '
+      'with its moves', () async {
+    w.session.playMove('e2e4');
+    final builderBoard = w.requests.documents.tabs.selected;
+    await go(Mode.study);
+    final studyBoard = w.requests.documents.tabs.selected;
+    expect(studyBoard, isNot(builderBoard));
+    w.session.playMove('d2d4');
+
+    expect(await w.requests.back(), isA<RequestDone>());
+    expect(w.requests.mode, Mode.repertoires);
+    expect(w.requests.documents.tabs.selected, builderBoard);
+    expect(w.session.tree!.children.single.san, 'e4');
+    expect(shownTitle(), startsWith('Builder · '));
+    expect(titleOf(studyBoard), startsWith('Study · '));
+
+    expect(await w.requests.forward(), isA<RequestDone>());
+    expect(w.requests.mode, Mode.study);
+    expect(w.requests.documents.tabs.selected, studyBoard);
+    expect(w.session.tree!.children.single.san, 'd4');
+  });
+
   test('a file read in the viewer and handed to Study comes back in Study '
       'when its tab is picked', () async {
     // Inside Documents, so picking the viewer's tab reads it where it is.
