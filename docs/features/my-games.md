@@ -53,7 +53,8 @@ the list instead.
 - **Messages** — `Reading your games and repertoires…`; `No games saved yet.
   Get games above to download them.`; `Nothing matches "{q}".`; `None of these
   games left your book.`; `Could not compare your games.` with `Try again`
-  (a problem line over the last comparison when an earlier one is shown); on
+  (a problem line over the last comparison when an earlier one is shown;
+  books that could not be read compare nothing until they can); on
   the Book tab `Open one of your games from the list to compare it with your
   book.`
 
