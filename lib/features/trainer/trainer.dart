@@ -713,11 +713,12 @@ class Trainer extends ChangeNotifier {
             revision: _session.trainingSourceRevision,
           )
         : null;
-    final chapters = await _chapters.chaptersWhere(
+    final (:chapters, :problem) = await _chapters.chaptersWhere(
       (ref) => ref.path == root || _catalog?.repertoireOf(ref.path) == root,
       open,
     );
     if (load.overtaken) return;
+    if (problem != null) return _become(TrainerFailed.source(problem));
     if (chapters.isEmpty) {
       return _become(const TrainerEmpty(NothingToTrain.noChapter));
     }
@@ -736,11 +737,12 @@ class Trainer extends ChangeNotifier {
             revision: _session.trainingSourceRevision,
           )
         : null;
-    final chapters = await _chapters.chaptersWhere(
+    final (:chapters, :problem) = await _chapters.chaptersWhere(
       (ref) => _books.contains(book, ref),
       open,
     );
     if (load.overtaken) return;
+    if (problem != null) return _become(TrainerFailed.source(problem));
     if (chapters.isEmpty) {
       return _become(const TrainerEmpty(NothingToTrain.emptyBook));
     }
