@@ -132,6 +132,10 @@ final class TrapTraining {
         session.source != draft) {
       return;
     }
+    if (!_matchesDraft(session.chapter, kept)) {
+      requests.say('The drafts of ${source.name} changed. Try again.');
+      return;
+    }
     final refused = session.apply((c) => lineAdded(c, kept.find.sans));
     if (refused != null || !_played(kept)) {
       requests.say('Could not add the line to ${draft.name}.');
@@ -147,7 +151,7 @@ final class TrapTraining {
     final chapters = library.repertoires.expand((f) => f.chapters).toList();
     for (final ref in draftsBeside(source, chapters)) {
       final draft = await library.chapterForSearch(ref);
-      if (draft != null && draft.side == kept.side && _sameRoot(draft, kept)) {
+      if (_matchesDraft(draft, kept)) {
         return ExistingDraft(ref);
       }
     }
@@ -183,6 +187,12 @@ final class TrapTraining {
 
   static bool _sameRoot(Chapter chapter, KeptFind kept) =>
       chapter.tree.rootFen.position == kept.rootFen.position;
+
+  static bool _matchesDraft(Chapter? chapter, KeptFind kept) =>
+      chapter != null &&
+      readHeading(chapter.preamble).draft &&
+      chapter.side == kept.side &&
+      _sameRoot(chapter, kept);
 
   static bool _plays(Chapter chapter, KeptFind kept) =>
       chapter.side == kept.side &&
