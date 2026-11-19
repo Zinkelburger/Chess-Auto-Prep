@@ -15,7 +15,9 @@ import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document/document_session.dart';
 import 'package:chess_auto_prep/workspace/review/game_review.dart';
+import 'package:chess_auto_prep/workspace/review/game_review_pane.dart';
 import 'package:dartchess/dartchess.dart' show Move;
+import 'package:flutter/material.dart' show Checkbox, MaterialApp, Scaffold;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_engine.dart';
@@ -489,6 +491,50 @@ void main() {
       review.setAnnotate(true);
       expect(review.annotated, isTrue);
       expect(review.problem, isNull);
+    },
+  );
+
+  testWidgets(
+    'Analyze again saves the new review when Annotate PGN is checked',
+    (tester) async {
+      final marked =
+          annotateGame(fixture.session.chapter!, reviewed) as ChapterEdited;
+      fixture.externalEdit(
+        '[Event "First"]\n[Result "*"]\n\n1. d4 *\n\n'
+        '${writeChapter(marked.chapter)}',
+      );
+      final session = fixture.session;
+      session.holdsEdits = false;
+      await session.open(fixture.ref, game: 0);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: GameReviewPane(review: review)),
+        ),
+      );
+      final checkbox = find.byType(Checkbox);
+      await tester.tap(find.text('Annotate PGN'));
+      await tester.pump();
+      expect(tester.widget<Checkbox>(checkbox).value, isFalse);
+
+      session.showGame(1);
+      await tester.pump();
+      expect(tester.widget<Checkbox>(checkbox).value, isTrue);
+      await tester.tap(find.text('Analyze again'));
+      for (final (cp, move) in [(45, 'g1f3'), (250, 'c7c5'), (-250, 'g1f3')]) {
+        await tester.pump();
+        engine.current.emit(line(depth: 14, score: Centipawns(cp), pv: [move]));
+        engine.current.end();
+      }
+      await tester.pump();
+      expect(review.running, isFalse);
+      expect(review.problem, isNull);
+      await fixture.saver.flush();
+
+      final saved = parseChapter(name: 'Games', text: fixture.onDisk);
+      final tree = saved.lines[1].tree!;
+      expect(storedReviewValue(tree.rootComment)?.cp, 45);
+      expect(writtenReviewMark(tree.children.first), ReviewMark.blunder);
+      expect(tree.children.map((move) => move.san), ['e4', 'Nf3']);
     },
   );
 
