@@ -7,6 +7,8 @@ import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/line_id_pins.dart';
 import 'package:chess_auto_prep/chess/pgn/pgn_reader.dart';
 import 'package:chess_auto_prep/chess/pgn/repertoire_import.dart';
+import 'package:chess_auto_prep/chess/training/sitting.dart';
+import 'package:chess_auto_prep/chess/training/training_line.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -153,6 +155,36 @@ void main() {
     final read = imported('$first\n\n${drill(0)}');
     expect(read.lines, 1);
     expect(chapterOf(read.chapters.single).lines.single.text, first);
+  });
+
+  test('a movetext result keeps an annotated game whole and out of Learn', () {
+    final read = imported('[Event "Practice"]\n\n1. e4 (1. d4) e5 1-0');
+    final chapter = chapterOf(read.chapters.single);
+    expect(chapter.lines, hasLength(1));
+    final game = chapter.lines.single;
+    expect(game.terminator, '1-0');
+    final moves = game.tree!.children;
+    expect(moves.map((m) => m.san), ['e4', 'd4']);
+    expect(moves.first.children.single.san, 'e5');
+    final lines = trainingLines(chapter, source: 'Practice.pgn');
+    expect(lines.single.modelGame, isTrue);
+    expect(toLearn(lines, const {}, created), isEmpty);
+  });
+
+  test('movetext results keep player names out of chapter titles', () {
+    final read = imported(
+      [
+        for (final (name, move) in [
+          ('Alice', 'e4'),
+          ('Alice', 'd4'),
+          ('Bob', 'c4'),
+          ('Bob', 'e4'),
+        ])
+          '[Event "Club"]\n[White "$name"]\n[Black "Sam"]\n\n1. $move 1-0',
+      ].join('\n\n'),
+    );
+    expect(read.chapters.map((chapter) => chapter.title), ['Main']);
+    expect(read.lines, 4);
   });
 
   test('a Lichess study export is one chapter per ChapterName', () {

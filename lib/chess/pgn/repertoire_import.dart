@@ -182,11 +182,9 @@ final class _Game {
   String? tag(String key) => tagValue(read.tags, key);
 
   /// A game with a result is somebody's finished game: its brackets are
-  /// annotation, not repertoire, and it is kept as it is.
-  bool get isComplete {
-    final result = (tag('Result') ?? '*').trim();
-    return result.isNotEmpty && result != '*';
-  }
+  /// annotation, not repertoire, and it is kept as it is. The result is the
+  /// `Result` header, or the marker after the moves when there is none.
+  bool get isComplete => isFinishedResult(tag('Result') ?? read.terminator);
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +224,9 @@ final class _Grouping {
 /// The games under their chapter titles, in the order the titles first
 /// appear; see [groupChapters].
 _Grouping _grouping(List<_Game> games) {
-  final grouping = groupChapters([for (final game in games) game.read.tags]);
+  final grouping = groupChapters([
+    for (final game in games) game.read.tags,
+  ], isComplete: (index) => games[index].isComplete);
   final groups = <String, _Group>{};
   for (final (index, title) in grouping.titles.indexed) {
     groups.putIfAbsent(title, () => _Group(title)).games.add(games[index]);

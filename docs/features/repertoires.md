@@ -104,7 +104,8 @@ follows) → `A repertoire named "X" already exists.` /
 `.pgn` dropped anywhere on the window → a new repertoire named after the file
 (illegal characters become `_`, trimmed, then ` (2)`, ` (3)`… until free;
 `Imported repertoire` when the name is unusable), opened on its first chapter.
-Variations become separate lines (whole games stay whole); a file with two or
+Variations become separate lines (a finished game — a result in its `Result`
+tag, or after its moves when it has none — stays whole); a file with two or
 more chapters (Lichess `ChapterName`, Chessable player headers) becomes one
 course file. It is written in a hidden staging folder and moved into place →
 `That PGN has no moves to train.`, `Could not read that file.`,

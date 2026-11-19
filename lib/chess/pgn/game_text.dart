@@ -197,6 +197,13 @@ int _pastQuoted(String text, int i, int end) {
   return end;
 }
 
+/// Whether [result], a `Result` header or the marker ending the moves, is
+/// a finished game's: anything but `*` or nothing.
+bool isFinishedResult(String? result) {
+  final value = result?.trim();
+  return value != null && value.isNotEmpty && value != '*';
+}
+
 /// The value of the first tag named [key], or null.
 String? tagValue(List<PgnHeader> header, String key) {
   for (final line in header) {
