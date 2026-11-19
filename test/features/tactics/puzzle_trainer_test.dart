@@ -129,6 +129,27 @@ void main() {
   );
 
   test(
+    'the pending reply is played after an earlier puzzle is deleted',
+    () => sitting((async) {
+      begin(async);
+      final playing = w.trainer.up!.puzzle;
+      expect(playing.index, 1);
+      w.trainer.play('e7e5');
+      expect(w.trainer.up!.waiting, isTrue);
+
+      unawaited(w.tactics.delete(w.tactics.at(0)!));
+      async.flushMicrotasks();
+      expect(w.trainer.up!.puzzle.index, 0);
+      expect(w.trainer.up!.puzzle.fen, playing.fen);
+      async.elapse(replyDelay);
+      expect(w.session.cursor.value, NodePath.of([0, 0]));
+      expect(w.trainer.up!.waiting, isFalse);
+      w.trainer.play('b8c6');
+      expect(w.trainer.up!.decided, Outcome.solved);
+    }),
+  );
+
+  test(
     'a clean solve is written as a success, and auto-advance brings the '
     'next puzzle',
     () => sitting((async) {
