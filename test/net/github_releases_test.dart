@@ -78,17 +78,11 @@ void main() {
   test('a download that times out before headers releases the transfer', () {
     fakeAsync((time) {
       final headers = Completer<http.StreamedResponse>();
-      var aborted = false;
+      Future<void>? abortTrigger;
       var released = false;
       final client = MockClient.streaming((request, bytes) async {
         await bytes.drain<void>();
-        if (request case http.Abortable(:final abortTrigger?)) {
-          unawaited(
-            abortTrigger.then((_) {
-              aborted = true;
-            }),
-          );
-        }
+        if (request is http.Abortable) abortTrigger = request.abortTrigger;
         return headers.future;
       });
       AssetDownload? result;
@@ -99,12 +93,11 @@ void main() {
       time.elapse(downloadStartTimeout);
       expect(result, isA<AssetRefused>());
 
+      var aborted = false;
+      unawaited(abortTrigger?.then((_) => aborted = true));
+      time.flushMicrotasks();
       expect(aborted, isTrue);
-      final body = StreamController<List<int>>(
-        onCancel: () {
-          released = true;
-        },
-      );
+      final body = StreamController<List<int>>(onCancel: () => released = true);
       headers.complete(http.StreamedResponse(body.stream, 200));
       body.add([1]);
       unawaited(body.close());
