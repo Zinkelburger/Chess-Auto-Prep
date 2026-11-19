@@ -4,6 +4,7 @@ import '../../storage/chapter_files.dart';
 import '../../ui/list_row.dart';
 import '../../ui/move_notation.dart';
 import '../../ui/theme.dart';
+import '../../workspace/document/document_session.dart';
 import 'chapter_outline.dart';
 
 /// One chapter of the outline. The one on the board is bold and accented,
@@ -202,8 +203,25 @@ class LineRow extends StatelessWidget {
 /// What a drag out of the outline carries: which games of the open chapter
 /// are on the move. Dropped on a chapter they become lines of their own
 /// there; dropped on a line they fold into it as variations.
+///
+/// A game is a place in the file, so the drag remembers which chapter and
+/// arrangement its games were picked in: once another chapter is open, or a
+/// line is deleted, put back or moved, the same numbers name other lines.
 final class LineDrag {
-  const LineDrag(this.games, {required this.label});
+  LineDrag(this.games, {required this.label, required DocumentSession session})
+    : _session = session,
+      _source = session.source,
+      _arrangement = session.arrangement;
+
+  final DocumentSession _session;
+  final ChapterRef? _source;
+  final int _arrangement;
+
+  /// Whether [session] still shows the lines this drag picked.
+  bool stillIn(DocumentSession session) =>
+      identical(session, _session) &&
+      session.source == _source &&
+      session.arrangement == _arrangement;
 
   final Set<int> games;
 
