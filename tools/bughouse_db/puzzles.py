@@ -178,6 +178,12 @@ class Candidate:
     gain: int | None = None  # material won by an advantage line, settled
     sit_cp: int | None = None  # the solver's worst score once the defender is handed a piece
     reject: str | None = None  # why verification turned it down; never exported
+    # Engine games only (`arena.py`): which trigger flagged it ("scan", "swing"
+    # or "both"), the game's opening, and the puzzle id, unique across both sets.
+    trigger: str = "scan"
+    opening: str = ""
+    pid: str | None = None
+    precheck: str | None = None  # "pass" or "fail" when the arena pre-check looked at it
 
 
 class FairyEngine:
@@ -293,6 +299,32 @@ def wants_advantage(score: Score, prev_score: Score) -> bool:
             and not as_cp(prev_score) > 300)
 
 
+@dataclass
+class ScanState:
+    """What the scan carries from one position to the next, per board."""
+
+    in_run: dict[tuple[str, bool], bool] = field(default_factory=dict)
+    last_score: dict[str, Score] = field(default_factory=dict)
+
+    def step(self, name: str, turn: bool, score: Score, legal: int,
+             kinds: frozenset[str] = frozenset(KINDS)) -> str | None:
+        """The scan's verdict on one searched position of board `name`: "mate",
+        "advantage" or None (see the module docstring)."""
+        prev_score = negate(self.last_score[name]) if name in self.last_score else ("cp", 20)
+        self.last_score[name] = score
+        mate = score[0] == "mate" and 0 < score[1] <= MAX_MATE
+        key = (name, turn)
+        kind = None
+        if legal >= 2:
+            if mate:
+                if not self.in_run.get(key) and "mate" in kinds:
+                    kind = "mate"
+            elif "advantage" in kinds and wants_advantage(score, prev_score):
+                kind = "advantage"
+        self.in_run[key] = mate
+        return kind
+
+
 def scan_game(game: BpgnGame) -> list[Candidate]:
     """Positions the scan flags on either board: first position of a mate run, or an eval jump."""
     sys.path.insert(0, str(REPO / "tools/mcp"))
@@ -301,8 +333,7 @@ def scan_game(game: BpgnGame) -> list[Candidate]:
     assert _ENGINE
     dual = DualBoard()
     out: list[Candidate] = []
-    in_run: dict[tuple[str, bool], bool] = {}
-    last_score: dict[str, Score] = {}
+    state = ScanState()
     try:
         for i, (which, san) in enumerate(game.moves):
             name = which.upper()
@@ -315,19 +346,7 @@ def scan_game(game: BpgnGame) -> list[Candidate]:
             best = ranks.get(1)
             if not best:
                 continue
-            score: Score = (best[0], best[1])
-            prev_score = negate(last_score[name]) if name in last_score else ("cp", 20)
-            last_score[name] = score
-            mate = score[0] == "mate" and 0 < score[1] <= MAX_MATE
-            key = (name, board.turn)
-            kind = None
-            if board.legal_moves.count() >= 2:
-                if mate:
-                    if not in_run.get(key) and "mate" in _KINDS:
-                        kind = "mate"
-                elif "advantage" in _KINDS and wants_advantage(score, prev_score):
-                    kind = "advantage"
-            in_run[key] = mate
+            kind = state.step(name, board.turn, (best[0], best[1]), board.legal_moves.count(), _KINDS)
             if kind:
                 played = next((s for w, s in game.moves[i + 1:] if w.upper() == name), None)
                 tags = game.tags
@@ -629,13 +648,14 @@ def web_puzzle(c: Candidate) -> dict | None:
     moves = (len(c.line) + 1) // 2
     start = CrazyhouseBoard(c.fen)
     first = _strip(sans[0])
-    accepted = {first} if len(c.line) > 1 else {_strip(_san(start, m)) for m in c.mates}
+    # A one-move puzzle also accepts its other mates, or the other collecting moves.
+    accepted = {first} | ({_strip(_san(start, m)) for m in c.mates} if len(c.line) == 1 else set())
     found = c.played is not None and _strip(c.played) in accepted
     if mate and moves == 1 and not keep_mate_in_one(found, "@" in c.line[0], len(legal[0].split())):
         return None
     themes = tag_themes(c.fen, c.line, c.cp)
     return {
-        "id": f"{c.game}-{c.board}-{c.ply}", "kind": c.kind, "fen": c.fen, "prev": c.prev,
+        "id": c.pid or f"{c.game}-{c.board}-{c.ply}", "kind": c.kind, "fen": c.fen, "prev": c.prev,
         "dual": c.dual, "board": c.board, "last": c.last, "mate": moves if mate else 0,
         "moves": moves, "cp": c.cp, "gain": c.gain, "themes": themes,
         "difficulty": rate_difficulty(c.kind, moves, themes, found, start, c.line[0]),

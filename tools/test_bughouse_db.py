@@ -607,6 +607,18 @@ class TestPuzzleExport(unittest.TestCase):
 
         self.assertIsNone(web_puzzle(self.candidate(line=["c5d7", "f8g8", "N@e6"])))
 
+    def test_a_one_move_tactic_played_in_the_game_was_found(self):
+        from bughouse_db.puzzles import web_puzzle
+
+        # A one-move tactic with no other collecting moves has an empty `mates`;
+        # the line's own move still counts as found.
+        p = web_puzzle(self.candidate(kind="advantage", line=["c5d7"], mates=[], cp=700, played="Nd7+"))
+        self.assertTrue(p["found"])
+        p = web_puzzle(self.candidate(kind="advantage", line=["c5d7"], mates=["c5b7"], cp=700, played="Nxb7"))
+        self.assertTrue(p["found"], "another collecting move counts too")
+        self.assertFalse(web_puzzle(self.candidate(kind="advantage", line=["c5d7"], mates=[], cp=700,
+                                                   played="Nb3"))["found"])
+
     def test_advantage_record_has_no_mate_and_keeps_cp(self):
         from bughouse_db.puzzles import web_puzzle
 
@@ -945,6 +957,204 @@ class TestPuzzleExport(unittest.TestCase):
             prevs = {r["id"]: r["prev"] for r in full}
             self.assertEqual(prevs["3677428-B-101"], self.PREV)
             self.assertIsNone(prevs["3677428-B-7"])
+
+
+# The arena referee's two generations of BPGN. The newer writes SAN from the
+# start with the opening inside the movetext and a score per move; the older
+# writes UCI after the opening, which only its tag holds. Comments that are not
+# a move's clock (sits, refused moves) must not shift the scores.
+ARENA_NEW = (
+    '[Event "Hivemind Arena"]\n[Round "3"]\n[WhiteA "hb-cap0"]\n[BlackA "hb-l50"]\n'
+    '[WhiteB "hb-l50"]\n[BlackB "hb-cap0"]\n[TimeControl "120"]\n'
+    '[Opening "2e2e4 1d2d4 2d7d5 1e7e6 2b1c3 2e7e6 1b1c3 1g8f6 1e2e4 1f8b4 2e4d5 2e6d5 1e4e5 2d2d4 2g8f6 2g1f3"]\n'
+    '[Result "1-0"]\n[Termination "checkmate"]\n\n'
+    "1B. e4 1A. d4 1b. d5 1a. e6 2B. Nc3 2b. e6 2A. Nc3 2a. Nf6 3A. e4 3a. Bb4 3B. exd5 3b. exd5 4A. e5\n"
+    "4B. d4 4b. Nf6 5B. Nf3 4a. Nd5 {[%clk 0:01:57.8] [%eval 2.60] 2.2s}\n"
+    "5b. Be7 {[%clk 0:01:57.7] [%eval 0.09] 2.3s} {B-white sits @2.9s} 6B. Bd3 {[%clk 0:01:58.5] [%eval 0.21] 3.8s}\n"
+    "5A. Qg4 {[%clk 0:01:58.4] [%eval #3] 3.8s} {A-black illegal e8e7 @4.0s} 5a. Rg8 {[%clk 0:01:55.7] [%eval -2.75] 5.9s}\n"
+    "6b. O-O {[%clk 0:01:55.3] [%eval 3.50] 6.2s} 1-0\n\n"
+)
+ARENA_OLD = (
+    '[Event "Hivemind Arena"]\n[Round "1"]\n[WhiteA "hb-v4"]\n[BlackA "hm-n400"]\n'
+    '[WhiteB "hm-n400"]\n[BlackB "hb-v4"]\n[TimeControl "120"]\n'
+    '[Opening "1g1f3 1g8f6 2d2d4 1g2g3 2e7e6 2b1c3 1d7d6 1f1g2 2g8f6 2e2e4 2d7d5 2g1f3 1b8c6 1h2h3 2f6e4 2f3e5"]\n'
+    '[Result "1-0"]\n[Termination "flag"]\n\n'
+    "1a. e7e5 {1.9s 118.1} 1b. f8b4 {2.1s 117.9} 1A. e1g1 {3.7s 118.1} 1B. c1d2 {4.2s 117.9} "
+    "2a. f8e7 {5.3s 116.6} 2b. e4d2 {6.3s 115.8} 2A. d2d4 {6.9s 116.5} 2B. d1d2 {8.3s 115.9} "
+    "3a. e5d4 {9.4s 114.1} 3b. e8g8 {10.3s 113.8} 3A. P@h6 {11.5s 114.4} 3B. P@h6 {12.3s 113.9}\n"
+    "{A-black sits @30.0s} {B-white sits @31.4s} 1-0\n\n"
+)
+
+
+class TestArenaGames(unittest.TestCase):
+    """Engine games as a puzzle source: reading both generations, the swing trigger, deduplication."""
+
+    def games(self, text, match="HypeBeast-v5/cap0-b"):
+        from bughouse_db.arena import iter_arena_games
+
+        return list(iter_arena_games(io.StringIO(text), match))
+
+    def test_scores_attach_to_their_move_and_events_are_not_moves(self):
+        (game,) = self.games(ARENA_NEW)
+        self.assertEqual(len(game.moves), 22)
+        self.assertEqual(game.moves[16], ("a", "Nd5"))
+        self.assertEqual(game.evals[:16], [None] * 16, "the opening carries no scores")
+        # Black's 2.60 from White's side is -260 for the mover; White's #3 is a mate for White.
+        self.assertEqual(game.evals[16:], [("cp", -260), ("cp", -9), ("cp", 21), ("mate", 3),
+                                           ("cp", 275), ("cp", -350)])
+        self.assertEqual(game.opening.split()[0], "2e2e4")
+
+    def test_new_files_already_hold_the_opening(self):
+        from bughouse_db.arena import full_moves, replay
+
+        (game,) = self.games(ARENA_NEW)
+        moves, evals = full_moves(game)
+        self.assertEqual(len(moves), len(game.moves), "the opening is not played twice")
+        steps = replay(game)
+        self.assertEqual([s.san for s in steps[:2]], ["e4", "d4"])
+        self.assertEqual(steps[19].san, "Qg4")
+
+    def test_old_files_get_the_opening_from_the_tag(self):
+        from bughouse_db.arena import full_moves, replay
+
+        (game,) = self.games(ARENA_OLD, "HypeBeast/v4-vs-hivemind-screen5")
+        moves, evals = full_moves(game)
+        self.assertEqual(len(moves), 16 + 12)
+        self.assertEqual(moves[0], ("A", "g1f3"))
+        self.assertEqual(moves[16], ("a", "e7e5"))
+        self.assertTrue(all(e is None for e in evals))
+        steps = replay(game)
+        self.assertEqual(steps[18].san, "O-O", "UCI castling reads as SAN for `played`")
+        self.assertEqual(steps[26].san, "P@h6")
+        self.assertIn("[BPn]", steps[26].prev, "board B's captures reached board A's hands")
+        self.assertIn("[Bn]", steps[26].fen, "the drop spent the pawn")
+
+    def test_names_ids_and_dates(self):
+        import re
+        from bughouse_db.arena import display_name, read_match
+
+        kinds = {"hb-v4": "hypebeast", "hm-n400": "hivemind"}
+        self.assertEqual(display_name("hb-v4", kinds), "HypeBeast")
+        self.assertEqual(display_name("hm-n400", kinds), "HiveMind")
+        self.assertEqual(display_name("fsf", {"fsf": "fsf"}), "Fairy-Stockfish")
+        self.assertEqual(display_name("v7-selfplay-flags-a", {}), "HypeBeast", "a build name is never shown")
+        with tempfile.TemporaryDirectory() as tmp:
+            match = Path(tmp) / "logs" / "screen5"
+            match.mkdir(parents=True)
+            (match / "games.bpgn").write_text(ARENA_OLD)
+            (match / "manifest.json").write_text(
+                '{"sides": {"contender": {"kind": "hypebeast", "name": "hb-v4"},'
+                ' "baseline": {"kind": "hivemind", "name": "hm-n400"}},'
+                ' "sessions": [{"started": "2026-11-09T21:06:58-0500"}]}')
+            (game,) = read_match(match)
+        self.assertEqual(game.match, f"{Path(tmp).name}/screen5")
+        self.assertEqual(game.date, "2026.11.09")
+        self.assertEqual(game.names, {"WhiteA": "HypeBeast", "BlackA": "HiveMind",
+                                      "WhiteB": "HiveMind", "BlackB": "HypeBeast"})
+        pid = game.puzzle_id("A", 41)
+        self.assertRegex(pid, r"^e[0-9a-f]{6}-1-A-41$")
+        self.assertRegex(pid, r"^[A-Za-z0-9][\w-]{0,63}$", "the page's id pattern")
+        self.assertLess(game.game_no, 2 ** 53)
+        self.assertNotEqual(game.game_no, self.games(ARENA_NEW)[0].game_no)
+        self.assertIsNone(re.match(r"^\d", pid), "no FICS id starts with a letter")
+
+    def test_a_swing_flags_the_position_after_the_move(self):
+        from bughouse_db.arena import swing_flags
+
+        a = "A"
+        # White's score falls from +100 to -250 on its next move: the position after that move.
+        drop = swing_flags([(a, True, ("cp", 100)), (a, False, ("cp", -100)),
+                            (a, True, ("cp", -250)), (a, False, ("cp", 250))])
+        self.assertEqual(drop, [False, False, True, False])
+        # Black's next score jumps from -100 to +300 after White's move 3: that move is flagged.
+        rise = swing_flags([(a, True, ("cp", 100)), (a, False, ("cp", -100)),
+                            (a, True, ("cp", 100)), (a, False, ("cp", 300))])
+        self.assertEqual(rise, [False, False, True, False])
+        # 299 is not enough; the other board's scores never mix in; unrecorded scores are skipped.
+        self.assertEqual(swing_flags([(a, True, ("cp", 100)), ("B", True, ("cp", -900)),
+                                      (a, False, None), (a, True, ("cp", -199))]), [False] * 4)
+        self.assertEqual(swing_flags([(a, True, ("cp", 100)), (a, False, None),
+                                      (a, True, ("cp", -200))]), [False, False, True])
+
+    def test_a_mate_is_beyond_any_centipawn_score(self):
+        from bughouse_db.arena import swing_flags
+
+        a = "A"
+        self.assertEqual(swing_flags([(a, True, ("cp", 2000)), (a, False, None), (a, True, ("mate", -4))]),
+                         [False, False, True], "+20 to being mated is a swing")
+        self.assertEqual(swing_flags([(a, True, ("mate", 5)), (a, False, None), (a, True, ("mate", 3))]),
+                         [False, False, False], "a shorter mate is not a swing")
+        self.assertEqual(swing_flags([(a, False, ("cp", -50)), (a, True, None), (a, False, ("mate", 2))]),
+                         [False, True, False], "a mate found next flags the move before it")
+
+    def test_flags_say_which_trigger_and_merge_over_games(self):
+        from bughouse_db import arena
+        from bughouse_db.arena import flag_game, merge, replay
+
+        (game,) = self.games(ARENA_NEW)
+        steps = replay(game)
+        eligible = [i for i, s in enumerate(steps) if s.eligible]
+        self.assertTrue(eligible)
+        # Black's score falls from -9 to -350 with 6b. O-O: a swing on board B.
+        scores = {s.fen: ("cp", 0) for s in steps if s.eligible}
+        with mock.patch.object(arena, "_SCORES", scores):
+            quiet = flag_game(game, frozenset({"mate", "advantage"}))
+        self.assertTrue(all(c.trigger == "swing" for c in quiet))
+        self.assertEqual(quiet, [], "a swing the frozen board does not confirm is not a candidate")
+        swung = [i for i, f in enumerate(arena.swing_flags([(s.board, s.white, s.eval) for s in steps]))
+                 if f and steps[i].eligible]
+        self.assertTrue(swung, "the fixture swings somewhere the scan looks")
+        at = swung[0]
+        scores[steps[at].fen] = ("cp", 450)
+        with mock.patch.object(arena, "_SCORES", scores):
+            flagged = flag_game(game, frozenset({"mate", "advantage"}))
+        by_ply = {c.ply: c for c in flagged}
+        self.assertIn(at, by_ply)
+        c = by_ply[at]
+        self.assertEqual((c.kind, c.trigger), ("advantage", "both"), "the scan's jump and the swing agree")
+        self.assertEqual((c.welo, c.belo, c.tc, c.opening), (0, 0, "120+0", game.opening))
+        self.assertEqual(c.played, next((s.san for s in steps[at + 1:] if s.board == c.board), None))
+        self.assertTrue(c.pid.startswith("e"))
+        twin = arena.P.Candidate(**{**c.__dict__, "trigger": "scan", "kind": "mate", "pid": "other"})
+        (merged,) = merge([c, twin])
+        self.assertEqual((merged.pid, merged.trigger, merged.kind), (c.pid, "both", "mate"))
+        (alone,) = merge([arena.P.Candidate(**{**c.__dict__, "trigger": "swing"}),
+                          arena.P.Candidate(**{**c.__dict__, "trigger": "scan"})])
+        self.assertEqual(alone.trigger, "both", "a position the scan flagged anywhere is not swing-only")
+
+    def test_the_pre_check_sets_aside_only_positions_with_two_good_moves(self):
+        from bughouse_db.arena import precheck_passes, sampled
+        from bughouse_db.puzzles import Candidate
+
+        self.assertFalse(precheck_passes(("cp", 900), ("cp", 700)), "two winning moves")
+        self.assertTrue(precheck_passes(("cp", 900), ("cp", 0)))
+        self.assertTrue(precheck_passes(("cp", 900), None), "one legal move is the verify's call")
+        self.assertTrue(precheck_passes(("mate", 1), ("mate", 1)), "mates in one are the verify's call")
+        self.assertFalse(precheck_passes(("mate", 3), ("cp", 2500)))
+        picks = [sampled(Candidate(fen="", dual="", board="A", ply=i, last=None, played=None, game=1, date="",
+                                   tc="", white="", black="", welo=0, belo=0, pid=f"eabcdef-1-A-{i}"))
+                 for i in range(2000)]
+        self.assertTrue(20 < sum(picks) < 100, "about 3 in 100, fixed by id")
+
+    def test_one_puzzle_per_line_per_opening_and_none_from_the_fics_set(self):
+        import json
+        from bughouse_db import arena
+        from bughouse_db.puzzles import Candidate
+
+        def cand(fen, line, opening, pid):
+            return Candidate(fen=fen, dual="", board="A", ply=1, last=None, played=None, game=1,
+                             date="2026.11.10", tc="120+0", white="HypeBeast", black="HypeBeast",
+                             welo=0, belo=0, line=line, opening=opening, pid=pid)
+
+        a = cand("8/8/8/8/8/8/8/K6k[] w - - 0 30", ["a1a2"], "1e2e4", "e1")
+        b = cand("8/8/8/8/8/8/8/K5k1[] w - - 0 30", ["a1a2"], "1e2e4", "e2")
+        c = cand("8/8/8/8/8/8/8/K5k1[] w - - 0 30", ["a1a2"], "1d2d4", "e3")
+        self.assertEqual([x.pid for x in arena.dedupe_lines([a, b, c])], ["e1", "e3"])
+        with tempfile.TemporaryDirectory() as tmp:
+            web = Path(tmp)
+            (web / "s00-0000000000.json").write_text(json.dumps({"puzzles": [{"fen": "8/8/8/8/8/8/8/K6k[] w - - 7 51"}]}))
+            self.assertEqual(arena.fics_keys(web), {"8/8/8/8/8/8/8/K6k[] w -"},
+                             "move counters do not matter")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,9 @@
 /**
- * Bughouse Puzzles page controller. It loads the set's index from
- * /bughouse-puzzles/, filters it in memory, fetches shards as puzzles are
- * opened, and runs one Attempt at a time on the PuzzleBoard. The flow and
+ * Bughouse Puzzles page controller. It loads the chosen set's index (FICS
+ * games from /bughouse-puzzles/, engine games from /bughouse-puzzles/engine/),
+ * filters it in memory, fetches shards as puzzles are opened, and runs one
+ * Attempt at a time on the PuzzleBoard. Each set keeps its own results,
+ * filter and place; a deep link opens the set its id belongs to. The flow and
  * key map follow the Tactics Trainer: a wrong move shows briefly and is
  * taken back, a right one gets the defender's reply, and View solution
  * plays out the rest. The current puzzle's id lives in the URL hash.
@@ -13,9 +15,9 @@ import type { Colour } from '../bughouse/types';
 import { PuzzleBoard } from './board';
 import { Attempt, analysisLink, inCheck, type Puzzle } from './puzzle';
 import {
-  DEFAULT_FILTER, DIFFICULTIES, DIFFICULTY_LABELS, LENGTHS, PuzzleStore, applyFilter, facetCounts,
-  lengthLabel, normalizeFilter, parseHash, puzzleHash, themeCounts, themeLabel,
-  type Filter, type IndexEntry, type KindFilter, type PuzzleIndex,
+  DEFAULT_FILTER, DIFFICULTIES, DIFFICULTY_LABELS, LENGTHS, PuzzleStore, SETS, SET_KEY, SET_NAMES, applyFilter, facetCounts,
+  initialSet, lengthLabel, normalizeFilter, parseHash, puzzleHash, setOfId, themeCounts, themeLabel,
+  type Filter, type IndexEntry, type KindFilter, type PuzzleIndex, type SetName,
 } from './set';
 
 type Outcome = 'win' | 'fail';
@@ -23,7 +25,7 @@ type Feedback = 'intro' | 'turn' | 'good' | 'bad' | 'win' | 'fail' | 'revealed' 
 type State = 'loading' | 'ready' | 'error' | 'empty';
 /** Theme chips shown before "more" expands the facet. */
 const THEME_CAP = 8;
-const STORE_KEY = 'bughouse-puzzles-v2';
+/** The first version's results carry over to the FICS set. */
 const OLD_STORE_KEY = 'bughouse-puzzles-v1';
 interface Saved { version: 2; outcomes: Record<string, Outcome>; filter: Filter; current: string | null }
 
@@ -38,28 +40,33 @@ function $<T extends HTMLElement = HTMLElement>(id: string): T {
 
 const sideName = (c: Colour) => (c === 'white' ? 'White' : 'Black');
 
-function load(): Saved {
+function load(set: SetName): Saved {
   const fresh: Saved = { version: 2, outcomes: {}, filter: { ...DEFAULT_FILTER }, current: null };
   try {
-    const s = JSON.parse(localStorage.getItem(STORE_KEY) ?? 'null') as Partial<Saved> | null;
+    const s = JSON.parse(localStorage.getItem(SETS[set].storeKey) ?? 'null') as Partial<Saved> | null;
     if (s && typeof s.outcomes === 'object' && s.outcomes) {
       return { version: 2, outcomes: s.outcomes, filter: normalizeFilter(s.filter), current: typeof s.current === 'string' ? s.current : null };
     }
     // Results from the first version carry over; its mate-length filter does not.
-    const old = JSON.parse(localStorage.getItem(OLD_STORE_KEY) ?? 'null') as { outcomes?: Record<string, Outcome> } | null;
+    const old = set === 'human' ? JSON.parse(localStorage.getItem(OLD_STORE_KEY) ?? 'null') as { outcomes?: Record<string, Outcome> } | null : null;
     if (old && typeof old.outcomes === 'object' && old.outcomes) fresh.outcomes = old.outcomes;
   } catch { /* private mode or a damaged entry: start fresh */ }
   return fresh;
 }
 
+function savedSet(): unknown {
+  try { return localStorage.getItem(SET_KEY); } catch { return null; }
+}
+
 export class BughousePuzzlesApp {
-  private readonly store = new PuzzleStore();
+  private readonly stores: Record<SetName, PuzzleStore> = { human: new PuzzleStore(SETS.human.base), engine: new PuzzleStore(SETS.engine.base) };
+  private set: SetName = initialSet(parseHash(location.hash), savedSet());
   private all: IndexEntry[] = [];
   private list: IndexEntry[] = [];
   private index = 0;
   private attempt: Attempt | null = null;
   private board: PuzzleBoard | null = null;
-  private saved = load();
+  private saved = load(this.set);
   private timer: ReturnType<typeof setTimeout> | null = null;
   /** A wrong move shown on the board until it is taken back. */
   private wrong: string | null = null;
@@ -68,36 +75,70 @@ export class BughousePuzzlesApp {
   /** Counts up on every `go`, so a slow shard cannot land on a later puzzle. */
   private generation = 0;
   private feedback: Feedback = 'turn';
+  /** Counts up on every set load, so a slow index cannot land after the set changed again. */
+  private loading = 0;
 
   constructor() {
     this.bind();
     void this.start();
   }
 
-  private async start() {
+  private get store(): PuzzleStore { return this.stores[this.set]; }
+
+  /** Load the current set and open the linked puzzle, else the saved place. */
+  private async start(linked: string | null = parseHash(location.hash)) {
+    const loading = ++this.loading;
+    this.clearTimer();
+    this.attempt = null;
+    this.all = [];
+    this.list = [];
     this.setState('loading');
+    this.say('turn', 'Loading');
+    this.setText('.bp-counter', '— / —');
+    for (const id of ['bp-prev', 'bp-next', 'bp-retry', 'bp-solution']) $<HTMLButtonElement>(id).disabled = true;
+    $('bp-analysis-link').hidden = true;
+    this.renderFilters();
     let index: PuzzleIndex;
     try {
-      index = await this.store.loadIndex();
+      index = this.store.index ?? await this.store.loadIndex();
     } catch (e) {
+      if (loading !== this.loading) return;
       $('bp-error-copy').textContent = e instanceof Error && /^\d{3} /.test(e.message) ? `The server answered ${e.message.slice(0, 3)}.` : 'Check the connection and try again.';
       this.setState('error');
       this.say('error', 'Nothing to solve yet', 'The puzzle set did not load.');
       return;
     }
+    if (loading !== this.loading) return;
+    try { localStorage.setItem(SET_KEY, this.set); } catch { /* not kept; fine */ }
     this.all = index.puzzles;
     $('bp-source').textContent = `${index.count} puzzles from ${index.source}. Your results are kept in this browser only.`;
     if (!this.board) {
       this.board = new PuzzleBoard($('bp-board'), { top: $('bp-seat-top'), bottom: $('bp-seat-bottom') }, (uci) => this.onMove(uci));
     }
     // A deep link wins over the saved place, and over a filter that would hide it.
-    const linked = parseHash(location.hash);
     if (linked && this.all.some((e) => e.id === linked)) {
       if (!applyFilter(this.all, this.saved.filter).some((e) => e.id === linked)) this.saved.filter = { ...DEFAULT_FILTER };
       this.applyFilter(this.saved.filter, linked);
     } else {
       this.applyFilter(this.saved.filter, this.saved.current);
     }
+  }
+
+  /** Change to the other set, keeping each set's own results, filter and place. */
+  private switchSet(set: SetName, linked: string | null = null) {
+    if (set === this.set) return;
+    this.persist();
+    this.set = set;
+    this.saved = load(set);
+    this.themesOpen = false;
+    void this.start(linked);
+  }
+
+  /** The other set's size, for its chip; fetched when Settings opens. */
+  private loadOtherIndex() {
+    const other = SET_NAMES.find((n) => n !== this.set)!;
+    if (this.stores[other].index) return;
+    this.stores[other].loadIndex().then(() => this.renderFilters(), () => { /* its chip shows no count */ });
   }
 
   private bind() {
@@ -108,14 +149,16 @@ export class BughousePuzzlesApp {
     $('bp-retry-load').onclick = () => { if (this.all.length) this.go(this.index); else void this.start(); };
     $('bp-clear-filters').onclick = () => this.applyFilter({ ...DEFAULT_FILTER }, this.list[this.index]?.id ?? null);
     const sheet = $<HTMLDialogElement>('bp-settings');
-    $('bp-settings-open').onclick = () => sheet.showModal();
+    $('bp-settings-open').onclick = () => { sheet.showModal(); this.loadOtherIndex(); };
     $('bp-settings-close').onclick = () => sheet.close();
     // A click on the backdrop (the dialog itself, outside its content) closes it.
     sheet.addEventListener('click', (e) => { if (e.target === sheet) sheet.close(); });
     window.addEventListener('hashchange', () => {
       const id = parseHash(location.hash);
+      if (id && setOfId(id) !== this.set) { this.switchSet(setOfId(id), id); return; }
       const at = id ? this.list.findIndex((e) => e.id === id) : -1;
       if (at >= 0 && at !== this.index) this.go(at);
+      else if (id && at < 0 && this.all.some((e) => e.id === id)) this.applyFilter({ ...DEFAULT_FILTER }, id);
     });
     document.addEventListener('keydown', (e) => {
       if ((e.target as HTMLElement).matches('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -136,7 +179,7 @@ export class BughousePuzzlesApp {
 
   private persist() {
     this.saved.current = this.list[this.index]?.id ?? null;
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(this.saved)); } catch { /* not kept; fine */ }
+    try { localStorage.setItem(SETS[this.set].storeKey, JSON.stringify(this.saved)); } catch { /* not kept; fine */ }
   }
 
   // ── Filters ────────────────────────────────────────────────────
@@ -166,6 +209,10 @@ export class BughousePuzzlesApp {
 
   private renderFilters() {
     const f = this.saved.filter;
+    this.renderFacet($('bp-set'), 'bp-set', SET_NAMES.map((n) => ({
+      value: n, label: SETS[n].label, count: n === this.set && this.all.length ? this.all.length : this.stores[n].index?.count ?? null, checked: n === this.set,
+    })), (v) => this.switchSet(v as SetName));
+
     const kinds: KindFilter[] = ['all', 'mate', 'advantage'];
     const kindCounts = facetCounts(this.all, f, 'kind', kinds);
     this.renderFacet($('bp-kind'), 'bp-kind', kinds.filter((k) => k === 'all' || this.all.some((e) => e.kind === k)).map((k) => ({
@@ -186,7 +233,7 @@ export class BughousePuzzlesApp {
 
     const missed = facetCounts(this.all, f, 'missed', [true]).get(true) ?? 0;
     const box = $('bp-missed');
-    box.replaceChildren(this.chip('checkbox', 'bp-missed', 'missed', 'Only ones the player missed', missed, f.missed, () => this.change({ missed: !f.missed })));
+    box.replaceChildren(this.chip('checkbox', 'bp-missed', 'missed', SETS[this.set].missed, missed, f.missed, () => this.change({ missed: !f.missed })));
 
     const themes = themeCounts(this.all, f).filter(([, n]) => n > 0);
     $('bp-theme-setting').hidden = themes.length < 2 && !f.theme;
@@ -211,11 +258,12 @@ export class BughousePuzzlesApp {
     }
   }
 
-  private renderFacet(box: HTMLElement, name: string, chips: { value: string; label: string; count: number; checked: boolean }[], pick: (value: string) => void) {
+  private renderFacet(box: HTMLElement, name: string, chips: { value: string; label: string; count: number | null; checked: boolean }[], pick: (value: string) => void) {
     box.replaceChildren(...chips.map((c) => this.chip('radio', name, c.value, c.label, c.count, c.checked, () => pick(c.value))));
   }
 
-  private chip(type: 'radio' | 'checkbox', name: string, value: string, text: string, count: number, checked: boolean, change: () => void): HTMLElement {
+  /** A choice with its count; a null count (not known yet) shows none and never disables it. */
+  private chip(type: 'radio' | 'checkbox', name: string, value: string, text: string, count: number | null, checked: boolean, change: () => void): HTMLElement {
     const label = document.createElement('label');
     label.className = 'choice';
     const input = document.createElement('input');
@@ -223,12 +271,15 @@ export class BughousePuzzlesApp {
     input.name = name;
     input.value = value;
     input.checked = checked;
-    input.disabled = !count && !checked;
+    input.disabled = count === 0 && !checked;
     input.onchange = change;
     const span = document.createElement('span');
-    const b = document.createElement('b');
-    b.textContent = String(count);
-    span.append(text, b);
+    span.append(text);
+    if (count !== null) {
+      const b = document.createElement('b');
+      b.textContent = String(count);
+      span.append(b);
+    }
     label.append(input, span);
     return label;
   }

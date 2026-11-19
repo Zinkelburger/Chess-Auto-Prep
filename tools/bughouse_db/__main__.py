@@ -8,6 +8,7 @@ import os
 import sys
 from pathlib import Path
 
+from . import arena as arena_api
 from . import book as book_api
 from . import fetch as fetch_api
 from . import puzzles as puzzles_api
@@ -64,8 +65,16 @@ def main(argv: list[str] | None = None) -> int:
     p_puzzles.add_argument("--min-elo", type=int, default=1800)
     p_puzzles.add_argument("--jobs", type=int, default=0)
     p_puzzles.add_argument("--engine", help="Fairy-Stockfish binary (or FAIRY_STOCKFISH)")
-    p_puzzles.add_argument("--out", type=Path, default=puzzles_api.WEB_OUT,
-                           help="output directory: index.json plus hashed shards")
+    p_puzzles.add_argument("--out", type=Path,
+                           help="output directory: index.json plus hashed shards (default: the site's "
+                                "bughouse-puzzles/, or bughouse-puzzles/engine/ with --arena)")
+    p_puzzles.add_argument("--arena", type=Path, action="append",
+                           help="mine engine games instead of FICS: a match directory of bughouse_arena "
+                                "(games.bpgn) or a directory of them; repeatable")
+    p_puzzles.add_argument("--scan-cache", type=Path,
+                           help="with --arena: keep the scan's scores here and reuse them")
+    p_puzzles.add_argument("--verify-log", type=Path,
+                           help="with --arena: append each verified candidate here and skip those already in it")
     p_puzzles.add_argument("--raw-out", type=Path, help="also keep the verified candidates")
     p_puzzles.add_argument("--from-raw", type=Path,
                            help="re-export a --raw-out file instead of mining (no engine needed)")
@@ -103,12 +112,19 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.command == "puzzles":
         kinds = frozenset(k.strip() for k in args.kinds.split(",") if k.strip())
+        rules = puzzles_api.TacticRules(forcing=args.forcing, min_gain=args.min_gain, sit=args.sit,
+                                        unique_cp=args.unique_cp,
+                                        collect_cp=None if args.collect_cp < 0 else args.collect_cp)
+        if args.arena:
+            return arena_api.run(
+                args.arena, args.jobs, args.engine, args.out or arena_api.WEB_OUT, args.raw_out, kinds,
+                args.from_raw, rules=rules, candidates_out=args.candidates_out,
+                from_candidates=args.from_candidates, verify_nodes=args.verify_nodes,
+                scan_cache=args.scan_cache, verify_log=args.verify_log,
+            )
         return puzzles_api.run(
-            args.year, args.games, args.min_elo, args.jobs, args.engine, args.out, args.raw_out,
-            kinds, args.from_raw,
-            rules=puzzles_api.TacticRules(forcing=args.forcing, min_gain=args.min_gain, sit=args.sit,
-                                         unique_cp=args.unique_cp,
-                                         collect_cp=None if args.collect_cp < 0 else args.collect_cp),
+            args.year, args.games, args.min_elo, args.jobs, args.engine, args.out or puzzles_api.WEB_OUT,
+            args.raw_out, kinds, args.from_raw, rules=rules,
             skip=args.skip, candidates_out=args.candidates_out, from_candidates=args.from_candidates,
             verify_nodes=args.verify_nodes,
         )
