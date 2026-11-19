@@ -181,6 +181,16 @@ final class AppEnvironment {
     final collections = p.join(documents.path, 'pgn_collections');
     final dice = Random();
     final documentsStore = PgnFileStore(documents: documents, support: support);
+    FileTournaments? tournaments;
+    try {
+      tournaments = FileTournaments(
+        root: Directory(p.join(documents.path, 'engine_tournaments')),
+        support: support,
+        documents: documentsStore,
+      );
+    } on Exception catch (error) {
+      log.w('open tournament storage', error);
+    }
     return AppEnvironment(
       folders: (
         repertoires: repertoires,
@@ -246,11 +256,7 @@ final class AppEnvironment {
             cores: cores,
             memoryMb: memoryMb,
           ),
-      tournaments: FileTournaments(
-        root: Directory(p.join(documents.path, 'engine_tournaments')),
-        support: support,
-        documents: documentsStore,
-      ),
+      tournaments: tournaments,
       pickExecutable: pickExecutableFile,
       launchTournament: (spec, transcript) => launchTournamentEngine(
         spec,
