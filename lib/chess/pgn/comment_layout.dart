@@ -362,7 +362,7 @@ List<String> _legalPrefix(_Anchor anchor, List<_MoveWord> run) {
   final ucis = <String>[];
   for (final word in run) {
     if (!word.fits(position)) break;
-    final move = position.parseSan(word.san);
+    final move = parseLegalSan(position, word.san);
     if (move == null) break;
     ucis.add(move.uci);
     position = position.play(move);

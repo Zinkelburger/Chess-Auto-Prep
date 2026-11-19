@@ -6,6 +6,7 @@ import '../../chess/fen.dart';
 import '../../chess/pgn/game_text.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/move_text.dart';
+import '../../chess/pgn/tree_edit.dart' show isLegalMove;
 import '../../chess/tournament/config.dart';
 import '../../chess/tournament/result.dart';
 import '../../diagnostics/log.dart';
@@ -108,7 +109,7 @@ final class TournamentGameRunner {
       if (stopping()) return;
       if (!_spend(side, clock.elapsedMilliseconds)) return;
       final parsed = move == null ? null : Move.parse(move);
-      if (parsed == null || !_position.isLegal(parsed)) {
+      if (parsed == null || !isLegalMove(_position, parsed)) {
         _lose(
           side,
           move == null ? 'engineFailure' : 'illegalMove',

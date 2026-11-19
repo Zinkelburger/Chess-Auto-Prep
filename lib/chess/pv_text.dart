@@ -1,7 +1,7 @@
 import 'package:dartchess/dartchess.dart';
 
 import 'fen.dart';
-import 'pgn/tree_edit.dart' show positionOf;
+import 'pgn/tree_edit.dart' show isLegalMove, positionOf;
 
 /// One move of an engine line as it is shown: numbered SAN, the UCI it
 /// came from, and the position it leaves behind.
@@ -37,7 +37,7 @@ List<PvMove> pvMoves(Fen start, List<String> uciMoves) {
   final moves = <PvMove>[];
   for (final uci in uciMoves) {
     final move = Move.parse(uci);
-    if (move == null || !position.isLegal(move)) break;
+    if (move == null || !isLegalMove(position, move)) break;
     final (next, san) = position.makeSan(move);
     moves.add(
       PvMove(
