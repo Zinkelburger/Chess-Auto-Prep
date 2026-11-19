@@ -496,6 +496,7 @@ final class AppUpdates extends ChangeNotifier {
     _set(UpdateFailed(problem, offer: offer, retry: retry));
   }
 
+  /// Repeats the failed operation with the original installation choice.
   Future<void> retry() async {
     final failed = _status;
     if (failed is! UpdateFailed) return;
