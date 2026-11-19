@@ -616,7 +616,10 @@ final class _Listing {
 
   factory _Listing.of(List<ChapterLine> lines) {
     final tags = [for (final line in lines) line.tags];
-    final grouping = groupChapters(tags);
+    final grouping = groupChapters(
+      tags,
+      isComplete: (index) => isFinishedResult(lines[index].result),
+    );
     final chapterOf = grouping.hasChapters ? grouping.titles : null;
     final sizes = <String, int>{};
     for (final title in chapterOf ?? const <String>[]) {

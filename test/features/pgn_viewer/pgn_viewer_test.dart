@@ -52,6 +52,45 @@ void main() {
     },
   );
 
+  test(
+    'games with movetext results stay out of player-name chapters',
+    () async {
+      fixture = await viewerOver(
+        [
+          for (final player in ['Alice', 'Alice', 'Bob'])
+            '[Event "Club"]\n[White "$player"]\n[Black "Sam"]\n\n1. e4 1-0',
+        ].join('\n\n'),
+      );
+      await fixture.open();
+      expect(fixture.viewer.chapters, isEmpty);
+      expect(fixture.viewer.games.map((game) => game.title), [
+        'Alice – Sam',
+        'Alice – Sam',
+        'Bob – Sam',
+      ]);
+    },
+  );
+
+  test(
+    'result search uses the listed marker and respects an explicit Result tag',
+    () async {
+      fixture = await viewerOver(
+        '[Event "One"]\n\n1. e4 1-0\n\n'
+        '[Event "Two"]\n\n1. c4 1/2-1/2\n\n'
+        '[Event "Three"]\n[Result "*"]\n\n1. d4 1-0',
+      );
+      await fixture.open();
+      final viewer = fixture.viewer;
+      expect(viewer.games.map((g) => g.result), ['1-0', '½-½', '']);
+      viewer.search('1-0');
+      expect(viewer.gameOrder, [0]);
+      for (final draw in ['½-½', '1/2-1/2']) {
+        viewer.search(draw);
+        expect(viewer.gameOrder, [1]);
+      }
+    },
+  );
+
   test('a file opened again moves to the top rather than in twice', () async {
     fixture = await viewerOver(threeGameFile);
     await fixture.open();
@@ -157,6 +196,20 @@ void main() {
     expect(fixture.viewer.visible.length, 3);
   });
 
+  test('a draw is found by either spelling of its result', () async {
+    fixture = await viewerOver(
+      '[Event "One"]\n[Result "1-0"]\n\n1. e4 1-0\n\n'
+      '[Event "Two"]\n[Result "1/2-1/2"]\n\n1. c4 1/2-1/2',
+    );
+    await fixture.open();
+    final viewer = fixture.viewer;
+    expect(viewer.games.map((g) => g.result), ['1-0', '½-½']);
+    for (final draw in ['½-½', '1/2-1/2']) {
+      viewer.search(draw);
+      expect(viewer.gameOrder, [1], reason: draw);
+    }
+  });
+
   test(
     'the viewer lets go of a file the workspace has moved on from',
     () async {
@@ -229,20 +282,6 @@ void main() {
       '/home/me/Downloads',
       collectionsRoot,
     ]);
-  });
-
-  test('a draw is found by either spelling of its result', () async {
-    fixture = await viewerOver(
-      '[Event "One"]\n[Result "1-0"]\n\n1. e4 1-0\n\n'
-      '[Event "Two"]\n[Result "1/2-1/2"]\n\n1. c4 1/2-1/2',
-    );
-    await fixture.open();
-    final viewer = fixture.viewer;
-    expect(viewer.games.map((g) => g.result), ['1-0', '½-½']);
-    for (final draw in ['½-½', '1/2-1/2']) {
-      viewer.search(draw);
-      expect(viewer.gameOrder, [1], reason: draw);
-    }
   });
 
   test(
