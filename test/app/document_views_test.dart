@@ -266,6 +266,35 @@ void main() {
       await tester.pump();
     }
 
+    testWidgets(
+      'turning to Edit while a rename is going stays on Read with the move held',
+      (tester) async {
+        start();
+        final view = study();
+        await openStudy(tester);
+        view.entered();
+        addTearDown(view.left);
+        w.session
+          ..cursor.toEnd()
+          ..playMove('b8c6');
+        final source = w.session.source!;
+        w.store.hold = true;
+        final rename = w.studies.rename(source, 'Renamed');
+        await tester.pump();
+        expect(w.store.waiting, 1);
+        editing.value = true;
+        expect(editing.value, isFalse);
+        expect(w.requests.status, contains('Stayed in Read'));
+        w.store.hold = false;
+        w.store.releaseNext();
+        await rename;
+        expect(w.session.source, studyRef('Renamed'));
+        expect(w.session.hasHeldEdits, isTrue);
+        expect(w.session.holdsEdits, isTrue);
+        expect(w.session.tree!.mainLine.last.san, 'Nc6');
+      },
+    );
+
     testWidgets('sends to Lichess only where it can write there, and only a '
         'study that is open', (tester) async {
       start(lichess: true);

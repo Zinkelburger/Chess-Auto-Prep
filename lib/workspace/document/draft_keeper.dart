@@ -29,7 +29,9 @@ import 'session_results.dart';
 /// A checkpoint on disk is only ever replaced or dropped by the visit that
 /// made the edits in it: a visit's first held edit sets aside a checkpoint
 /// it did not write (an earlier session's, or a tab closed on its edits),
-/// unless the edits are that checkpoint's, restored by a tab.
+/// unless the edits are that checkpoint's, restored by a tab. One that
+/// cannot be set aside stays as it is; these edits are then in no
+/// checkpoint, and each later write tries to set it aside again first.
 ///
 /// Only a document shown game by game — a collection in the viewer, a study
 /// chapter — is kept: that is where edits are held.
@@ -78,6 +80,11 @@ final class DraftKeeper {
   /// Why the checkpoint of each file named could not be written, until one
   /// is or the file needs none.
   final _unkept = <String, String>{};
+
+  /// Files whose checkpoint on disk is another visit's and could not be set
+  /// aside: it may hold work nothing else has, so it is neither written
+  /// over nor dropped until it has been moved aside.
+  final _notSetAside = <String>{};
 
   /// The draft offered for the open file, until it is restored, replaced
   /// by new edits or its file is left.
@@ -139,7 +146,11 @@ final class DraftKeeper {
     _setAside(to);
     _schedule();
     _flush();
-    _inTurn(() => _drop(from));
+    // The old checkpoint goes only once the new one is written: until then
+    // it is the one copy of these edits on disk.
+    _inTurn(() async {
+      if (!_unkept.containsKey(to)) await _drop(from);
+    });
   }
 
   /// The edits this visit held are off the board, as the session says: kept
@@ -239,6 +250,10 @@ final class DraftKeeper {
     ({Chapter file, int game, Revision revision, String path}) waiting,
   ) async {
     try {
+      if (_notSetAside.contains(waiting.path)) {
+        await _drafts.setAside(waiting.path);
+        _notSetAside.remove(waiting.path);
+      }
       final file = waiting.file;
       // A join of each game's own text: cheaper here than copying the
       // parsed games to another isolate would be.
@@ -265,6 +280,8 @@ final class DraftKeeper {
 
   Future<void> _drop(String path) async {
     _unkept.remove(path);
+    // What is on disk is not this visit's checkpoint.
+    if (_notSetAside.contains(path)) return;
     try {
       await _drafts.drop(path);
     } on Object catch (error) {
@@ -319,8 +336,10 @@ final class DraftKeeper {
       draft.game < file.lines.length ? draft.game : 0,
     );
     _withdraw();
-    // These edits are the checkpoint: it is theirs to replace.
+    // These edits are the checkpoint: it is theirs to replace, even one
+    // that could not be set aside earlier.
     _owns = true;
+    _notSetAside.remove(draft.path);
     _session.restoreDraft(
       RetainedDraft(
         shown: (chapter: restored, view: null),
@@ -359,6 +378,8 @@ final class DraftKeeper {
         if (_offered == draft) {
           _offered = null;
           _kept.remove(draft.path);
+          // The copy holds it: it may go, though it was not set aside.
+          _notSetAside.remove(draft.path);
           _inTurn(() => _drop(draft.path));
         }
         say('Saved the unsaved edits as $name', problem: false);
@@ -375,8 +396,10 @@ final class DraftKeeper {
     _inTurn(() async {
       try {
         await _drafts.setAside(path);
+        _notSetAside.remove(path);
       } on Object catch (error) {
         log.w('set aside the unsaved viewer edits for $path', error);
+        _notSetAside.add(path);
       }
     });
   }

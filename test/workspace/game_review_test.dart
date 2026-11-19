@@ -590,6 +590,28 @@ void main() {
     expect(last.nags.where((n) => n == 2 || n == 4 || n == 6), isEmpty);
   });
 
+  test('opening another file ends the review of every game, even if the '
+      'file comes back before the position is finished', () async {
+    const placement = '7k/8/8/8/8/8/R7/6K1 w - -';
+    const twins =
+        '[Event "A"]\n[SetUp "1"]\n[FEN "$placement 0 1"]\n\n1. Ra3 *\n\n'
+        '[Event "B"]\n[SetUp "1"]\n[FEN "$placement 0 1"]\n\n1. Ra3 *\n';
+    final ref = chapterRef('Study', 'Endings');
+    fixture.store.documents[ref] = Opened(twins, scriptedRevision(twins));
+    final session = fixture.session;
+    await session.open(ref, game: 0);
+    final running = review.startAll();
+    await pumpEventQueue();
+    await session.open(fixture.ref);
+    await session.open(ref, game: 0);
+    final stopped = engine.current.stopped;
+    engine.current.end();
+    await running;
+    expect(stopped, isTrue);
+    expect(review.unreviewedGames, [0, 1]);
+    expect(engine.searches, hasLength(1));
+  });
+
   test('every game is reviewed in turn, each written into its own game, '
       'and moving between them does not stop it', () async {
     const two =

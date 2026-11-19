@@ -125,7 +125,10 @@ moves played, review annotations and the like show at once but are held in
 memory (`DocumentSession.holdsEdits`): the strip says `Unsaved changes` with
 `Discard` (asks `Discard unsaved changes to “<chapter>”?`) and `Save` / Ctrl+S. On Edit every
 change is written as it is made, as in the builder, and turning to Edit writes
-what Read held first; Ctrl+Z undoes either way (100 steps held). Coming to the
+what Read held first. While the file cannot take them (a rename still going,
+a conflict), Save and Edit leave the edits held and say so, and the switch
+stays on Read. Ctrl+Z undoes either way (100 steps held); on Read, edits wait
+until an undo of the file lands. Coming to the
 mode, or to a document tab that held edits, never writes them. A read-only
 file holds edits on Read and Edit alike, and Save asks `Save your moves` →
 `Copy into Documents…` (a file name, checked as every name is, then a copy in
@@ -149,7 +152,11 @@ says `Unsaved edits to <file> from an earlier session.` with `Restore unsaved
 edits`; if the file changed since, `… The file has changed since.` with `Save
 them as a copy` (`<file> unsaved edits.pgn` beside it). A checkpoint edited
 past, or that is not a draft at all, is moved to the recovery quarantine; one
-that cannot be read just now stays where it is for the next opening.
+that cannot be read just now stays where it is for the next opening. One that
+cannot be moved aside is never written over or dropped: the new edits go into
+no checkpoint until a later write can move it, or until it is restored or
+saved as a copy. A renamed file's checkpoint
+stays under the old name until the one under the new name is written.
 `Unsaved edits to <file> were not kept.` (with what the disk says) when a
 checkpoint could not be written.
 
@@ -175,7 +182,8 @@ once on Edit. Stop, an edit or another game cancels it and drops late results.
 without a review) reviews each such game in turn, `Game 2 of 5 · 19 / 34
 positions`, writing each into its own game as it ends (one undoable edit per
 game); moving between the games goes on while it runs, Stop or another file
-ends it, and a game whose main line changed meanwhile is left as it is.
+ends it (even one left again at once), and a game whose main line changed
+meanwhile is left as it is.
 Read-only files get the graph only (`This file is read-only`). The graph also
 reads evaluations already in the PGN. One rule marks a move for the graph,
 the counts and the annotations; a review read back from the file shows the

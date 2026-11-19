@@ -94,6 +94,11 @@ final class DocumentSaver extends ChangeNotifier {
   SaveState get state => _state;
   Revision? get revision => _target?.revision;
 
+  /// Counts the drafts taken, so whoever waits on the disk can tell that
+  /// new words arrived meanwhile.
+  int get drafts => _drafts;
+  int _drafts = 0;
+
   /// The opened source, advanced only by our own proven publication chain.
   Revision? get trainingSourceRevision => _trainingSourceRevision;
   Revision? _trainingSourceRevision;
@@ -192,6 +197,7 @@ final class DocumentSaver extends ChangeNotifier {
     // Ordinary edits can supersede an ordinary failed undo. Compound undo
     // keeps admission closed until its exact command has been reconciled.
     _failedUndo = null;
+    _drafts++;
     _pending.typed(text, scope);
     _set(const Unsaved());
     _start();
@@ -538,7 +544,18 @@ final class DocumentSaver extends ChangeNotifier {
   /// Words typed while the undo is being written are newer than the version
   /// being put back, so they win: the draft goes to disk, the undo is
   /// refused, and the version it wrote becomes the next step back.
-  Future<UndoResult> undo() async {
+  Future<UndoResult> undo() {
+    _undos++;
+    return _undoNow().whenComplete(() => _undos--);
+  }
+
+  /// Whether an undo is on its way to the file. Reading refuses edits
+  /// meanwhile: one held now would be made on the version the undo
+  /// replaces, and saving it would put back what the undo took out.
+  bool get undoing => _undos > 0;
+  int _undos = 0;
+
+  Future<UndoResult> _undoNow() async {
     if (_state is SaveStopped) return undoFrozen;
     if (_state is DocumentFollowing) return undoBehind;
     if (_clock.isWaiting) await flush();

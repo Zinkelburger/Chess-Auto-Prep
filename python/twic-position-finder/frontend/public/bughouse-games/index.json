@@ -1,0 +1,187 @@
+{
+ "version": 1,
+ "generated": "2026-11-19",
+ "source": "Bughouse games played by HypeBeast 1.1.1, a Fairy-Stockfish fork that plays one board while pricing the other, against HypeBeast 1.1.0 and against itself, at fixed node budgets on a virtual clock. Every variation and score is the engine's own; the notes were written by Claude, an AI model, from the engines' search logs.",
+ "games": [
+  {
+   "id": "selfplay-g45",
+   "file": "selfplay-g45-d539b30d4b.json",
+   "title": "A rook crosses the boards twice and sets up mate",
+   "summary": "White on board B won the queen in the fixed opening, but by move 20 the engine scored Black ahead there and White ahead on board A. The finish turns on one rook: White takes it with Bxg7 on board B, Black drops it on board A, gives it up there with Rxf2+ and Kxf2, and it returns to board B for R@h6+ before N@f6# mates. Watch Black on board A choose its last moves by what each would hand to Black on board B, where by the engine's count a single piece was enough to mate.",
+   "event": "HypeBeast 1.1.1 against itself, 500,000 nodes a move for one team and 450,000 for the other",
+   "date": "2026-11-17",
+   "seats": {
+    "Awhite": "HypeBeast 1.1.1 (500k)",
+    "Ablack": "HypeBeast 1.1.1 (450k)",
+    "Bwhite": "HypeBeast 1.1.1 (450k)",
+    "Bblack": "HypeBeast 1.1.1 (500k)"
+   },
+   "winner": 0,
+   "how": "checkmate",
+   "moves": 178,
+   "notes": 16
+  },
+  {
+   "id": "selfplay-g29",
+   "file": "selfplay-g29-1b606023cc.json",
+   "title": "Pieces that crossed the boards and came back",
+   "summary": "Both queens on board B were lost early and crossed to board A, where Black kept its queen in hand for the rest of the game and pulled clearly ahead from 22...N@f4. After that, follow the pieces: the bishop taken on g5 on board A returns to g5 by way of d5 on board B, and the rook White on board A loses on g1 is dropped by White on board B in the mating attack that ends with P@f4#.",
+   "event": "HypeBeast 1.1.1 against itself, 500,000 nodes a move for one team and 450,000 for the other",
+   "date": "2026-11-17",
+   "seats": {
+    "Awhite": "HypeBeast 1.1.1 (500k)",
+    "Ablack": "HypeBeast 1.1.1 (450k)",
+    "Bwhite": "HypeBeast 1.1.1 (450k)",
+    "Bblack": "HypeBeast 1.1.1 (500k)"
+   },
+   "winner": 1,
+   "how": "checkmate",
+   "moves": 183,
+   "notes": 18
+  },
+  {
+   "id": "selfplay-g39",
+   "file": "selfplay-g39-c59f93ae83.json",
+   "title": "A queen lost on move 13 comes back to mate",
+   "summary": "A-White lost its queen to Bxd5 early on board A, and B-White dropped it on a4, where it stood for most of the game. B-Black was ahead on board B by the engine's count through the second half, and board A swung to White after the queens were traded on e1 at moves 30 and 31. At the end B-Black's N@c3+ and Nxa4+ won that queen back, and A-White, who sat a moment to wait for it, mated with Q@b8#.",
+   "event": "HypeBeast 1.1.1 against itself, 500,000 nodes a move for one team and 450,000 for the other",
+   "date": "2026-11-17",
+   "seats": {
+    "Awhite": "HypeBeast 1.1.1 (500k)",
+    "Ablack": "HypeBeast 1.1.1 (450k)",
+    "Bwhite": "HypeBeast 1.1.1 (450k)",
+    "Bblack": "HypeBeast 1.1.1 (500k)"
+   },
+   "winner": 0,
+   "how": "checkmate",
+   "moves": 153,
+   "notes": 18
+  },
+  {
+   "id": "v111-v110-g10",
+   "file": "v111-v110-g10-519fa52220.json",
+   "title": "Sitting in check while the partner mates first",
+   "summary": "Queens and rooks cross the boards all game. Black on board A gets far ahead by its own count, then gives up its queen, and a queen taken on board B turns board A into a mating attack for White. Facing mate there, Black on board A sits in check, and its partner mates first with N@e5# on board B.",
+   "event": "HypeBeast 1.1.1 against HypeBeast 1.1.0, 500,000 nodes a move",
+   "date": "2026-11-17",
+   "seats": {
+    "Awhite": "HypeBeast 1.1.0",
+    "Ablack": "HypeBeast 1.1.1",
+    "Bwhite": "HypeBeast 1.1.1",
+    "Bblack": "HypeBeast 1.1.0"
+   },
+   "winner": 1,
+   "how": "checkmate",
+   "moves": 140,
+   "notes": 17
+  },
+  {
+   "id": "selfplay-g28",
+   "file": "selfplay-g28-53ee2c2e2b.json",
+   "title": "One rook crosses the boards five times, then mates",
+   "summary": "On board A White attacked from the opening and stayed ahead; on board B White pressed first, then Black counterattacked with pawns and pieces fed from board A, and after the score swung both ways Black was mating there at the end. Follow the rook that started on h1 of board B: it crosses between the boards five times, and its last trip, Qxh8 on board B, gives White on board A R@d8#.",
+   "event": "HypeBeast 1.1.1 against itself, 500,000 nodes a move for one team and 450,000 for the other",
+   "date": "2026-11-17",
+   "seats": {
+    "Awhite": "HypeBeast 1.1.1 (450k)",
+    "Ablack": "HypeBeast 1.1.1 (500k)",
+    "Bwhite": "HypeBeast 1.1.1 (500k)",
+    "Bblack": "HypeBeast 1.1.1 (450k)"
+   },
+   "winner": 0,
+   "how": "checkmate",
+   "moves": 175,
+   "notes": 17
+  },
+  {
+   "id": "v111-v110-g21",
+   "file": "v111-v110-g21-e7e9ca7e8c.json",
+   "title": "A pawn on d2 and a knight from board A turn board B",
+   "summary": "White on board B led for most of the game, helped by the queen that Nxd1 won on board A, while board A swung back and forth. Black on board B turned it with the pawn drop P@d2, a knight sent over by Rxg2 and a new queen on d1, then mated, starting with B@g2+ with a bishop won on board A. Watch Black on board A in the last moves: behind, it keeps its queen and rooks away from White, because each would let Black on board B mate, and it ends by sitting.",
+   "event": "HypeBeast 1.1.1 against HypeBeast 1.1.0, 500,000 nodes a move",
+   "date": "2026-11-17",
+   "seats": {
+    "Awhite": "HypeBeast 1.1.1",
+    "Ablack": "HypeBeast 1.1.0",
+    "Bwhite": "HypeBeast 1.1.0",
+    "Bblack": "HypeBeast 1.1.1"
+   },
+   "winner": 0,
+   "how": "checkmate",
+   "moves": 211,
+   "notes": 17
+  },
+  {
+   "id": "v111-v110-g26",
+   "file": "v111-v110-g26-b8c768db30.json",
+   "title": "Pieces won on board A deliver the mate on board B",
+   "summary": "On board A, Black won White's queen with P@d2+ and N@e4+ and sent it to board B, where White, far behind a few moves earlier, dropped it with Q@g4 and went on to mate. Follow the rooks as well: Bxf7+ on board B gave Black on board A a rook that later took on d1 with Rxd1+, and that captured rook, with a pawn from Bxa3+, gave the mate on a5.",
+   "event": "HypeBeast 1.1.1 against HypeBeast 1.1.0, 500,000 nodes a move",
+   "date": "2026-11-17",
+   "seats": {
+    "Awhite": "HypeBeast 1.1.0",
+    "Ablack": "HypeBeast 1.1.1",
+    "Bwhite": "HypeBeast 1.1.1",
+    "Bblack": "HypeBeast 1.1.0"
+   },
+   "winner": 1,
+   "how": "checkmate",
+   "moves": 130,
+   "notes": 16
+  },
+  {
+   "id": "v111pre-v110-g11",
+   "file": "v111pre-v110-g11-ba1332ef52.json",
+   "title": "Bishop and queen from board A mate on board B",
+   "summary": "On board B, Black lost the queen early to a rook won on board A, and from then on queens and rooks kept crossing between the boards. The finish came from board A: A-White's Qxd3+ sent the bishop for B@d2+ and Qxf5+ sent the queen for Q@e3#. Watch move 18 on board A, where Black checks with N@e3+ first so that taking the queen on e5 would not hand B-Black a mating queen.",
+   "event": "HypeBeast 1.1.1 (pre-release build) against HypeBeast 1.1.0, 500,000 nodes a move",
+   "date": "2026-11-17",
+   "seats": {
+    "Awhite": "HypeBeast 1.1.1 (pre-release build)",
+    "Ablack": "HypeBeast 1.1.0",
+    "Bwhite": "HypeBeast 1.1.0",
+    "Bblack": "HypeBeast 1.1.1 (pre-release build)"
+   },
+   "winner": 0,
+   "how": "checkmate",
+   "moves": 113,
+   "notes": 15
+  },
+  {
+   "id": "v111pre-v110-g28",
+   "file": "v111pre-v110-g28-0b82712e0b.json",
+   "title": "Captures on board A load the mating attack on board B",
+   "summary": "Both boards swung back and forth, with a promoted queen for each side on board B and pieces crossing in both directions. Near the end White on board A gave up a rook and fell behind there, but its captures sent Black on board B a bishop, a rook, a pawn and a queen, which Black dropped one after another to mate. Follow the bishop from Ba6+: it crosses to board A, captures there, and comes back as B@f3+.",
+   "event": "HypeBeast 1.1.1 (pre-release build) against HypeBeast 1.1.0, 500,000 nodes a move",
+   "date": "2026-11-17",
+   "seats": {
+    "Awhite": "HypeBeast 1.1.0",
+    "Ablack": "HypeBeast 1.1.1 (pre-release build)",
+    "Bwhite": "HypeBeast 1.1.1 (pre-release build)",
+    "Bblack": "HypeBeast 1.1.0"
+   },
+   "winner": 0,
+   "how": "checkmate",
+   "moves": 103,
+   "notes": 17
+  },
+  {
+   "id": "v111pre-v110-g05",
+   "file": "v111pre-v110-g05-4e2eb08b3d.json",
+   "title": "A queen won on board B mates on board A",
+   "summary": "On board B, B-Black's B@f2+ was taken with Kxf2, which put B-White on top there and sent the bishop to A-Black, who was ahead on board A by the engines' count for nearly all the rest of the game. Follow the queen at the end: on board B, N@e7+ and Nxg6 won B-Black's queen, and A-Black dropped it with Q@h4+ in the mate on board A.",
+   "event": "HypeBeast 1.1.1 (pre-release build) against HypeBeast 1.1.0, 500,000 nodes a move",
+   "date": "2026-11-17",
+   "seats": {
+    "Awhite": "HypeBeast 1.1.1 (pre-release build)",
+    "Ablack": "HypeBeast 1.1.0",
+    "Bwhite": "HypeBeast 1.1.0",
+    "Bblack": "HypeBeast 1.1.1 (pre-release build)"
+   },
+   "winner": 1,
+   "how": "checkmate",
+   "moves": 131,
+   "notes": 15
+  }
+ ]
+}
