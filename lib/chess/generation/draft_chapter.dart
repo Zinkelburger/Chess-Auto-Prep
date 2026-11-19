@@ -1,4 +1,4 @@
-import 'package:dartchess/dartchess.dart' show Role, Side, Square;
+import 'package:dartchess/dartchess.dart' show Move, NormalMove, Side;
 
 import '../fen.dart';
 import '../openings.dart';
@@ -12,6 +12,7 @@ import '../pgn/games_written.dart';
 import '../pgn/line_id_pins.dart';
 import '../pgn/tree_edit.dart';
 import 'draft_lines.dart';
+import 'legal_moves.dart';
 
 /// The text of a draft chapter: the heading with `// Draft` in it, then one
 /// game per kept line, in the shape of every other chapter file, so its
@@ -193,18 +194,16 @@ Map<String, Set<String>> chapterPins(Chapter chapter) {
 }
 
 /// The model's spelling of a castling move the tree spells king-to-rook,
-/// or null for any other move. `e1h1` with a white king on e1 is `e1g1`.
+/// or null for any other move: the name [legalMovesOf] gives it, so `e1h1`
+/// with a white king on e1 is `e1g1`, and `e1f1` with the rook on f1 is too.
 String? standardCastling(String uci, Fen fen) {
-  const pairs = {
-    'e1h1': 'e1g1',
-    'e1a1': 'e1c1',
-    'e8h8': 'e8g8',
-    'e8a8': 'e8c8',
-  };
-  final standard = pairs[uci];
-  if (standard == null) return null;
+  // Only a castle from the e-file has a second name.
+  if (!uci.startsWith('e1') && !uci.startsWith('e8')) return null;
   final position = positionOf(fen);
-  final from = Square.parse(uci.substring(0, 2));
-  if (position == null || from == null) return null;
-  return position.board.pieceAt(from)?.role == Role.king ? standard : null;
+  final move = Move.parse(uci);
+  if (position == null || move is! NormalMove || !position.isLegal(move)) {
+    return null;
+  }
+  final standard = searchUci(position, move);
+  return standard == uci ? null : standard;
 }
