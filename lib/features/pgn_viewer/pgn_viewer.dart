@@ -335,18 +335,20 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
 
   /// [ref] is now the viewer's file: it goes to the top of the recent list,
   /// which is then kept. Called once the workspace has it open, so a file
-  /// that could not be read is not remembered as one that was.
+  /// that could not be read is not remembered as one that was. With
+  /// [keepQuery], coming back to the viewer's own file keeps its search.
   Future<void> opened(
     ChapterRef ref, {
     ReadingPlace? place,
+    bool keepQuery = false,
     bool Function()? currentRequest,
   }) async {
+    if (!keepQuery || _file != ref) _query = '';
     _file = ref;
     _sort = GameOrder.fileOrder;
     _perspective = place?.perspective ?? const FollowCollectionPlayer();
     _orientedFor = null;
     _orient();
-    _query = '';
     _selection = null;
     _order = null;
     _ordinals = null;

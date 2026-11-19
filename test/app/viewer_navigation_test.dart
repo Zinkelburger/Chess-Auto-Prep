@@ -137,6 +137,47 @@ void main() {
   });
 
   testWidgets(
+    'Back from the builder restores the viewer search and reading place',
+    (tester) async {
+      final stored = _StoredPlace(
+        const ReadingPlace(
+          game: 0,
+          key: '',
+          path: NodePath.root(),
+          sort: GameOrder.fileOrder,
+        ),
+      );
+      final app = WindowFixture(viewerPlaces: stored);
+      addTearDown(app.dispose);
+      final ref = collectionRef('search');
+      app.store.documents[ref] = Opened(
+        threeGameFile,
+        scriptedRevision(threeGameFile),
+      );
+      await app.pumpShell(tester);
+      await app.requests.openFile(ref);
+      app.viewer.search('Ding');
+      app.parts.documents.filter.apply(
+        const GameFilter(
+          rules: [HeaderRule(field: 'Event', value: 'Tata')],
+        ),
+      );
+      app.viewer.showGame(1);
+      final cursor = NodePath.of([0]);
+      app.session.cursor.goTo(cursor);
+      await tester.pumpAndSettle();
+      await app.requests.readInBuilder(kidMain, []);
+      await app.requests.back();
+      await tester.pumpAndSettle();
+      expect(app.viewer.file, ref);
+      expect(app.viewer.query, 'Ding');
+      expect(app.viewer.visible.single.$1, 1);
+      expect(app.parts.documents.filter.kept, 2);
+      expect(app.session.cursor.value, cursor);
+    },
+  );
+
+  testWidgets(
     'sorted counter, number entry and keyboard share the visible list',
     (tester) async {
       final app = WindowFixture();
