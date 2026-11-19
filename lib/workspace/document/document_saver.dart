@@ -538,7 +538,18 @@ final class DocumentSaver extends ChangeNotifier {
   /// Words typed while the undo is being written are newer than the version
   /// being put back, so they win: the draft goes to disk, the undo is
   /// refused, and the version it wrote becomes the next step back.
-  Future<UndoResult> undo() async {
+  Future<UndoResult> undo() {
+    _undos++;
+    return _undoNow().whenComplete(() => _undos--);
+  }
+
+  /// Whether an undo is on its way to the file. Reading refuses edits
+  /// meanwhile: one held now would be made on the version the undo
+  /// replaces, and saving it would put back what the undo took out.
+  bool get undoing => _undos > 0;
+  int _undos = 0;
+
+  Future<UndoResult> _undoNow() async {
     if (_state is SaveStopped) return undoFrozen;
     if (_state is DocumentFollowing) return undoBehind;
     if (_clock.isWaiting) await flush();

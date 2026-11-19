@@ -614,7 +614,7 @@ final class DocumentSession extends ChangeNotifier {
     if (_saver.referencesPending || _saver.state is DocumentFollowing) {
       return _editRefused('the chapter must finish saving or be read again');
     }
-    if (_restoring) {
+    if (_restoring || (_saver.undoing && _holdsEdits)) {
       return _editRefused('an undo is still putting the chapter back');
     }
     return null;
