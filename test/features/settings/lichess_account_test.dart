@@ -84,6 +84,20 @@ void main() {
     expect(state.problem, isNull);
   });
 
+  test('logging in again and cancelling keeps the saved account', () async {
+    final before = saved = someone(name: 'Previous');
+    final state = owner();
+    await state.load();
+    final done = state.logIn();
+    await Future<void>.delayed(Duration.zero);
+    expect(state.status, isA<Connecting>());
+    await state.cancel();
+    await done;
+    expect((state.status as SignedIn).account, same(before));
+    expect(saved, same(before));
+    expect(state.problem, isNull);
+  });
+
   test('a browser that did not open is said so, with the page', () async {
     login.browserOpens = false;
     final state = owner();
