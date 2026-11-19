@@ -120,8 +120,11 @@ final class AppParts {
   /// written now rather than when its second is up. Answers what did not
   /// get there, or null.
   Future<String?> _settleWrites() async {
-    final kept = _started ? await _drafts?.settle() : null;
+    final drafts = _started ? _drafts : null;
+    await drafts?.settle();
     final pending = await env.pendingWrites.settle();
+    // A producer can leave a fresh checkpoint while its write is settling.
+    final kept = await drafts?.settle();
     final problems = [kept, pending].nonNulls;
     return problems.isEmpty ? null : problems.join('\n');
   }
