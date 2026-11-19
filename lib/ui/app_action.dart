@@ -31,9 +31,6 @@ final class AppAction {
 
   /// Actions under one heading sit together; null puts one at the top.
   final String? group;
-
-  /// The label with its key after it, the way a tooltip says it.
-  String get labelWithKey => withKey(label, shortcut);
 }
 
 /// [description] with the key that does it after it — `Flip board (F)` —
