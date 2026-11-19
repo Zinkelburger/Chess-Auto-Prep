@@ -43,12 +43,13 @@ final class BoardDoors {
       await (positionOnly ? requests.pasteFen() : requests.paste());
       return;
     }
-    final source = workspace.session.source;
-    final game = workspace.session.game;
+    final session = workspace.session;
+    final source = session.source ?? session.analysisPage;
+    final game = session.game;
     final text = await requests.input.clipboard() ?? '';
     if (!inspecting() ||
-        source != workspace.session.source ||
-        game != workspace.session.game) {
+        source != (session.source ?? session.analysisPage) ||
+        game != session.game) {
       return;
     }
     requests.say(await inspection.paste(text, positionOnly: positionOnly));
