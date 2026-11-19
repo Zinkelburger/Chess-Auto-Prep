@@ -372,6 +372,77 @@ final class TableLine {
     );
   }
 
+  /// A partner drop that loses its piece if [node]'s branch goes. Check
+  /// each surviving history whose partner was removed. A reused drop may
+  /// rely on a different capture in the history of a later ordinary move.
+  LineMove? dropBrokenByRemoving(int node) {
+    // A removed path changes the partner's hand only after a capture on
+    // that path. SAN includes the capture marker for en passant too.
+    bool captures(LineEntry entry) =>
+        entry is LineMove && entry.san.contains('x');
+    final removed = {node};
+    final supplied = {if (captures(nodes[node].entry)) node};
+    final board = nodes[node].board;
+    bool drops(LineEntry entry) => entry is LineMove && entry.uci.contains('@');
+    final hasDrop = <int>{};
+    final replays = <(int?, int?), LineReplay>{
+      (null, null): LineReplayed(root),
+    };
+    for (var i = 0; i < nodes.length; i++) {
+      final step = nodes[i];
+      if (step.board != board &&
+          (hasDrop.contains(step.parent) || drops(step.entry))) {
+        hasDrop.add(i);
+      }
+      if (i <= node) continue;
+      if (step.board == board && removed.contains(step.parent)) {
+        removed.add(i);
+        if (supplied.contains(step.parent) || captures(step.entry)) {
+          supplied.add(i);
+        }
+      } else if (hasDrop.contains(i) && supplied.contains(step.partner)) {
+        final before = asAt(i);
+        final after = before
+            .goTo(board, nodes[node].parent)
+            ._replayCached(replays);
+        if (after is LineBroken &&
+            before._replayCached(replays) is LineReplayed) {
+          return after.move;
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Histories share the replay up to the same pair of cursors. Walk back
+  /// in play order to a known prefix, then apply only the remaining steps.
+  LineReplay _replayCached(Map<(int?, int?), LineReplay> cache) {
+    var at = _at;
+    final missing = <((int?, int?), int)>[];
+    while (!cache.containsKey(at)) {
+      final (one, two) = at;
+      if (one != null && (two == null || one > two)) {
+        missing.add((at, one));
+        at = (nodes[one].parent, two);
+      } else {
+        missing.add((at, two!));
+        at = (one, nodes[two].parent);
+      }
+    }
+    var replay = cache[at]!;
+    for (final (cursors, node) in missing.reversed) {
+      if (replay case LineReplayed(:final position)) {
+        final entry = nodes[node].entry;
+        final after = _apply(position, entry);
+        replay = after == null
+            ? LineBroken(entry as LineMove)
+            : LineReplayed(after);
+      }
+      cache[cursors] = replay;
+    }
+    return replay;
+  }
+
   /// [node] and everything after it on its board taken out; a cursor in
   /// what went goes back to the node before [node]. The other board's moves
   /// stay: one that dropped a piece a move gone had captured no longer

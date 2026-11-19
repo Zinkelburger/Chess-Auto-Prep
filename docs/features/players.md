@@ -156,7 +156,8 @@ movetext (`(no moves yet)`; a missing study is noted, not fatal).
 **Delete saved games…** — confirm `Delete <name>'s saved games?` → their
 downloads move to the recovery folder and their engine reports are deleted.
 Linked PGN files stay, as does a download another reader shares (one of the
-user's own accounts, or an account another person holds); the confirm names
+user's own accounts, or an account another person holds or links as a PGN
+file); the confirm names
 each one kept. `Remove player…` offers `Remove and delete games` /
 `Remove, keep games`, and removes them from every group.
 

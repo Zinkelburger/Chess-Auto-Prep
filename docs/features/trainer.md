@@ -27,7 +27,9 @@ a line selects its scope and previews its moves on the board without starting
 a quiz. **Whole repertoire** returns to the broad scope. Each level offers
 Learn and Review. Line checkboxes mark known material **Learned**; row menus
 also offer reading and training. Model games and lines with no moves to ask
-remain read-only and never enter queues.
+remain read-only and never enter queues. When the repertoire list cannot be
+read, a Book or repertoire scope says so with **Try again** instead of calling
+the book empty, and the scope buttons stay so the open chapter can be trained.
 
 **Review → Due / All learned / Choose lines** controls the next review.
 Choose lines changes the outline checkboxes into session selection; the same

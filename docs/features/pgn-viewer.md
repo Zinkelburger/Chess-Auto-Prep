@@ -210,8 +210,9 @@ with `Open study`.
 **Export** — `Export games…` (Actions or the Filter tab) →
 `Export games` asks a `PGN file name`, then `Choose folder` → the
 visible games in list order, with comments and variations, written to a new
-file; an existing file is never replaced; the source is untouched. Refused
-while filtering: `Wait for filtering to finish and select at least one game.`
+file; an existing file is never replaced; the source is untouched. Closing
+the app waits for an export in progress. Refused while filtering: `Wait for
+filtering to finish and select at least one game.`
 
 **Close file** — Actions ▸ `Close file` → back to the recent list.
 

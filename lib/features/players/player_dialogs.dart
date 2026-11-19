@@ -110,7 +110,9 @@ class _PlayerDialogState extends State<_PlayerDialog>
     'rating': 'Rating',
     'notes': 'Prep notes',
   };
-  String _initialText(String key) => key == 'aliases'
+  // An alias written as one string (hand-edited or imported) shows as it is.
+  String _initialText(String key) =>
+      key == 'aliases' && widget.player?.fields[key] is! String
       ? widget.player?.strings(key).join('; ') ?? ''
       : widget.player?.text(key) ?? '';
 
