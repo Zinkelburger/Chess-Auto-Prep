@@ -179,9 +179,16 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
     ];
   }
 
-  Future<PgnExportResult> export(String name, String text) =>
-      exporter?.save(name, text) ??
-      Future.value(const PgnExportFailed('File export is unavailable.'));
+  /// Writes [text] to a new file; closing the app waits for it, as it does
+  /// for a study's export.
+  Future<PgnExportResult> export(String name, String text) {
+    final saving = exporter?.save(name, text);
+    if (saving == null) {
+      return Future.value(const PgnExportFailed('File export is unavailable.'));
+    }
+    pendingWrites.watch(this, saving);
+    return saving;
+  }
 
   int _filterSeen = -1;
   ({List<(int, GameSummary)> games, List<ViewerChapter> chapters})? _selection;
