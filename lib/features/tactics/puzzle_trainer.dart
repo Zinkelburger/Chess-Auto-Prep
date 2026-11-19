@@ -538,7 +538,14 @@ final class PuzzleTrainer extends ChangeNotifier {
     final showing = (source: _session.source, game: _session.game);
     final puzzle = _puzzleShown(showing.game);
     final up = _up;
-    if (showing == _showing && (up == null || puzzle?.fen == up.puzzle.fen)) {
+    // Another puzzle can be set at the same position: the answer tells
+    // them apart.
+    final same =
+        up != null &&
+        puzzle != null &&
+        up.puzzle.fen == puzzle.fen &&
+        listEquals(up.puzzle.answer, puzzle.answer);
+    if (showing == _showing && (up == null || same)) {
       return;
     }
     final sameSource = showing.source == _showing.source;
@@ -546,7 +553,7 @@ final class PuzzleTrainer extends ChangeNotifier {
     if (puzzle != null && _run != null && !_parked) {
       // The same puzzle at another index, as when an earlier one is
       // deleted: it keeps its progress, answer and engine.
-      if (up != null && sameSource && up.puzzle.fen == puzzle.fen) {
+      if (up != null && sameSource && same) {
         // A reply or an advance waiting on it stays due.
         final moved = up.copyWith(puzzle: puzzle);
         if (identical(_replyDue, up)) _replyDue = moved;

@@ -149,6 +149,38 @@ void main() {
     }),
   );
 
+  test('a replacement at the same FEN does not inherit a pending reply', () {
+    const fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+    const set =
+        '''
+[Event "Default #1"]
+[SetUp "1"]
+[FEN "$fen"]
+
+1... e5 2. Nf3 *
+
+[Event "Default #2"]
+[SetUp "1"]
+[FEN "$fen"]
+
+1... c5 2. Nf3 *
+''';
+    sitting((async) {
+      begin(async);
+      w.trainer.play('e7e5');
+      expect(w.trainer.up!.waiting, isTrue);
+      unawaited(w.tactics.delete(w.tactics.at(0)!));
+      async.flushMicrotasks();
+      expect(w.trainer.up!.puzzle.answer, ['c5', 'Nf3']);
+      expect(w.trainer.up!.waiting, isFalse);
+      async.elapse(replyDelay);
+      expect(w.session.shownTo, const NodePath.root());
+      expect(w.trainer.up!.found, 0);
+      expect(w.trainer.run!.outcomes, isEmpty);
+      expect(setText(), isNot(contains('ReviewCount')));
+    }, set: set);
+  });
+
   test(
     'a clean solve is written as a success, and auto-advance brings the '
     'next puzzle',
