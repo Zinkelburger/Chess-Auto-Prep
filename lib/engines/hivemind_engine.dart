@@ -372,9 +372,14 @@ final class _Collecting {
   int _nodes = -1;
   bool _stopped = false;
 
+  /// How long a stopped search may take to print `bestmove`. The engine
+  /// first finishes the batch it is evaluating, which takes seconds on a
+  /// busy or slow CPU; only a wedged one runs past this.
+  static const stopGrace = Duration(seconds: 30);
+
   void stop() {
     _stopped = true;
-    _watch(const Duration(seconds: 5));
+    _watch(stopGrace);
   }
 
   void add(JointLine line) {

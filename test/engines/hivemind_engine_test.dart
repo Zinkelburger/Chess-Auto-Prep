@@ -211,7 +211,7 @@ void main() {
         expect(process.sent.last, 'stop');
         process.next = ['bestmove (e2e4,pass)'];
         unawaited(engine.search(question(team: Team.cd)).then((a) => next = a));
-        for (var second = 0; second < 4; second++) {
+        for (var second = 0; second < 29; second++) {
           time.elapse(const Duration(seconds: 1));
           process.say(liveSearch.first);
           time.flushMicrotasks();
@@ -223,6 +223,30 @@ void main() {
       });
     },
   );
+
+  // Measured on the real engine under load: `bestmove` came 2 to 3 s
+  // after `stop`, the time to finish the batch it was evaluating.
+  test('an engine that takes seconds to answer stop keeps its search', () {
+    fakeAsync((time) {
+      late HivemindProcess engine;
+      final process = AnsweringProcess(live: true);
+      unawaited(HivemindProcess.start(process).then((e) => engine = e!));
+      time.flushMicrotasks();
+      HivemindAnswer? stopped;
+      unawaited(engine.search(question()).then((a) => stopped = a));
+      time.flushMicrotasks();
+      process.say(liveSearch.first);
+      time.flushMicrotasks();
+      engine.stop();
+      time.elapse(const Duration(seconds: 8));
+      process
+        ..say(liveSearch.first)
+        ..say('bestmove (e2e4,pass)');
+      time.flushMicrotasks();
+      expect(stopped, isA<HivemindSearched>());
+      expect(process.killed, isFalse);
+    });
+  });
 
   for (final budget in [
     const NodeBudget(200),
