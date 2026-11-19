@@ -76,9 +76,9 @@ final class LichessAccountState extends ChangeNotifier {
     final signedIn = _status;
     if (signedIn is! SignedIn) return Future.value();
     return _once(() async {
-      _set(const SigningOut());
       // Register the local removal with shutdown before waiting on Lichess.
-      final removal = _save(null);
+      final removal = _save(_write(null));
+      _set(const SigningOut());
       await _login.revoke(signedIn.account.token);
       if (await removal) {
         _set(const SignedOut(), problem: null);
@@ -112,7 +112,7 @@ final class LichessAccountState extends ChangeNotifier {
           until: grant.until,
           personal: grant.personal,
         );
-        if (!await _save(account)) {
+        if (!await _save(_write(account))) {
           _set(
             const SignedOut(),
             problem:
@@ -132,8 +132,8 @@ final class LichessAccountState extends ChangeNotifier {
     }
   }
 
-  Future<bool> _save(LichessAccount? account) async {
-    final saving = _write(account).catchError((Object _) {
+  Future<bool> _save(Future<bool> write) async {
+    final saving = write.catchError((Object _) {
       // The credential must never become part of an exception message.
       log.w('save the Lichess account', 'the preferences write failed');
       return false;
