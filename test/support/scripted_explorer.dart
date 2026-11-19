@@ -137,7 +137,7 @@ const explorerCollections = '/Documents/pgn_collections';
 Explorer explorerOver(
   DocumentSession session, {
   required SettingsStore settings,
-  ScriptedExplorerApi? lichess,
+  LichessExplorer? lichess,
   ScriptedBook? book,
   LocalGames? thisFile,
   SavedGames? myGames,
