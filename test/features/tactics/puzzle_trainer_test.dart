@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/tactics/puzzle_queue.dart';
 import 'package:chess_auto_prep/chess/tactics/puzzle_run.dart';
@@ -69,6 +70,34 @@ void main() {
       unawaited(w.trainer.continueSession());
       async.flushMicrotasks();
       expect(w.trainer.up, same(up), reason: 'a visible puzzle is not reset');
+    }),
+  );
+
+  test(
+    'Continue returns to the revisited puzzle after document replacement',
+    () => sitting((async) {
+      unawaited(w.requests.open(kidMain));
+      async.flushMicrotasks();
+      w.requests.switchTo(Mode.tactics);
+      async.flushMicrotasks();
+      begin(async);
+      final first = w.trainer.up!.puzzle.fen;
+      unawaited(w.trainer.next());
+      async.flushMicrotasks();
+      expect(w.trainer.up!.puzzle.fen, isNot(first));
+      unawaited(w.trainer.previous());
+      async.flushMicrotasks();
+      expect(w.trainer.up!.puzzle.fen, first);
+      w.requests.switchTo(Mode.repertoires);
+      async.flushMicrotasks();
+      expect(w.session.source, kidMain);
+      w.trainer.putDown();
+      w.requests.switchTo(Mode.tactics);
+      async.flushMicrotasks();
+      expect(w.trainer.up, isNull);
+      unawaited(w.trainer.continueSession());
+      async.flushMicrotasks();
+      expect(w.trainer.up!.puzzle.fen, first);
     }),
   );
 

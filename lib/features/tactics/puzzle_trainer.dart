@@ -554,6 +554,8 @@ final class PuzzleTrainer extends ChangeNotifier {
       return _putUp(puzzle);
     }
     if (_up == null) return;
+    // A mode switch can replace the document before putDown runs.
+    if (!sameSource) _parkedAt = _up!.puzzle.fen;
     _cancelTimers();
     _up = null;
     notifyListeners();
