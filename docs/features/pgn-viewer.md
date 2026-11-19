@@ -176,7 +176,8 @@ once on Edit. Stop, an edit or another game cancels it and drops late results.
 without a review) reviews each such game in turn, `Game 2 of 5 · 19 / 34
 positions`, writing each into its own game as it ends (one undoable edit per
 game); moving between the games goes on while it runs, Stop or another file
-ends it, and a game whose main line changed meanwhile is left as it is.
+ends it (even one left again at once), and a game whose main line changed
+meanwhile is left as it is.
 Read-only files get the graph only (`This file is read-only`). The graph also
 reads evaluations already in the PGN. One rule marks a move for the graph,
 the counts and the annotations; a review read back from the file shows the
