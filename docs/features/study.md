@@ -146,8 +146,9 @@ restores retain the original operation/revision and offer **Retry save**,
 even when the source recovery file has already moved. Restoring refreshes the
 study list without taking the user away from the current document.
 
-Rename preserves the file's PGN bytes. Player/group prep links must be updated
-before a linked study can be renamed or deleted. Restoration, rename, deletion
+Rename preserves the file's PGN bytes. Players' study links and prep files,
+and group study links, must be updated before a linked study can be renamed
+or deleted. Restoration, rename, deletion
 and imports use the document store, shared recovery gate and pending-write
 tracking; widgets do not write files directly.
 
