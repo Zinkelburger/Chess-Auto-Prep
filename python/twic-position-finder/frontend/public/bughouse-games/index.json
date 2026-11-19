@@ -1,0 +1,43 @@
+{
+ "version": 1,
+ "generated": "2026-11-19",
+ "source": "PLACEHOLDER fixtures for development, not the published collection: two HypeBeast self-play games with invented notes and lines.",
+ "games": [
+  {
+   "id": "placeholder-king-hunt",
+   "file": "placeholder-king-hunt-09b929e97b.json",
+   "title": "Placeholder: a king hunt to h4",
+   "summary": "Placeholder text. White on board B gives two pieces to pull the black king up the board, and the queen won on board A finishes the job.",
+   "event": "PLACEHOLDER: HypeBeast 1.1.1 self-play, two option sets, 2 minutes a side",
+   "date": "2026-11-17",
+   "seats": {
+    "Awhite": "HypeBeast 1.1.1 (a)",
+    "Ablack": "HypeBeast 1.1.1 (b)",
+    "Bwhite": "HypeBeast 1.1.1 (b)",
+    "Bblack": "HypeBeast 1.1.1 (a)"
+   },
+   "winner": 1,
+   "how": "checkmate",
+   "moves": 57,
+   "notes": 13
+  },
+  {
+   "id": "placeholder-queen-trade",
+   "file": "placeholder-queen-trade-29a1d13524.json",
+   "title": "Placeholder: a queen traded across",
+   "summary": "Placeholder text. A queen trade on board A hands a queen to the partner on board B, who mates with it.",
+   "event": "PLACEHOLDER: HypeBeast 1.1.1 self-play, two option sets, 2 minutes a side",
+   "date": "2026-11-17",
+   "seats": {
+    "Awhite": "HypeBeast 1.1.1 (b)",
+    "Ablack": "HypeBeast 1.1.1 (a)",
+    "Bwhite": "HypeBeast 1.1.1 (a)",
+    "Bblack": "HypeBeast 1.1.1 (b)"
+   },
+   "winner": 0,
+   "how": "checkmate",
+   "moves": 64,
+   "notes": 8
+  }
+ ]
+}
