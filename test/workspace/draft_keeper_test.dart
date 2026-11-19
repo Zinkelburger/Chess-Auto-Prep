@@ -414,6 +414,42 @@ void main() {
       expect(await draftFiles().single.readAsString(), earlier);
     });
 
+    test('a renamed file keeps its old checkpoint until the new one is '
+        'written', () async {
+      final app = run();
+      addTearDown(app.kill);
+      await app.session.open(games, game: 0);
+      app.session.setComment(NodePath.of(const [0]), 'Before rename');
+      expect(await app.keeper.settle(), isNull);
+      final old = draftFiles().single;
+      final folder = old.parent.path;
+      final failed = await FaultyDisk(disk.root).run(
+        lastingFault(
+          (op) =>
+              op.kind == IoKind.publishReplace &&
+              p.isWithin(folder, op.to ?? op.path),
+          IoError.enospc,
+        ),
+        () async {
+          app.session.relocated(collectionRef('renamed'));
+          expect(await app.keeper.settle(), isNotNull);
+        },
+      );
+      expect(failed.end, isA<Returned<void>>());
+      expect(await old.readAsString(), contains('Before rename'));
+
+      app.session.setComment(NodePath.of(const [0]), 'After rename');
+      expect(await app.keeper.settle(), isNull);
+      expect(await old.exists(), isFalse);
+      expect(
+        await draftFiles().single.readAsString(),
+        contains('After rename'),
+      );
+      app.session.discardHeld();
+      expect(await app.keeper.settle(), isNull);
+      expect(draftFiles(), isEmpty);
+    });
+
     test('an edit made just before the window closes is kept: settling '
         'writes it before its second is up', () async {
       final first = run();

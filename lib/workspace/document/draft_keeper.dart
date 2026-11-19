@@ -83,6 +83,10 @@ final class DraftKeeper {
   /// visit's to replace or drop until it has been moved.
   final _notSetAside = <String>{};
 
+  /// For a renamed file whose new checkpoint is not written yet, the old
+  /// names whose checkpoints still hold its edits; they go once it is.
+  final _movedFrom = <String, Set<String>>{};
+
   /// The draft offered for the open file, until it is restored, replaced
   /// by new edits or its file is left.
   ViewerDraft? _offered;
@@ -143,7 +147,16 @@ final class DraftKeeper {
     _setAside(to);
     _schedule();
     _flush();
-    _inTurn(() => _drop(from));
+    _inTurn(() async {
+      final old = {...?_movedFrom.remove(from), from};
+      if (_unkept.containsKey(to)) {
+        (_movedFrom[to] ??= {}).addAll(old);
+        return;
+      }
+      for (final path in old) {
+        await _drop(path);
+      }
+    });
   }
 
   /// The edits this visit held are off the board, as the session says: kept
@@ -260,6 +273,9 @@ final class DraftKeeper {
         ),
       );
       _unkept.remove(waiting.path);
+      for (final old in _movedFrom.remove(waiting.path) ?? const <String>{}) {
+        await _drop(old);
+      }
     } on Object catch (error) {
       // Derived from the draft on screen, which is still there: the next
       // edit tries again.
@@ -273,6 +289,9 @@ final class DraftKeeper {
 
   Future<void> _drop(String path) async {
     _unkept.remove(path);
+    for (final old in _movedFrom.remove(path) ?? const <String>{}) {
+      await _drop(old);
+    }
     // Still the earlier checkpoint, not this visit's: it is offered again.
     if (_notSetAside.remove(path)) return;
     try {
