@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:chessground/chessground.dart';
+import 'package:collection/collection.dart';
 import 'package:dartchess/dartchess.dart' show Setup, Side;
 import 'package:flutter/material.dart';
 
@@ -187,18 +188,57 @@ class _SetupState extends State<_Setup> {
     if (edited != null) _change(() => _fen.text = edited.value);
   }
 
+  // ChoiceField submits its displayed text. Give every suggestion a unique
+  // label, including when a registered name already contains a suffix.
+  late final Map<String, TournamentEngine> _options = _engineOptions();
+
+  Map<String, TournamentEngine> _engineOptions() {
+    final engines = [TournamentEngine.bundled(), ...widget.engines];
+    for (final seat in widget.previous?.engines ?? const <TournamentEngine>[]) {
+      if (!engines.any(
+        (e) => const DeepCollectionEquality().equals(e.json, seat.json),
+      )) {
+        engines.add(seat);
+      }
+    }
+    final names = {for (final engine in engines) engine.name};
+    final options = <String, TournamentEngine>{};
+    for (final engine in engines) {
+      var label = engine.name;
+      if (options.containsKey(label)) {
+        var suffix = 2;
+        do {
+          label = '${engine.name} ($suffix)';
+          suffix++;
+        } while (names.contains(label) || options.containsKey(label));
+      }
+      options[label] = engine;
+    }
+    return options;
+  }
+
   Widget _seat(int index) {
     final engine = _seats[index];
-    final options = [TournamentEngine.bundled(), ...widget.engines];
+    final options = _options.entries;
+    final selected =
+        options.where((e) => identical(e.value, engine)).firstOrNull ??
+        options
+            .where(
+              (e) => const DeepCollectionEquality().equals(
+                e.value.json,
+                engine.json,
+              ),
+            )
+            .firstOrNull;
     return Row(
       children: [
         Expanded(
           child: ChoiceField(
-            text: engine.name,
+            text: selected?.key ?? engine.name,
             hint: 'Engine ${index + 1}',
-            options: options.map((e) => e.name).toList(),
+            options: _options.keys.toList(),
             onChanged: (name) {
-              final found = options.where((e) => e.name == name).firstOrNull;
+              final found = _options[name];
               if (found != null) _change(() => _seats[index] = found);
             },
           ),
