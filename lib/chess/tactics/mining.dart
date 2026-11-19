@@ -85,7 +85,7 @@ List<PlayedMove> movesBy(GameTree tree, Side side) {
   return moves;
 }
 
-/// Whether play has ended at [fen]. An unreadable position also ends play.
+/// Whether the game is over at [fen] or the position cannot be read.
 bool isOver(Fen fen) {
   try {
     return Chess.fromSetup(Setup.parseFen(fen.value)).isGameOver;
