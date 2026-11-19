@@ -79,6 +79,10 @@ final class DraftKeeper {
   /// is or the file needs none.
   final _unkept = <String, String>{};
 
+  /// Files whose earlier checkpoint could not be set aside. It is not this
+  /// visit's to replace or drop until it has been moved.
+  final _notSetAside = <String>{};
+
   /// The draft offered for the open file, until it is restored, replaced
   /// by new edits or its file is left.
   ViewerDraft? _offered;
@@ -243,6 +247,10 @@ final class DraftKeeper {
       // A join of each game's own text: cheaper here than copying the
       // parsed games to another isolate would be.
       final text = writeChapter(file);
+      if (_notSetAside.contains(waiting.path)) {
+        await _drafts.setAside(waiting.path);
+        _notSetAside.remove(waiting.path);
+      }
       await _drafts.keep(
         ViewerDraft(
           path: waiting.path,
@@ -265,6 +273,8 @@ final class DraftKeeper {
 
   Future<void> _drop(String path) async {
     _unkept.remove(path);
+    // Still the earlier checkpoint, not this visit's: it is offered again.
+    if (_notSetAside.remove(path)) return;
     try {
       await _drafts.drop(path);
     } on Object catch (error) {
@@ -375,7 +385,11 @@ final class DraftKeeper {
     _inTurn(() async {
       try {
         await _drafts.setAside(path);
+        _notSetAside.remove(path);
       } on Object catch (error) {
+        // Each checkpoint write tries again first, and is refused until
+        // it succeeds.
+        _notSetAside.add(path);
         log.w('set aside the unsaved viewer edits for $path', error);
       }
     });

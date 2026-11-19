@@ -15,6 +15,9 @@ import 'package:path/path.dart' as p;
 
 import '../storage/store_fixture.dart';
 import '../support/big_chapter.dart';
+import '../support/faulty_disk/fault_plan.dart';
+import '../support/faulty_disk/faulty_disk.dart';
+import '../support/faulty_disk/io_trace.dart';
 import '../support/scripted_store.dart';
 import '../support/viewer_fixture.dart';
 
@@ -346,6 +349,70 @@ void main() {
           ? folder.listSync(recursive: true).whereType<File>().toList()
           : const [];
     }
+
+    test('editing past a draft the quarantine cannot take never writes over '
+        'it', () async {
+      final first = run();
+      await first.session.open(games, game: 0);
+      first.session.setComment(NodePath.of(const [0]), 'Earlier session');
+      expect(await first.keeper.settle(), isNull);
+      first.kill();
+      final earlier = await draftFiles().single.readAsString();
+
+      final second = run();
+      addTearDown(second.kill);
+      await second.session.open(games, game: 0);
+      await second.keeper.settle();
+      expect(second.offer, isNotNull);
+      final quarantine = p.join(disk.support.path, quarantineFolder);
+      final fault = await FaultyDisk(disk.root).run(
+        lastingFault(
+          (op) => op.kind == IoKind.mkdir && p.isWithin(quarantine, op.path),
+          IoError.enospc,
+        ),
+        () async {
+          second.session.setComment(NodePath.of(const [0]), 'Later session');
+          expect(await second.keeper.settle(), isNotNull);
+        },
+      );
+      expect(fault.end, isA<Returned<void>>());
+      expect(await draftFiles().single.readAsString(), earlier);
+
+      // Once the quarantine works again the earlier draft goes there first.
+      second.session.setComment(NodePath.of(const [0]), 'Later again');
+      expect(await second.keeper.settle(), isNull);
+      expect(quarantined().map((f) => f.readAsStringSync()), [earlier]);
+      expect(await draftFiles().single.readAsString(), contains('Later again'));
+    });
+
+    test('discarding edits whose earlier draft could not be set aside leaves '
+        'that draft', () async {
+      final first = run();
+      await first.session.open(games, game: 0);
+      first.session.setComment(NodePath.of(const [0]), 'Earlier session');
+      expect(await first.keeper.settle(), isNull);
+      first.kill();
+      final earlier = await draftFiles().single.readAsString();
+
+      final second = run();
+      addTearDown(second.kill);
+      await second.session.open(games, game: 0);
+      await second.keeper.settle();
+      final quarantine = p.join(disk.support.path, quarantineFolder);
+      await FaultyDisk(disk.root).run(
+        lastingFault(
+          (op) => op.kind == IoKind.mkdir && p.isWithin(quarantine, op.path),
+          IoError.enospc,
+        ),
+        () async {
+          second.session.setComment(NodePath.of(const [0]), 'Later session');
+          await second.keeper.settle();
+        },
+      );
+      second.session.discardHeld();
+      expect(await second.keeper.settle(), isNull);
+      expect(await draftFiles().single.readAsString(), earlier);
+    });
 
     test('an edit made just before the window closes is kept: settling '
         'writes it before its second is up', () async {
