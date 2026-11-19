@@ -109,7 +109,9 @@ final class StudyFileChanges {
       }
       final names = [
         for (final player in data.players)
-          if (p.equals(player.text('prep_file'), study.path)) player.name,
+          if (p.equals(player.text('prep_file'), study.path) ||
+              player.studies.any((link) => p.equals(link.path, study.path)))
+            player.name,
         for (final group in data.groups)
           if (group.study == study.path) group.name,
       ];

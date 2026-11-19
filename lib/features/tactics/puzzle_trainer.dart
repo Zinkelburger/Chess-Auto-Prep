@@ -537,8 +537,15 @@ final class PuzzleTrainer extends ChangeNotifier {
   void _documentChanged() {
     final showing = (source: _session.source, game: _session.game);
     final puzzle = _puzzleShown(showing.game);
-    if (showing == _showing &&
-        (_up == null || puzzle?.fen == _up!.puzzle.fen)) {
+    final up = _up;
+    // Another puzzle can be set at the same position: the answer tells
+    // them apart.
+    final same =
+        up != null &&
+        puzzle != null &&
+        up.puzzle.fen == puzzle.fen &&
+        listEquals(up.puzzle.answer, puzzle.answer);
+    if (showing == _showing && (up == null || same)) {
       return;
     }
     final sameSource = showing.source == _showing.source;
@@ -546,14 +553,20 @@ final class PuzzleTrainer extends ChangeNotifier {
     if (puzzle != null && _run != null && !_parked) {
       // The same puzzle at another index, as when an earlier one is
       // deleted: it keeps its progress, answer and engine.
-      if (sameSource && _up?.puzzle.fen == puzzle.fen) {
-        _up = _up!.copyWith(puzzle: puzzle);
+      if (up != null && sameSource && same) {
+        // A reply or an advance waiting on it stays due.
+        final moved = up.copyWith(puzzle: puzzle);
+        if (identical(_replyDue, up)) _replyDue = moved;
+        if (identical(_advanceDue, up)) _advanceDue = moved;
+        _up = moved;
         notifyListeners();
         return;
       }
       return _putUp(puzzle);
     }
     if (_up == null) return;
+    // A mode switch can replace the document before putDown runs.
+    if (!sameSource) _parkedAt = _up!.puzzle.fen;
     _cancelTimers();
     _up = null;
     notifyListeners();
@@ -610,8 +623,12 @@ final class PuzzleTrainer extends ChangeNotifier {
     }
     _replyTimer = Timer(replyDelay, () {
       _replyTimer = null;
+      // Read when it fires: the puzzle can have moved to another index.
+      final due = _replyDue;
       _replyDue = null;
-      if (!_disposed && !_suspended && identical(_up, target)) _reply();
+      if (!_disposed && !_suspended && due != null && identical(_up, due)) {
+        _reply();
+      }
     });
   }
 
@@ -624,8 +641,13 @@ final class PuzzleTrainer extends ChangeNotifier {
     }
     _advanceTimer = Timer(advanceDelay, () {
       _advanceTimer = null;
+      final due = _advanceDue;
       _advanceDue = null;
-      if (!_disposed && !_suspended && autoAdvance && identical(_up, target)) {
+      if (!_disposed &&
+          !_suspended &&
+          autoAdvance &&
+          due != null &&
+          identical(_up, due)) {
         unawaited(next());
       }
     });

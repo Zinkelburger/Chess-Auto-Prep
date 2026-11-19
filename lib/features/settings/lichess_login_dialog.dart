@@ -32,11 +32,16 @@ class _LoginDialog extends StatefulWidget {
 
 class _LoginDialogState extends State<_LoginDialog>
     with ListeningState<_LoginDialog> {
+  /// The account up when the dialog opened: a cancelled login goes back to
+  /// it, which is no new sign-in.
+  late final AccountStatus _before;
+
   @override
   Listenable listenableOf(_LoginDialog widget) => widget.account;
   @override
   void initState() {
     super.initState();
+    _before = widget.account.status;
     // Start only once the dialog is in the navigator, including re-login
     // when the saved credential was rejected.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -47,8 +52,9 @@ class _LoginDialogState extends State<_LoginDialog>
   @override
   void changed() {
     if (!mounted) return;
-    if (widget.account.status is SignedIn) {
-      Navigator.of(context).pop(true);
+    final status = widget.account.status;
+    if (status is SignedIn) {
+      Navigator.of(context).pop(!identical(status, _before));
     } else {
       setState(() {});
     }

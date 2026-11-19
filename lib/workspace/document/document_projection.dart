@@ -180,9 +180,9 @@ Landing? withReferenceChanges(Landing? landed, ReferenceChanges? references) =>
 ///
 /// A chapter that is its whole file is written as it is, with the ids the
 /// edit would change pinned ([withIdsPinned]); [written], when the edit said
-/// only which games it wrote, is the scope, which the pins do not widen —
-/// they land on games the edit wrote anyway. A chapter of a course file
-/// ([view]) goes back into its file ([spliced]) and the file is written.
+/// only which games it wrote, is the scope, widened by the games a pin
+/// rewrote. A chapter of a course file ([view]) goes back into its file
+/// ([spliced]) and the file is written.
 ///
 /// Null when a game the edit added could not be given its chapter's name.
 Landing? landing(
@@ -198,7 +198,12 @@ Landing? landing(
       text: writeChapter(pinned.chapter),
       scope: written == null
           ? GamesRearranged(pinned.games)
-          : GamesEdited(written),
+          : GamesEdited(
+              GamesWritten(
+                rewritten: {...written.rewritten, ...pinned.games.rewritten},
+                appended: written.appended,
+              ),
+            ),
       chapter: pinned.chapter,
       view: null,
     );

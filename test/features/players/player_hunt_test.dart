@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/players/player.dart';
 import 'package:chess_auto_prep/engines/engine_line.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/engines/maia/move_policy.dart';
 import 'package:chess_auto_prep/features/players/player_analysis.dart';
 import 'package:chess_auto_prep/features/players/player_hunt.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
@@ -23,13 +26,14 @@ const _game =
     '[Event "Club"]\n[White "Alex"]\n[Black "Bob"]\n[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 1-0';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  late ScriptedDocumentStore store;
   late PlayerAnalysis analysis;
   late PlayerHunt hunt;
   late ScriptedEngine engine;
   late PlayerReports reports;
   late Player player;
   setUp(() async {
-    final store = ScriptedDocumentStore();
+    store = ScriptedDocumentStore();
     const ref = DocumentRef('/p.pgn');
     store.documents[ref] = Opened(_game, scriptedRevision(_game));
     analysis = PlayerAnalysis(
@@ -71,6 +75,48 @@ void main() {
       expect(analysis.evals.values, contains(-125));
     },
   );
+  test(
+    'finishing obsolete analysis preserves the selected player’s cached findings',
+    () async {
+      final first = player;
+      const file = DocumentRef('/second.pgn');
+      final text = _game.replaceFirst('Alex', 'Bea');
+      store.documents[file] = Opened(text, scriptedRevision(text));
+      final second = Player.create('Bea').edited({
+        'pgn_files': [file.path],
+      });
+      await analysis.select(second);
+      final caching = hunt.start();
+      await pumpEventQueue();
+      engine.current.emit(line(depth: 14, score: const Centipawns(-180)));
+      engine.current.end();
+      await caching;
+      await analysis.pending.settle();
+      expect(hunt.findings.single.score.text, '-1.80');
+
+      await analysis.select(first);
+      engine = ScriptedEngine();
+      final oldRun = hunt.start();
+      await pumpEventQueue();
+      final release = store.readEarly = Completer<void>();
+      engine.current.emit(line(depth: 14, score: const Centipawns(-125)));
+      engine.current.end();
+      await pumpEventQueue();
+      expect(
+        store.readEarly,
+        isNull,
+        reason: 'final source validation is waiting',
+      );
+      await analysis.select(second);
+      await pumpEventQueue();
+      expect(hunt.findings.single.score.text, '-1.80');
+      release.complete();
+      await oldRun;
+      expect(analysis.player?.id, second.id);
+      expect(hunt.findings.map((finding) => finding.score.text), ['-1.80']);
+    },
+  );
+
   // In-memory reports: a disk read is real I/O that pumpEventQueue does not
   // wait for.
   test('a cancelled reload of the same player restores the report', () async {
@@ -155,6 +201,24 @@ void main() {
       );
     },
   );
+  test('an obsolete Maia failure leaves practical probes enabled', () async {
+    final model = _WaitingPolicy();
+    hunt.dispose();
+    hunt = PlayerHunt(analysis, () async => Started(engine), model: model)
+      ..configure(limit: 1, practical: true);
+    analysis.configure(minPly: 1);
+    await pumpEventQueue();
+    final running = hunt.start();
+    await pumpEventQueue();
+    engine.current.emit(line(depth: 14, pv: ['c7c5']));
+    engine.current.end();
+    await model.asked.future;
+    hunt.stop();
+    model.answer.complete(const MaiaFailed('late failure'));
+    await running;
+    expect(hunt.practicalWarning, isNull);
+  });
+
   test('a castle the games played is not an unseen reply', () async {
     // The engine names castling king to its square (e8g8); the games name
     // it king onto rook (e8h8). Both are the reply these games met.
@@ -288,4 +352,15 @@ void main() {
     expect((scoreFromPacked(10000) as MateIn).mating, true);
     expect((scoreFromPacked(-10000) as MateIn).mating, false);
   });
+}
+
+final class _WaitingPolicy implements MovePolicy {
+  final asked = Completer<void>();
+  final answer = Completer<MaiaAnswer>();
+
+  @override
+  Future<MaiaAnswer> policy(Fen fen, int elo) {
+    asked.complete();
+    return answer.future;
+  }
 }

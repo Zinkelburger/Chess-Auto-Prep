@@ -100,6 +100,26 @@ void main() {
       expect(line.issues, isEmpty);
     });
 
+    test(
+      'the listing knows the mainline result before any move is replayed',
+      () {
+        for (final (text, result) in [
+          ('[Event "Inline"] 1. e4 {1-0} (1. c4 0-1) *', '*'),
+          ('[Event "Escapes"]\n\n1. e4 ; 1-0\n% 1-0\ne5 1/2-1/2 *', '1/2-1/2'),
+          ('[Event "Missing"]\n\n1. e4 {1-0}', null),
+          ('[Event "Broken"]\n[FEN "invalid"]\n\n1. e4 1-0', null),
+          ('[Event "Conflict"]\n[Result "*"]\n\n1. e4 1-0', '*'),
+        ]) {
+          final line = _unread(text);
+          expect(line.result, result);
+          expect(line.isRead, isFalse);
+          expect(line.spacedBy('\r\n').result, result);
+          line.take(readGame(text));
+          expect(line.result, result);
+        }
+      },
+    );
+
     test('has the headers the whole read gives', () {
       for (final text in [
         _game,

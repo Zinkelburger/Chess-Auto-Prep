@@ -19,7 +19,10 @@ typedef NamedMove = ({NormalMove move, String uci});
 /// refuses to decide that for us. And castling is named the way Stockfish and
 /// the opponent model name it, king to its destination (`e1g1`), while
 /// dartchess passes it around as king to rook (`e1h1`) so that Chess960
-/// works; [uci] is the former and [NamedMove.move] the latter.
+/// works; `uci` is the former and [NamedMove.move] the latter. A king that
+/// castles from anywhere but the e-file — a set-up position whose castling
+/// rights say so — keeps the king-to-rook name, since where it lands could
+/// name an ordinary king move or the square it started on.
 ///
 /// Sorting by name only fixes the order the tree is built and written in; it
 /// is not a ranking and the search never takes the first few.
@@ -33,7 +36,7 @@ List<NamedMove> legalMovesOf(Position position) {
         moves.addAll(_promotions(from, to));
       } else {
         final move = NormalMove(from: from, to: to);
-        moves.add((move: move, uci: _standardUci(position, move)));
+        moves.add((move: move, uci: searchUci(position, move)));
       }
     }
   }
@@ -48,17 +51,18 @@ Iterable<NamedMove> _promotions(Square from, Square to) => [
     ),
 ];
 
-/// The king lands two files towards the rook it castled with, so a rook on
-/// the higher file puts the king on g and one on the lower file puts it on c.
-String _standardUci(Position position, NormalMove move) {
-  final board = position.board;
-  final isCastling =
-      board.pieceAt(move.from)?.role == Role.king &&
-      board.pieceAt(move.to)?.role == Role.rook &&
-      board.pieceAt(move.to)?.color == position.turn;
-  if (!isCastling) return move.uci;
-  final destination = Square(
-    move.to > move.from ? move.from + 2 : move.from - 2,
-  );
-  return '${move.from.name}${destination.name}';
+/// Whether the legal [move] is castling: the only legal move dartchess
+/// spells as landing on a piece of the side that moves.
+bool castlesOntoRook(Position position, NormalMove move) =>
+    position.board.bySide(position.turn).has(move.to);
+
+/// The name the search knows the legal [move] by. A king castling from the
+/// e-file lands on g for the rook on the higher file and on c for the one on
+/// the lower file; every other move keeps its own name.
+String searchUci(Position position, NormalMove move) {
+  if (move.from.file != File.e || !castlesOntoRook(position, move)) {
+    return move.uci;
+  }
+  final side = move.to > move.from ? CastlingSide.king : CastlingSide.queen;
+  return '${move.from.name}${kingCastlesTo(position.turn, side).name}';
 }

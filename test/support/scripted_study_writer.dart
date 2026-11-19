@@ -6,7 +6,13 @@ import 'package:dartchess/dartchess.dart' show Side;
 final class ScriptedStudyWriter implements LichessStudyWriter {
   ScriptedStudyWriter({this.loggedIn = true});
 
+  /// Lets a test hold a particular chapter request before it lands.
+  Future<void> Function(String name)? beforeAdd;
+
   bool loggedIn;
+
+  /// Thrown by [create], as a writer that fails outright would.
+  Object? createError;
 
   /// The id a new study gets.
   String studyId = 'wxyz9876';
@@ -31,6 +37,7 @@ final class ScriptedStudyWriter implements LichessStudyWriter {
 
   @override
   Future<LichessWrite> create(String name) async {
+    if (createError case final error?) throw error;
     if (failing case final failed?) return failed;
     created.add(name);
     return LichessWritten(studyId);
@@ -45,6 +52,7 @@ final class ScriptedStudyWriter implements LichessStudyWriter {
     bool initial = false,
   }) async {
     if (failing case final failed?) return failed;
+    if (beforeAdd case final wait?) await wait(name);
     if (refuse.contains(name)) {
       return const LichessNotWritten(
         LichessWriteProblem.rejected,

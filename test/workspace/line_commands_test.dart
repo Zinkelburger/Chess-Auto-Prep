@@ -2,10 +2,17 @@
 // deciding which branch is the main line, and which side the chapter is for.
 // Each of them has to reach the disk, and each has to leave the games it did
 // not name exactly as they were.
+import 'dart:convert';
+
+import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/chess/pgn/games_written.dart';
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
+import 'package:chess_auto_prep/chess/training/schedule.dart';
+import 'package:chess_auto_prep/chess/training/training_line.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
+import 'package:chess_auto_prep/workspace/document/document_projection.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:dartchess/dartchess.dart' show Side;
@@ -116,6 +123,64 @@ void main() {
     expect(fixture.onDisk, isNot(contains('c4')));
     expect(fixture.onDisk, contains('[Event "Slav"]'));
     expect(fixture.session.cursor.value, const NodePath.root());
+  });
+
+  test(
+    'deleting the first line’s moves keeps the other line’s review',
+    () async {
+      final fixture = await openSession(
+        '[Event "King pawn"]\n[LineID "x"]\n\n1. e4 *\n\n'
+        '[Event "Queen pawn"]\n[LineID "x"]\n\n1. d4 *\n',
+      );
+      addTearDown(fixture.dispose);
+      final session = fixture.session;
+      List<TrainingLine> lines() =>
+          trainingLines(session.chapter!, source: fixture.ref.path);
+      final [kingPawn, queenPawn] = lines();
+      expect(kingPawn.key.id, 'x');
+      expect(queenPawn.key, isNot(kingPawn.key));
+      final reviews = {
+        for (final line in [kingPawn, queenPawn])
+          line.key: Review(
+            key: line.key,
+            lineName: line.name,
+            lastRating: 'good',
+            due: DateTime.utc(2026, 11, 20 + line.game),
+          ),
+      };
+
+      deleteFrom(session, pathOfSans(session.tree!, ['e4'])!);
+      await fixture.saver.flush();
+      await session.open(fixture.ref);
+      final remaining = lines().single;
+      expect(remaining.moves.single.san, 'd4');
+      expect(
+        (remaining.key, reviews[remaining.key]?.due),
+        (queenPawn.key, reviews[queenPawn.key]!.due),
+      );
+    },
+  );
+
+  test('a pin cannot authorize an undeclared move change', () {
+    const text = '[Event "One"]\n\n1. e4 *\n\n[Event "Two"]\n\n1. d4 *';
+    final before = parseChapter(name: 'Test', text: text);
+    final edited = parseChapter(
+      name: 'Test',
+      text: text.replaceAll('1. d4', '1. c4'),
+    );
+    final written = GamesWritten(rewritten: {0});
+    final arranged = GamesArranged.of(written, before: 2);
+    for (final scope in [written, null]) {
+      final landed = landing(before, null, edited, arranged, written: scope)!;
+      expect(
+        changeOutsideScope(
+          previous: utf8.encode(text),
+          next: utf8.encode(landed.text),
+          scope: landed.scope,
+        ),
+        contains('game 2 would change'),
+      );
+    }
   });
 
   test('changing the side writes the Color line and turns the board', () async {

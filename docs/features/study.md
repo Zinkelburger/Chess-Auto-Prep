@@ -82,7 +82,8 @@ logged in (`Log in to Lichess to send a study.`) or logged in without write
 permission (`… Log in again to give it.`) offers **Log in to Lichess**, which
 sends once the login completes. A refused chapter stops the send with Lichess's
 reason and how many went; **Send again** then goes to the study already made.
-A new study holds at most 64 chapters.
+Closing the app waits for a send in progress until its chapter links are in
+the study. A new study holds at most 64 chapters.
 
 **Copy study PGN** and **Copy chapter PGN** export the respective material.
 **Export study PGN…** writes a captured snapshot to a chosen folder and never
@@ -146,8 +147,9 @@ restores retain the original operation/revision and offer **Retry save**,
 even when the source recovery file has already moved. Restoring refreshes the
 study list without taking the user away from the current document.
 
-Rename preserves the file's PGN bytes. Player/group prep links must be updated
-before a linked study can be renamed or deleted. Restoration, rename, deletion
+Rename preserves the file's PGN bytes. Players' study links and prep files,
+and group study links, must be updated before a linked study can be renamed
+or deleted. Restoration, rename, deletion
 and imports use the document store, shared recovery gate and pending-write
 tracking; widgets do not write files directly.
 

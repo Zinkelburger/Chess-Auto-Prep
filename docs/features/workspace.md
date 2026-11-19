@@ -287,7 +287,9 @@ focus: arrows, Enter/Space, Esc. A text field with focus keeps its keys.
   entries); nothing on disk.
 - **Local sources** — TWIC reads `master_games.db` with no network; `This
   file` indexes the open file's main lines to ply 50 (`indexedPlies`) and
-  lists 100 games; `My games` reads the downloaded games.
+  lists 100 games; `My games` reads the downloaded games. An account whose
+  games cannot be read is left out and named (`Could not read your Lichess
+  games.`, with `Try again`); the others still answer.
   Both are built once and answered from memory.
 - **Book source** — files indexed once and re-parsed only when their bytes
   change; each chapter of a course file indexed from its own games; the open

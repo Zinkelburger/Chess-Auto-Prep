@@ -122,6 +122,26 @@ void main() {
     expect(await reports.read(key), isNull);
   });
 
+  test('deleting downloads keeps a PGN linked by another player', () async {
+    final alex = await person('Alex', {
+      'lichess': 'alex',
+      'chesscom': 'shared',
+    });
+    final linked = download(GameSite.lichess, 'alex');
+    await person('Bob', {
+      'pgn_files': [linked.path],
+    });
+    await saved.refresh();
+    final confirmed = (await saved.current(alex))!;
+    await saved.delete(alex, confirmed: confirmed);
+    expect(store.documents[linked], isA<Opened>());
+    expect(store.deleted.keys, [download(GameSite.chesscom, 'shared')]);
+    expect(
+      confirmed.kept,
+      contains((site: GameSite.lichess, username: 'alex', otherPerson: 'Bob')),
+    );
+  });
+
   test('with the user\'s accounts unreadable nothing is deleted', () async {
     final alex = await person('Alex', {'lichess': 'alex'});
     final confirmed = (await saved.current(alex))!;

@@ -10,6 +10,7 @@ import 'package:chess_auto_prep/features/trainer/train_pane.dart';
 import 'package:chess_auto_prep/features/trainer/trainer.dart';
 import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/features/trainer/training_scope.dart';
+import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
@@ -68,6 +69,7 @@ void main() {
     WidgetTester tester, {
     bool rateReviews = false,
     bool reviewAll = false,
+    ScriptedFiles? chapters,
   }) async {
     reads = [];
     final settings = SettingsStore(
@@ -82,7 +84,10 @@ void main() {
     trainer = Trainer(
       session: fixture.session,
       settings: settings,
-      chapters: ScopeReader(files: ScriptedFiles(), documents: fixture.store),
+      chapters: ScopeReader(
+        files: chapters ?? ScriptedFiles(),
+        documents: fixture.store,
+      ),
       files: files,
       analysis: analysis,
       time: (now: DateTime.now, jitter: () => 0),
@@ -104,6 +109,25 @@ void main() {
     await tester.sendKeyEvent(key);
     await tester.pumpAndSettle();
   }
+
+  testWidgets('a failed book read still offers the open chapter', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      chapters: ScriptedFiles(
+        listing: const RepertoiresUnreadable('disk denied'),
+      ),
+    );
+    await tester.tap(find.text('Book'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('disk denied'), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
+    await tester.tap(find.text('Chapter'));
+    await tester.pumpAndSettle();
+    expect(trainer.scope, TrainScope.chapter);
+    expect(find.text('Learn 2'), findsOneWidget);
+  });
 
   testWidgets('a rating that did not save does not stop the next sitting', (
     tester,

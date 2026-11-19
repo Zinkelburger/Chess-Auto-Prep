@@ -343,15 +343,19 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (source == null) return const RequestDone();
     // The viewer is told its file again, as when it was read there first,
     // so its game list and reading place come back with it.
+    // A file the viewer still names but the board left (for the builder,
+    // say) lost its filter with the board: its reading place restores it.
     final viewing = place.mode == Mode.pgnViewer;
+    final away = _session.source != source;
     final saved = viewing ? await _viewer.savedPlace(source) : null;
     if (_disposed || ticket.overtaken) return const RequestDropped();
     final result = await _open(ticket, source, game: place.game, left: leave);
     if (_disposed || result is! RequestDone) return stayed(result);
-    if (viewing && ticket.current && _viewer.file != source) {
+    if (viewing && ticket.current && (away || _viewer.file != source)) {
       await _viewer.opened(
         source,
         place: saved,
+        keepQuery: true,
         currentRequest: () => ticket.current,
       );
       if (_disposed || ticket.overtaken) return const RequestDropped();

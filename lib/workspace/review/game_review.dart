@@ -12,6 +12,7 @@ import '../../engines/engine.dart';
 import '../../engines/engine_line.dart';
 import '../../engines/engine_supervisor.dart';
 import '../../engines/fixed_depth.dart';
+import '../../storage/chapter_files.dart' show ChapterRef;
 import '../analysis/engine_jobs.dart';
 import '../document/document_session.dart';
 import '../latest.dart';
@@ -126,6 +127,12 @@ final class GameReview extends ChangeNotifier {
   }
 
   void _follow() {
+    // Another file ends a review of every game, even if this one comes
+    // back before the next position is asked about.
+    if (_batchSource case final source? when session.source != source) {
+      _batchSource = null;
+      stop();
+    }
     if (!_applying &&
         _chapter != null &&
         !identical(_chapter, session.chapter)) {
@@ -221,6 +228,9 @@ final class GameReview extends ChangeNotifier {
   /// While every game of the file is being reviewed: which one of how many.
   ({int game, int of})? batch;
 
+  /// The file every game of which is being reviewed.
+  ChapterRef? _batchSource;
+
   /// The games of the open file a review of them all would cover: each one
   /// read whole, with moves, that carries no review yet.
   ///
@@ -297,6 +307,7 @@ final class GameReview extends ChangeNotifier {
     problem = null;
     // Not one game's review: moving to another game does not end it.
     _chapter = null;
+    _batchSource = source;
     bool current() => ticket.current && session.source == source;
     try {
       final started = await launch();
@@ -333,6 +344,7 @@ final class GameReview extends ChangeNotifier {
         problem = 'The review of the games could not finish: $error';
       }
     } finally {
+      _batchSource = null;
       batch = null;
       _search = null;
       final engine = _engine;

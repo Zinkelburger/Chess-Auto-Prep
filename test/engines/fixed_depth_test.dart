@@ -88,7 +88,11 @@ void main() {
             .having((e) => e.depth, 'depth', 3),
       );
 
-      final over = evaluator.evaluate(start);
+      final stalemate = Position.setupPosition(
+        Rule.chess,
+        Setup.parseFen('7k/5K2/6Q1/8/8/8/8/8 b - - 0 1'),
+      );
+      final over = evaluator.evaluate(stalemate);
       await pumpEventQueue();
       engine.current
         ..emit(line(depth: 0, pv: const []))
@@ -96,6 +100,43 @@ void main() {
       expect(await over, isA<Evaluated>().having((e) => e.eval.cp, 'cp', 0));
     },
   );
+
+  test(
+    'a drawn position with legal king moves accepts an empty depth-zero line',
+    () async {
+      final bareKings = Position.setupPosition(
+        Rule.chess,
+        Setup.parseFen('7k/8/8/8/8/8/8/K7 w - - 0 1'),
+      );
+      expect(bareKings.hasSomeLegalMoves, isTrue);
+      final engine = ScriptedEngine();
+      final result = FixedDepthEvaluator(engine, depth: 14).evaluate(bareKings);
+      engine.current
+        ..emit(line(depth: 0, pv: const []))
+        ..end();
+      expect(await result, isA<Evaluated>().having((e) => e.eval.cp, 'cp', 0));
+    },
+  );
+
+  test(
+    'a crash after a shallow score without moves leaves a playable position unevaluated',
+    () async {
+      final engine = ScriptedEngine();
+      final asked = FixedDepthEvaluator(engine, depth: 14).evaluate(start);
+      engine.current.emit(line(depth: 2, score: const Centipawns(80), pv: []));
+      engine.crash();
+      expect(await asked, isA<EvaluationUnavailable>());
+    },
+  );
+
+  test('a shallow mate score without a PV is still a verdict', () async {
+    final engine = ScriptedEngine();
+    final asked = FixedDepthEvaluator(engine, depth: 14).evaluate(start);
+    engine.current
+      ..emit(line(depth: 3, score: const MateIn(2), pv: const []))
+      ..end();
+    expect(await asked, isA<Evaluated>().having((e) => e.eval.cp, 'cp', 9998));
+  });
 
   group('with the cache in front', () {
     test('a kept verdict is answered without the engine, from the side to '

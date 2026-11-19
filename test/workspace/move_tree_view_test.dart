@@ -1,4 +1,8 @@
+import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart' show Opened;
+import 'package:chess_auto_prep/ui/app_action.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
+import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
 import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:chess_auto_prep/workspace/reading/move_tree_view.dart';
 import 'package:flutter/gestures.dart';
@@ -6,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/scripted_store.dart';
 import '../support/session_fixture.dart';
 
 /// A chapter whose introduction and whose first move both carry the tokens
@@ -19,12 +24,29 @@ const annotatedChapter = '''
 {Play the Exchange. [%eval 0.21]} 1. d4 ({A sideline. [%eval 0.05]} 1. c4 e5) 1... d5 {[%clk 0:29:41] Our move.} *
 ''';
 
-Future<void> pumpTree(WidgetTester tester, SessionFixture fixture) async {
+/// [onAnnotate] adds `Comment this move` to the menu, as the workspace does.
+Future<void> pumpTree(
+  WidgetTester tester,
+  SessionFixture fixture, {
+  VoidCallback? onAnnotate,
+}) async {
   await tester.binding.setSurfaceSize(const Size(400, 600));
   await tester.pumpWidget(
     MaterialApp(
       theme: darkTheme(),
-      home: Scaffold(body: MoveTreeView(session: fixture.session)),
+      home: Scaffold(
+        body: MoveTreeView(
+          session: fixture.session,
+          moveMenu: onAnnotate == null
+              ? null
+              : (path) => [
+                  AppAction('Comment this move', () {
+                    fixture.session.cursor.goTo(path);
+                    onAnnotate();
+                  }),
+                ],
+        ),
+      ),
     ),
   );
   await tester.pump();
@@ -112,6 +134,99 @@ void main() {
       copied,
       startsWith('rnbqkb1r/pppppppp/5n2/8/3P4/8/PPP1PPPP/RNBQKBNR w'),
     );
+  });
+
+  testWidgets('a move menu cannot delete from a file opened while it was '
+      'up', (tester) async {
+    final fixture = await openSession('[Event "A"]\n\n1. e4 e5 2. Nf3 *\n');
+    addTearDown(fixture.dispose);
+    final other = chapterRef('KID', 'B');
+    const text = '[Event "B"]\n\n1. d4 d5 2. c4 *\n';
+    fixture.store.documents[other] = Opened(text, scriptedRevision(text));
+    await pumpTree(tester, fixture);
+
+    fixture.store.hold = true;
+    final opening = fixture.session.open(other);
+    await tester.pump();
+    expect(fixture.store.waiting, 1);
+    await tester.tap(find.textContaining('e5'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    final delete = find.text('Delete from here');
+    expect(delete, findsOneWidget);
+    fixture.store.hold = false;
+    fixture.store.releaseNext();
+    expect(await opening, isA<DocumentOpened>());
+    await tester.pumpAndSettle();
+    if (delete.evaluate().isNotEmpty) {
+      await tester.tap(delete);
+      await tester.pumpAndSettle();
+    }
+
+    await fixture.saver.flush();
+    expect(fixture.session.source, other);
+    expect(fixture.session.tree!.mainLine.map((move) => move.san), [
+      'd4',
+      'd5',
+      'c4',
+    ]);
+    expect((fixture.store.documents[other] as Opened).text, text);
+  });
+
+  testWidgets('Comment this move declines a path that now names another '
+      'move', (tester) async {
+    final fixture = await openSession(twoLines);
+    addTearDown(fixture.dispose);
+    var opened = false;
+    await pumpTree(tester, fixture, onAnnotate: () => opened = true);
+    final path = NodePath.of([0, 1]);
+    await tester.longPress(find.textContaining('Nf6'));
+    await tester.pumpAndSettle();
+    makeMainLine(fixture.session, path);
+    await tester.pump();
+    expect(fixture.session.tree!.nodeAt(path)?.san, 'd5');
+    await tester.tap(find.text('Comment this move'));
+    await tester.pumpAndSettle();
+    expect(opened, isFalse);
+  });
+
+  testWidgets('Comment this move still works after a note lands on the '
+      'move', (tester) async {
+    final fixture = await openSession(twoLines);
+    addTearDown(fixture.dispose);
+    final session = fixture.session;
+    NodePath? editing;
+    await pumpTree(
+      tester,
+      fixture,
+      onAnnotate: () => editing = session.cursor.value,
+    );
+    final path = NodePath.of([0, 0, 0]);
+    await tester.longPress(find.textContaining('c4'));
+    await tester.pumpAndSettle();
+    session.setComment(NodePath.of([0, 0]), 'Annotations landed');
+    session.setGlyph(path, 2);
+    await tester.pump();
+    await tester.tap(find.text('Comment this move'));
+    await tester.pumpAndSettle();
+    expect(editing, path);
+    expect(session.cursor.currentMove?.san, 'c4');
+  });
+
+  testWidgets('a move menu still acts after another game is renamed', (
+    tester,
+  ) async {
+    final fixture = await openSession(twoLines);
+    addTearDown(fixture.dispose);
+    await fixture.session.open(fixture.ref, game: 0);
+    await pumpTree(tester, fixture);
+    await tester.longPress(find.textContaining('c4'));
+    await tester.pumpAndSettle();
+    expect(renameLine(fixture.session, 1, 'Renamed'), isNull);
+    await tester.pump();
+    await tester.tap(find.text('Delete from here'));
+    await tester.pumpAndSettle();
+    expect(fixture.onDisk, contains('1. d4 d5 *'));
+    expect(fixture.onDisk, contains('[Event "Renamed"]'));
   });
 
   testWidgets('a move offers what can be done to it, and does it', (

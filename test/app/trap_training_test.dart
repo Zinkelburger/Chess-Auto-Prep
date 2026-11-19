@@ -266,6 +266,27 @@ void main() {
     );
   });
 
+  testWidgets('Add and train preserves a regular chapter that replaced the '
+      'listed draft', (tester) async {
+    final draft = inKid('Main (draft)');
+    await openBeside(tester, {draft: draftText(draft.name, 'White')});
+    await listEveryFind(tester);
+    await trainTheTrap(tester);
+    expect(find.text('Add this line to “Main (draft)”?'), findsOneWidget);
+
+    // A sync replaces the file while the player is reading the question.
+    final replacement = chapterWith('1. Nf3 d5');
+    w.store.documents[draft] = Opened(
+      replacement,
+      scriptedRevision(replacement),
+    );
+    await tester.tap(find.text('Add and train'));
+    await tester.pumpAndSettle();
+    await w.saver.flush();
+
+    expect((w.store.documents[draft]! as Opened).text, replacement);
+  });
+
   testWidgets('a draft beside the chapter for the other side is passed over', (
     tester,
   ) async {

@@ -238,20 +238,40 @@ ExplorerAnswer parseExplorerAnswer(String body) {
   if (data is! Map<String, Object?>) {
     throw const FormatException('the explorer answer is not an object');
   }
-  int count(Map<String, Object?> map, String key) => switch (map[key]) {
-    final int n => n,
-    _ => 0,
+  final rows = data['moves'];
+  if (data.containsKey('error') || rows is! List) {
+    throw const FormatException('the explorer did not return a move list');
+  }
+  int? count(Map<String, Object?> map, String key) => switch (map[key]) {
+    final int n when n >= 0 => n,
+    null => 0,
+    _ => null,
   };
-  final moves = [
-    for (final move in _maps(data['moves']))
-      ExplorerMove(
-        uci: '${move['uci'] ?? ''}',
-        san: '${move['san'] ?? ''}',
-        white: count(move, 'white'),
-        draws: count(move, 'draws'),
-        black: count(move, 'black'),
-      ),
-  ]..sort((a, b) => b.games.compareTo(a.games));
+  final moves = <ExplorerMove>[];
+  for (final row in rows) {
+    if (row case {
+      'uci': final String uci,
+      'san': final String san,
+    } when uci.isNotEmpty && san.isNotEmpty && row is Map<String, Object?>) {
+      final white = count(row, 'white');
+      final draws = count(row, 'draws');
+      final black = count(row, 'black');
+      if (white == null || draws == null || black == null) continue;
+      moves.add(
+        ExplorerMove(
+          uci: uci,
+          san: san,
+          white: white,
+          draws: draws,
+          black: black,
+        ),
+      );
+    }
+  }
+  if (rows.isNotEmpty && moves.isEmpty) {
+    throw const FormatException('the explorer returned no readable moves');
+  }
+  moves.sort((a, b) => b.games.compareTo(a.games));
   final seen = <String>{};
   final games = [
     for (final game in [
