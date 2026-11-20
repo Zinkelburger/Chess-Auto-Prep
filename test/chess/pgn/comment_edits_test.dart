@@ -116,6 +116,74 @@ void main() {
         '[Event "C"]\n[Result "*"]\n\n1. d4 d5 2. Bf4 *\n';
     final d5 = NodePath.of([0, 0]);
 
+    test('changing the shown glyph preserves a different glyph in game B', () {
+      final before = parseChapter(
+        name: 'Shared',
+        text: shared
+            .replaceFirst('{first}', r'$1')
+            .replaceFirst('{second}', r'$2'),
+      );
+      expect(before.tree.nodeAt(d5)!.nags, [1]);
+
+      final edit = setGlyph(before, at: d5, nag: 3) as CommentWritten;
+      expect(edit.chapter.lines[0].text, contains(r'd5 $3'));
+      expect(edit.chapter.lines[1].text, before.lines[1].text);
+      expect(edit.written.rewritten, {0});
+    });
+
+    test('adding a move glyph keeps the visible position glyph beside it', () {
+      final before = parseChapter(
+        name: 'Shared',
+        text:
+            '[Event "A"]\n\n1. d4 d5 *\n\n'
+            '[Event "B"]\n\n1. d4 d5 \$14 *\n\n'
+            '[Event "C"]\n\n1. d4 d5? *\n',
+      );
+      expect(before.tree.nodeAt(d5)!.nags, [14]);
+
+      final edit = setGlyph(before, at: d5, nag: 1) as CommentWritten;
+      expect(edit.written.rewritten, {1});
+      expect(edit.chapter.lines[0].text, before.lines[0].text);
+      expect(edit.chapter.lines[1].text, contains(r'd5 $1 $14'));
+      expect(edit.chapter.lines[2].text, before.lines[2].text);
+      expect(reread(edit.chapter).tree.nodeAt(d5)!.nags, [1, 14]);
+    });
+
+    test('only games with the same whole move-glyph group are edited', () {
+      final before = parseChapter(
+        name: 'Shared',
+        text:
+            '[Event "A"]\n\n1. d4 d5! *\n\n'
+            '[Event "B"]\n\n1. d4 d5 \$1 \$2 *\n\n'
+            '[Event "C"]\n\n1. d4 d5! \$16 *\n',
+      );
+      final edit = setGlyph(before, at: d5, nag: 3) as CommentWritten;
+      expect(edit.written.rewritten, {0, 2});
+      expect(edit.chapter.lines[0].text, contains(r'd5 $3'));
+      expect(edit.chapter.lines[1].text, before.lines[1].text);
+      expect(edit.chapter.lines[2].text, contains(r'd5 $3 $16'));
+    });
+
+    test('a repeated move can supply the glyph from its variation', () {
+      final before = parseChapter(
+        name: 'Repeated',
+        text: '[Event "A"]\n\n1. d4 d5 (1... d5!) *\n',
+      );
+      final edit =
+          setGlyph(before, at: d5, nag: 14, position: true) as CommentWritten;
+      expect(edit.chapter.lines.single.text, contains(r'd5 (1... d5 $1 $14)'));
+      expect(reread(edit.chapter).tree.nodeAt(d5)!.nags, [1, 14]);
+    });
+
+    test('the first glyph on a shared move goes into the first game', () {
+      final before = parseChapter(name: 'Shared', text: shared);
+      final edit = setGlyph(before, at: d5, nag: 1) as CommentWritten;
+      expect(edit.written.rewritten, {0});
+      expect(edit.chapter.lines[0].text, contains(r'd5 $1 {first}'));
+      expect(edit.chapter.lines[1].text, before.lines[1].text);
+      expect(edit.chapter.lines[2].text, before.lines[2].text);
+    });
+
     test('an edit rewrites the note shown and keeps the one never shown', () {
       final before = parseChapter(name: 'Shared', text: shared);
       final after = commented(before, at: d5, text: 'Ours');
@@ -282,6 +350,14 @@ void main() {
     test('refuses a comment on a move it plays, and changes nothing', () {
       expect(
         setComment(chapter, at: NodePath.of([0]), text: 'mine'),
+        isA<GameNotWhole>(),
+      );
+      expect(writeChapter(chapter), partlyReadChapter);
+    });
+
+    test('refuses a glyph even when an earlier game could hold it', () {
+      expect(
+        setGlyph(chapter, at: NodePath.of([0]), nag: 1),
         isA<GameNotWhole>(),
       );
       expect(writeChapter(chapter), partlyReadChapter);

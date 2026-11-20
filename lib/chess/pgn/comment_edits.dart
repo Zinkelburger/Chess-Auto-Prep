@@ -102,12 +102,53 @@ CommentResult setGlyph(
   int? nag,
   bool position = false,
 }) {
-  if (at.isRoot) return _unchanged(chapter);
-  return _edited(
-    chapter,
-    at,
-    (node) => _glyphed(node, nag, position: position),
-    holds: (node) => node.nags.any(position ? isPositionGlyph : isGlyph),
+  final moves = chapter.tree.lineTo(at);
+  if (moves.isEmpty) return _unchanged(chapter);
+  MoveNode change(MoveNode node) => _glyphed(node, nag, position: position);
+  if (chapter.game case final game?) {
+    return _inTheOneGame(chapter, game, at, change);
+  }
+
+  final sans = [for (final move in moves) move.san];
+  final shown = moves.last.nags;
+  final inGroup = position ? isPositionGlyph : isGlyph;
+  final group = shown.where(inGroup).toList();
+  final lines = [...chapter.lines];
+  final written = <int>{};
+  var needsHome = group.isEmpty;
+  for (final (index, line) in chapter.lines.indexed) {
+    final tree = chapter.treeInChapter(line);
+    if (tree == null) continue;
+    var edited = tree;
+    for (final path in pathsOfSans(tree, sans)) {
+      if (!line.isWhole) return const GameNotWhole();
+      final node = tree.nodeAt(path)!;
+      if (group.isEmpty) {
+        // Add beside the annotations the merge shows, or on the first
+        // occurrence when the move has no annotations at all.
+        if (!needsHome || (shown.isNotEmpty && node.nags.isEmpty)) continue;
+        needsHome = false;
+      } else if (!_sameNags(group, node.nags.where(inGroup).toList())) {
+        continue;
+      }
+      final changed = change(node);
+      if (!identical(changed, node)) {
+        edited = withNodeChanged(edited, path, (_) => changed);
+      }
+    }
+    if (identical(edited, tree)) continue;
+    switch (rewritten(line, edited)) {
+      case LineRefused(:final reason):
+        return CommentUnwritable(reason);
+      case LineRewritten(:final line):
+        lines[index] = line;
+        written.add(index);
+    }
+  }
+  if (written.isEmpty) return _unchanged(chapter);
+  return CommentWritten(
+    withLines(chapter, lines),
+    written: GamesWritten(rewritten: written),
   );
 }
 
