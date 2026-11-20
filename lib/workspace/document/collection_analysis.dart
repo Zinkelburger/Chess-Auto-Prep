@@ -37,6 +37,8 @@ final class CollectionAnalysis extends ChangeNotifier {
   late final DocumentSession session;
   late final EngineAnalysis engine;
   final _pages = <Object, KeptBoard>{};
+  final editing = ValueNotifier(false);
+  final _editingIn = <Object, bool>{};
   Object? _key;
   final _shows = Latest();
   bool _disposed = false;
@@ -50,7 +52,7 @@ final class CollectionAnalysis extends ChangeNotifier {
 
   /// Reopen this game's scratch work, or copy its complete game at the
   /// current cursor, including variations, annotations and a comment preview.
-  Future<bool> show() async {
+  Future<bool> show({bool initiallyEditing = false}) async {
     if (_disposed || source.shownTo != null) return false;
     source.snapshot();
     final key = _sourceKey;
@@ -79,6 +81,7 @@ final class CollectionAnalysis extends ChangeNotifier {
         session.playMove(move.uci);
       }
     }
+    if (!active) editing.value = _editingIn[key] ?? initiallyEditing;
     _key = key;
     active = true;
     sourceEngine.pause(this, 'Analysis tab is on the board');
@@ -117,6 +120,7 @@ final class CollectionAnalysis extends ChangeNotifier {
   void hide() {
     _shows.cancel();
     if (!active) return;
+    _editingIn[_key!] = editing.value;
     // The same page is reused on return; capture even if no other page is shown.
     session.snapshot();
     session.analysisPage
@@ -134,6 +138,7 @@ final class CollectionAnalysis extends ChangeNotifier {
     _shows.close();
     hide();
     source.anyChange.removeListener(_followSource);
+    editing.dispose();
     engine.dispose();
     session.dispose();
     saver.dispose();

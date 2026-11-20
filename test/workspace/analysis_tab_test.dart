@@ -8,6 +8,28 @@ import '../support/viewer_fixture.dart';
 import '../support/window_fixture.dart';
 
 void main() {
+  test('each scratch game keeps its own edit setting', () async {
+    final w = WindowFixture();
+    addTearDown(w.dispose);
+    final ref = collectionRef('Collection');
+    w.store.documents[ref] = Opened(
+      threeGameFile,
+      scriptedRevision(threeGameFile),
+    );
+    await w.requests.openFile(ref, game: 0);
+    final inspection = w.parts.workspace.inspection!;
+    expect(await inspection.show(initiallyEditing: true), isTrue);
+    expect(inspection.editing.value, isTrue);
+    inspection.editing.value = false;
+
+    w.viewer.showGame(1);
+    expect(await inspection.show(initiallyEditing: true), isTrue);
+    expect(inspection.editing.value, isTrue);
+    w.viewer.showGame(0);
+    expect(await inspection.show(initiallyEditing: true), isTrue);
+    expect(inspection.editing.value, isFalse);
+  });
+
   test(
     'inner analysis keeps collection, filters and draft and restores scratch undo',
     () async {

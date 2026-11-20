@@ -191,6 +191,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       _tabs.selected == WorkspaceTab.analysis &&
       (_ws.inspection?.active ?? false);
   Workspace get _boardWorkspace => _inspecting ? _ws.inspecting : _ws;
+  ValueNotifier<bool> get _boardEditing =>
+      _inspecting ? _ws.inspection!.editing : _editing;
 
   void _innerTabChanged() {
     if (!mounted) return;
@@ -205,7 +207,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
 
   Future<void> _showAnalysis() async {
     final tabs = _tabs;
-    final shown = await _ws.inspection?.show() ?? false;
+    final shown =
+        await _ws.inspection?.show(initiallyEditing: _editing.value) ?? false;
     if (!mounted) return;
     if (!shown && tabs.selected == WorkspaceTab.analysis) {
       tabs.show(WorkspaceTab.moves);
@@ -440,7 +443,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
             listenable: Listenable.merge([
               _requests,
               widget.labs.offered,
-              _editing,
+              _boardEditing,
               _columns,
             ]),
             builder: (context, _) => _requests.mode == Mode.repertoires
@@ -486,7 +489,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         // menu is open: the bar itself shows none of it.
         actionsChange: Listenable.merge([
           _view.changes,
-          _editing,
+          _boardEditing,
           _view.layout,
         ]),
         status: switch (_requests.status) {
@@ -505,7 +508,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
             screen ??
             WorkspaceKeys(
               session: _boardWorkspace.session,
-              editing: _editing,
+              editing: _boardEditing,
               tabs: _tabs,
               extra: _keys.all(context),
               leave: _keys.leave,
@@ -593,7 +596,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       workspace: _boardWorkspace,
       tabs: _tabs,
       layout: _inspecting ? null : _view.layout,
-      editing: _editing,
+      editing: _boardEditing,
       moves: _moves,
       hooks: WorkspaceHooks(
         builder: _view is RepertoiresView,
@@ -605,7 +608,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         noteEditing: _view is RepertoiresView,
         header: _view.header,
         underHeading: _inspecting ? null : _view.underHeading,
-        quietBoard: _view.quietBoard,
+        quietBoard: _inspecting
+            ? _view.editSwitch && !_boardEditing.value
+            : _view.quietBoard,
         paneActions: _inspecting ? null : () => _view.paneActions(_editing),
         explorerFileBar: _inspecting ? null : _view.explorerFileBar,
         gameCounter: !_inspecting && _view.gameCounter,
