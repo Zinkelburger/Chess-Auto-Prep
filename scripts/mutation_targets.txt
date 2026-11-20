@@ -339,6 +339,8 @@
 #     player's games, which a check needs, resets it), :56 `busy` while a
 #     check runs (the progress shown; a second check overtakes the first
 #     and comes to the same gaps).
+#   lib/features/players/player_picker.dart:77 the search's padding, :138,
+#     :144 the row's line counts: the look.
 #   lib/features/settings/lichess_account.dart:179 `Connecting`'s
 #     `browserOpened` default (shown only until the login says whether the
 #     browser took the page).

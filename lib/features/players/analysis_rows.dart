@@ -29,11 +29,16 @@ class PositionsHeader extends StatelessWidget {
           Text('Position', style: Theme.of(context).textTheme.labelSmall),
           if (analysis.evals.isNotEmpty) ...[
             const SizedBox(width: Space.m),
-            _Sorter(
-              label: 'Eval',
-              tooltip: 'Worst engine evaluation first',
-              active: order == PositionOrder.badEval,
-              onTap: () => analysis.configure(order: PositionOrder.badEval),
+            // A width of its own, as the other columns have: a sorter's
+            // label flexes, which a row cannot lay out at an unbounded width.
+            SizedBox(
+              width: positionScoreWidth,
+              child: _Sorter(
+                label: 'Eval',
+                tooltip: 'Worst engine evaluation first',
+                active: order == PositionOrder.badEval,
+                onTap: () => analysis.configure(order: PositionOrder.badEval),
+              ),
             ),
           ],
           const Spacer(),
