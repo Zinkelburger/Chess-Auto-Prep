@@ -62,6 +62,7 @@ try {
     await page.waitForFunction(() => document.querySelectorAll('.bg-game').length > 0);
     assert.equal(await page.$$eval('.bg-game', (rows) => rows.length), index.games.length);
     assert.equal(await text(page, '.bg-game .bg-game-title'), first.title);
+    assert.ok(!(await text(page, '#bg-games')).includes(first.summary), 'the annotator\'s summary is not in the list');
     assert.match(await text(page, '.bg-game .bg-game-facts'), new RegExp(`${first.moves} moves`));
     assert.equal(await text(page, '#bg-source'), index.source.trim(), 'the source sentence is shown');
     const sourceTop = await page.$eval('#bg-source', (el) => el.getBoundingClientRect().top);
@@ -72,6 +73,10 @@ try {
     await ready(page);
     assert.equal(await hash(page), `#${first.id}`);
     assert.match(await text(page, '#bg-note'), /Start of the game/);
+    assert.ok(!(await text(page, '#bg-note')).includes(game.summary), 'nor at the start of the game');
+    const given = game.moves.filter((m) => m.book).length;
+    assert.match(await text(page, '#bg-note'), new RegExp(`first ${given} moves were played by people`));
+    assert.equal(await text(page, '.bg-moves-label'), 'Starting moves, from a human game');
 
     // Partners sit side by side: A with White at the bottom, B with Black; each reserve in its seat row.
     assert.equal(await orientation(page, 'A'), 'white');
