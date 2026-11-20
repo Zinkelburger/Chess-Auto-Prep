@@ -284,6 +284,11 @@ void main() {
     // Refused while the gate guards the file: kept, and not a conflict.
     expect(saver.state, isA<SaveFailed>());
     expect(saver.settled, isFalse);
+    expect(
+      session.source?.path,
+      at('repertoires/KID/Mainline.pgn'),
+      reason: 'the file is at its new name, so the workspace shows it there',
+    );
 
     now = now.add(const Duration(minutes: 6));
     await saver.flush();
@@ -294,6 +299,87 @@ void main() {
     expect(
       text('repertoires/KID/Mainline.pgn'),
       contains('typed while the books wait'),
+    );
+  });
+
+  test('a rename owed for a chapter the workspace has left is not followed '
+      'from the one open now', () async {
+    File(at('repertoires/KID/Other.pgn')).writeAsStringSync(
+      '// KID\n// Color: Black\n\n[Event "Other"]\n\n1. e4 c5 *\n',
+    );
+    stops.add(FileRelocationStep.intent);
+    final owner = changes();
+    final moved = await owner.move(
+      session.source!,
+      DocumentRef(at('repertoires/KID/Mainline.pgn')),
+    );
+    expect(moved, isA<LibraryUnfinished>());
+    await session.open(ChapterRef.at(at('repertoires/KID/Other.pgn')));
+    // Somebody else takes the file now open: that is a conflict, not the
+    // owed rename still on its way.
+    File(at('repertoires/KID/Other.pgn')).deleteSync();
+
+    await annotate('typed into Other');
+
+    expect(saver.state, isA<SaveConflict>());
+    expect(session.source?.path, at('repertoires/KID/Other.pgn'));
+  });
+
+  test('a delete still being carried out keeps the save waiting, not in '
+      'conflict', () async {
+    always = FileRelocationStep.document;
+    final deleted = await library.deleteChapter(chapter('KID', 'Main'));
+    expect(deleted, isA<LibraryUnfinished>());
+
+    await annotate('typed while the delete is under way');
+
+    expect(File(at('repertoires/KID/Main.pgn')).existsSync(), isFalse);
+    expect(saver.state, isA<SaveFailed>());
+    expect(saver.settled, isFalse);
+  });
+
+  test('a delete asked for while a rename of the open chapter is owed '
+      'follows the rename first', () async {
+    stops.add(FileRelocationStep.intent);
+    final owner = changes();
+    final open = session.source!;
+    final moved = await owner.move(
+      open,
+      DocumentRef(at('repertoires/KID/Mainline.pgn')),
+    );
+    expect(moved, isA<LibraryUnfinished>());
+
+    // Asked against the name the list showed before the rename landed.
+    expect(await owner.delete(open), isA<LibraryStale>());
+
+    expect(session.source?.path, at('repertoires/KID/Mainline.pgn'));
+    expect(File(at('repertoires/KID/Mainline.pgn')).existsSync(), isTrue);
+  });
+
+  test('a rename once followed is not carried out again on a new file of '
+      'the old name', () async {
+    stops.add(FileRelocationStep.intent);
+    final renamed = await library.renameChapter(
+      chapter('KID', 'Main'),
+      'Mainline',
+    );
+    expect(renamed, isA<LibraryUnfinished>());
+    await annotate('typed after the rename');
+    expect(session.source?.path, at('repertoires/KID/Mainline.pgn'));
+
+    // A new chapter takes the old name, is opened, and then goes from disk.
+    File(at('repertoires/KID/Main.pgn')).writeAsStringSync(
+      '// KID\n// Color: Black\n\n[Event "Main"]\n\n1. e4 e5 *\n',
+    );
+    await session.open(ChapterRef.at(at('repertoires/KID/Main.pgn')));
+    File(at('repertoires/KID/Main.pgn')).deleteSync();
+    await annotate('typed into the new Main');
+
+    expect(session.source?.path, at('repertoires/KID/Main.pgn'));
+    expect(saver.state, isA<SaveConflict>());
+    expect(
+      text('repertoires/KID/Mainline.pgn'),
+      isNot(contains('typed into the new Main')),
     );
   });
 
