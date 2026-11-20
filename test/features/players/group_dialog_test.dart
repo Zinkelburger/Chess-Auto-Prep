@@ -81,7 +81,12 @@ void main() {
     expect(answered, isFalse);
     expect(find.text('Please enter a name.'), findsOneWidget);
     await tester.enterText(name, 'Club');
-    for (final wrong in ['2026-13-01', '2026-1-1', '10/10/2026', '2026-02-30']) {
+    for (final wrong in [
+      '2026-13-01',
+      '2026-1-1',
+      '10/10/2026',
+      '2026-02-30',
+    ]) {
       await tester.enterText(date, wrong);
       await save(tester);
       expect(answered, isFalse, reason: wrong);

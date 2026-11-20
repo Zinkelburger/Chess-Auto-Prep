@@ -100,9 +100,7 @@ void main() {
     });
 
     testWidgets('lists the players saved with where their games come from, '
-        'narrowed by the search, and a row chooses its player', (
-      tester,
-    ) async {
+        'narrowed by the search, and a row chooses its player', (tester) async {
       await save(tester, alex);
       await save(tester, Player.create('Bob'));
       await show(tester);
@@ -242,14 +240,14 @@ void main() {
       expect(find.text('Filters'), findsOneWidget);
       await tester.tap(find.text('Filters'));
       await tester.pump();
-      tester
-          .widget<ChoiceField>(find.byType(ChoiceField))
-          .onSubmitted!('Last 90 days');
+      tester.widget<ChoiceField>(find.byType(ChoiceField)).onSubmitted!(
+        'Last 90 days',
+      );
       await tester.pump();
       expect(analysis().recentDays, 90);
-      tester
-          .widget<ChoiceField>(find.byType(ChoiceField))
-          .onSubmitted!('Last week');
+      tester.widget<ChoiceField>(find.byType(ChoiceField)).onSubmitted!(
+        'Last week',
+      );
       expect(analysis().recentDays, 90);
       await tester.tap(find.text(TimeClass.blitz.label));
       await tester.pump();
@@ -258,9 +256,9 @@ void main() {
       await tester.tap(find.text(TimeClass.blitz.label));
       await tester.pump();
       expect(analysis().speeds, isEmpty);
-      tester
-          .widget<ChoiceField>(find.byType(ChoiceField))
-          .onSubmitted!('All dates');
+      tester.widget<ChoiceField>(find.byType(ChoiceField)).onSubmitted!(
+        'All dates',
+      );
       await tester.pump();
       expect(analysis().recentDays, isNull);
       expect(find.text('Filters'), findsOneWidget);

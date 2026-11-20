@@ -20,7 +20,11 @@ void main() {
     final corpus = buildPlayerCorpus(
       {'alex'},
       [
-        _game(0, '[White "Alex"]\n[Black "Bob"]\n[Result "1-0"]\n', '1. e4 1-0'),
+        _game(
+          0,
+          '[White "Alex"]\n[Black "Bob"]\n[Result "1-0"]\n',
+          '1. e4 1-0',
+        ),
         _game(1, '[White "Alex"]\n[Black "Cy"]\n[Result "0-1"]\n', '1. e4 0-1'),
       ],
     );
@@ -35,7 +39,11 @@ void main() {
       {'alex'},
       [
         for (final (i, first) in ['e4', 'e4', 'e4', 'd4'].indexed)
-          _game(i, '[White "Alex"]\n[Black "Bob"]\n[Result "*"]\n', '1. $first *'),
+          _game(
+            i,
+            '[White "Alex"]\n[Black "Bob"]\n[Result "*"]\n',
+            '1. $first *',
+          ),
       ],
     );
     final start = corpus.positions.firstWhere((p) => p.ply == 0);

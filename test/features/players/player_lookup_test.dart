@@ -91,12 +91,10 @@ void main() {
     final buttons = tester
         .widgetList<TextButton>(find.widgetWithText(TextButton, 'Use account'))
         .toList();
-    expect([for (final b in buttons) b.onPressed != null], [
-      true,
-      true,
-      false,
-      false,
-    ]);
+    expect(
+      [for (final b in buttons) b.onPressed != null],
+      [true, true, false, false],
+    );
     await tester.tap(find.text('4 suggested accounts'));
     await tester.pump();
     expect(find.text('Lichess alexk'), findsNothing);

@@ -89,7 +89,8 @@ void main() {
   });
 
   test('with no repertoire of the other colour, says so', () async {
-    const black = '// Color: Black\n\n[Event "?"]\n[Result "*"]\n\n1. e4 c5 *\n';
+    const black =
+        '// Color: Black\n\n[Event "?"]\n[Result "*"]\n\n1. e4 c5 *\n';
     w.store.documents[benkoMain] = Opened(black, scriptedRevision(black));
     await w.library.refresh();
     final analysis = w.parts.players.analysis;
@@ -97,10 +98,7 @@ void main() {
     analysis.setSide(Side.black);
     final book = w.parts.players.book;
     await book.check();
-    expect(
-      book.status,
-      'Your book has no white repertoire to check against.',
-    );
+    expect(book.status, 'Your book has no white repertoire to check against.');
     expect(book.gaps, isEmpty);
     expect(book.busy, isFalse);
   });

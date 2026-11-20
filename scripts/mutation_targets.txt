@@ -350,6 +350,18 @@
 #     status's type and lines: the look.
 #   lib/features/players/analysis_rows.dart:117-118, :193, :203, :236, :256
 #     line counts and wrapping: the look.
+#   lib/features/players/analysis_filters.dart:105, :116 the steppers'
+#     upper bounds (defaults), :52 the padding: the look.
+#   lib/features/players/findings_view.dart:180-181, :191-192, :222-223,
+#     :233-234 the steppers' bounds (defaults), :67 the bar's fraction (the
+#     progress shown), :102, :147, :286, :317 line counts and :134, :272
+#     paddings: the look.
+#   lib/features/players/player_book_pane.dart:35, :57 paddings, :76, :128,
+#     :137 line counts: the look.
+#   lib/features/players/player_tree_pane.dart:183 the share of no games
+#     (a row is drawn only for a move some game played, so the total is
+#     never 0), :61, :66, :139 the heading's padding, lines and height: the
+#     look.
 #   lib/features/settings/lichess_account.dart:179 `Connecting`'s
 #     `browserOpened` default (shown only until the login says whether the
 #     browser took the page).

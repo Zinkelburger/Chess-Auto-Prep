@@ -169,11 +169,7 @@ void main() {
 
       await show(
         tester,
-        (c) => removePlayer(
-          c,
-          alex,
-          saved: _summary(downloaded: 1),
-        ),
+        (c) => removePlayer(c, alex, saved: _summary(downloaded: 1)),
       );
       expect(
         find.text(
@@ -282,7 +278,9 @@ void main() {
       await show(tester, (c) => editPlayer(c, owner, player: held));
       expect(find.text('Edit Alex'), findsOneWidget);
       expect(find.text('a.pgn'), findsOneWidget);
-      tester.widget<InputChip>(find.widgetWithText(InputChip, 'b.pgn')).onDeleted!();
+      tester
+          .widget<InputChip>(find.widgetWithText(InputChip, 'b.pgn'))
+          .onDeleted!();
       await tester.pump();
       expect(find.text('b.pgn'), findsNothing);
       await tester.enterText(box('Names used in PGN files'), 'A.; Al');

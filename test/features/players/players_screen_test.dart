@@ -235,7 +235,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Add to Club'), findsOneWidget);
     final dialog = find.byType(Dialog);
-    expect(find.descendant(of: dialog, matching: find.text('Alex')), findsNothing);
+    expect(
+      find.descendant(of: dialog, matching: find.text('Alex')),
+      findsNothing,
+    );
     await tester.tap(find.descendant(of: dialog, matching: find.text('Bea')));
     await settle(tester);
     expect(directory().group!.contains(bea.id), isTrue);
