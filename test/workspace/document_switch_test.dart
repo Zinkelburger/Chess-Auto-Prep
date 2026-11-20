@@ -309,6 +309,31 @@ void main() {
       expect(fixture.session.source, other, reason: 'the user went there');
     });
 
+    test('keeps a newer edit when the frozen document would switch to its '
+        'copy', () async {
+      final fixture = await openSession(blackChapter);
+      addTearDown(fixture.dispose);
+      fixture.store.saves.add(const SaveRefused('game 3 would change'));
+      fixture.session.setComment(sicilian, 'Before copying');
+      await fixture.saver.flush();
+
+      final gate = fixture.store.readEarly = Completer<void>();
+      final copying = fixture.session.saveCopy('Main draft');
+      await pumpEventQueue();
+      expect(fixture.store.readEarly, isNull);
+      fixture.session.setComment(sicilian, 'After copying');
+      gate.complete();
+
+      final result = await copying as CopySaved;
+      expect(result.nowEditing, isFalse);
+      expect(fixture.session.source, fixture.ref);
+      expect(fixture.session.commentAt(sicilian), contains('After copying'));
+      final copy =
+          fixture.store.documents[chapterRef('KID', 'Main draft')] as Opened;
+      expect(copy.text, contains('Before copying'));
+      expect(copy.text, isNot(contains('After copying')));
+    });
+
     test('takes over the document it copied', () async {
       final fixture = await openSession(blackChapter);
       addTearDown(fixture.dispose);

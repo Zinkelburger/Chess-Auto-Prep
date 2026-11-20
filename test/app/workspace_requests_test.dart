@@ -112,6 +112,75 @@ void main() {
   });
 
   group('open over a draft the file refused', () {
+    test('changing study games while copying still closes the study', () async {
+      final study = studyRef('Endgames');
+      w.store.documents[study] = Opened(
+        twoChapterStudy,
+        scriptedRevision(twoChapterStudy),
+      );
+      await w.requests.openStudy(study);
+      final changed = twoChapterStudy.replaceFirst('Nf3 *', 'Bc4 *');
+      w.store.documents[study] = Opened(changed, scriptedRevision(changed));
+      w.session.setComment(NodePath.of([0]), 'A note for the copy');
+      await w.saver.flush();
+
+      final gate = w.store.createGate = Completer<void>();
+      w.question.answer = DraftChoice.saveACopy;
+      final closing = w.requests.closeFile();
+      await pumpEventQueue();
+      expect(w.store.createGate, isNull);
+      w.session.nextGame();
+      expect(w.session.game, 1);
+      gate.complete();
+
+      expect(await closing, isA<RequestDone>());
+      expect(w.session.isScratch, isTrue);
+      final copy = w.store.documents[studyRef('Main copy')] as Opened;
+      expect(copy.text, contains('A note for the copy'));
+      expect(copy.text, contains('1. d4 d5 *'));
+    });
+
+    test('a copy of the same PGN under its old source cannot close the '
+        'relocated document', () async {
+      await freezeKid();
+      final gate = w.store.createGate = Completer<void>();
+      w.question.answer = DraftChoice.saveACopy;
+      final closing = w.requests.closeFile();
+      await pumpEventQueue();
+      expect(w.store.createGate, isNull);
+      final moved = ChapterRef.at('/repertoires/KID/Renamed.pgn');
+      w.session.relocated(moved);
+      gate.complete();
+
+      expect(await closing, isA<RequestDropped>());
+      expect(w.session.source, moved);
+      expect(w.session.commentAt(NodePath.of([0])), contains('frozen words'));
+    });
+
+    test('an edit after the copy keeps the source open when the next file '
+        'arrives', () async {
+      await freezeKid();
+      final gate = w.store.readEarly = Completer<void>();
+      w.question.answer = DraftChoice.saveACopy;
+      final opening = w.requests.open(benko);
+      await pumpEventQueue();
+      expect(w.store.readEarly, isNull);
+      expect(w.store.opened.last, benko);
+      w.session.committingEditors.addListener(
+        () => w.session.setComment(NodePath.of([0]), 'After the copy'),
+      );
+      gate.complete();
+
+      expect(await opening, isA<RequestDropped>());
+      expect(w.session.source, kid);
+      expect(w.session.commentAt(NodePath.of([0])), contains('After the copy'));
+      final copy =
+          w.store.documents[ChapterRef.at('/repertoires/KID/Main copy.pgn')]
+              as Opened;
+      expect(copy.text, contains('frozen words'));
+      expect(copy.text, isNot(contains('After the copy')));
+    });
+
     test('the chapter already open is not left, so nothing is asked', () async {
       await freezeKid();
       expect(await w.requests.open(kid), isA<RequestDone>());

@@ -126,12 +126,11 @@ final class AppParts {
     return problems.isEmpty ? null : problems.join('\n');
   }
 
-  /// The copy the question on the way out asked for: the name of the file
-  /// it wrote, or null. A copy that failed leaves the user where they were,
-  /// so the bar says why.
-  Future<String?> _copied() async {
+  /// Returns the copy only if it covers the draft the user would leave.
+  Future<CopySaved?> _copied() async {
     final written = await _copyOnLeave(session);
-    if (written is CopySaved) return written.name;
+    if (_disposed) return null;
+    if (written is CopySaved && session.mayLeaveWith(written)) return written;
     if (written != null) sayCopy(requests.say, written);
     return null;
   }

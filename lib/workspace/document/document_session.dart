@@ -31,6 +31,8 @@ import 'undo_history.dart';
 part 'document_cursor.dart';
 part 'external_document_edits.dart';
 
+typedef _Open = ({ChapterRef ref, int? game, Ticket ticket, CopySaved? copy});
+
 /// The active immutable chapter, file and edits. DocumentSaver owns
 /// persistence and [DocumentCursor] where the reader is in the document. The
 /// board, move list and panels derive their state from here. This notifies
@@ -215,6 +217,12 @@ final class DocumentSession extends ChangeNotifier {
     return _chapter;
   }
 
+  bool mayLeaveWith(CopySaved? copy) {
+    final chapter = snapshot();
+    if (copy == null || chapter == null) return copy == null;
+    return copy.draft?.$1 == _source && copy.draft?.$2 == writeChapter(chapter);
+  }
+
   Listenable get committingEditors => _editors;
   final _editors = _Editors();
 
@@ -295,16 +303,9 @@ final class DocumentSession extends ChangeNotifier {
   /// introduced. Nothing edits it; it is shown so a note is not invisible.
   String? startingCommentAt(NodePath at) => tree?.nodeAt(at)?.startingComment;
 
-  /// Reads [ref] through the store, so the session holds the revision every
-  /// later save is checked against. [game] opens one game of the file as the
-  /// whole document, as a study chapter is; null merges its games. Another
-  /// chapter of the same file is another [open]: the draft of the one left
-  /// goes to disk first, as when another file is opened. Another game of a
-  /// file holding edits is shown as [showGame] shows it, keeping them.
-  ///
-  /// Words the file has not taken are left with the document: the caller
-  /// asked the user about them first, or the user said to throw them away.
-  Future<OpenResult> open(ChapterRef ref, {int? game}) {
+  /// Reads [ref] at its stored revision, showing [game] or merging its games.
+  /// Leaving via [copy] requires the copied draft at handover.
+  Future<OpenResult> open(ChapterRef ref, {int? game, CopySaved? copy}) {
     if (_held != null && ref == _source && game != null) {
       if (game == this.game || _isAnotherGame(game)) {
         cancelOpening();
@@ -312,12 +313,12 @@ final class DocumentSession extends ChangeNotifier {
         return Future.value(const DocumentOpened());
       }
     }
-    return _read(ref, game);
+    return _read(ref, game, copy);
   }
 
-  Future<OpenResult> _read(ChapterRef ref, int? game) {
-    final ticket = _opens.begin();
-    return _switching(ticket, () => _opened(ref, game, ticket));
+  Future<OpenResult> _read(ChapterRef ref, int? game, [CopySaved? copy]) {
+    final opening = (ref: ref, game: game, ticket: _opens.begin(), copy: copy);
+    return _switching(opening.ticket, () => _opened(opening));
   }
 
   /// A newer navigation intent supersedes a read even if it stays here.
@@ -337,7 +338,8 @@ final class DocumentSession extends ChangeNotifier {
     }
   }
 
-  Future<OpenResult> _opened(ChapterRef ref, int? game, Ticket ticket) async {
+  Future<OpenResult> _opened(_Open opening) async {
+    final (:ref, :game, :ticket, :copy) = opening;
     // A rename, move or delete of this document may still be running, with a
     // draft behind it that belongs to the file it was typed into: it goes out
     // before this document takes the saver over, and before the read below,
@@ -352,7 +354,7 @@ final class DocumentSession extends ChangeNotifier {
     final read = await readDocument(_store, ref, game: game, parsed: _parsed);
     if (ticket.overtaken) return const OpenOvertaken();
     if (access.versionOf(ref.path) != version) {
-      return _opened(ref, game, ticket);
+      return _opened(opening);
     }
     final DocumentShown shown;
     switch (read) {
@@ -372,12 +374,15 @@ final class DocumentSession extends ChangeNotifier {
         return const OpenOvertaken();
       }
       // A flush to the file being opened supersedes the read.
-      if (into == ref.path) return _opened(ref, game, ticket);
+      if (into == ref.path) return _opened(opening);
     }
     // A same-file autosave may already have settled while the read was out.
     if (access.versionOf(ref.path) != version ||
         (_saver.documentPath == ref.path && _saver.lastReceipt != receipt)) {
-      return _opened(ref, game, ticket);
+      return _opened(opening);
+    }
+    if ((copy != null && !mayLeaveWith(copy)) || ticket.overtaken) {
+      return const OpenOvertaken();
     }
     _show(shown.chapter, ref, shown.revision, shown.readOnly, view: shown.view);
     return const DocumentOpened();
@@ -410,31 +415,32 @@ final class DocumentSession extends ChangeNotifier {
 
   /// The open document was deleted, so the analysis board comes up rather
   /// than a chapter whose file is now in recovery.
-  void closed() {
-    if (_source == null) return;
-    _editors.commit();
+  bool closed([CopySaved? copy]) {
+    if (_source == null || !mayLeaveWith(copy)) return false;
     _opens.cancel();
     _setAsideUndo = null;
     _showBoard();
+    return true;
   }
 
   /// The analysis board as it was left or, given [board], [board] on a new
   /// one, or on the one up when nothing was played or edited on it. False
   /// when another document was asked for meanwhile, or the session went.
-  Future<bool> showAnalysisBoard([Chapter? board]) {
-    if (board == null) return _selectAnalysis(_board, leftAsIs: _leftAsIs);
+  Future<bool> showAnalysisBoard([Chapter? board, CopySaved? copy]) {
+    if (board == null) return restoreAnalysisPage(_board, copy);
     final leftAsIs = _leftAsIs;
     _editors.commit();
     final blank = isScratch && _board.isBlank(_chapter);
     return _selectAnalysis(
       blank ? _board : KeptBoard(board),
+      copy: copy,
       fresh: board,
       leftAsIs: leftAsIs,
     );
   }
 
-  Future<bool> restoreAnalysisPage(KeptBoard page) =>
-      _selectAnalysis(page, leftAsIs: _leftAsIs);
+  Future<bool> restoreAnalysisPage(KeptBoard page, [CopySaved? copy]) =>
+      _selectAnalysis(page, copy: copy, leftAsIs: _leftAsIs);
 
   /// Whether the file has words it has not taken before an editor hands its
   /// note over: the caller asked about those first, and the user said to
@@ -445,6 +451,7 @@ final class DocumentSession extends ChangeNotifier {
   Future<bool> _selectAnalysis(
     KeptBoard page, {
     Chapter? fresh,
+    CopySaved? copy,
     required bool leftAsIs,
   }) async {
     if (_disposed) return false;
@@ -455,6 +462,7 @@ final class DocumentSession extends ChangeNotifier {
     final file = !isScratch;
     if (file) await _switching(ticket, _saver.flush);
     if (ticket.overtaken) return false;
+    if (copy != null && !mayLeaveWith(copy)) return false;
     // Words nobody was asked about that the file will not take keep it up,
     // where the screen says why, as they do when another file is asked for.
     if (file && !leftAsIs && !_saver.settled) return false;
@@ -955,14 +963,8 @@ final class DocumentSession extends ChangeNotifier {
     if (_held == null) _saver.relocated(moved);
   }
 
-  /// Writes the draft on screen beside its file as `<name>.pgn`, replacing
-  /// nothing; the answer is about the file the user asked for.
-  ///
-  /// A document frozen by a stopped save, or that this app may not write,
-  /// hands the session to the copy, the only place its words can still be
-  /// edited. Any other document keeps it (a conflicted one can be reloaded),
-  /// as does one the user left while the copy was written. [into] is the
-  /// folder to write it in instead, for a file outside Documents.
+  /// Creates a copy beside the file or in [into]. A stopped or read-only
+  /// document opens the copy only while it still covers the current draft.
   Future<CopyResult> saveCopy(String name, {String? into}) async {
     final ticket = _opens.now;
     final ref = _source;
@@ -973,15 +975,14 @@ final class DocumentSession extends ChangeNotifier {
     final frozen = _saver.state is SaveStopped || _readOnly != null;
     if (!frozen) return written;
     final path = p.join(into ?? p.dirname(ref.path), written.name);
-    final opened = await open(ChapterRef.at(path), game: atGame);
+    final opened = await open(ChapterRef.at(path), game: atGame, copy: written);
     return CopySaved(written.name, nowEditing: opened is DocumentOpened);
   }
 
-  /// Writes the words on screen beside their file and leaves the session
-  /// where it is: the question on the way out asks for that.
+  /// Copies the committed editor text beside its source and keeps it open.
   Future<CopyResult> copyAside(String name, {String? into}) async {
+    final chapter = snapshot();
     final ref = _source;
-    final chapter = _chapter;
     if (ref == null || chapter == null) {
       return const CopyFailed('there is nothing open to copy');
     }

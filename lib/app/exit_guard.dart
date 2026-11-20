@@ -7,6 +7,7 @@ import '../diagnostics/log.dart';
 import '../storage/disk_problems.dart';
 import '../ui/theme.dart';
 import '../workspace/document/document_saver.dart';
+import '../workspace/document/session_results.dart';
 
 /// What the user said about words that are not on disk.
 enum DraftChoice {
@@ -51,7 +52,7 @@ final class Stay extends LeaveAnswer {
 final class Go extends LeaveAnswer {
   const Go({this.copy});
 
-  final String? copy;
+  final CopySaved? copy;
 }
 
 /// What the user is walking away from.
@@ -90,10 +91,8 @@ final class ExitGuard {
   final Future<String?> Function()? settleFeatures;
   final DraftQuestion _question;
 
-  /// Writes the words somewhere else and answers the file it wrote, or null
-  /// when it wrote none. Null itself when this guard has nowhere to write
-  /// them, and then the question does not offer it.
-  final Future<String?> Function()? _saveCopy;
+  /// Returns the copy covering the current draft, or null to stay.
+  final Future<CopySaved?> Function()? _saveCopy;
 
   /// How long the file is given before the user is asked about it.
   final Duration wait;

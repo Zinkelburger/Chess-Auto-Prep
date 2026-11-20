@@ -9,6 +9,7 @@ import 'package:chess_auto_prep/storage/pgn_document_store.dart'
     show IoFailure, Opened, SaveRefused, Unfinished;
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/document/document_session.dart';
+import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,6 +19,8 @@ import '../support/library_fixture.dart';
 import '../support/scripted_files.dart';
 import '../support/scripted_store.dart';
 import '../support/session_fixture.dart';
+import '../support/study_fixture.dart';
+import '../support/window_fixture.dart';
 
 void main() {
   const moment = Duration(milliseconds: 20);
@@ -285,7 +288,7 @@ void main() {
       edit('one');
       await pumpEventQueue();
       final question = _Question(waits: true);
-      final copying = Completer<String?>();
+      final copying = Completer<CopySaved?>();
       final guard = ExitGuard(
         saver: fixture.saver,
         question: question,
@@ -302,7 +305,7 @@ void main() {
       await question.first;
       question.answerNow(DraftChoice.keepWaiting);
       expect(await closing, isFalse);
-      copying.complete('Accepted copy.pgn');
+      copying.complete(const CopySaved('Accepted copy.pgn'));
       await pumpEventQueue();
     },
   );
@@ -328,14 +331,51 @@ void main() {
     final guard = ExitGuard(
       saver: fixture.saver,
       question: question,
-      saveCopy: () async => 'Main copy.pgn',
+      saveCopy: () async => const CopySaved('Main copy.pgn'),
       wait: moment,
     );
     final first = guard.mayLeaveDocument();
     final second = guard.mayLeaveDocument();
-    expect((await first as Go).copy, 'Main copy.pgn');
-    expect((await second as Go).copy, 'Main copy.pgn');
+    expect((await first as Go).copy?.name, 'Main copy.pgn');
+    expect((await second as Go).copy?.name, 'Main copy.pgn');
     expect(question.asked, hasLength(1));
+  });
+
+  test('closing a study preserves a move played while saving a copy', () async {
+    final w = WindowFixture();
+    addTearDown(w.dispose);
+    final study = studyRef('Endgames');
+    w.store.documents[study] = Opened(
+      twoChapterStudy,
+      scriptedRevision(twoChapterStudy),
+    );
+    await w.requests.openStudy(study);
+    final changed = twoChapterStudy.replaceFirst('Nf3 *', 'Bc4 *');
+    w.store.documents[study] = Opened(changed, scriptedRevision(changed));
+    final lastMove = NodePath.of([0, 0, 0]);
+    w.session.cursor.goTo(lastMove);
+    w.session.setComment(lastMove, 'Develop the knight');
+    await w.saver.flush();
+
+    w.question.answer = DraftChoice.saveACopy;
+    final gate = Completer<void>();
+    w.store.createGate = gate;
+    final closing = w.requests.closeFile();
+    await pumpEventQueue();
+    expect(w.store.createGate, isNull, reason: 'the copy reached the store');
+    w.session.playMove('b8c6');
+    expect(w.session.cursor.currentMove?.san, 'Nc6');
+    w.question.answer = DraftChoice.keepWaiting;
+    gate.complete();
+    await closing;
+
+    final copy = w.store.documents[studyRef('Main copy')] as Opened;
+    expect(copy.text, contains('Develop the knight'));
+    if (w.session.source == study) {
+      expect(w.session.tree?.nodeAt(lastMove.mainChild)?.san, 'Nc6');
+    } else {
+      expect(copy.text, contains('Nc6'));
+    }
   });
 
   test('a copy that was not written keeps the user where they are', () async {

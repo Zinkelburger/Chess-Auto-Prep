@@ -8,6 +8,7 @@
 library;
 
 import '../../chess/pgn/comment_edits.dart';
+import '../../storage/document_ref.dart';
 
 sealed class OpenResult {
   const OpenResult();
@@ -34,10 +35,13 @@ sealed class CopyResult {
 }
 
 final class CopySaved extends CopyResult {
-  const CopySaved(this.name, {this.nowEditing = false});
+  const CopySaved(this.name, {this.nowEditing = false, this.draft});
 
   /// The file name the copy was written under.
   final String name;
+
+  /// The source and exact PGN written by the saver.
+  final (DocumentRef, String)? draft;
 
   /// Whether the session is now on the copy. A document that cannot take
   /// words any more — a stopped save, a file this app may not write — has
