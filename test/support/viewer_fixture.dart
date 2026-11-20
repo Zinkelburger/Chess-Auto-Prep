@@ -132,6 +132,21 @@ const threeGameFile = '''
 1. c4 *
 ''';
 
+/// A game with no id of its own, spelled as a file may spell it and as
+/// the app does not: `0-0`, a disambiguation it does not need, a promotion with
+/// no `=` and checks with no `+`.
+const oddlySpelledGame = '''
+[Event "Casual"]
+[Date "2024.02.01"]
+[White "White"]
+[Black "Black"]
+[Result "*"]
+[SetUp "1"]
+[FEN "8/4P3/2k5/8/8/8/8/RN2K2R w KQ - 0 1"]
+
+1. 0-0 Kd5 2. Nbd2 Kc6 3. e8Q Kb6 4. Qb8 Kc5 *
+''';
+
 /// Everything a viewer test needs: a scripted store holding [text] under
 /// [name] in the collections folder, a session over it, and the viewer.
 final class ViewerFixture {
