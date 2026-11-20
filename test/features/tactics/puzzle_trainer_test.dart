@@ -7,6 +7,7 @@ import 'package:chess_auto_prep/chess/tactics/puzzle_run.dart';
 import 'package:chess_auto_prep/features/tactics/puzzle_state.dart';
 import 'package:chess_auto_prep/features/tactics/puzzle_trainer.dart';
 import 'package:chess_auto_prep/features/tactics/tactics_set.dart';
+import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -609,6 +610,58 @@ void main() {
       w.trainer.suspend();
       w.trainer.showSolution();
       expect(w.trainer.up?.feedback, isNot(isA<Revealed>()));
+    }),
+  );
+
+  test(
+    'while the sitting is put aside nothing starts a new one or ends it',
+    () => sitting((async) {
+      begin(async);
+      final run = w.trainer.run;
+      w.trainer.putDown();
+      // Every puzzle of the sitting goes: continuing would end it.
+      for (final puzzle in w.tactics.puzzles.toList()) {
+        unawaited(w.tactics.delete(puzzle));
+        async.flushMicrotasks();
+      }
+      async.elapse(const Duration(seconds: 1));
+      w.trainer.suspend();
+      unawaited(w.trainer.start());
+      async.flushMicrotasks();
+      expect(w.trainer.run, same(run), reason: 'no new sitting');
+      unawaited(w.trainer.continueSession());
+      async.flushMicrotasks();
+      expect(w.trainer.run, same(run), reason: 'not ended either');
+    }),
+  );
+
+  test(
+    'the answer shown while the reply is on its way can be walked',
+    () => sitting((async) {
+      begin(async);
+      w.trainer.play('e7e5');
+      expect(w.trainer.up!.waiting, isTrue);
+      w.trainer.showSolution();
+      expect(w.trainer.up!.waiting, isFalse);
+      expect(w.session.cursor.currentMove!.san, 'Nf3');
+      w.trainer.play('b8c6');
+      expect(w.session.cursor.currentMove!.san, 'Nc6');
+    }),
+  );
+
+  test(
+    'a sitting started with another file of games open opens the set',
+    () => sitting((async) {
+      final games = ChapterRef.at('/collections/Games.pgn');
+      const text = '[Event "One"]\n\n1. e4 *\n\n[Event "Two"]\n\n1. d4 *\n';
+      w.store.documents[games] = Opened(text, scriptedRevision(text));
+      unawaited(w.requests.open(games, game: 1));
+      async.flushMicrotasks();
+      expect(w.session.source, games);
+      expect(w.session.game, 1);
+      begin(async);
+      expect(w.session.source, tacticsRef);
+      expect(w.session.game, w.trainer.up!.puzzle.index);
     }),
   );
 }

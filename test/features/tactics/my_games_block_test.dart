@@ -280,4 +280,22 @@ void main() {
     named('My accounts…').run!();
     expect(asked, 1);
   });
+
+  testWidgets('a username changed after a pause lets the queued games go', (
+    tester,
+  ) async {
+    await withAccount(tester);
+    await pumpBlock(tester);
+    await tester.tap(find.text('Get games'));
+    await settle(tester, () => games.running);
+    await tester.tap(find.text('Pause'));
+    site.gate.complete();
+    await settle(tester, () => games.status is MyGamesPaused);
+    expect(games.queued, 1);
+    await games.saveUsernames(lichess: 'Someone else');
+    await tester.pump();
+    expect(games.queued, 0, reason: 'they may be the other account\'s');
+    expect(games.status, isA<MyGamesIdle>());
+    expect(find.text('Get games'), findsOneWidget);
+  });
 }
