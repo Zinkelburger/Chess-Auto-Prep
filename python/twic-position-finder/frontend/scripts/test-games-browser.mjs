@@ -19,11 +19,11 @@ const index = JSON.parse(await fs.readFile(path.join(served, 'index.json'), 'utf
 const games = await Promise.all(index.games.map(async (e) => JSON.parse(await fs.readFile(path.join(served, e.file), 'utf8'))));
 const first = index.games[0];
 const game = games[0];
-// The noted move with the most lines in the collection (the hardest note card to lay out),
-// the first move after a wait anywhere, and the first game's first noted move.
-const rich = games.flatMap((g) => g.moves.filter((m) => m.note).map((m) => ({ g, m }))).sort((a, b) => b.m.lines.length - a.m.lines.length)[0];
+// The first game's middle move, its first move the files annotate (the page shows no annotation),
+// and the first move after a wait anywhere.
+const mid = game.moves[Math.floor(game.moves.length / 2)];
+const annotated = game.moves.find((m) => m.note && m.i < game.moves.length - 1);
 const waited = games.flatMap((g) => g.moves.filter((m) => m.waited).map((m) => ({ g, m })))[0];
-const noted = game.moves.find((m) => m.note);
 const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -92,67 +92,30 @@ try {
     for (const s of seats) assert.ok(s.inside, `${label}: the clock beside "${s.name}" stays in its row`);
     if (seats.some((s) => s.clipped)) console.log(`${label}: names cut short: ${seats.filter((s) => s.clipped).map((s) => s.name).join(', ')}`);
 
-    // The first noted move by deep link: its note shows and the move is current in the list.
-    await open(page, first.id, noted.i);
-    await page.waitForFunction((i) => document.querySelector(`.bg-mv[data-i="${i}"]`)?.classList.contains('active'), {}, noted.i);
-    assert.equal(await text(page, '#bg-note .bg-note-text'), noted.note.trim());
-    if (noted.glyph) assert.equal(await text(page, '#bg-note .bg-note-head .bg-glyph'), noted.glyph);
-
-    // The richest note card: all its lines, scores as mates where `mate` is set, and the list keeps room.
-    await open(page, rich.g.id, rich.m.i);
-    assert.equal(await page.$$eval('#bg-note .bg-line', (els) => els.length), rich.m.lines.length);
-    const scores = await page.$$eval('#bg-note .bg-line-eval', (els) => els.map((e) => e.textContent));
-    rich.m.lines.forEach((l, k) => { if (l.mate !== null) assert.match(scores[k], /mates in \d+/, `${l.id} reads as a mate`); });
+    // A move by deep link: it is current in the list, the card names it, and no annotation shows.
+    await open(page, first.id, mid.i);
+    await page.waitForFunction((i) => document.querySelector(`.bg-mv[data-i="${i}"]`)?.classList.contains('active'), {}, mid.i);
+    assert.match(await text(page, '#bg-note .bg-note-move'), new RegExp(`${escape(mid.san)}$`));
+    assert.equal(await page.$$eval('.bg-line, .bg-glyph, .bg-mv-note, #bg-prev-note, #bg-next-note', (els) => els.length), 0, 'no notes, lines or glyphs');
     const listH = await page.$eval('#bg-moves', (el) => el.getBoundingClientRect().height);
-    assert.ok(listH >= 200, `${label}: the move list keeps its height beside a long note (${listH}px)`);
+    assert.ok(listH >= 200, `${label}: the move list keeps its height (${listH}px)`);
     assert.deepEqual(await overflowing(page), [], `${label}: nothing in the panel sticks out sideways`);
     assert.match(await page.$eval('#bg-analysis', (a) => a.href), /\/bughouse\?fen=.+&fen2=/);
-    await shot(page, `${label}-note`);
+    await shot(page, `${label}-move`);
+    // A move the files annotate shows no note either.
+    await open(page, first.id, annotated.i);
+    assert.ok(!(await text(page, '#bg-note')).includes(annotated.note.trim().slice(0, 30)), `${label}: the annotator's note is not shown`);
 
-    // Into a variation: only its board changes, the bar says so, and Escape comes back.
-    const lineIndex = rich.m.lines.length - 1;
-    const line = rich.m.lines[lineIndex];
-    const still = line.board === 'A' ? 'B' : 'A';
-    const stillAnchor = line.from === 'before' ? rich.m.i - 1 : rich.m.i;
-    const ply = line.moves.length - 1;
-    await page.$eval(`#bg-note .bg-line-move[data-line="${lineIndex}"][data-ply="${ply}"]`, (el) => el.scrollIntoView({ block: 'center' }));
-    const stillBefore = line.from === 'after' ? await pieces(page, still) : null;
-    await page.click(`#bg-note .bg-line-move[data-line="${lineIndex}"][data-ply="${ply}"]`);
-    await page.waitForSelector('#bg-var-bar:not([hidden])');
-    assert.match(await text(page, '#bg-var-text'), new RegExp(`board ${line.board}`));
-    assert.equal(await page.$eval(`#bg-var-tag-${line.board}`, (el) => el.hidden), false);
-    assert.ok(await page.$eval('#bg-note', (box) => {
-      const t = box.querySelector('.bg-line-move.active').getBoundingClientRect(), b = box.getBoundingClientRect();
-      return t.top >= b.top - 1 && t.bottom <= b.bottom + 1;
-    }), `${label}: the line being walked stays in view in the note card`);
-    if (stillBefore !== null) assert.equal(await pieces(page, still), stillBefore, 'the other board did not move');
-    assert.equal(await page.$eval('#bg-analysis', (a) => new URL(a.href).searchParams.get('fen')), line.moves[ply].fen, 'the analysis link opens the variation');
-    assert.equal(await page.$eval('#bg-analysis', (a) => new URL(a.href).searchParams.get('fen2')), stillAnchor >= 0 ? rich.g.moves[stillAnchor].fen[still] : rich.g.start[still]);
-    if (label === 'phone') await page.$eval('#bg-var-bar', (el) => el.scrollIntoView({ block: 'start' }));
-    await shot(page, `${label}-variation`);
-    await page.keyboard.press('Escape');
-    await page.waitForSelector('#bg-var-bar', { hidden: true });
-
-    // Keys: → steps and the hash follows; N jumps to the next note; End shows the result; Home.
-    if (rich.m.i < rich.g.moves.length - 1) {
-      await page.keyboard.press('ArrowRight');
-      await atHash(page, `#${rich.g.id}:${rich.m.i + 1}`);
-    }
-    const here = Math.min(rich.m.i + 1, rich.g.moves.length - 1);
-    const nextNote = rich.g.moves.find((m) => m.i > here && m.note);
-    if (nextNote) {
-      await page.keyboard.press('n');
-      await atHash(page, `#${rich.g.id}:${nextNote.i}`);
-    }
+    // Keys: → steps and the hash follows; End shows the result; Home.
+    await page.keyboard.press('ArrowRight');
+    await atHash(page, `#${first.id}:${annotated.i + 1}`);
     await page.keyboard.press('End');
-    await atHash(page, `#${rich.g.id}:${rich.g.moves.length - 1}`);
-    assert.match(await text(page, '#bg-note'), new RegExp(escape(rich.g.result.text.slice(0, 20))));
-    const last = rich.g.moves.at(-1);
-    if (last.note) assert.equal(await text(page, '#bg-note .bg-note-text'), last.note.trim());
+    await atHash(page, `#${first.id}:${game.moves.length - 1}`);
+    assert.match(await text(page, '#bg-note'), new RegExp(escape(game.result.text.slice(0, 20))));
     for (const b of ['A', 'B']) assert.match(await text(page, `#bg-eval-${b}`), /^([+−]?\d+\.\d|0\.0|[<>][+−]20|#-?\d+|)$/, `board ${b}'s score reads as a score`);
     await shot(page, `${label}-last`);
     await page.keyboard.press('Home');
-    await atHash(page, `#${rich.g.id}`);
+    await atHash(page, `#${first.id}`);
 
     // A move after a wait says so in words, and the list row shows it.
     if (waited) {
@@ -162,8 +125,8 @@ try {
     }
     // Clicking a move in the list goes there.
     await open(page, first.id);
-    await page.click(`.bg-mv[data-i="${noted.i}"]`);
-    await atHash(page, `#${first.id}:${noted.i}`);
+    await page.click(`.bg-mv[data-i="${mid.i}"]`);
+    await atHash(page, `#${first.id}:${mid.i}`);
     // HypeBeast on request: switched on it searches the board in focus, a click on a move of its line shows
     // the line on that board, Escape returns to the game, and the next move is searched in turn.
     if (label === 'desktop') {
@@ -176,7 +139,7 @@ try {
       await evaluated();
       const focus = (await text(page, '#bg-engine-name')).match(/^HypeBeast · board ([AB])$/)?.[1];
       assert.ok(focus, 'the engine names the board it searches');
-      assert.equal(focus, noted.board, 'it searches the board the move was played on');
+      assert.equal(focus, mid.board, 'it searches the board the move was played on');
       const before = await settled(focus);
       // A press at the move's place, as a player's: the rows are redrawn with each engine update.
       // Measured in one step: a handle can be redrawn away between finding it and measuring it.
@@ -190,7 +153,7 @@ try {
       await page.waitForFunction(() => document.querySelector('#bg-var-bar').hidden);
       assert.equal(await settled(focus), before, 'Escape puts the game back');
       await page.keyboard.press('ArrowRight');
-      await page.waitForFunction((n) => decodeURIComponent(location.hash).endsWith(`:${n}`), {}, noted.i + 1);
+      await page.waitForFunction((n) => decodeURIComponent(location.hash).endsWith(`:${n}`), {}, mid.i + 1);
       await evaluated();
       await page.keyboard.press('l');
       await page.waitForFunction(() => document.querySelector('#bg-engine-info').textContent.startsWith('Off'));
@@ -202,6 +165,8 @@ try {
     assert.equal(await orientation(page, 'B'), 'white');
     await page.click('#bg-flip');
     // Back to the list.
+    // Scrolled down the list, the button can sit under the sticky site nav.
+    await page.$eval('#bg-back', (el) => el.scrollIntoView({ block: 'center' }));
     await page.click('#bg-back');
     await page.waitForFunction(() => document.querySelector('#bg').dataset.view === 'list');
 
@@ -218,7 +183,7 @@ try {
     if (label === 'desktop') await shot(page, `${label}-error`);
     await page.close();
     assert.deepEqual(errors.filter((e) => !/503/.test(e)), [], `${label}: no page errors`);
-    console.log(`${label}: list, game, notes, ${rich.m.lines.length} lines, variation, last move, keys, flip and errors checked`);
+    console.log(`${label}: list, game, no annotations, last move, keys, flip, engine and errors checked`);
   }
 } finally {
   await browser.close();

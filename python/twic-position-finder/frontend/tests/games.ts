@@ -4,13 +4,9 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { readBoard } from '../src/bughouse/setup';
 import { GameStore, LINE_KINDS, gameHash, isContractError, parseGame, parseHash, parseIndex, type Game } from '../src/bughouse-games/games';
+import { START, analysisLink, clocksAt, end, evalOn, focusBoard, goTo, lastMoveOn, shown, step } from '../src/bughouse-games/view';
 import {
-  START, analysisLink, clocksAt, end, enterLine, evalOn, focusBoard, goTo, lastMoveOn, leaveLine, lineAt, noteStep, notedMoves,
-  shown, step,
-} from '../src/bughouse-games/view';
-import {
-  WAIT_CODES, assumePhrase, formatClock, formatEval, kindTitle, lengthLine, lineContext, lineTokens, mateWords, moveName, playersLine,
-  resultLine, scoreWords, seatLabel, seconds, waitPhrase,
+  WAIT_CODES, formatClock, formatEval, lengthLine, mateWords, playersLine, resultLine, seatLabel, seconds, waitPhrase,
 } from '../src/bughouse-games/words';
 
 // ── The served collection follows the contract ─────────────────────────
@@ -46,27 +42,6 @@ const games: Game[] = index.games.map((entry) => {
   return game;
 });
 assert.deepEqual(warnings, [], 'no line was dropped');
-
-// Every line of every game: only its own board moves, the other stands where the line begins, and back out.
-for (const g of games) {
-  for (const m of g.moves) {
-    m.lines.forEach((line, index) => {
-      const at = goTo(g, m.i);
-      const inLine = enterLine(g, at, index, 0);
-      const s = shown(g, inLine);
-      assert.equal(s.variation, line.board);
-      assert.equal(s.fen[line.board], line.moves[0].fen);
-      const still = line.board === 'A' ? 'B' : 'A';
-      const anchor = line.from === 'before' ? m.i - 1 : m.i;
-      assert.equal(s.fen[still], anchor >= 0 ? g.moves[anchor].fen[still] : g.start[still], `${g.id} ${line.id}: the other board stands where the line begins`);
-      let walk = inLine;
-      for (let k = 1; k < line.moves.length; k++) walk = step(g, walk, 1);
-      assert.equal(shown(g, walk).fen[line.board], line.moves.at(-1)!.fen);
-      for (let k = 0; k < line.moves.length; k++) walk = step(g, walk, -1);
-      assert.deepEqual(walk, at, `${g.id} ${line.id}: back from the first line move leaves the variation`);
-    });
-  }
-}
 
 // ── A small game with every kind of thing the contract allows ──────────────
 // True positions (replayed with the arena referee); notes, glyphs and lines invented.
@@ -196,25 +171,6 @@ assert.equal(lastMoveOn(small, 0, 'B'), -1);
   const v = shown(small, goTo(small, 3));
   assert.deepEqual(v.fen, { A: A2, B: B2 });
   assert.deepEqual(v.last, { A: 'd7d5', B: 'g8f6' }, 'each board shows its own last move');
-  assert.equal(v.variation, null);
-}
-// Lines: `before` keeps the other board as before the move, `after` as after it.
-{
-  const at = goTo(small, 2);
-  const instead = enterLine(small, at, 0, 1);
-  assert.deepEqual(shown(small, instead).fen, { A: small.moves[2].lines[0].moves[1].fen, B: B1 });
-  assert.equal(shown(small, instead).last.A, 'g1f3');
-  assert.equal(lineAt(small, instead)!.id, 'm2-a');
-  assert.equal(focusBoard(small, instead), 'A');
-  const arrives = enterLine(small, at, 3, 0);
-  assert.equal(shown(small, arrives).check.A, true, 'check comes from the line move’s SAN');
-  assert.deepEqual(leaveLine(enterLine(small, at, 1, 99)), at);
-  assert.equal(enterLine(small, at, 1, 99).line!.ply, 1, 'a ply past the end is clamped');
-  assert.deepEqual(enterLine(small, at, 99, 0), at, 'no such line: stay put');
-  // Clocks and scores in a variation are those of where it begins.
-  assert.deepEqual(clocksAt(small, instead), clocksAt(small, goTo(small, 1)));
-  assert.equal(evalOn(small, instead, 'A'), null, 'before move 2 board A has no score yet');
-  assert.equal(evalOn(small, enterLine(small, at, 1, 0), 'A')!.eval, -20);
 }
 // Clocks: the starting time until the first recorded clocks; then the last recorded.
 for (const v of Object.values(clocksAt(small, goTo(small, 1)))) assert.equal(v, 120);
@@ -223,13 +179,9 @@ assert.deepEqual(clocksAt(small, goTo(small, 3)), SMALL.moves[3].clocks);
 assert.equal(evalOn(small, goTo(small, 3), 'A')!.eval, -20);
 assert.equal(evalOn(small, goTo(small, 5), 'B')!.mate, 3);
 assert.equal(evalOn(small, goTo(small, 5), 'A')!.eval, 3820);
-// Note to note.
-assert.deepEqual(notedMoves(small), [2, 4, 5]);
-assert.deepEqual(noteStep(small, START, 1), goTo(small, 2));
-assert.deepEqual(noteStep(small, goTo(small, 2), 1), goTo(small, 4));
-assert.deepEqual(noteStep(small, goTo(small, 4), -1), goTo(small, 2));
-assert.equal(noteStep(small, goTo(small, 2), -1), null);
-assert.equal(noteStep(small, goTo(small, 5), 1), null);
+// The board in focus is the current move's, A at the start.
+assert.equal(focusBoard(small, START), 'A');
+assert.equal(focusBoard(small, goTo(small, 3)), small.moves[3].board);
 // The analysis link puts the board in focus first.
 {
   const link = new URL(analysisLink(small, goTo(small, 3)), 'https://x');
@@ -258,35 +210,13 @@ assert.equal(waitPhrase({ seconds: 6.5, why: 'partner_mate' }), 'sat 6.5 s while
 assert.equal(waitPhrase({ seconds: 2.5, why: 'mated' }), 'sat 2.5 s rather than move into mate, while the partner plays on');
 assert.equal(waitPhrase({ seconds: 1, why: 'something_new' }), 'waited 1 s', 'an unknown code falls back to "waited"');
 for (const code of WAIT_CODES) assert.ok(waitPhrase({ seconds: 1, why: code }).startsWith('sat 1 s '), code);
-assert.equal(assumePhrase(''), '');
-assert.equal(assumePhrase('R'), 'Supposes White’s partner first delivers a rook.');
-assert.equal(assumePhrase('nn'), 'Supposes Black’s partner first delivers two knights.');
-assert.equal(assumePhrase('QP'), 'Supposes White’s partner first delivers a queen and a pawn.');
-assert.equal(assumePhrase('Np'), 'Supposes White first receives a knight and Black a pawn from their partners.');
 assert.equal(resultLine(1, 'checkmate'), 'A-Black and B-White win by checkmate');
 assert.equal(resultLine(null, 'repetition'), 'Draw by repetition');
 assert.equal(resultLine(0, 'time_forfeit'), 'A-White and B-Black win by time forfeit');
 assert.equal(playersLine({ Awhite: 'X', Bblack: 'X', Ablack: 'Y', Bwhite: 'Y' }), 'X against Y');
 assert.equal(playersLine({ Awhite: 'X', Bblack: 'Z', Ablack: 'Y', Bwhite: 'Y' }), 'X and Z against Y');
-assert.equal(lengthLine(57, 13), '57 moves · 13 notes');
-assert.equal(lengthLine(1, 0), '1 move · no notes');
-{
-  const m = small.moves[2];
-  const base = m.lines[0];
-  assert.equal(kindTitle({ ...base, kind: 'played' }, m), 'Expected continuation');
-  assert.equal(kindTitle({ ...base, kind: 'instead' }, m), `Instead of ${m.san}`);
-  assert.equal(kindTitle({ ...base, kind: 'threat' }, m), 'Threat');
-  assert.equal(kindTitle({ ...base, kind: 'arrives', assume: 'R' }, m), 'If a rook arrives');
-  assert.equal(kindTitle({ ...base, kind: 'novel' }, m), 'Line', 'an unknown kind is a plain line');
-  const threat = { ...base, kind: 'threat', start: base.start.replace(/ [wb] /, ' b ') };
-  assert.match(lineContext(threat, m), /what Black would play with a free move\.$/);
-  assert.match(lineContext({ ...base, from: 'before' }, m), new RegExp(`^Before ${moveName(m).replace(/[.+?]/g, '\\$&')}, on board ${base.board}`));
-}
-assert.deepEqual(
-  lineTokens({ id: 'x', kind: 'played', from: 'after', board: 'A', start: '8/8/8/8/8/8/8/K6k[] b - - 0 14', assume: '', eval: null, mate: null, note: null,
-    moves: [{ uci: 'h1g1', san: 'Kg1', fen: '' }, { uci: 'a1b1', san: 'Kb1', fen: '' }, { uci: 'g1f1', san: 'Kf1', fen: '' }] }).map((t) => `${t.number}${t.san}`),
-  ['14…Kg1', '15.Kb1', 'Kf1'],
-);
+assert.equal(lengthLine(57), '57 moves');
+assert.equal(lengthLine(1), '1 move');
 
 assert.equal(formatEval(3820, null, true), '>+20', 'a huge score is capped for display');
 assert.equal(formatEval(-13073, null, true), '<−20');
@@ -295,8 +225,6 @@ assert.equal(formatEval(3820, null), '+38.2', 'uncapped for the exact value on h
 assert.equal(formatEval(3820, 2, true), '#2', 'a mate is never capped away');
 assert.equal(mateWords(3), 'White mates in 3');
 assert.equal(mateWords(-1), 'Black mates in 1');
-assert.equal(scoreWords(null, -4), 'Black mates in 4', 'a line with mate reads as a mate even if its last SAN only says +');
-assert.equal(scoreWords(4200, null), '>+20');
 
 const all = games.flatMap((g) => g.moves);
 console.log(`games: ${games.length} games, ${all.length} moves, ${all.reduce((n, m) => n + m.lines.length, 0)} lines checked`);

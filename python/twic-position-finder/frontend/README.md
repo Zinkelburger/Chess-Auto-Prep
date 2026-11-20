@@ -375,11 +375,13 @@ sit, board B turned the other way. The files under `public/bughouse-games/`
 are written by the HypeBeast repo's builder, never by hand; their format, a
 fixed contract with that builder, is
 [src/bughouse-games/README.md](src/bughouse-games/README.md). Every position
-of the game and its notes is a FEN from the data.
+of the game is a FEN from the data. The page shows the moves, clocks, the
+engines' scores and waits; the annotator's notes, lines and glyphs in the
+files are not shown.
 
 HypeBeast runs on the page itself, off until the reader switches it on (the
-switch above the note, or L). It then searches the board in focus (the
-current move's board, or a variation's) with both boards as the game has
+switch above the current move, or L). It then searches the board in focus
+(the current move's board) with both boards as the game has
 them, and follows the reader through the game; finished searches are kept, so
 stepping back shows them at once. The panel is the analysis board's
 (`src/analysis/ceval.ts`, `engine.ts`) and its lines, threads and search time
@@ -390,11 +392,11 @@ cross-origin isolated like `/bughouse` (`public/_headers`, `astro.config.mjs`).
 
 ```
 games.ts        types, contract checks (parseIndex, parseGame), #<id>:<move> links, GameStore
-view.ts         the cursor (move, or a line and ply in it) and what each board shows there
-words.ts        line kinds, waits, scores, clocks, seats and results in words
+view.ts         the cursor (a move) and what each board shows there
+words.ts        waits, scores, clocks, seats and results in words
 board.ts        one read-only chessground board with its pockets, engines and clocks
 engine.ts       HypeBeast on request for the board in focus, in the analysis board's panel
-app.ts          page controller: the list, a game, keys (← → Home End ↑ ↓, N/P notes, F flip, L engine, Esc)
+app.ts          page controller: the list, a game, keys (← → Home End ↑ ↓, F flip, L engine, Esc)
 ```
 
 `public/_headers` caches `index.json` for ten minutes. Game files are named by
