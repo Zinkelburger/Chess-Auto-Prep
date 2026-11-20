@@ -86,7 +86,6 @@ void main() {
   });
 
   test('none names nothing', () {
-    expect(Openings.none.isEmpty, isTrue);
     expect(Openings.none.at(_after('e4 c5')), isNull);
   });
 

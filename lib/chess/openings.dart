@@ -68,8 +68,6 @@ final class Openings {
 
   final Map<String, Opening> _byPosition;
 
-  bool get isEmpty => _byPosition.isEmpty;
-
   /// The name the book gives the position [fen], or null.
   Opening? at(Fen fen) => _byPosition[fen.position];
 

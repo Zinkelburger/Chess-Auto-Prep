@@ -81,9 +81,6 @@ final class HeaderRule {
         value: value ?? this.value,
       );
 
-  /// `White rating ≥ 2200`, `Player contains Carlsen`: the rule's chip.
-  String get label => '${fieldLabel(field)} ${rule.label} ${value.trim()}';
-
   /// Whether a game whose header values are [headers] and whose main line
   /// is [moves] (normalised SANs, see [normalSan]) passes. A rule on
   /// [movesField] keeps nothing when it is not given the moves.
