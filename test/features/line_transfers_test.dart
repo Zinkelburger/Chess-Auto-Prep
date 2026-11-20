@@ -102,9 +102,15 @@ void main() {
       isA<LibraryDone>(),
     );
 
-    expect(text('repertoires/KID/Sidelines.pgn'), contains('1. d4 Nf6 2. c4 g6'));
+    expect(
+      text('repertoires/KID/Sidelines.pgn'),
+      contains('1. d4 Nf6 2. c4 g6'),
+    );
     expect(text('repertoires/KID/Main.pgn'), isNot(contains('Indian')));
-    expect(reviews(), contains("${at('repertoires/KID/Sidelines.pgn')},indian,"));
+    expect(
+      reviews(),
+      contains("${at('repertoires/KID/Sidelines.pgn')},indian,"),
+    );
     expect(reviews(), isNot(contains(at('repertoires/KID/Main.pgn'))));
   });
 
@@ -130,7 +136,10 @@ void main() {
       isA<LibraryDone>(),
     );
 
-    expect(text('repertoires/KID/Sidelines.pgn'), contains('1. d4 Nf6 2. c4 g6'));
+    expect(
+      text('repertoires/KID/Sidelines.pgn'),
+      contains('1. d4 Nf6 2. c4 g6'),
+    );
     expect(text('repertoires/KID/Main.pgn'), isNot(contains('Indian')));
   });
 }

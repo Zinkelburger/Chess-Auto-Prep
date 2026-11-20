@@ -105,9 +105,7 @@ void main() {
       expect(answered?.rootMoves, isEmpty);
     });
 
-    testWidgets('with nothing on the board asks only the name', (
-      tester,
-    ) async {
+    testWidgets('with nothing on the board asks only the name', (tester) async {
       await ask(tester, 'Main');
       expect(find.text('From here'), findsNothing);
       await create(tester);

@@ -460,6 +460,35 @@
 #     six fields (a FEN tag is read whole).
 #   lib/engines/maia/maia_model.dart:152 `.first` -> `.last`: the move head
 #     is asked about one position, so its `[1, 4352]` answer has one row.
+# lib/features/library, with equivalent mutants a --max 30 sample can draw:
+#   lib/features/library/library_state.dart:138 the folded count's start,
+#     :149 `rows == 0` -> `!= 0` or `== 1`: only `libraryMessage` reads the
+#     fold, and it says nothing for a count or for none.
+#   lib/features/library/library_imports.dart:40, :51 the hundred names an
+#     import tries, :82 the off-thread size: a limit and where the text is
+#     read, not what is imported.
+#   lib/features/library/file_changes.dart:138 `folders: false` -> true on a
+#     save (nothing lies under a file's path), :203 the follow's answer when
+#     it throws (the store answers failures as typed results), :265, :266 a
+#     follow overtaken by another open (the saver drops an answer about a
+#     document it is no longer on, and a stale owed change is refused by
+#     the next follow because the open file is not under it), :270 the
+#     on-its-way answer (while the gate is still carrying the change out it
+#     guards the file, so no save that finds the file gone reaches it).
+#   lib/features/library/line_transfers.dart:31 discard's answer when
+#     nothing is pending or a retry runs (only a listener notification reads
+#     it; the Discard button ignores it), :177 the place that seeds a fresh
+#     id for an arriving line whose own is taken (any free id serves, and
+#     the training rows follow whichever it gets).
+#   lib/features/library/deleted_chapters_view.dart,
+#     lib/features/library/outline_rows.dart and
+#     lib/features/library/repertoire_tile.dart: only a widget's look
+#     survives (line counts, a radius, padding, the drop target's tint).
+#   lib/features/library/backup_history_dialog.dart:138 the prune limit at
+#     100 versions (the archive keeps the newest 100, so at 100 nothing
+#     would go; the 101st mirrors that retention constant), and its look.
+#   lib/features/library/library_messages.dart: no mutant compiles (each
+#     `&&` -> `||` breaks the null promotion the next line needs).
 lib/chess/pgn/game_review.dart|test/workspace/game_review_test.dart|test/chess/pgn/edit_laws_test.dart test/app
 lib/chess/pgn/line_edits.dart|test/chess/pgn/line_edits_test.dart|test/chess/pgn test/workspace
 lib/chess/pgn/chapter_edits.dart|test/chess/pgn/chapter_edits_test.dart|test/chess/pgn test/workspace
@@ -785,3 +814,7 @@ lib/features/study/study_panel.dart|test/features/study/study_panel_menus_test.d
 lib/features/study/study_sender.dart|test/features/study/study_sender_more_test.dart test/features/study/study_sender_test.dart|
 lib/features/tactics/set_additions.dart|test/features/tactics/set_additions_test.dart test/features/tactics/my_games_test.dart test/features/tactics/mining_native_checkpoint_test.dart test/features/tactics/account_persistence_test.dart|
 lib/features/tactics/source_games.dart|test/features/tactics/source_games_test.dart|
+# lib/features/library
+lib/features/library/new_chapter_dialog.dart|test/features/library/new_chapter_dialog_test.dart|test/features/outline_panel_test.dart test/features/library_panel_test.dart
+lib/features/library/file_edits.dart|test/features/file_edits_test.dart test/features/library_lines_test.dart test/features/library_test.dart|test/features/line_transfers_test.dart test/features/library_changes_test.dart test/features/course_chapters_test.dart test/features/compound_rename_test.dart test/features/closed_rename_navigation_test.dart test/features/library_holds_test.dart test/features/library_open_course_test.dart test/features/library_on_disk_test.dart test/features/outline_panel_test.dart test/features/outline_panel_more_test.dart
+lib/features/library/library_actions.dart|test/features/library_panel_test.dart test/features/outline_panel_test.dart|test/app/board_doors_test.dart test/app/shell_doors_test.dart test/features/library_panel_more_test.dart test/features/outline_panel_more_test.dart
