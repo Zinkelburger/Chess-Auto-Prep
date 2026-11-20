@@ -70,6 +70,8 @@ void main() {
     bool rateReviews = false,
     bool reviewAll = false,
     ScriptedFiles? chapters,
+    VoidCallback? onImport,
+    Widget? bookChip,
   }) async {
     reads = [];
     final settings = SettingsStore(
@@ -98,7 +100,13 @@ void main() {
       MaterialApp(
         theme: darkTheme(),
         home: Scaffold(
-          body: TrainPane(trainer: trainer, moves: moves, onRead: reads.add),
+          body: TrainPane(
+            trainer: trainer,
+            moves: moves,
+            onRead: reads.add,
+            onImport: onImport,
+            bookChip: bookChip,
+          ),
         ),
       ),
     );
@@ -127,6 +135,49 @@ void main() {
     await tester.pumpAndSettle();
     expect(trainer.scope, TrainScope.chapter);
     expect(find.text('Learn 2'), findsOneWidget);
+  });
+
+  testWidgets('with no chapter open, a course can be imported', (tester) async {
+    fixture.session.closed();
+    var imports = 0;
+    await pump(
+      tester,
+      onImport: () => imports++,
+      bookChip: const Text('Book in use'),
+    );
+    expect(find.text('Open a repertoire chapter to train it.'), findsOneWidget);
+    expect(find.text('Book in use'), findsNothing, reason: 'not the book');
+    await tester.tap(find.text('Import course PGN…'));
+    expect(imports, 1);
+  });
+
+  testWidgets('an empty book says so under the book trained', (tester) async {
+    await pump(
+      tester,
+      chapters: ScriptedFiles(listing: const Repertoires([])),
+      bookChip: const Text('Book in use'),
+    );
+    await tester.tap(find.text('Book'));
+    await tester.pumpAndSettle();
+    expect(find.text('Your book has no chapters yet.'), findsOneWidget);
+    expect(find.text('Book in use'), findsOneWidget);
+    expect(find.text('Import course PGN…'), findsNothing);
+  });
+
+  testWidgets('the trainer mode with no repertoire chosen asks for one', (
+    tester,
+  ) async {
+    var imports = 0;
+    await pump(tester, onImport: () => imports++);
+    trainer.selection.enter(null);
+    await tester.pumpAndSettle();
+    expect(find.text('Choose your repertoire'), findsOneWidget);
+    await tester.tap(find.text('Import course PGN…'));
+    expect(imports, 1);
+
+    trainer.selection.choose(folder('Empty', []));
+    await tester.pumpAndSettle();
+    expect(find.text('No training lines available'), findsOneWidget);
   });
 
   testWidgets('a rating that did not save does not stop the next sitting', (
