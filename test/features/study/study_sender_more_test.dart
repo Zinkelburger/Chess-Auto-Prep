@@ -4,8 +4,12 @@
 // chapter stops the send, links are written even while reading holds
 // edits, a send that only updated says no "0 added", and a long name is cut
 // at 100 characters.
+import 'package:chess_auto_prep/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/chess/pgn/study_lichess.dart';
+import 'package:chess_auto_prep/features/study/study_import_source.dart';
 import 'package:chess_auto_prep/features/study/study_sender.dart';
+import 'package:chess_auto_prep/workspace/document/study_choice.dart';
+import 'package:chess_auto_prep/workspace/document/study_drafts.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/scripted_study_writer.dart';
@@ -77,6 +81,65 @@ void main() {
     await sender.send(into: 'wxyz9876');
     expect(lichess.replaced, isEmpty);
     expect(lichess.added, hasLength(1));
+  });
+
+  test('resending updates the original and adds the edited copy', () async {
+    final (fixture, sender) = await open(
+      _chapter('Round 1', url: 'https://lichess.org/study/wxyz9876/oldchap0'),
+    );
+    final session = fixture.session;
+    final copy = gameDraft(session)!.named('Round 1 analysis');
+    await fixture.studies.addChapters(IntoStudy(fixture.ref), [copy]);
+    expect(session.game, 1);
+    session.cursor.toEnd();
+    session.playMove('g1f3');
+
+    await sender.send(into: 'wxyz9876');
+
+    expect(lichess.replaced.map((r) => r.chapter), ['oldchap0']);
+    expect(lichess.added.map((a) => (a.study, a.name)), [
+      ('wxyz9876', 'Round 1 analysis'),
+    ]);
+    expect(lichess.pgns, [
+      contains('1. e4 e5 *'),
+      contains('1. e4 e5 2. Nf3 *'),
+    ]);
+  });
+
+  test('an append keeps each unclaimed remote chapter link once', () async {
+    const base = 'https://lichess.org/study/wxyz9876';
+    const first = '$base/oldchap0';
+    const second = '$base/oldchap1';
+    final (fixture, sender) = await open(_chapter('A', url: first));
+    final text = [
+      _chapter('B', url: second),
+      _chapter('A again', url: '$first?from=export'),
+      _chapter('B again', url: '$second/'),
+    ].join('\n');
+    final data = await fixture.studies.imports.pgn(text) as StudyImportData;
+    await fixture.studies.importPreview(data, into: fixture.ref);
+
+    expect(
+      fixture.session.chapter!.lines.map(
+        (line) => tagValue(line.tags, chapterUrlTag),
+      ),
+      [first, second, null, null],
+    );
+    await sender.send(into: 'wxyz9876');
+    expect(lichess.replaced.map((r) => r.chapter), ['oldchap0', 'oldchap1']);
+    expect(lichess.added.map((a) => a.name), ['A again', 'B again']);
+  });
+
+  test('a deliberate copy into a new local study starts unlinked', () async {
+    const old = 'https://lichess.org/study/wxyz9876/oldchap0';
+    final (fixture, sender) = await open(_chapter('A', url: old));
+    final copy = gameDraft(fixture.session)!.named('Analysis');
+    await fixture.studies.addChapters(const NewStudy('Notes'), [copy]);
+    await fixture.session.open(studyRef('Notes'), game: 0);
+
+    await sender.send(into: 'wxyz9876');
+    expect(lichess.replaced, isEmpty);
+    expect(lichess.added.map((a) => a.name), ['Analysis']);
   });
 
   test('a refused chapter stops the send there', () async {

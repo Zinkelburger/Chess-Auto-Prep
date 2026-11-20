@@ -244,8 +244,8 @@ String newStudyChapterText({
 
 /// A chapter on its way into a study from somewhere else: a game with the
 /// tags it already has, a line from a move tree, a board. The study's own
-/// six tags are written for it when it is added; its other tags travel
-/// with it.
+/// six tags are written for it when it is added. Its other tags travel
+/// with it. Only an import can keep the source chapter's Lichess link.
 final class ChapterDraft {
   const ChapterDraft({
     required this.name,
@@ -253,6 +253,7 @@ final class ChapterDraft {
     required this.moves,
     this.tags = const [],
     this.result,
+    this.keepChapterUrl = false,
   });
 
   /// What the chapter is called; empty for `Chapter N`.
@@ -269,12 +270,16 @@ final class ChapterDraft {
   /// The game's termination marker, `1-0` or the like; null for `*`.
   final String? result;
 
+  /// Whether the import can still update its original Lichess chapter.
+  final bool keepChapterUrl;
+
   ChapterDraft named(String name) => ChapterDraft(
     name: name,
     orientation: orientation,
     moves: moves,
     tags: tags,
     result: result,
+    keepChapterUrl: keepChapterUrl,
   );
 }
 
@@ -295,6 +300,9 @@ String studyChapterText(
   );
   final buffer = StringBuffer();
   for (final tag in tags) {
+    if (!draft.keepChapterUrl && tag is PgnTag && tag.key == 'ChapterURL') {
+      continue;
+    }
     buffer
       ..write(tag.text)
       ..write(tag.trailer);

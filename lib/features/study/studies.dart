@@ -3,8 +3,11 @@ import 'package:path/path.dart' as p;
 
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/chapter_edit.dart';
+import '../../chess/pgn/chapter_line.dart';
+import '../../chess/pgn/game_text.dart';
 import '../../chess/pgn/study.dart';
 import '../../chess/pgn/study_edits.dart' as pgn show addChapters;
+import '../../chess/pgn/study_lichess.dart';
 import '../../diagnostics/log.dart';
 import '../../net/lichess_studies.dart';
 import '../../net/lichess_study_writes.dart';
@@ -180,17 +183,17 @@ final class Studies extends ChangeNotifier {
   Future<StudyResult> addChapters(
     StudyChoice into,
     List<ChapterDraft> drafts,
-  ) => _run('add chapters to a study', () => _addChapters(into, drafts));
+  ) => _run('add chapters to a study', () => _addChapters(into, (_) => drafts));
 
   Future<StudyResult> _addChapters(
     StudyChoice into,
-    List<ChapterDraft> drafts,
+    List<ChapterDraft> Function(Chapter) drafts,
   ) async {
     switch (into) {
       case NewStudy(:final name):
         if (nameProblem(name) case final wrong?) return StudyProblem(wrong);
         final empty = await readChapter(name: name, text: '');
-        final edit = pgn.addChapters(empty, study: name, drafts: drafts);
+        final edit = pgn.addChapters(empty, study: name, drafts: drafts(empty));
         if (edit is! ChapterEdited) return _refusedAdd(edit);
         final created = await _created(name, writeChapter(edit.chapter));
         return created is StudyDone
@@ -208,14 +211,18 @@ final class Studies extends ChangeNotifier {
     }
   }
 
-  StudyResult _addOpen(ChapterRef study, List<ChapterDraft> drafts) {
+  StudyResult _addOpen(
+    ChapterRef study,
+    List<ChapterDraft> Function(Chapter) drafts,
+  ) {
     final chapter = _session.chapter;
     if (chapter == null || _session.game == null) {
       return const StudyProblem('Open that study from its list first.');
     }
     final first = chapter.lines.length;
     final refused = _session.apply(
-      (open) => pgn.addChapters(open, study: studyNameOf(open), drafts: drafts),
+      (open) =>
+          pgn.addChapters(open, study: studyNameOf(open), drafts: drafts(open)),
       writes: true,
     );
     return refused == null
@@ -225,7 +232,7 @@ final class Studies extends ChangeNotifier {
 
   Future<StudyResult> _addOnDisk(
     ChapterRef study,
-    List<ChapterDraft> drafts,
+    List<ChapterDraft> Function(Chapter) drafts,
   ) async {
     final String text;
     final Revision revision;
@@ -244,7 +251,7 @@ final class Studies extends ChangeNotifier {
     final edit = pgn.addChapters(
       chapter,
       study: studyNameIn(chapter.lines) ?? study.name,
-      drafts: drafts,
+      drafts: drafts(chapter),
     );
     if (edit is! ChapterEdited) return _refusedAdd(edit);
     final saved = await _store.save(
@@ -313,7 +320,12 @@ final class Studies extends ChangeNotifier {
         'Some games could not be read completely. Import them as a new study to preserve their original text.',
       );
     }
-    return _addChapters(IntoStudy(into), [
+    LichessStudyLink? linkOf(ChapterLine line) {
+      final url = tagValue(line.tags, chapterUrlTag);
+      return url == null ? null : parseStudyLink(url);
+    }
+
+    List<ChapterDraft> imported(Set<LichessStudyLink> claimed) => [
       for (final (index, line) in data.chapter.lines.indexed)
         ChapterDraft(
           name: studyChapterName(
@@ -325,8 +337,17 @@ final class Studies extends ChangeNotifier {
           moves: line.tree!,
           tags: line.tags,
           result: line.terminator,
+          keepChapterUrl: switch (linkOf(line)) {
+            final link? when link.chapterId != null => claimed.add(link),
+            _ => true,
+          },
         ),
-    ]);
+    ];
+    return _addChapters(
+      IntoStudy(into),
+      (destination) =>
+          imported({for (final line in destination.lines) ?linkOf(line)}),
+    );
   });
 
   Future<StudyResult> exportPgn(String name) async {

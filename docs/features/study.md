@@ -59,7 +59,10 @@ file read clears the previous actionable preview.
 New-study import preserves the original PGN text and chooses a free filename.
 Appending adds complete games through the open document session, preserving
 unsaved edits and making the addition undoable. It selects the first appended
-chapter. Partially parsed PGN can be preserved as a new file when it contains
+chapter. An appended import keeps its Lichess chapter link if no earlier
+chapter in the destination or the same import already claims it. A chapter
+copied with **Add to study** starts without its source's link.
+Partially parsed PGN can be preserved as a new file when it contains
 at least one complete game; it cannot be appended through a lossy rewrite.
 
 **Send to Lichess…** asks one question, **New study** or **Existing study**
