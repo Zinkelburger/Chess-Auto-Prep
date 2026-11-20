@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/chess/pgn/pgn_reader.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,6 +30,25 @@ void main() {
   test('[EventDate does not start a game', () {
     const file = '[Event "A"]\n[EventDate "2020.01.01"]\n\n1. e4 *\n';
     expect(splitChapterText(file).games, hasLength(1));
+  });
+
+  test('a brace on a PGN escape line leaves the next game readable', () {
+    const lines = [
+      '[Event "First"]\n',
+      '% {\n',
+      '\n',
+      '1. e4 *\n',
+      '\n',
+      '[Event "Second"]\n',
+      '\n',
+      '1. d4 d5 *\n',
+    ];
+    final chapter = parseChapter(name: 'Games', text: lines.join());
+    final streamed = gamesOfLines(lines).map(readGame).toList();
+    expect([chapter.lines.length, streamed.length], [2, 2]);
+    for (final tree in [chapter.lines.last.tree!, streamed.last.tree!]) {
+      expect(tree.mainLine.map((m) => m.san), ['d4', 'd5']);
+    }
   });
 
   test('a header quoted inside a comment does not split the game', () {

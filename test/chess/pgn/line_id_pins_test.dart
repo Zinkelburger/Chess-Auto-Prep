@@ -92,6 +92,17 @@ void main() {
     expect(after.chapter.lines.single.lineId, 'line_ZDQgZDV8MQ');
   });
 
+  test('a line below a PGN escape keeps its saved training id', () {
+    final chapter = parseChapter(
+      name: 'Games',
+      text:
+          '[Event "A"]\n% {\n\n1. e4 *\n\n'
+          '[Event "B"]\n\n1. c4 {note} *\n\n'
+          '[Event "C"]\n\n1. d4 d5 *',
+    );
+    expect(trainedIdsOf(chapter).last, 'line_ZDQgZDV8MQ');
+  });
+
   test('a renamed line keeps its bytes: its id does not change', () {
     final edited = renamedLine(chapter, game: 0, name: 'Spanish');
     final after = pinned(edited);

@@ -152,6 +152,28 @@ void main() {
     },
   );
 
+  test('a saved draft index restores the game below a PGN escape', () async {
+    const file =
+        '[Event "A"]\n% {\n\n1. e4 *\n\n'
+        '[Event "B"]\n\n1. c4 {note} *\n\n'
+        '[Event "C"]\n\n1. d4 d5 *';
+    final revision = scriptedRevision(file);
+    store.documents[ref] = Opened(file, revision);
+    final drafts = _MemoryDrafts()
+      ..kept[ref.path] = ViewerDraft(
+        path: ref.path,
+        game: 1,
+        revision: revision,
+        text: file.replaceFirst('d5 *', 'd5 {my note} *'),
+      );
+    final run = _Run(store, drafts);
+    await run.session.open(ref, game: 0);
+    await until(() => run.offer != null);
+    await run.keeper.restore();
+    expect(run.session.tree!.mainLine.last.comment, 'my note');
+    run.kill();
+  });
+
   test('renaming the file moves its checkpoint, and discarding leaves none '
       'under either name', () async {
     final drafts = _MemoryDrafts();
