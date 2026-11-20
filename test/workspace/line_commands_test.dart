@@ -2,8 +2,12 @@
 // deciding which branch is the main line, and which side the chapter is for.
 // Each of them has to reach the disk, and each has to leave the games it did
 // not name exactly as they were.
+import 'dart:convert';
+
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
+import 'package:chess_auto_prep/chess/training/schedule.dart';
+import 'package:chess_auto_prep/chess/training/training_line.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
@@ -117,6 +121,51 @@ void main() {
     expect(fixture.onDisk, contains('[Event "Slav"]'));
     expect(fixture.session.cursor.value, const NodePath.root());
   });
+
+  test(
+    'deleting the first line’s moves keeps the other line’s review',
+    () async {
+      final fixture = await openSession(
+        '[Event "King pawn"]\n[LineID "x"]\n\n1. e4 *\n\n'
+        '[Event "Queen pawn"]\n[LineID "x"]\n\n1. d4 *\n',
+      );
+      addTearDown(fixture.dispose);
+      final session = fixture.session;
+      List<TrainingLine> lines() =>
+          trainingLines(session.chapter!, source: fixture.ref.path);
+      final [kingPawn, queenPawn] = lines();
+      expect(kingPawn.key.id, 'x');
+      expect(queenPawn.key, isNot(kingPawn.key));
+      final reviews = {
+        for (final line in [kingPawn, queenPawn])
+          line.key: Review(
+            key: line.key,
+            lineName: line.name,
+            lastRating: 'good',
+            due: DateTime.utc(2026, 11, 20 + line.game),
+          ),
+      };
+
+      final before = fixture.onDisk;
+      deleteFrom(session, pathOfSans(session.tree!, ['e4'])!);
+      await fixture.saver.flush();
+      expect(
+        changeOutsideScope(
+          previous: utf8.encode(before),
+          next: utf8.encode(fixture.onDisk),
+          scope: fixture.store.requestedSaves.single.scope,
+        ),
+        isNull,
+      );
+      await session.open(fixture.ref);
+      final remaining = lines().single;
+      expect(remaining.moves.single.san, 'd4');
+      expect(
+        (remaining.key, reviews[remaining.key]?.due),
+        (queenPawn.key, reviews[queenPawn.key]!.due),
+      );
+    },
+  );
 
   test('changing the side writes the Color line and turns the board', () async {
     final fixture = await openSession(threeLines);
