@@ -1,11 +1,15 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:chess_auto_prep/chess/pgn/chapter_heading.dart';
+import 'package:chess_auto_prep/storage/chapter_directory.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/workspace/document/generated_draft.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
+import '../storage/store_fixture.dart';
 import '../support/scripted_store.dart';
 
 void main() {
@@ -31,6 +35,39 @@ void main() {
     expect((result as DraftWritten).ref, second);
     expect((await store.open(first) as Opened).text, 'existing');
   });
+
+  test(
+    'a section with a slash has a discoverable draft beside its course',
+    () async {
+      final disk = await StoreFixture.create();
+      addTearDown(disk.dispose);
+      final course = disk.ref('repertoires/Main/Course.pgn');
+      await disk.put(
+        course,
+        '[Event "Italian"]\n[ChapterName "Open/Semi-Open"]\n\n1. e4 e5 *\n',
+      );
+      final files = ChapterDirectory(
+        Directory(p.join(disk.documents.path, 'repertoires')),
+        recovery: disk.store.recovery,
+      );
+      final before = await files.list() as Repertoires;
+      final source = before.folders.single.chapters.single;
+      expect(source.name, 'Open/Semi-Open');
+
+      final draft = GeneratedDraft(
+        documents: disk.store,
+        folder: p.dirname(source.path),
+        chapter: source.name,
+        textFor: (name) => '// Draft\n\n[Event "$name"]\n\n1. e4 e5 *\n',
+      );
+      final written = await draft.write() as DraftWritten;
+      expect(p.dirname(written.ref.path), p.dirname(course.path));
+      final after = await files.list() as Repertoires;
+      expect(draftsBeside(source, after.folders.single.chapters), [
+        written.ref,
+      ]);
+    },
+  );
 
   test('a failed write says why and a second try writes the draft', () async {
     final store = ScriptedDocumentStore()
@@ -109,6 +146,67 @@ void main() {
           '/Documents/repertoires/Main/$name.pgn',
           heading: heading,
         );
+
+    test(
+      'same-named sections in two courses cannot select the same draft',
+      () async {
+        const section = 'Open/Semi-Open';
+        final folder = p.dirname(source.path);
+        ChapterRef course(String file) =>
+            ChapterRef.at(p.join(folder, file), section: section);
+        final italian = course('Italian.pgn');
+        final spanish = course('Spanish.pgn');
+        final store = ScriptedDocumentStore();
+        final made = await publishDraft(
+          newDraftBeside(italian, [italian, spanish])!,
+          documents: store,
+          textFor: (_) => '// Draft\n\n1. e4 e5 *',
+        );
+        final draft = ChapterRef.at(
+          (made as DraftWritten).ref.path,
+          heading: marked,
+        );
+        expect(draftsBeside(spanish, [italian, spanish, draft]), isEmpty);
+      },
+    );
+
+    test(
+      'literal backslash draft filenames occupy their numbered slots',
+      () async {
+        const section = r'Main\Sidelines';
+        final folder = p.dirname(source.path);
+        final course = ChapterRef.at(
+          p.join(folder, 'Course.pgn'),
+          section: section,
+        );
+        final store = ScriptedDocumentStore();
+        final drafts = <ChapterRef>[];
+        for (var n = 1; n <= 20; n++) {
+          final suffix = n == 1 ? '(draft)' : '(draft $n)';
+          final ref = ChapterRef.at(
+            p.join(folder, '$section $suffix.pgn'),
+            heading: marked,
+          );
+          drafts.add(ref);
+          store.documents[ref] = Opened(
+            'existing',
+            scriptedRevision('existing'),
+          );
+        }
+        expect(draftsBeside(course, drafts), orderedEquals(drafts));
+        expect(newDraftBeside(course, drafts.take(19))?.number, 20);
+        expect(newDraftBeside(course, drafts), isNull);
+        final made = await GeneratedDraft(
+          documents: store,
+          folder: folder,
+          chapter: section,
+          textFor: (_) => '// Draft\n\n1. e4 *',
+        ).write();
+        expect((made as DraftNotWritten).reason, contains('Too many drafts'));
+        expect(store.documents, hasLength(20));
+      },
+      skip: Platform.isWindows,
+    );
 
     test('are the ones already there, marked drafts, in its folder', () {
       final chapters = [
