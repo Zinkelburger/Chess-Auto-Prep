@@ -210,8 +210,13 @@ final class LichessLoginApi implements LichessLogin {
         final String code => await _exchange(code, verifier, redirect),
         _ => const LoginFailed(LoginProblem.http),
       };
-      // A grant that arrives after Cancel is not the user's to keep.
-      return attempt == _attempt ? outcome : const LoginCancelled();
+      if (attempt == _attempt) return outcome;
+      // A grant that arrives after Cancel is not the user's to keep, and
+      // nothing here keeps it: Lichess is asked to forget it.
+      if (outcome case LoggedIn(:final account)) {
+        unawaited(revoke(account.token));
+      }
+      return const LoginCancelled();
     } on TimeoutException {
       log.w('log into Lichess', 'no callback in ${wait.inMinutes} minutes');
       return const LoginFailed(LoginProblem.timedOut);

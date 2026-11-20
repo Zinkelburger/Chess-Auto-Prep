@@ -74,7 +74,10 @@ place of Lichess's, keeping its id and place (one Lichess no longer has is
 added again); every other chapter is added, the first one into a new study
 taking the place of its empty chapter. The link of each chapter Lichess makes
 is written back as `ChapterURL`, one undoable edit, so the next send updates
-instead of duplicating. The dialog shows `Sending chapter 3 of 7…`, then
+instead of duplicating. A study left before Lichess answered takes its links on
+disk; a chapter moved or changed during the send takes none. When any link is
+not written the dialog says the chapters went but sending again adds them
+again. The dialog shows `Sending chapter 3 of 7…`, then
 `Sent to lichess.org/study/<id> · 2 added · 5 updated`, **Open on Lichess**,
 and a line saying Lichess keeps moves, comments, glyphs and arrows but not
 engine evaluations (its graph comes from its own computer analysis). Not

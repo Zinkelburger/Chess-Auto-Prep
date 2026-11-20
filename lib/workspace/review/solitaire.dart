@@ -471,10 +471,7 @@ final class Solitaire extends ChangeNotifier {
   }
 
   /// The move number of the game's first move, from its starting position.
-  int get _firstMoveNumber {
-    final fen = _session.tree?.rootFen.value.split(' ');
-    return fen == null || fen.length < 6 ? 1 : int.tryParse(fen[5]) ?? 1;
-  }
+  int get _firstMoveNumber => _session.tree?.rootFen.fullMove ?? 1;
 
   NodePath get _startPath {
     if (fromStart) return const NodePath.root();

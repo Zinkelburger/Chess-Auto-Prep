@@ -155,12 +155,18 @@ void main() {
     });
   });
 
-  test('cancelling during the token exchange discards the grant', () async {
+  test('cancelling during the token exchange discards and revokes the '
+      'grant', () async {
     final listener = _CallbackListener();
     final page = Completer<Uri>();
     final exchanging = Completer<void>();
     final token = Completer<http.Response>();
+    final revoked = Completer<String?>();
     final client = MockClient((request) async {
+      if (request.url.path == '/api/token' && request.method == 'DELETE') {
+        revoked.complete(request.headers['Authorization']);
+        return http.Response('', 204);
+      }
       if (request.url.path == '/api/token') {
         exchanging.complete();
         return token.future;
@@ -199,6 +205,11 @@ void main() {
     await loggingIn;
     expect(writes, 0);
     expect(owner.status, isA<SignedOut>());
+    // Lichess issued a token nobody here keeps; it must not stay valid.
+    expect(
+      await revoked.future.timeout(const Duration(seconds: 5)),
+      'Bearer lip_grant',
+    );
   });
 
   test('a stalled browser launcher times out and frees the account', () {

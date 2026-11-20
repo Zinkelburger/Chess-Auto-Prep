@@ -45,7 +45,6 @@ final class PlayerPosition {
     required this.fen,
     required this.side,
     required this.line,
-    required this.game,
     required this.ply,
     this.start = Fen.initial,
   });
@@ -56,7 +55,6 @@ final class PlayerPosition {
   /// began at, to [fen].
   final List<String> line;
   final Fen start;
-  final int game;
   final int ply;
   final Set<int> _games = {};
   final Map<String, int> _moves = {};
@@ -184,7 +182,6 @@ PlayerCorpus buildPlayerCorpus(Set<String> names, List<PlayerGame> sources) {
             fen: fen,
             side: side,
             line: List.of(line),
-            game: index,
             ply: ply,
             start: tree.rootFen,
           ),
