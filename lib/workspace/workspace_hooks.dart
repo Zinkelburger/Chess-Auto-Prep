@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
@@ -30,6 +32,7 @@ final class WorkspaceHooks {
     this.boardClaim,
     this.lesson,
     this.trainingTools = false,
+    this.onShapeEdit,
     this.onStudyLesson,
     this.onBoardMove,
     this.onEngineMove,
@@ -60,6 +63,7 @@ final class WorkspaceHooks {
   /// Whether editing offers the quiz markers a study's training reads.
   final bool studyTools;
   final bool trainingTools;
+  final ValueChanged<VoidCallback>? onShapeEdit;
   final VoidCallback? onStudyLesson;
 
   /// Under the heading: what the mode has to say about the game before it
@@ -122,7 +126,7 @@ final class WorkspaceHooks {
 
   /// Where the moves of a clicked engine line go when not into the
   /// document: the explorer Book's free board or a puzzle's stored moves.
-  final ValueChanged<String>? onEngineMove;
+  final FutureOr<void> Function(String)? onEngineMove;
 
   /// Plays a database move under the same puzzle restrictions as engine moves.
   final ValueChanged<String>? onExplorerMove;

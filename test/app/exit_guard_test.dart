@@ -116,6 +116,29 @@ void main() {
     fixture.store.releaseAll();
   });
 
+  test(
+    'fresh navigation gets its own decision while a save finishes',
+    () async {
+      fixture.store.hold = true;
+      edit('one');
+      final question = _Question(waits: true);
+      final guard = guardWith(question);
+      final asked = question.first;
+      final old = guard.mayLeaveDocument();
+      guard.cancelNavigation();
+      final fresh = guard.mayLeaveDocument();
+      expect(await old, isA<Stay>());
+      final shared = guard.mayLeaveDocument();
+      await asked;
+      expect(question.asked, hasLength(1));
+      fixture.store.hold = false;
+      fixture.store.releaseAll();
+      expect(await fresh, isA<Go>());
+      expect(await shared, isA<Go>());
+      expect(question.withdrawn, 1);
+    },
+  );
+
   test('a question about leaving does not answer one about closing', () async {
     diskFull();
     edit('one');

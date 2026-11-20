@@ -37,6 +37,7 @@ class BoardAndCounter extends StatefulWidget {
     this.editing,
     this.quiet = false,
     this.engineInBoard = true,
+    this.onShapeEdit,
     this.noteShown,
   });
 
@@ -62,6 +63,7 @@ class BoardAndCounter extends StatefulWidget {
 
   /// Training provides the shared engine in its Analysis tool pane.
   final bool engineInBoard;
+  final ValueChanged<VoidCallback>? onShapeEdit;
 
   /// Where a move made on the board or typed into the field goes.
   final ValueChanged<String> onMove;
@@ -160,6 +162,7 @@ class _BoardAndCounterState extends State<BoardAndCounter>
                   settings: widget.settings,
                   analysis: widget.analysis,
                   editing: widget.editing,
+                  onShapeEdit: widget.onShapeEdit,
                   onMove: widget.onMove,
                 ),
                 // Room for the field's name on its border.
@@ -236,6 +239,7 @@ class _ColumnBoard extends StatelessWidget {
     required this.settings,
     required this.analysis,
     required this.editing,
+    required this.onShapeEdit,
     required this.onMove,
   });
 
@@ -243,6 +247,7 @@ class _ColumnBoard extends StatelessWidget {
   final SettingsStore settings;
   final EngineAnalysis analysis;
   final ValueNotifier<bool>? editing;
+  final ValueChanged<VoidCallback>? onShapeEdit;
   final ValueChanged<String> onMove;
 
   @override
@@ -256,6 +261,8 @@ class _ColumnBoard extends StatelessWidget {
     // A comment's line on the board is read, not played on.
     builder: (context, _) {
       final keeps = drawsIntoComment(session, editing: editing?.value ?? false);
+      final apply = onShapeEdit ?? (VoidCallback edit) => edit();
+
       return BoardView(
         fen: session.cursor.boardFen,
         orientation: session.orientation,
@@ -265,8 +272,10 @@ class _ColumnBoard extends StatelessWidget {
         coordinates: settings.value.boardCoordinates,
         shapes: shapesOnBoard(session),
         threat: threatOnBoard(session, analysis.threat.value),
-        onDraw: keeps ? (shape) => drawIntoComment(session, shape) : null,
-        onClear: keeps ? () => clearCommentShapes(session) : null,
+        onDraw: keeps
+            ? (shape) => apply(() => drawIntoComment(session, shape))
+            : null,
+        onClear: keeps ? () => apply(() => clearCommentShapes(session)) : null,
       );
     },
   );

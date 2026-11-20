@@ -22,6 +22,10 @@ final class DocumentCursor implements ValueListenable<NodePath> {
   final _path = ValueNotifier<NodePath>(const NodePath.root());
   final _commentLine = ValueNotifier<CommentLine?>(null);
 
+  /// An explicit jump supersedes a pending move even when Home stays at root.
+  int get navigation => _navigation;
+  int _navigation = 0;
+
   /// The move the cursor is on; the root before the first move.
   @override
   NodePath get value => _path.value;
@@ -79,6 +83,7 @@ final class DocumentCursor implements ValueListenable<NodePath> {
   /// Moves the cursor; a path not in the tree is ignored. Going to the move
   /// the cursor is already on still puts the board back on the file.
   void goTo(NodePath path) {
+    _navigation++;
     final tree = _tree();
     if (path == value) closeCommentLine();
     if (tree == null || path == value) return;

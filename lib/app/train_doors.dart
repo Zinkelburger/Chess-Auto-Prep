@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../features/trainer/trainer.dart';
 import '../features/trainer/trainer_state.dart';
+import '../workspace/latest.dart';
 import '../workspace/workspace.dart';
 import '../workspace/workspace_tabs.dart';
 import 'mode.dart';
@@ -57,22 +58,102 @@ final class TrainDoors {
     view().show(WorkspaceTab.train);
   }
 
+  Ticket? _study;
+  ({Record source, Ticket ticket, Future<RequestResult> ready})? _copy;
+
+  bool get analyzing =>
+      mounted() &&
+      requests.mode == Mode.trainer &&
+      view().layout.shows(WorkspaceTab.analysis);
+
+  /// A board gesture or database row edits the document position. The
+  /// explicit Analysis command copies the displayed Book continuation too.
+  Future<void> analysisBoard([void Function()? edit]) async {
+    if (trainer.board.value != null) {
+      if (edit == null) await studyLesson();
+      return;
+    }
+    if (_study?.current ?? false) return;
+    final session = workspace.session;
+    if (session.shownTo != null) return;
+    if (!session.isScratch) {
+      session.snapshot();
+      final book = edit == null ? workspace.tree.board.value : null;
+      Record source() => (
+        session.chapter,
+        session.cursor.value,
+        session.cursor.navigation,
+        session.cursor.commentLine.value,
+        session.orientation,
+        book == null || !workspace.tree.watching
+            ? book
+            : workspace.tree.board.value,
+      );
+      final from = source();
+      final position = session.cursor.boardFen;
+      var copy = _copy;
+      if (copy == null || copy.ticket.overtaken || copy.source != from) {
+        bool current() =>
+            analyzing && trainer.board.value == null && source() == from;
+        final line = book == null
+            ? null
+            : [for (final move in workspace.tree.offFile) move.uci];
+        final ready = requests.newAnalysisBoard(
+          continuation: line,
+          current: current,
+        );
+        final ticket = requests.navigation;
+        _study = null;
+        _copy = copy = (source: from, ticket: ticket, ready: ready);
+      }
+      try {
+        if (await copy.ready is! RequestDone ||
+            copy.ticket.overtaken ||
+            !session.isScratch ||
+            session.cursor.boardFen != position) {
+          return;
+        }
+      } finally {
+        if (_copy == copy) _copy = null;
+      }
+    }
+    if (analyzing && trainer.board.value == null) edit?.call();
+  }
+
+  /// Builder can keep the trainer's file without issuing a document request.
+  void left() {
+    if ((_study?.current ?? false) || (_copy?.ticket.current ?? false)) {
+      requests.cancelPending(withdrawQuestion: true);
+    }
+    _study = null;
+    _copy = null;
+  }
+
   Future<void> studyLesson() async {
     final trainer = this.trainer;
     final lesson = trainer.lesson;
-    if (lesson == null || lesson.suspended) return;
+    if (lesson == null || trainer.board.value == null) return;
     final line = lesson.line;
     final shown = lesson.drill.shown;
+    final page = requests.documents.tabs.selected;
     trainer.suspend();
-    final result = await requests.openLine(
+    final opening = requests.openLine(
       root: line.start,
       sans: line.moves.map((m) => m.san).toList(),
       ply: shown,
       side: line.side,
+      current: () => mounted() && trainer.lesson == lesson && lesson.suspended,
     );
-    if (!mounted() || trainer.lesson != lesson) return;
-    if (result is! RequestDone) {
-      trainer.resume();
+    final ticket = _study = requests.navigation;
+    final result = await opening;
+    if (_study != ticket) return;
+    _study = null;
+    if (!mounted() || trainer.lesson != lesson || !lesson.suspended) return;
+    if (result is! RequestDone || ticket.overtaken) {
+      if (requests.documents.tabs.selected == page &&
+          view().layout.shows(WorkspaceTab.train)) {
+        trainer.resume();
+      }
       return;
     }
     if (!view().layout.isOpen(WorkspaceTab.analysis)) {

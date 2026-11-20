@@ -168,6 +168,7 @@ class _BoardSide extends StatelessWidget {
                 editing: hooks.noteEditing && !view._notesUp ? editing : null,
                 quiet: hooks.quietBoard,
                 engineInBoard: !hooks.trainingTools,
+                onShapeEdit: hooks.onShapeEdit,
                 noteShown: _NoteRoom.of(context),
                 settings: workspace.settings,
                 analysis: workspace.analysis,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../ui/theme.dart';
@@ -8,7 +10,7 @@ import 'engine_pane.dart';
 class TrainingAnalysisPane extends StatefulWidget {
   const TrainingAnalysisPane({super.key, required this.workspace, this.onMove});
   final Workspace workspace;
-  final ValueChanged<String>? onMove;
+  final FutureOr<void> Function(String)? onMove;
 
   @override
   State<TrainingAnalysisPane> createState() => _TrainingAnalysisPaneState();

@@ -149,6 +149,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     if (mode == _shown) return;
     if (_shown case final left?) {
       final previous = _views[left]!;
+      if (left == Mode.trainer) _trainDoors.left();
       if (left != Mode.trainer &&
           previous.tabs.selected == WorkspaceTab.analysis) {
         previous.tabs.show(WorkspaceTab.moves);
@@ -226,11 +227,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   late final _sitting = SittingInView(
     trainer: _train.lines,
     requests: _requests,
-    trainTabOpen: () => _view.layout.visible.any(
-      (i) =>
-          !_view.layout.isEmpty(i) &&
-          _view.layout.pane(i).selected == WorkspaceTab.train,
-    ),
+    trainTabOpen: () => _view.layout.shows(WorkspaceTab.train),
   );
   late final _puzzle = PuzzleInView(
     puzzles: _train.puzzles,
@@ -263,6 +260,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     settingRows: widget.settingRows,
     settingsAlso: widget.settingsAlso,
     importCourse: () => unawaited(_trainDoors.importCourse()),
+    trainerAnalysis: _trainDoors.analysisBoard,
   );
 
   /// The window's keys over the workspace's, and the mouse's buttons.
@@ -310,6 +308,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
 
   @override
   void dispose() {
+    _trainDoors.left();
     _requests.removeListener(_modeMayHaveChanged);
     _ws.jobs?.removeListener(_jobChanged);
     _ws.inspection?.removeListener(_analysisChanged);
@@ -360,18 +359,37 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// move on the board is the puzzle's, or the document's.
   void _boardMove(String uci) {
     if (_ws.solitaire?.play(uci) == true) return;
+    if (_trainDoors.analyzing) {
+      unawaited(_engineMove(uci));
+      return;
+    }
     _ws.tree.watching ? _ws.tree.play(uci) : _train.puzzles.play(uci);
   }
 
   /// A clicked engine line goes to the Book's free board, follows stored
   /// moves on a revealed puzzle, or plays into the document.
-  void _engineMove(String uci) => _suggestedMove(uci, book: _ws.tree.watching);
+  Future<void>? _engineMove(String uci) =>
+      _suggestedMove(uci, book: _ws.tree.watching);
 
-  void _suggestedMove(String uci, {bool book = false}) {
+  Future<void>? _suggestedMove(String uci, {bool book = false}) {
     final puzzle = _train.puzzles.up;
-    if (puzzle?.finished == false) return;
-    if (book) return _ws.tree.play(uci);
-    _ws.session.playMove(uci, existingOnly: puzzle != null);
+    if (puzzle?.finished == false || _train.lines.board.value != null) {
+      return null;
+    }
+    final session = _ws.session;
+    if (book) {
+      _ws.tree.play(uci);
+    } else if (_trainDoors.analyzing && !session.isScratch) {
+      if (session.cursor.commentLine.value != null) return null;
+      final before = session.cursor.value;
+      session.playMove(uci, existingOnly: true);
+      if (session.cursor.value == before) {
+        return _trainDoors.analysisBoard(() => session.playMove(uci));
+      }
+    } else {
+      session.playMove(uci, existingOnly: puzzle != null);
+    }
+    return null;
   }
 
   /// The body of a tab the workspace does not draw: the mode's own first,
@@ -621,6 +639,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         boardClaim: _inspecting ? null : _claim,
         lesson: _inspecting ? null : _train.lines.board,
         trainingTools: _requests.mode == Mode.trainer,
+        onShapeEdit: _trainDoors.analyzing ? _trainDoors.analysisBoard : null,
         onStudyLesson: _requests.mode == Mode.trainer
             ? () => unawaited(_trainDoors.studyLesson())
             : null,

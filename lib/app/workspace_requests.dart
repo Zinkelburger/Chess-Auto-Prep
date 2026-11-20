@@ -152,6 +152,9 @@ final class WorkspaceRequests extends ChangeNotifier {
 
   Mode get mode => _mode;
 
+  /// Whether a caller still owns the navigation it just started.
+  Ticket get navigation => _asked.now;
+
   /// What the bar under the top bar says; null when it says nothing.
   String? get status => _status;
 
@@ -658,7 +661,10 @@ final class WorkspaceRequests extends ChangeNotifier {
 
   /// A separate analysis tab with the entire current game, its variations
   /// and comments, positioned and oriented exactly like the source.
-  Future<RequestResult> newAnalysisBoard() async {
+  Future<RequestResult> newAnalysisBoard({
+    List<String>? continuation,
+    bool Function()? current,
+  }) async {
     if (_session.shownTo != null) return const RequestDropped();
     final ticket = _nextRequest();
     _session.snapshot();
@@ -672,18 +678,23 @@ final class WorkspaceRequests extends ChangeNotifier {
       ),
       side,
     );
-    if (ticket.overtaken) return const RequestDropped();
+    if (ticket.overtaken || current?.call() == false) {
+      return const RequestDropped();
+    }
     final leave = await _leavingFile();
     if (ticket.overtaken || leave == null) return const RequestDropped();
-    final shown = await _session.showAnalysisBoard(board);
+    final shown = await _session.showAnalysisBoard(board, current);
     if (!shown || ticket.overtaken) return const RequestDropped();
     _session.cursor.goTo(cursor);
     // A read-only line preview belongs only in the new scratch tab. Preserve
     // the full source game and insert the visible line as a variation there.
-    if (preview != null) {
+    if (preview != null && continuation == null) {
       for (final move in preview.moves.take(preview.at + 1)) {
         _session.playMove(move.uci);
       }
+    }
+    for (final uci in continuation ?? const <String>[]) {
+      _session.playMove(uci);
     }
     _saidCopy(leave);
     return const RequestDone();
@@ -697,12 +708,14 @@ final class WorkspaceRequests extends ChangeNotifier {
     required List<String> sans,
     required int ply,
     required Side side,
+    bool Function()? current,
   }) async {
     final ticket = _nextRequest();
     final leave = await _leavingFile();
     if (ticket.overtaken || leave == null) return const RequestDropped();
     final shown = await _session.showAnalysisBoard(
       boards.analysisBoard(side: side, root: root, sans: sans),
+      current,
     );
     if (!shown || ticket.overtaken) return const RequestDropped();
     if (_session.tree case final tree?) {
@@ -958,7 +971,8 @@ final class WorkspaceRequests extends ChangeNotifier {
   };
 
   /// Supersedes navigation already in flight, including a read in the session.
-  void cancelPending() {
+  void cancelPending({bool withdrawQuestion = false}) {
+    if (withdrawQuestion) _leaving.cancelNavigation();
     _asked.cancel();
     _session.cancelOpening();
   }

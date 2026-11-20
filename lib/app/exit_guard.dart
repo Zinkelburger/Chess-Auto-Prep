@@ -158,7 +158,10 @@ final class ExitGuard {
 
   Future<LeaveAnswer> _mayGo(_Away kind) {
     final asked = _deciding[kind];
-    if (asked != null) return asked;
+    final cancelled =
+        kind == _Away.document &&
+        (_navigationCancellation?.isCompleted ?? false);
+    if (asked != null && !cancelled) return asked;
     // A question already on screen is answered first: two at once, and the
     // button pressed on one would decide the other.
     final cancellation = kind == _Away.document ? Completer<void>() : null;
@@ -167,7 +170,9 @@ final class ExitGuard {
     _deciding[kind] = decided;
     return decided.whenComplete(() {
       // The entry removed is [decided] itself, which has just completed.
-      unawaited(_deciding.remove(kind));
+      if (identical(_deciding[kind], decided)) {
+        unawaited(_deciding.remove(kind));
+      }
       if (identical(_navigationCancellation, cancellation)) {
         _navigationCancellation = null;
       }

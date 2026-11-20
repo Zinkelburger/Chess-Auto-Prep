@@ -44,6 +44,7 @@ final class WindowActions {
     required this.settingRows,
     required this.settingsAlso,
     required this.importCourse,
+    required this.trainerAnalysis,
   });
 
   final WorkspaceRequests requests;
@@ -69,6 +70,7 @@ final class WindowActions {
 
   /// A course PGN into the repertoires, then its Train tab.
   final VoidCallback importCourse;
+  final Future<void> Function() trainerAnalysis;
 
   ModeView get _view => view();
 
@@ -161,7 +163,24 @@ final class WindowActions {
   Future<void> analyze() async {
     training.puzzles.inspectAlternative();
     documents.autoplay.stop();
-    _view.tabs.add(WorkspaceTab.analysis.tab);
+    final view = _view;
+    if (view is TrainerView) {
+      final layout = view.layout;
+      if (training.lines.board.value != null && layout.count > 1) {
+        // The lesson takes keyboard focus. Keep Train visible while opening
+        // Analysis in a neighbouring pane, where help stays concealed.
+        final pane = view.tabs.selected == WorkspaceTab.train
+            ? layout.visible.firstWhere((i) => i != layout.active)
+            : layout.active;
+        layout.show(pane, WorkspaceTab.analysis);
+        return;
+      }
+      final opening = trainerAnalysis();
+      layout.show(layout.active, WorkspaceTab.analysis);
+      await opening;
+      return;
+    }
+    view.tabs.add(WorkspaceTab.analysis.tab);
   }
 
   Future<void> _saveCopy(BuildContext context) async {

@@ -231,9 +231,17 @@ class Trainer extends ChangeNotifier {
   }
 
   Future<void> _checkRetained(Lesson lesson, TrainerReady state) async {
-    final unchanged = await _chapters.unchanged(state.chapters);
-    if (_disposed || !identical(_lesson, lesson) || unchanged) return;
-    await _load(force: true);
+    while (!await _chapters.unchanged(state.chapters)) {
+      // The catalog can see the saved file before the saver adopts its
+      // receipt. Check the revisions that _saved advanced once it has.
+      await _session.writeInFlight;
+      if (_disposed || _lesson != lesson) return;
+      final latest = _state;
+      if (latest is! TrainerReady || identical(latest, state)) {
+        return _load(force: true);
+      }
+      state = latest;
+    }
   }
 
   /// The book in use as the last load saw it.
@@ -253,6 +261,7 @@ class Trainer extends ChangeNotifier {
     final returning =
         _retained &&
         _lesson != null &&
+        _session.persistedChange == null &&
         _session.source?.path == _read?.ref?.path;
     if (!returning &&
         revision == _savedRevision &&
@@ -280,6 +289,7 @@ class Trainer extends ChangeNotifier {
     if (path != null &&
         state is TrainerReady &&
         receipt != null &&
+        state.chapters.where((c) => c.ref.path == path).length <= 1 &&
         state.progress.documentSaved(
           path,
           receipt.beforeRevision,
@@ -564,7 +574,7 @@ class Trainer extends ChangeNotifier {
   /// preserve the original source until it changes or Back to lines is chosen.
   void _follow() {
     if (selection.active) {
-      if (_lesson != null && _session.source != _read?.ref) suspend();
+      if (board.value != null && _session.source != _read?.ref) suspend();
       final state = _state;
       if (state is TrainerReady &&
           _session.source != null &&

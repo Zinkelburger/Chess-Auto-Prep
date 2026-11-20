@@ -213,6 +213,9 @@ final class ActionLayout extends ChangeNotifier {
   PaneTabs<WorkspaceTab> pane(int index) => _panes[index];
   bool isOpen(WorkspaceTab tab) => visible.any((i) => openIn(i).contains(tab));
 
+  bool shows(WorkspaceTab tab) =>
+      visible.any((i) => !isEmpty(i) && pane(i).selected == tab);
+
   /// Whether pane [index] was added empty and nothing was opened in it yet.
   bool isEmpty(int index) => _empty.contains(index);
 

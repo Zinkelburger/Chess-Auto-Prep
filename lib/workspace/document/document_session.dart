@@ -53,6 +53,7 @@ final class DocumentSession extends ChangeNotifier {
   Revision? get trainingSourceRevision => _saver.trainingSourceRevision;
   store.Receipt? get persistedChange => _saver.lastReceipt;
   Listenable get persistedChanges => _saver;
+  Future<void>? get writeInFlight => _saver.writeInFlight;
 
   /// Active chapter and optional file/section projection, replaced atomically.
   ({Chapter chapter, SectionView? view})? _shown;
@@ -421,13 +422,13 @@ final class DocumentSession extends ChangeNotifier {
   /// The analysis board as it was left or, given [board], [board] on a new
   /// one, or on the one up when nothing was played or edited on it. False
   /// when another document was asked for meanwhile, or the session went.
-  Future<bool> showAnalysisBoard([Chapter? board]) {
+  Future<bool> showAnalysisBoard([Chapter? board, bool Function()? current]) {
     if (board == null) return _selectAnalysis(_board, leftAsIs: _leftAsIs);
     final leftAsIs = _leftAsIs;
     _editors.commit();
-    final blank = isScratch && _board.isBlank(_chapter);
     return _selectAnalysis(
-      blank ? _board : KeptBoard(board),
+      isScratch && _board.isBlank(_chapter) ? _board : KeptBoard(board),
+      current: current,
       fresh: board,
       leftAsIs: leftAsIs,
     );
@@ -445,6 +446,7 @@ final class DocumentSession extends ChangeNotifier {
   Future<bool> _selectAnalysis(
     KeptBoard page, {
     Chapter? fresh,
+    bool Function()? current,
     required bool leftAsIs,
   }) async {
     if (_disposed) return false;
@@ -454,7 +456,7 @@ final class DocumentSession extends ChangeNotifier {
     final ticket = _opens.begin();
     final file = !isScratch;
     if (file) await _switching(ticket, _saver.flush);
-    if (ticket.overtaken) return false;
+    if (ticket.overtaken || current?.call() == false) return false;
     // Words nobody was asked about that the file will not take keep it up,
     // where the screen says why, as they do when another file is asked for.
     if (file && !leftAsIs && !_saver.settled) return false;

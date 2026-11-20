@@ -93,6 +93,7 @@ final class DocumentSaver extends ChangeNotifier {
 
   SaveState get state => _state;
   Revision? get revision => _target?.revision;
+  Future<void>? get writeInFlight => _writing ? _clock._inFlight : null;
 
   /// The opened source, advanced only by our own proven publication chain.
   Revision? get trainingSourceRevision => _trainingSourceRevision;

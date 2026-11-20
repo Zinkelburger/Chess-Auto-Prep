@@ -2,6 +2,7 @@ import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/features/library/library_panel.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/workspace/board/board_view.dart';
 import 'package:chess_auto_prep/workspace/board/move_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -160,6 +161,77 @@ void main() {
     expect(find.text('That move is not legal here.'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('analysis beside Train keeps exploratory moves off the chapter', (
+    tester,
+  ) async {
+    await openKid(tester);
+    final original = kidOnDisk();
+    w.requests.switchTo(Mode.trainer);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open tools and arrange panes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, 'Analysis'));
+    await tester.pumpAndSettle();
+
+    await clickField(tester);
+    await tester.enterText(field, 'Nf6');
+    await tester.pumpAndSettle();
+    expect(tester.widget<BoardView>(find.byType(BoardView)).lastMove, 'g8f6');
+    await w.saver.flush();
+    expect(kidOnDisk(), original);
+  });
+
+  testWidgets('reselecting the chapter with Analysis visible protects it too', (
+    tester,
+  ) async {
+    await openKid(tester);
+    final original = kidOnDisk();
+    w.requests.switchTo(Mode.trainer);
+    await tester.pumpAndSettle();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(w.session.isScratch, isTrue);
+    await w.requests.documents.select(kidMain);
+    await tester.pumpAndSettle();
+    expect(w.session.source, kidMain);
+
+    await clickField(tester);
+    await tester.enterText(field, 'Nf6');
+    await tester.pumpAndSettle();
+    expect(w.session.isScratch, isTrue);
+    expect(w.session.cursor.currentMove?.uci, 'g8f6');
+    await w.saver.flush();
+    expect(kidOnDisk(), original);
+  });
+
+  testWidgets(
+    'leaving trainer while analysis opens keeps the builder chapter',
+    (tester) async {
+      await openKid(tester);
+      w.store.hold = true;
+      w.session.playMove('g8f6');
+      final saving = w.saver.flush();
+      await tester.pump();
+      expect(w.store.waiting, greaterThan(0));
+
+      w.requests.switchTo(Mode.trainer);
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      w.requests.switchTo(Mode.repertoires);
+      w.store.hold = false;
+      w.store.releaseAll();
+      await saving;
+      await tester.pumpAndSettle();
+      expect(w.session.source, kidMain);
+      expect(w.session.cursor.currentMove?.uci, 'g8f6');
+      expect(kidOnDisk(), contains('1... Nf6'));
+    },
+  );
 
   testWidgets('on the analysis board a typed move is taken back by Ctrl+Z', (
     tester,

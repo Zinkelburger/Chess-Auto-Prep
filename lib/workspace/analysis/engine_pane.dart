@@ -57,7 +57,7 @@ class EnginePane extends StatefulWidget {
   final int coresAvailable;
 
   /// Where a clicked line's moves go; null plays them into the document.
-  final ValueChanged<String>? onMove;
+  final FutureOr<void> Function(String)? onMove;
 
   @override
   State<EnginePane> createState() => _EnginePaneState();
@@ -109,11 +109,16 @@ class _EnginePaneState extends State<EnginePane>
 
   /// Plays the line up to and including [index]. A move that does not
   /// land, because the document refused it, ends the walk there.
-  void _play(List<PvMove> moves, int index) {
+  Future<void> _play(List<PvMove> moves, int index) async {
     _leave();
-    final play = widget.onMove ?? widget.session.playMove;
+    final FutureOr<void> Function(String) play =
+        widget.onMove ?? widget.session.playMove;
     for (final move in moves.take(index + 1)) {
-      play(move.uci);
+      final pending = play(move.uci);
+      if (pending is Future<void>) {
+        await pending;
+        if (!mounted) return;
+      }
       if (widget.analysis.position != move.after) return;
     }
   }
@@ -169,7 +174,7 @@ class _EnginePaneState extends State<EnginePane>
       moves: moves,
       onHover: _hover,
       onLeave: _leave,
-      onTap: (index) => _play(moves, index),
+      onTap: (index) => unawaited(_play(moves, index)),
     );
   }
 }
