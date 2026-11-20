@@ -23,6 +23,11 @@ import 'game_runner_test.dart' show ScriptEngine, config;
 final class _Store implements TournamentStore, TournamentNotifications {
   final base = ScriptedTournaments();
   final changed = StreamController<void>.broadcast();
+  Future<void> dispose() async {
+    await changed.close();
+    await base.dispose();
+  }
+
   String? failList;
   String? failEngines;
   List<String> engineWarnings = const [];
@@ -110,8 +115,7 @@ void main() {
   });
   tearDown(() async {
     run.dispose();
-    await store.changed.close();
-    await store.base.dispose();
+    await store.dispose();
   });
 
   test('a refresh keeps the run selected while it is listed, and selects '

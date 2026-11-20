@@ -12,8 +12,8 @@ import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/storage/tournaments.dart';
-import 'package:chessground/chessground.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
+import 'package:chessground/chessground.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

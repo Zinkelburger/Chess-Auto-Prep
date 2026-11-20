@@ -330,7 +330,7 @@ void main() {
       ),
       [
         ScriptEngine([...whiteKnights], score: score),
-        ScriptEngine([...?black ?? blackKnights], score: score),
+        ScriptEngine([...(black ?? blackKnights)], score: score),
       ],
     );
 

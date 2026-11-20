@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:chess_auto_prep/chess/fen.dart';
-import 'package:chess_auto_prep/chess/tournament/config.dart';
 import 'package:chess_auto_prep/engines/engine.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/engines/playing_engine.dart';
