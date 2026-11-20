@@ -417,6 +417,44 @@ void main() {
     expect(books.shareOf(books.chosen!, course), BookShare.some);
   });
 
+  test(
+    'an unnamed course chapter can be kept on its own after reload',
+    () async {
+      const path = '/repertoires/Course/Course.pgn';
+      final unnamed = ChapterRef.at(path);
+      final named = ChapterRef.at(path, section: 'Najdorf');
+      final course = RepertoireFolder(
+        name: 'Course',
+        path: '/repertoires/Course',
+        modified: DateTime(2026),
+        chapters: [unnamed, named],
+      );
+      final whole = books.create('Whole course')!;
+      books.setRepertoire(whole, course, true);
+      books.setChapter(whole, course, named, false);
+      final empty = books.create('From scratch')!;
+      books.setChapter(empty, course, unnamed, true);
+      await books.settled;
+
+      final reopened = Books(
+        store: MemoryBooks(BookList.decode(store.books.encode())),
+        root: '/repertoires',
+      );
+      addTearDown(reopened.dispose);
+      await reopened.load();
+      expect(
+        {
+          for (final book in reopened.books)
+            book.name: (
+              reopened.contains(book, unnamed),
+              reopened.contains(book, named),
+            ),
+        },
+        {'Whole course': (true, false), 'From scratch': (true, false)},
+      );
+    },
+  );
+
   test('deleting the book in use leaves none in use', () {
     final book = books.create('Spring')!;
     books.delete(book);
