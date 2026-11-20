@@ -70,10 +70,8 @@ final class TrapTraining {
       requests.say('This line starts where the chapter does not.');
       return;
     }
-    final holder = _plays(chapter, kept)
-        ? source
-        : await _chapterPlaying(source, kept);
-    if (session.source != source) return;
+    final holder = await _chapterPlaying(source, kept);
+    if (session.source != source || session.chapter != chapter) return;
     if (holder != null) {
       if (await requests.readInBuilder(holder, sans) is! RequestDone) {
         return;
@@ -154,17 +152,25 @@ final class TrapTraining {
     return newDraftBeside(source, chapters);
   }
 
-  /// The first other chapter of [source]'s repertoire that plays the line.
+  /// Prefer the open chapter, then a sibling whose main line can be drilled.
   Future<ChapterRef?> _chapterPlaying(ChapterRef source, KeptFind kept) async {
     final folder = library.repertoires
         .where((f) => f.chapters.any((ref) => ref.path == source.path))
         .firstOrNull;
-    for (final ref in folder?.chapters ?? const <ChapterRef>[]) {
-      if (ref == source) continue;
-      final chapter = await library.chapterForSearch(ref);
-      if (chapter != null && _plays(chapter, kept)) return ref;
+    final siblings = folder?.chapters.where((ref) => ref != source);
+    ChapterRef? holding;
+    for (final ref in [source, ...?siblings]) {
+      final chapter = ref == source
+          ? session.chapter
+          : await library.chapterForSearch(ref);
+      if (chapter == null || !_plays(chapter, kept)) continue;
+      holding ??= ref;
+      if (await trainer.lineThrough(ref, chapter, kept.find.sans) != null) {
+        return ref;
+      }
     }
-    return null;
+    // A line already in the repertoire should not be copied to a draft.
+    return holding;
   }
 
   /// Whether the chapter on the board, the draft, now plays the line.

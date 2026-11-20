@@ -66,6 +66,69 @@ void main() {
     session.dispose();
   });
 
+  test('training a shared prefix uses the open course chapter', () async {
+    const path = '/repertoires/KID/Course.pgn';
+    const text = '''
+// Color: White
+
+[Event "Long line"]
+[ChapterName "A"]
+[LineID "long"]
+
+1. e4 e5 2. Nf3 *
+
+[Event "Short line"]
+[ChapterName "B"]
+[LineID "short"]
+
+1. e4 e5 *
+''';
+    final a = ChapterRef.at(path, section: 'A');
+    final b = ChapterRef.at(path, section: 'B');
+    chapters.listing = Repertoires([
+      RepertoireFolder(
+        name: 'KID',
+        path: '/repertoires/KID',
+        modified: DateTime(2026),
+        chapters: [a, b],
+      ),
+    ]);
+    session.store.documents[a.wholeFile] = Opened(text, scriptedRevision(text));
+    await session.session.open(a);
+    trainer.setScope(TrainScope.repertoire);
+
+    expect(await trainer.trainLineThrough(['e4', 'e5']), isTrue);
+    final ready = trainer.state as TrainerReady;
+    expect(ready.chapters.map((c) => c.ref), [a, b]);
+    expect(trainer.lesson!.line.key, (source: path, id: 'long'));
+  });
+
+  test('a path-only reference can train the sole named chapter', () async {
+    final path = session.ref.path;
+    final named = ChapterRef.at(path, section: 'Italian');
+    const text = '''
+// Color: White
+
+[Event "Line"]
+[ChapterName "Italian"]
+
+1. e4 e5 2. Nf3 *
+''';
+    chapters.listing = Repertoires([
+      RepertoireFolder(
+        name: 'KID',
+        path: '/repertoires/KID',
+        modified: DateTime(2026),
+        chapters: [named],
+      ),
+    ]);
+    session.externalEdit(text);
+    await session.session.reloadFromDisk();
+    trainer.setScope(TrainScope.repertoire);
+    expect(await trainer.trainLineThrough(['e4']), isTrue);
+    expect(trainer.lesson!.line.name, 'Line');
+  });
+
   test('an unreadable chapter is left out and the rest are trained', () {
     fakeAsync((clock) {
       session.store.documents[ref('KID', 'Other')] = const Unreadable(

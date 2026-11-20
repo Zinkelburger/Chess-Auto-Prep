@@ -446,21 +446,61 @@ class Trainer extends ChangeNotifier {
   /// as a trap from the Positions list. The chapter as it stands now is
   /// read first. False when no such line can be trained.
   Future<bool> trainLineThrough(List<String> sans) async {
+    final ref = _session.source;
+    final chapter = _session.chapter;
+    if (ref == null || chapter == null) return false;
     await _load(force: true);
+    final line = await lineThrough(ref, chapter, sans);
+    if (line == null || ref != _session.source || chapter != _session.chapter) {
+      return false;
+    }
+    trainLine(line);
+    return _lesson != null;
+  }
+
+  /// The shortest drillable main line in the open or prospective chapter.
+  Future<TrainingLine?> lineThrough(
+    ChapterRef ref,
+    Chapter chapter,
+    List<String> sans,
+  ) async {
+    show();
     await _loadsSettled();
     final state = _state;
-    final source = _session.source?.path;
-    if (_disposed || state is! TrainerReady || source == null) return false;
+    if (_disposed || state is! TrainerReady) return null;
+    final file = state.chapters.where((c) => c.ref.path == ref.path);
+    final observed = file.firstOrNull?.revision;
+    final revision = _session.trainingSourceRevision;
+    final here = ref == _session.source;
+    if (here &&
+        (observed, observed?.nativeIdentity) !=
+            (revision, revision?.nativeIdentity)) {
+      return null;
+    }
+    // A path-only ref can open a sole named chapter with the same line keys.
+    late final local = trainingLines(chapter, source: ref.path);
+    final lines = !here && _scope != TrainScope.book
+        ? local
+        : file.where((c) => c.ref == ref).firstOrNull?.lines ??
+              local.map((line) => state.lineOf(line.key)).nonNulls;
+    var reviews = state.progress.reviews;
+    if (!here && file.isEmpty) {
+      final read = await _files.read({ref.path});
+      if (read is! ProgressLoaded) return null;
+      reviews = read.reviews;
+    }
     bool plays(TrainingLine line) =>
-        line.key.source == source &&
+        line.start == chapter.tree.rootFen &&
+        line.side == chapter.side &&
         line.moves.length >= sans.length &&
         [for (final move in line.moves.take(sans.length)) move.san].join(' ') ==
-            sans.join(' ');
-    final holding = state.lines.where(plays).toList()
+            sans.join(' ') &&
+        !line.modelGame &&
+        line.yourMoves > 0 &&
+        reviews[line.key]?.excluded != true;
+    final holding = lines.where(plays).toList()
       ..sort((a, b) => a.moves.length.compareTo(b.moves.length));
-    if (holding.isEmpty) return false;
-    trainLine(holding.first);
-    return _lesson != null;
+    return holding.firstOrNull;
   }
 
   /// Waits out a read that a later change of chapter started meanwhile.
