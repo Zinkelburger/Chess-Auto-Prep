@@ -2,7 +2,6 @@ import 'package:dartchess/dartchess.dart' show Side;
 
 import '../chess/generation/draft_chapter.dart';
 import '../chess/pgn/chapter.dart';
-import '../chess/pgn/chapter_heading.dart';
 import '../chess/pgn/tree_edit.dart';
 import '../features/library/library.dart';
 import '../features/trainer/trainer.dart';
@@ -112,10 +111,10 @@ final class TrapTraining {
     final made = await publishDraft(
       target,
       documents: documents,
-      textFor: (name) => draftHeading(
+      textFor: (name) => emptyDraftText(
         name: name,
-        side: chapter.side,
-        rootMoves: readHeading(chapter.preamble).rootMoves,
+        source: chapter,
+        firstMove: kept.find.sans.first,
         created: _now(),
       ),
     );

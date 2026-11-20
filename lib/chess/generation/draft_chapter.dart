@@ -126,6 +126,48 @@ String draftHeading({
     '${rootLine(rootMoves)}'
     '// Created on ${created.toString().split('.').first}\n\n';
 
+/// A new draft with no moves, starting at [source]'s actual position.
+/// An imported game can supply a FEN the chapter heading cannot reproduce.
+String emptyDraftText({
+  required String name,
+  required Chapter source,
+  required String firstMove,
+  required DateTime created,
+}) {
+  final root = source.tree.rootFen;
+  final heading = readHeading(source.preamble);
+  final headingRoot = heading.rootFen;
+  final preamble = draftHeading(
+    name: name,
+    side: source.side,
+    rootMoves: headingRoot.position == root.position
+        ? heading.rootMoves
+        : const [],
+    created: created,
+  );
+  if (headingRoot == root) return preamble;
+  final white = source.side == Side.white;
+  // Adding the line will extend this game. Give it the id that appending
+  // its first move to an empty chapter would have assigned.
+  final first = mainlineSans(lineTree(root, [firstMove]));
+  final tags = [
+    const PgnTag('Event', 'Repertoire Line'),
+    PgnTag('White', white ? 'Me' : 'Training'),
+    PgnTag('Black', white ? 'Training' : 'Me'),
+    const PgnTag('Result', '*'),
+    PgnTag('FEN', root.value),
+    const PgnTag('SetUp', '1'),
+    if (first.isNotEmpty) PgnTag('LineID', newLineId(first, 0, {})),
+  ];
+  final game = writeGameText(
+    tags,
+    GameTree(rootFen: root),
+    terminator: '*',
+    separator: '\n',
+  );
+  return '$preamble$game\n';
+}
+
 /// [sans], played from [chapter]'s start, added to it as one edit — one
 /// undo, and the cursor stays where it is. The moves it already holds are
 /// followed and the rest written as the board writes a move ([addMove]),

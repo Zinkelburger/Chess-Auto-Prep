@@ -4,6 +4,8 @@ import 'package:chess_auto_prep/chess/generation/eval.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_heading.dart';
+import 'package:chess_auto_prep/chess/pgn/line_id_pins.dart';
+import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
 import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
@@ -15,28 +17,32 @@ import '../support/scripted_files.dart';
 import '../support/scripted_store.dart';
 import '../support/window_fixture.dart';
 
-Fen board(String name) => Fen('$name w - - 0 1');
-
-/// A search in which, after 1.e4, the likely 1...f6 loses: a trap.
-final trapTree = OurNode.over(
-  fen: Fen.initial,
+/// A search in which the likely reply f6 to e4 loses.
+OurNode trapTree(Fen root) => OurNode.over(
+  fen: root,
   evalForUs: const Eval(30),
   candidates: [
     CandidateMove(
       move: const MoveRef(uci: 'e2e4', san: 'e4'),
       child: OpponentNode.over(
-        fen: board('after-e4'),
+        fen: lineTree(root, const ['e4']).children.single.fen,
         evalForUs: const Eval(30),
         replies: [
           ReplyMove(
             move: const MoveRef(uci: 'e7e5', san: 'e5'),
             probability: 0.6,
-            child: HorizonNode(fen: board('e5'), evalForUs: const Eval(0)),
+            child: HorizonNode(
+              fen: lineTree(root, const ['e4', 'e5']).mainLine.last.fen,
+              evalForUs: const Eval(0),
+            ),
           ),
           ReplyMove(
             move: const MoveRef(uci: 'f7f6', san: 'f6'),
             probability: 0.4,
-            child: HorizonNode(fen: board('f6'), evalForUs: const Eval(250)),
+            child: HorizonNode(
+              fen: lineTree(root, const ['e4', 'f6']).mainLine.last.fen,
+              evalForUs: const Eval(250),
+            ),
           ),
         ],
       ),
@@ -72,9 +78,10 @@ void main() {
     if (listed) w.chapterFiles.listing = kidWith(const []);
     await w.library.refresh();
     await w.session.open(main);
+    final root = w.session.chapter!.tree.rootFen;
     await w.parts.workspace.finds.record(
-      trapTree,
-      rootFen: Fen.initial,
+      trapTree(root),
+      rootFen: root,
       prefix: const [],
       side: Side.white,
       elo: 1800,
@@ -148,6 +155,38 @@ void main() {
     expect((w.store.documents[draft]! as Opened).text, contains('1. e4 f6'));
   });
 
+  for (final (description, setup) in [
+    (
+      'imported PGN setup position',
+      const Fen('rnbqkbnr/ppp1pppp/8/3p4/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2'),
+    ),
+    ('imported move counters', Fen('${Fen.initial.position} 8 17')),
+  ]) {
+    testWidgets('a new trap draft preserves the $description and writes the '
+        'first move’s line ID', (tester) async {
+      await openWith(
+        tester,
+        '// Color: White\n\n[Event "Imported"]\n[Result "*"]\n'
+        '[SetUp "1"]\n[FEN "${setup.value}"]\n\n${setup.fullMove}. c4 *\n',
+      );
+      await listEveryFind(tester);
+      await trainTheTrap(tester);
+      await tester.tap(find.text('Add and train'));
+      await tester.pumpAndSettle();
+      await w.saver.flush();
+
+      final draft = ChapterRef.at('/repertoires/KID/Main (draft).pgn');
+      final saved = await w.library.chapterForSearch(draft);
+      expect(saved?.tree.rootFen, setup);
+      expect(mainlineSans(saved!.tree), ['e4', 'f6']);
+      final id = newLineId(['e4'], 0, {});
+      expect(saved.lines.single.lineId, id);
+      expect(saved.lines.single.nameAt(0), 'Repertoire Line');
+      expect(w.lineTrainer.lesson?.line.key.id, id);
+      expect(w.lineTrainer.lesson?.line.start, setup);
+    });
+  }
+
   testWidgets('a trap no chapter plays, the draft declined, goes nowhere', (
     tester,
   ) async {
@@ -193,7 +232,7 @@ void main() {
     await w.library.refresh();
     await w.session.open(main);
     await w.parts.workspace.finds.record(
-      trapTree,
+      trapTree(Fen.initial),
       rootFen: Fen.initial,
       prefix: const [],
       side: Side.white,
