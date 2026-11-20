@@ -764,7 +764,7 @@ void main() {
       fixture.session.closed();
       // More stubs than one sitting takes, ahead of the one real line.
       final stubs = [
-        for (var i = 0; i < learnSitting + 2; i++)
+        for (var i = 0; i < const TrainingOptions().learnLimit + 2; i++)
           '[Event "Stub $i"]\n\n1. e4 *\n',
       ].join('\n');
       fixture.externalEdit(

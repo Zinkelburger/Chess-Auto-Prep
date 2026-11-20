@@ -17,7 +17,6 @@ void main() {
       fen: Fen.initial,
       side: Side.white,
       line: const [],
-      game: 0,
       ply: 0,
     );
     final finding = PlayerWeakness(position, const Centipawns(26), const [
