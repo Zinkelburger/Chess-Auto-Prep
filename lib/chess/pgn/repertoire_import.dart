@@ -178,14 +178,9 @@ final class _Game {
 
   bool get hasMoves => read.tree?.children.isNotEmpty ?? false;
 
-  String? tag(String key) => tagValue(read.tags, key);
-
   /// A game with a result is somebody's finished game: its brackets are
   /// annotation, not repertoire, and it is kept as it is.
-  bool get isComplete {
-    final result = (tag('Result') ?? '*').trim();
-    return result.isNotEmpty && result != '*';
-  }
+  bool get isComplete => isFinishedRepertoireGame(read.tags, read.terminator);
 }
 
 // ---------------------------------------------------------------------------
@@ -247,6 +242,15 @@ _Grouping _grouping(List<_Game> games) {
 /// bracket at the opponent's move is coverage, one at ours is the author
 /// naming a move they do not recommend.
 const branchPliesHeader = 'BranchPlies';
+
+/// An expanded sideline can carry its source game's termination marker.
+/// Only a result in the sideline's own headers says that it finished.
+bool isFinishedRepertoireGame(List<PgnHeader> tags, String? terminator) {
+  final header = tagValue(tags, 'Result');
+  if (header == null && tagValue(tags, branchPliesHeader) != null) return false;
+  final result = (header ?? terminator ?? '*').trim();
+  return result.isNotEmpty && result != '*';
+}
 
 /// [game]'s root-to-leaf paths as games of their own, in reading order: the
 /// main line first, then each sideline where it branches, the way the

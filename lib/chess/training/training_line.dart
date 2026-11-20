@@ -7,6 +7,7 @@ import '../pgn/comment_text.dart' show hasToken;
 import '../pgn/game_text.dart';
 import '../pgn/game_tree.dart';
 import '../pgn/line_id_pins.dart';
+import '../pgn/repertoire_import.dart' show isFinishedRepertoireGame;
 import '../pgn/study.dart';
 import '../pgn/tree_edit.dart' show nullMoveSan;
 import 'schedule.dart';
@@ -173,8 +174,7 @@ bool _isModelGame(ChapterLine line) {
       tagValue(line.tags, 'ModelGameResult') != null) {
     return true;
   }
-  final result = tagValue(line.tags, 'Result')?.trim() ?? '*';
-  return result.isNotEmpty && result != '*';
+  return isFinishedRepertoireGame(line.tags, line.terminator);
 }
 
 /// `[CumProb "0.1253"]`, a likelihood from 0 to 1; null for any other

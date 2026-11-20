@@ -6,6 +6,9 @@ import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/line_id_pins.dart';
 import 'package:chess_auto_prep/chess/pgn/pgn_reader.dart';
 import 'package:chess_auto_prep/chess/pgn/repertoire_import.dart';
+import 'package:chess_auto_prep/chess/training/schedule.dart';
+import 'package:chess_auto_prep/chess/training/sitting.dart';
+import 'package:chess_auto_prep/chess/training/training_line.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -106,6 +109,72 @@ void main() {
 ''');
     expect(read.lines, 1);
     expect(read.chapters.single.text, contains('(1... c5)'));
+  });
+
+  test('a movetext result keeps an annotated game whole and out of Learn', () {
+    final read = imported('[Event "Practice"]\n\n1. e4 (1. d4) e5 1-0');
+    final chapter = chapterOf(read.chapters.single);
+    expect(chapter.lines, hasLength(1));
+    final game = chapter.lines.single;
+    expect(game.terminator, '1-0');
+    final moves = game.tree!.children;
+    expect(moves.map((m) => m.san), ['e4', 'd4']);
+    expect(moves.first.children.single.san, 'e5');
+    final lines = trainingLines(chapter, source: 'Practice.pgn');
+    expect(lines.single.modelGame, isTrue);
+    expect(toLearn(lines, const {}, created), isEmpty);
+  });
+
+  test('a saved sideline with a copied result keeps its due review', () {
+    const saved = '''
+[Event "Practice"]
+
+1. e4 e5 1-0
+
+[Event "Practice — 1...c5"]
+[BranchPlies "1"]
+
+1. e4 c5 1-0
+''';
+    const key = (source: 'Practice.pgn', id: 'line_ZTQgYzV8MQ');
+    final chapter = parseChapter(name: 'Main', text: saved);
+    final lines = trainingLines(chapter, source: key.source);
+    final review = Review(
+      key: key,
+      lineName: 'Practice — 1...c5',
+      lastRating: 'good',
+      due: created,
+    );
+    expect(dueNow(lines, {key: review}, created).single.key, key);
+  });
+
+  test('a sideline still honors explicit result and model-game tags', () {
+    for (final (header, modelGame) in [
+      ('[Result "0-1"]', true),
+      ('[Result "*"]', false),
+      ('[ModelGameWhite "Fischer"]', true),
+      ('[ModelGameResult "1-0"]', true),
+    ]) {
+      final chapter = parseChapter(
+        name: 'Main',
+        text: '[Event "Line"]\n[BranchPlies "1"]\n$header\n\n1. e4 c5 1-0',
+      );
+      final lines = trainingLines(chapter, source: 'Practice.pgn');
+      expect(lines.single.modelGame, modelGame, reason: header);
+    }
+  });
+
+  test('reimport expands new variations on a previously imported sideline', () {
+    final read = imported(
+      '[Event "Practice — 1...c5"]\n[BranchPlies "1"]\n\n'
+      '1. e4 c5 2. Nf3 (2. Nc3) 1-0',
+    );
+    final chapter = chapterOf(read.chapters.single);
+    final lines = trainingLines(chapter, source: 'Practice.pgn');
+    expect(toLearn(lines, const {}, created).map((l) => l.moves.last.san), [
+      'Nf3',
+      'Nc3',
+    ]);
   });
 
   test('a Lichess study export is one chapter per ChapterName', () {
