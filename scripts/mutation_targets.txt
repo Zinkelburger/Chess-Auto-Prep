@@ -15,15 +15,14 @@
 # them; none does yet):
 #   lib/app/board_doors.dart:49; lib/app/player_views.dart:87-88 (a race);
 #   lib/app/workspace_wiring.dart:234 (the evaluator choice);
-#   lib/features/tactics/my_games.dart:255 (one of two username writes
-#     failing), :294/:303 (the queue-retry path), :449;
-#   lib/features/tactics/puzzle_trainer.dart:325, :634 (cancelling an
-#     alternative-answer check in flight).
+#   lib/features/tactics/source_game_pane.dart:138 (the Game tab's move
+#     list brought to a new game's move when the list itself stays: each
+#     puzzle tried so far builds the list afresh).
 # Swept and not listed for other reasons: lib/app/app.dart and lib/main.dart
 # (native startup, integration only) and lib/features/library/
 # library_messages.dart (no mutants). Every other lib/ file not named in this
-# list has not been swept: lib/features is part done (tactics_set.dart was
-# being triaged), and both new_chapter_dialog.dart files and
+# list has not been swept: lib/features is part done, and both
+# new_chapter_dialog.dart files and
 # lib/features/databases/database_library.dart are still to run.
 #
 # Not listed: files whose only survivors are equivalent mutants, which no
@@ -560,6 +559,43 @@
 #     study_recovery_dialog.dart (:81, :92, :95, :117, :152) and
 #     study_send_dialog.dart (:156, :209): padding, line counts, a flex, a
 #     held problem line, a live region.
+# lib/features/tactics, with equivalent mutants a --max 30 sample can draw:
+#   lib/features/tactics/tactics_set.dart:86 the seed's start (the
+#     constructor draws one), :151 the queue memo's seed (it changes only
+#     with the filter, which already misses the memo), :177 `||` -> `&&`
+#     before the parse (the same check after it drops an overtaken read,
+#     and being overtaken never clears), :180, :221 which game the chapter
+#     shows (the set reads every line), :276 `==` -> `!=` (a new seed on
+#     leaving Random instead of on picking it: each Random still gets its
+#     own order).
+#   lib/features/tactics/puzzle_filters.dart:169 `?? false` -> true (a
+#     two-state box never answers null).
+#   lib/features/tactics/my_games.dart:180 the `0` new puzzles outside a
+#     review (read only while one runs, whose status carries the count),
+#     :294 the `0` added of a start from any other status (games are left
+#     queued only by a pause or a failure, matched above), :303 and the
+#     `reviewed` count (no app code reads it), :358 `_pausing`'s `false`
+#     default (a review starts only from Downloading or Reviewing), :414
+#     the kept flag's start (a failed download leaves nothing to compare),
+#     :418 the log of an incomplete download, :512 `<` -> `<=` at exactly
+#     200 saved games (the download asks for 200, not 20; the extra games
+#     are saved already and dropped), :537 the first progress count.
+#   lib/features/tactics/puzzle_state.dart:103 `found + 1` -> `+ 2` (it
+#     is read just after the solver's own move, when `found` is odd).
+#   lib/features/tactics/puzzle_trainer.dart:33 the advance delay, :522
+#     `||` -> `&&` in `_bringUp` (every caller makes the same check just
+#     before, with no wait between), :646-648 the advance timer's checks
+#     as it fires (disposing, suspending and turning auto-advance off each
+#     cancel it, and each change of the puzzle up cancels it or moves its
+#     target along).
+#   Only a widget's look survives in
+#     lib/features/tactics/puzzle_filters.dart (:32, :192),
+#     lib/features/tactics/puzzle_pane.dart (:95, :253),
+#     lib/features/tactics/tactics_actions.dart (:75 the icon),
+#     lib/features/tactics/tactics_panel.dart (:147, :331) and
+#     lib/features/tactics/my_games_block.dart (:22 filled or outlined by
+#     default, :39, :73, :101, :129, :235 the icon, :309, :311 which field
+#     takes focus): padding, line counts, a divider.
 # lib/features/trainer, with equivalent mutants a --max 30 sample can draw:
 #   lib/features/trainer/trainer_state.dart: no mutant compiles (the
 #     unused `study = false` default was made required: every caller names it).
@@ -937,6 +973,8 @@ lib/features/study/study_commands.dart|test/features/study/study_chapters_test.d
 lib/features/study/quiz_menu.dart|test/features/study/quiz_menu_test.dart|
 lib/features/study/study_import_source.dart|test/features/study/study_import_source_test.dart test/features/study/study_import_preview_test.dart|test/features/study/studies_test.dart test/features/study/study_panel_test.dart
 lib/features/study/study_actions.dart|test/features/study/study_actions_test.dart test/features/study/study_panel_test.dart test/features/study/study_panel_menus_test.dart|test/app/study_lichess_send_test.dart test/app/document_views_test.dart
+# lib/features/tactics
+lib/features/tactics/my_games_words.dart|test/features/tactics/my_games_words_test.dart|test/features/tactics/my_games_test.dart
 # lib/features/trainer
 lib/features/trainer/trainer_words.dart|test/features/trainer/trainer_words_test.dart test/storage/training_rows_test.dart|test/features/trainer/train_pane_test.dart test/features/trainer/trainer_test.dart
 lib/features/trainer/training_scope.dart|test/features/trainer/training_scope_test.dart test/features/trainer/trainer_scope_test.dart|test/features/trainer/trainer_test.dart test/features/trainer/training_workspace_test.dart test/features/trainer/lesson_fit_test.dart test/features/trainer/train_pane_test.dart

@@ -3,7 +3,7 @@
  * depth, "Show threat", the gear, a progress bar, and the engine lines.
  * Hovering a line shows its first move on the board; hovering a move in it
  * shows a small board of that position (the wheel steps along the line);
- * clicking a move plays the line up to it. When the engine waits for the
+ * pressing a move plays the line up to it. When the engine waits for the
  * player (a phone's first download) or has failed, one button starts it.
  * Screen readers hear the evaluation once a search ends, not every update.
  * Fairy-Stockfish on the bughouse board and Stockfish on the PGN page both use it;
@@ -54,6 +54,8 @@ export interface CevalOptions {
 
 export interface CevalState {
   enabled: boolean;
+  /** The engine's name as shown, when the page names more than the engine (the board searched). */
+  title?: string;
   /** The position searched: the current one, or with the other side to move in threat mode. */
   fen: string;
   ply: number;
@@ -137,13 +139,17 @@ export class CevalView {
       const index = Math.max(0, Math.min(this.hovered.moves.length - 1, this.hovered.index + (e.deltaY > 0 ? 1 : -1)));
       this.drawBoard(this.hovered.moves, index);
     }, { passive: false });
-    pvs.addEventListener('click', (e) => {
+    const pick = (e: Event) => {
       const move = (e.target as HTMLElement).closest<HTMLElement>('.ch-pv-move');
       const row = move?.closest<HTMLElement>('.ch-pv');
       if (!move || !row || this.state?.threat) return;
       this.hideBoard();
       hooks.play(row.dataset.pv!.split(' '), Number(move.dataset.index));
-    });
+    };
+    // On press, as lila does: the rows are redrawn with every engine update, so a
+    // release can land on a new row and a click would be lost. Keys still click.
+    pvs.addEventListener('pointerdown', (e) => { if (e.button === 0) { e.preventDefault(); pick(e); } });
+    pvs.addEventListener('click', (e) => { if (e.detail === 0) pick(e); });
   }
 
   render(state: CevalState) {
@@ -155,7 +161,7 @@ export class CevalView {
     threat.hidden = !state.enabled || state.inCheck || !!state.over || !!state.unplayable;
     threat.setAttribute('aria-pressed', String(state.threat));
     const { engineName } = this.options;
-    name.textContent = state.threat ? 'Show threat' : engineName;
+    name.textContent = state.threat ? 'Show threat' : state.title ?? engineName;
     // The running engine's thread count, for the browser test: the gear's label changes before the restart.
     if (state.status.kind === 'ready' && state.status.threads !== undefined) name.dataset.threads = String(state.status.threads); else delete name.dataset.threads;
     info.classList.remove('ch-failed');

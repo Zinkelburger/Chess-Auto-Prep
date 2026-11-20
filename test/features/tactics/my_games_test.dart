@@ -287,6 +287,51 @@ void main() {
     );
   });
 
+  test(
+    'a saved game not yet reviewed is reviewed with a new download',
+    () async {
+      final newer = scholarsMate.replaceAll('AbCd1234', 'XyZw9876');
+      r = _Review(
+        accounts: {GameSite.lichess: const Account('Me')},
+        lichess: GamesFetched([newer]),
+      );
+      await r.cache.keep(GameSite.lichess, 'Me', [
+        scholarsMate,
+      ], DateTime(2026));
+      await r.start();
+      expect(await r.cache.all(GameSite.lichess, 'Me'), hasLength(2));
+      expect(
+        analyzedIn(r.setText),
+        containsAll(['lichess_XyZw9876', 'lichess_AbCd1234']),
+        reason: 'the saved file is what is reviewed',
+      );
+    },
+  );
+
+  test('a download that cannot be saved fills the review with distinct '
+      'games: those it shares with the saved ones count once', () async {
+    String game(String prefix, int i) =>
+        scholarsMate.replaceAll('AbCd1234', '$prefix${'$i'.padLeft(6, '0')}');
+    final fresh = [for (var i = 0; i < 5; i++) game('Nw', i)];
+    final shared = [for (var i = 0; i < 10; i++) game('Sh', i)];
+    final older = [for (var i = 0; i < 10; i++) game('Ol', i)];
+    r = _Review(
+      accounts: {GameSite.lichess: const Account('Me')},
+      lichess: GamesFetched([...fresh, ...shared]),
+    );
+    await r.cache.keep(GameSite.lichess, 'Me', [
+      ...shared,
+      ...older,
+    ], DateTime(2026));
+    r.store.saves.add(const IoFailure('disk full'));
+    await r.start();
+    expect(
+      analyzedIn(r.setText).where((id) => id != 'lichess_abc'),
+      hasLength(reviewWindow),
+      reason: 'the 15 fetched and 5 of the older saved ones',
+    );
+  });
+
   test('one failed save leaves the other site saved and reviewed', () async {
     r = _Review();
     r.store.creates.add(const IoFailure('disk full'));

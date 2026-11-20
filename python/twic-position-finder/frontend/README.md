@@ -10,7 +10,7 @@ Static Astro site deployed to Cloudflare Pages. Browser preparation tools, one s
 | `/tactics`            | Tactics Trainer — Stockfish in the browser mines puzzles from games  | `src/tactics/*`                        |
 | `/bughouse`           | Bughouse — one board or both, + and − on every piece in both hands, lila's board editor, and what one more piece is worth; HypeBeast in the browser | `src/analysis/*`, `../../../tools/prepare_hypebeast_web.py` |
 | `/bughouse-puzzles`   | Bughouse Puzzles — mates and tactics mined from FICS games and engine games, reserves frozen | `src/bughouse-puzzles/*`, `public/bughouse-puzzles/` |
-| `/bughouse-games`     | Bughouse Games — annotated engine games, both boards, notes and variations | `src/bughouse-games/*`, `public/bughouse-games/` |
+| `/bughouse-games`     | Bughouse Games — engine games on both boards, with clocks, scores and HypeBeast on request | `src/bughouse-games/*`, `public/bughouse-games/` |
 | `/charles-clock`      | Charles Clock — a full-screen phone clock with its own `<html>`      | `src/pages/charles-clock.astro`, `src/lib/charles-clock.ts` |
 | `/meow-chess/`        | Meow Chess — the Meow-Chess tournament director app, a Flutter web build copied in from its own repository | `public/meow-chess/` (built), `functions/meow-chess/fetch.js` |
 
@@ -273,13 +273,15 @@ Fairy-Stockfish binary:
   pre-check of tactics, and deduplication against the FICS set and per
   opening line. `--scan-cache` and `--verify-log` make a long run resumable,
   and `--export-verified` exports what a stopped run's verify log holds
-  (`--from-candidates` names its candidate file for the count).
+  (`--from-candidates` names its candidate file, so the log gives the share
+  checked; the source sentence on the page leaves it out).
 
-  The published engine set is such a partial mine, and its source line says
-  so: 8,287 games (8,266 HypeBeast self-play, 17 against HiveMind, 4 against
-  Fairy-Stockfish) gave 109,540 distinct candidate positions, of which the
-  first 50,336 were checked (pre-check or full verify) before the run was
-  stopped. 816 were sound; 611 are published (542 mates, 69 tactics) after
+  The published engine set is such a partial mine. The page says only
+  "8,287 engine games played by HypeBeast, most of them against other builds
+  of itself"; the facts are these: 8,287 games (8,266 HypeBeast self-play, 17
+  against HiveMind, 4 against Fairy-Stockfish) gave 109,540 distinct candidate
+  positions, of which the first 50,336 were checked (pre-check or full verify)
+  before the run was stopped. 816 were sound; 611 are published (542 mates, 69 tactics) after
   the mate-in-one rule (the engine found 108 of them), the one-move-tactic
   rule below (95) and the FICS and repeated-line deduplication (2). Of the
   1,177 pre-check rejects verified in full anyway, none was sound.
@@ -355,10 +357,28 @@ app.ts          page controller: play, reply, Solution, Retry, #<id> deep links 
 ```
 
 Solving shows only the board, its two pockets, one feedback box in lila's
-words ("Black to move", then "Best move!" or "Solved!"; no mate count and no
-icon), the moves and four buttons; who played the game and whether they found
-the move stay out of the way. Once a puzzle is over, **Analyse this board**
-opens its position on `/bughouse`.
+words ("Black to move", then "Best move!" or "Solved!"; no mate count, no
+goal and no icon), the moves (two lines tall, scrolling inside when longer)
+and four buttons, with one fixed line under them: "Reserves are frozen: no
+new pieces arrive for either side." The moves are clickable: a click, ←/→,
+Home/End or the two small arrows beside them show an earlier board of the
+line, and the board stays locked until play is back on the latest move. Once a
+puzzle is over, a block under the buttons whose room is kept from the start
+says who played the game ("Plotno (2061) – shadew (2047) · FICS 2017") and
+what the solver's side did there, and **Analyse this board** opens its
+position on `/bughouse`. Nothing on the page moves or changes size while
+solving or at the moment of solving. "Solved after a miss" is drawn neutral,
+not as a failure, though the progress grid records it as missed.
+
+Every control works by keyboard, and the Keys section in Settings lists them.
+The board is one Tab stop: the arrows move a square cursor (drawn only after a
+key is pressed on the board), Enter or Space picks up and puts down, Escape
+puts back, and once a puzzle is over Enter goes to the next. Enter or Space on
+a reserve piece picks it and hands the focus to the board. A polite live line
+says where the cursor is, what was picked and the opponent's reply. The
+progress grid is one Tab stop too (arrows, Home/End, Enter). A tap on a
+reserve piece picks it on a touch screen, as a click does (the analysis board
+on `/bughouse` shares this).
 
 Styles: the shared trainer vocabulary (`src/styles/trainer.css`, also used by
 the Tactics Trainer), the board and pocket in `src/styles/bughouse-board.css`
@@ -367,27 +387,43 @@ analysis boards), plus `src/styles/bughouse-puzzles.css`.
 
 ## Bughouse games
 
-`/bughouse-games` lists annotated bughouse games played by engines (HypeBeast
+`/bughouse-games` lists bughouse games played by engines (HypeBeast
 against itself or another engine) and opens one with both boards as partners
 sit, board B turned the other way. The files under `public/bughouse-games/`
 are written by the HypeBeast repo's builder, never by hand; their format, a
 fixed contract with that builder, is
-[src/bughouse-games/README.md](src/bughouse-games/README.md). The page
-generates no moves: every position is a FEN from the data.
+[src/bughouse-games/README.md](src/bughouse-games/README.md). Every position
+of the game is a FEN from the data. The page shows the moves, clocks, the
+engines' scores and waits; the annotator's summaries, notes, lines and glyphs
+in the files are not shown. The first moves of a game, which come from a
+human game and not from an engine, are labelled as such.
+
+HypeBeast runs on the page itself, off until the reader switches it on (the
+switch above the current move, or L). It then searches the board in focus
+(the current move's board) with both boards as the game has
+them, and follows the reader through the game; finished searches are kept, so
+stepping back shows them at once. The panel is the analysis board's
+(`src/analysis/ceval.ts`, `engine.ts`) and its lines, threads and search time
+are that board's settings. Pressing a move of an engine line shows the line on
+that board under an "Engine line" tag until the reader moves, Esc or **Back
+to the game**; the engine keeps searching the game's position. So the page is
+cross-origin isolated like `/bughouse` (`public/_headers`, `astro.config.mjs`).
 
 ```
 games.ts        types, contract checks (parseIndex, parseGame), #<id>:<move> links, GameStore
-view.ts         the cursor (move, or a line and ply in it) and what each board shows there
-words.ts        line kinds, waits, scores, clocks, seats and results in words
+view.ts         the cursor (a move) and what each board shows there
+words.ts        waits, scores, clocks, seats and results in words
 board.ts        one read-only chessground board with its pockets, engines and clocks
-app.ts          page controller: the list, a game, keys (← → Home End ↑ ↓, N/P notes, F flip, Esc)
+engine.ts       HypeBeast on request for the board in focus, in the analysis board's panel
+app.ts          page controller: the list, a game, keys (← → Home End ↑ ↓, F flip, L engine, Esc)
 ```
 
 `public/_headers` caches `index.json` for ten minutes. Game files are named by
 content hash but share the directory with `index.json`, so no rule marks
 them immutable. `npm run test:games` checks the served files and the pure
 modules; `npm run test:games:browser` drives the built page at desktop,
-1024×768 and phone sizes and writes screenshots to `build/bughouse-games-web/`.
+1024×768 and phone sizes (at desktop it also switches HypeBeast on, opens one
+of its lines and steps on) and writes screenshots to `build/bughouse-games-web/`.
 
 ## Meow Chess
 
@@ -447,6 +483,11 @@ scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test
   failed download and a phone's first visit, and writes screenshots to
   `build/bughouse-web/`.
 - `test:puzzles:browser` drives `/bughouse-puzzles`: the FICS set by default,
-  Settings switching to engine games, one engine puzzle solved on the board,
-  results kept per set, and deep links opening the right set; screenshots
-  also go to `build/bughouse-web/`.
+  Settings switching to engine games, one engine puzzle solved on the board
+  and stepped back through, results kept per set, and deep links opening the
+  right set; then the layout at twelve window sizes (no clipping, the buttons
+  in the first screen), boxes that do not move from loading to the next
+  puzzle at three sizes, touch taps and drags on the reserve, Space on a
+  focused button, a solve by keyboard alone with a drop, contrast, touch
+  target sizes and reduced motion. Screenshots also go to
+  `build/bughouse-web/`.

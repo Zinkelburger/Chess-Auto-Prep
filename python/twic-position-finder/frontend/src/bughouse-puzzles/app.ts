@@ -7,6 +7,10 @@
  * key map follow the Tactics Trainer: a wrong move shows briefly and is
  * taken back, a right one gets the defender's reply, and View solution
  * plays out the rest. The current puzzle's id lives in the URL hash.
+ * Clicking a move, ←/→, Home/End or the step buttons show an earlier board
+ * of the line; the board is locked until play returns to the latest move.
+ * The board can be solved by keyboard alone (board.ts); while it has the
+ * focus the arrows are its own.
  *
  * Solving shows only the board, the task and the moves; choosing puzzles,
  * progress and the notes on the set live in the Settings sheet.
@@ -16,7 +20,7 @@ import { PuzzleBoard } from './board';
 import { Attempt, analysisLink, inCheck, type Puzzle } from './puzzle';
 import {
   DEFAULT_FILTER, DIFFICULTIES, DIFFICULTY_LABELS, LENGTHS, PuzzleStore, SETS, SET_KEY, SET_NAMES, applyFilter, facetCounts,
-  initialSet, lengthLabel, normalizeFilter, parseHash, puzzleHash, setOfId, themeCounts, themeLabel,
+  gameLines, initialSet, lengthLabel, normalizeFilter, parseHash, puzzleHash, setOfId, themeCounts, themeLabel,
   type Filter, type IndexEntry, type KindFilter, type PuzzleIndex, type SetName,
 } from './set';
 
@@ -28,6 +32,9 @@ const THEME_CAP = 8;
 /** The first version's results carry over to the FICS set. */
 const OLD_STORE_KEY = 'bughouse-puzzles-v1';
 interface Saved { version: 2; outcomes: Record<string, Outcome>; filter: Filter; current: string | null }
+
+/** What Space presses itself instead of showing the solution. */
+const CONTROLS = 'button, a[href], summary, label, [role="button"], [role="link"], [role="radio"], [role="checkbox"], [role="option"], [role="tab"], [contenteditable="true"]';
 
 /** How long the opponent's last move is shown arriving before the solver may move. */
 const INTRO_MS = 200;
@@ -70,6 +77,8 @@ export class BughousePuzzlesApp {
   private timer: ReturnType<typeof setTimeout> | null = null;
   /** A wrong move shown on the board until it is taken back. */
   private wrong: string | null = null;
+  /** The number of moves on the board being looked at; null shows the latest. */
+  private view: number | null = null;
   /** Whether the theme facet shows every theme or only the commonest. */
   private themesOpen = false;
   /** Counts up on every `go`, so a slow shard cannot land on a later puzzle. */
@@ -77,6 +86,8 @@ export class BughousePuzzlesApp {
   private feedback: Feedback = 'turn';
   /** Counts up on every set load, so a slow index cannot land after the set changed again. */
   private loading = 0;
+  /** Whether the last input was a pointer (mouse, pen or touch) rather than a key. */
+  private pointer = false;
 
   constructor() {
     this.bind();
@@ -96,7 +107,7 @@ export class BughousePuzzlesApp {
     this.say('turn', 'Loading');
     this.setText('.bp-counter', '— / —');
     for (const id of ['bp-prev', 'bp-next', 'bp-retry', 'bp-solution']) $<HTMLButtonElement>(id).disabled = true;
-    $('bp-analysis-link').hidden = true;
+    this.showAfter(false);
     this.renderFilters();
     let index: PuzzleIndex;
     try {
@@ -113,7 +124,8 @@ export class BughousePuzzlesApp {
     this.all = index.puzzles;
     $('bp-source').textContent = `${index.count} puzzles from ${index.source}. Your results are kept in this browser only.`;
     if (!this.board) {
-      this.board = new PuzzleBoard($('bp-board'), { top: $('bp-seat-top'), bottom: $('bp-seat-bottom') }, (uci) => this.onMove(uci));
+      this.board = new PuzzleBoard($('bp-board'), { top: $('bp-seat-top'), bottom: $('bp-seat-bottom') },
+        { move: (uci) => this.onMove(uci), next: () => this.next() }, $('bp-live'));
     }
     // A deep link wins over the saved place, and over a filter that would hide it.
     if (linked && this.all.some((e) => e.id === linked)) {
@@ -146,6 +158,8 @@ export class BughousePuzzlesApp {
     $('bp-next').onclick = () => this.next();
     $('bp-retry').onclick = () => this.go(this.index);
     $('bp-solution').onclick = () => this.reveal();
+    $('bp-back').onclick = () => this.browse(this.shown - 1);
+    $('bp-forward').onclick = () => this.browse(this.shown + 1);
     $('bp-retry-load').onclick = () => { if (this.all.length) this.go(this.index); else void this.start(); };
     $('bp-clear-filters').onclick = () => this.applyFilter({ ...DEFAULT_FILTER }, this.list[this.index]?.id ?? null);
     const sheet = $<HTMLDialogElement>('bp-settings');
@@ -153,6 +167,13 @@ export class BughousePuzzlesApp {
     $('bp-settings-close').onclick = () => sheet.close();
     // A click on the backdrop (the dialog itself, outside its content) closes it.
     sheet.addEventListener('click', (e) => { if (e.target === sheet) sheet.close(); });
+    $('bp-session').addEventListener('keydown', (e) => this.sessionKey(e));
+    // chessground cancels its presses, so Chrome takes a mouse solve for keyboard use and would ring
+    // the Next button it focuses. The page keeps track itself: a key brings the ring back.
+    const next = $('bp-next');
+    document.addEventListener('pointerdown', () => { this.pointer = true; }, true);
+    document.addEventListener('keydown', () => { this.pointer = false; next.classList.remove('bp-quiet'); }, true);
+    next.addEventListener('blur', () => next.classList.remove('bp-quiet'));
     window.addEventListener('hashchange', () => {
       const id = parseHash(location.hash);
       if (id && setOfId(id) !== this.set) { this.switchSet(setOfId(id), id); return; }
@@ -161,13 +182,20 @@ export class BughousePuzzlesApp {
       else if (id && at < 0 && this.all.some((e) => e.id === id)) this.applyFilter({ ...DEFAULT_FILTER }, id);
     });
     document.addEventListener('keydown', (e) => {
-      if ((e.target as HTMLElement).matches('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement;
+      if (target.matches('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
       if ($<HTMLDialogElement>('bp-settings').open) return;
+      // Space on a focused button, link or other control presses that control.
+      if (e.key === ' ' && target.closest(CONTROLS)) return;
       const key = e.key.toLowerCase();
       if (e.key === 'ArrowUp' || key === 'p') { e.preventDefault(); this.go(this.index - 1); }
       else if (e.key === 'ArrowDown' || key === 's') { e.preventDefault(); this.next(); }
       else if (e.key === ' ') { e.preventDefault(); this.reveal(); }
       else if (key === 'r') { e.preventDefault(); this.go(this.index); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); this.browse(this.shown - 1); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); this.browse(this.shown + 1); }
+      else if (e.key === 'Home') { e.preventDefault(); this.browse(0); }
+      else if (e.key === 'End') { e.preventDefault(); this.browse(this.attempt?.ply ?? 0); }
     });
   }
 
@@ -297,7 +325,9 @@ export class BughousePuzzlesApp {
     this.clearTimer();
     this.index = i;
     this.wrong = null;
+    this.view = null;
     this.attempt = null;
+    this.showAfter(false);
     const entry = this.list[i];
     const generation = ++this.generation;
     this.persist();
@@ -319,6 +349,7 @@ export class BughousePuzzlesApp {
   private open(puzzle: Puzzle) {
     const a = new Attempt(puzzle);
     this.attempt = a;
+    this.board?.resetCursor();
     this.setState('ready');
     this.renderPuzzle();
     const intro = a.intro();
@@ -362,6 +393,7 @@ export class BughousePuzzlesApp {
     this.timer = setTimeout(() => {
       this.timer = null;
       a.reply();
+      this.board!.announce(`${sideName(a.solver === 'white' ? 'black' : 'white')} played ${a.played.at(-1)}`);
       this.say('turn');
       this.renderLine();
       this.renderBoard();
@@ -373,6 +405,7 @@ export class BughousePuzzlesApp {
     if (!a || a.done) return;
     this.clearTimer();
     this.wrong = null;
+    this.view = null;
     const play = () => {
       a.step();
       this.renderLine();
@@ -392,7 +425,28 @@ export class BughousePuzzlesApp {
     this.say(revealed ? 'revealed' : a.failed ? 'fail' : 'win');
     this.renderBoard();
     this.renderSession();
-    $('bp-analysis-link').hidden = false;
+    this.showAfter(true);
+    // Enter or Space goes on: the board keeps the focus if it has it, else Next takes it.
+    const next = $<HTMLButtonElement>('bp-next');
+    if (document.activeElement !== $('bp-board') && !next.disabled) {
+      next.classList.toggle('bp-quiet', this.pointer);
+      next.focus({ preventScroll: true });
+    }
+  }
+
+  /** The game's lines and the analysis link, below the buttons in a block whose room is always kept. */
+  private showAfter(shown: boolean) { $('bp-after').classList.toggle('is-shown', shown); }
+
+  /** How many moves of the line the board shows now. */
+  private get shown(): number { return this.view ?? this.attempt?.ply ?? 0; }
+
+  /** Show the board after `ply` moves; the latest move returns to play. Waits out a reply or a take-back. */
+  private browse(ply: number) {
+    const a = this.attempt;
+    if (!a || this.timer || ply < 0 || ply > a.ply || ply === this.shown) return;
+    this.view = ply === a.ply ? null : ply;
+    this.renderLine();
+    this.renderBoard();
   }
 
   private clearTimer() {
@@ -404,8 +458,9 @@ export class BughousePuzzlesApp {
 
   private renderBoard(showWrong = false, intro: Attempt['pos'] | null = null) {
     const a = this.attempt!;
-    let pos = intro ?? a.pos;
-    let last = intro ? [] : a.last;
+    const past = intro ? null : this.view === null ? null : a.history[this.view];
+    let pos = intro ?? past?.pos ?? a.pos;
+    let last = intro ? [] : past?.last ?? a.last;
     if (showWrong && this.wrong) {
       // Show the wrong move where it landed until it is taken back.
       pos = { ...pos, pieces: { ...pos.pieces } };
@@ -418,9 +473,10 @@ export class BughousePuzzlesApp {
       pos,
       bottom: a.solver,
       solver: a.solver,
-      legal: this.timer || intro || a.done ? [] : a.legal(),
+      legal: this.timer || intro || past || a.done ? [] : a.legal(),
       last,
-      check: !showWrong && !intro && inCheck(a.pos),
+      check: !showWrong && !intro && inCheck(pos),
+      finished: a.done && !past && !intro,
     });
   }
 
@@ -435,9 +491,12 @@ export class BughousePuzzlesApp {
   private renderPuzzle() {
     const a = this.attempt!;
     this.renderNav();
-    const link = $<HTMLAnchorElement>('bp-analysis-link');
-    link.href = analysisLink(a.puzzle);
-    link.hidden = true;
+    $<HTMLAnchorElement>('bp-analysis-link').href = analysisLink(a.puzzle);
+    // Written now, shown when the puzzle is over, so showing them moves nothing.
+    const [game, found] = gameLines(a.puzzle, this.set);
+    $('bp-game').textContent = game;
+    $('bp-found').textContent = found;
+    this.showAfter(false);
     this.renderLine();
   }
 
@@ -447,7 +506,7 @@ export class BughousePuzzlesApp {
     box.replaceChildren();
     const startNo = Number(a.puzzle.fen.split(' ')[5]) || 1;
     const blackStarts = a.solver === 'black';
-    const token = (i: number, san: string, cls: string) => {
+    const token = (i: number, san: string, cls: string, ply: number | null) => {
       const whiteMove = blackStarts ? i % 2 === 1 : i % 2 === 0;
       if (whiteMove || i === 0) {
         const n = document.createElement('span');
@@ -455,13 +514,32 @@ export class BughousePuzzlesApp {
         n.textContent = `${startNo + Math.floor((i + (blackStarts ? 1 : 0)) / 2)}.${whiteMove ? '' : '..'}`;
         box.append(n);
       }
-      const t = document.createElement('span');
-      t.className = `san-token played ${cls}`.trimEnd();
+      // A move of the line is a button that shows the board after it.
+      const t = document.createElement(ply === null ? 'span' : 'button');
+      t.className = `san-token ${ply === null ? 'played ' : ''}${cls}`.trimEnd();
       t.textContent = san;
+      if (t instanceof HTMLButtonElement) {
+        t.type = 'button';
+        t.onclick = () => this.browse(ply!);
+        if (ply === this.shown && !this.wrong) t.setAttribute('aria-current', 'true');
+      }
       box.append(t);
     };
-    a.played.forEach((san, i) => token(i, san, i % 2 === 0 ? 'best' : ''));
-    if (this.wrong) token(a.played.length, this.wrongLabel(this.wrong), 'wrong');
+    const shown = this.shown;
+    a.played.forEach((san, i) => token(i, san, `${i % 2 === 0 ? 'best' : ''}${i + 1 === shown && !this.wrong ? ' active' : ''}`.trim(), i + 1));
+    if (this.wrong) token(a.played.length, this.wrongLabel(this.wrong), 'wrong', null);
+    $<HTMLButtonElement>('bp-back').disabled = shown === 0 || !!this.wrong;
+    $<HTMLButtonElement>('bp-forward').disabled = shown >= a.ply || !!this.wrong;
+    // The box is two lines tall; a longer line scrolls inside it, the current move in view.
+    const current = box.querySelector<HTMLElement>('.wrong, .active');
+    if (current) {
+      // Measured inside the padding, so whole rows show and no sliver of the one above.
+      const r = current.getBoundingClientRect();
+      const b = box.getBoundingClientRect();
+      const pad = parseFloat(getComputedStyle(box).paddingTop);
+      if (r.top < b.top + pad) box.scrollTop += r.top - b.top - pad;
+      else if (r.bottom > b.bottom - pad) box.scrollTop += r.bottom - b.bottom + pad;
+    } else box.scrollTop = 0;
   }
 
   /** A wrong move has no SAN in the data: "Nf7", "e5", "e8=N" or the drop as written. */
@@ -506,7 +584,7 @@ export class BughousePuzzlesApp {
       bad: 'Not the move',
       win: 'Solved!',
       fail: 'Solved after a miss',
-      revealed: 'Solution',
+      revealed: 'Solution shown',
     };
     if (state === 'error') return;
     titleEl.textContent = copy[state];
@@ -514,6 +592,8 @@ export class BughousePuzzlesApp {
 
   private renderSession() {
     const strip = $('bp-session');
+    // The grid is one Tab stop; a rebuild keeps the focus on it, on the current puzzle.
+    const focused = strip.contains(document.activeElement);
     strip.replaceChildren();
     const outcomes = this.list.map((p) => this.saved.outcomes[p.id]);
     const won = outcomes.filter((o) => o === 'win').length;
@@ -525,6 +605,7 @@ export class BughousePuzzlesApp {
       const o = outcomes[i];
       const what = p.kind === 'mate' ? `Mate in ${p.mate}` : `Tactic, ${p.moves} move${p.moves === 1 ? '' : 's'}`;
       cell.className = `session-cell${o ? ` ${o}` : ''}${i === this.index ? ' current' : ''}`;
+      cell.tabIndex = i === this.index ? 0 : -1;
       cell.title = `${i + 1}. ${what}`;
       cell.setAttribute('aria-label', `Puzzle ${i + 1}, ${what.toLowerCase()}${o === 'win' ? ', solved' : o === 'fail' ? ', missed' : ''}`);
       cell.addEventListener('click', () => this.go(i));
@@ -532,11 +613,41 @@ export class BughousePuzzlesApp {
     });
     // Scroll the strip itself, never the page: on a phone the strip sits below the board.
     const cell = strip.children[this.index] as HTMLElement | undefined;
-    if (cell) {
-      const r = cell.getBoundingClientRect();
-      const box = strip.getBoundingClientRect();
-      if (r.top < box.top) strip.scrollTop += r.top - box.top;
-      else if (r.bottom > box.bottom) strip.scrollTop += r.bottom - box.bottom;
-    }
+    if (cell) this.showCell(cell, focused);
+  }
+
+  private showCell(cell: HTMLElement, focus: boolean) {
+    const strip = $('bp-session');
+    if (focus) cell.focus({ preventScroll: true });
+    const r = cell.getBoundingClientRect();
+    const box = strip.getBoundingClientRect();
+    if (r.top < box.top) strip.scrollTop += r.top - box.top;
+    else if (r.bottom > box.bottom) strip.scrollTop += r.bottom - box.bottom;
+  }
+
+  /** Arrows move between the progress cells (up and down by row), Home and End to the ends; Enter opens one. */
+  private sessionKey(e: KeyboardEvent) {
+    const cells = [...$('bp-session').children] as HTMLElement[];
+    const at = cells.indexOf(document.activeElement as HTMLElement);
+    if (at < 0) return;
+    let to = -1;
+    if (e.key === 'ArrowLeft') to = at - 1;
+    else if (e.key === 'ArrowRight') to = at + 1;
+    else if (e.key === 'Home') to = 0;
+    else if (e.key === 'End') to = cells.length - 1;
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      // The cell in the row above or below nearest to this one's column.
+      const here = cells[at];
+      const down = e.key === 'ArrowDown';
+      const row = cells.filter((c) => (down ? c.offsetTop > here.offsetTop : c.offsetTop < here.offsetTop));
+      const y = down ? Math.min(...row.map((c) => c.offsetTop)) : Math.max(...row.map((c) => c.offsetTop));
+      const near = row.filter((c) => c.offsetTop === y).sort((a, b) => Math.abs(a.offsetLeft - here.offsetLeft) - Math.abs(b.offsetLeft - here.offsetLeft))[0];
+      to = near ? cells.indexOf(near) : at;
+    } else return;
+    e.preventDefault();
+    to = Math.max(0, Math.min(cells.length - 1, to));
+    cells[at].tabIndex = -1;
+    cells[to].tabIndex = 0;
+    this.showCell(cells[to], true);
   }
 }
