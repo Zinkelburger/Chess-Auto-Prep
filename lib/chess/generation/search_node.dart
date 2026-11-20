@@ -323,9 +323,10 @@ int nodesIn(SearchNode node) => switch (node) {
 
 /// Whether [node] is searched [plies] half-moves deep: no position nearer
 /// than that is left unexpanded or cut off at a horizon, so going on with
-/// the same depth would add nothing.
+/// the same depth would add nothing. A frontier at that depth still needs
+/// its score if the search paused before evaluating it.
 bool searchedTo(SearchNode node, int plies) => switch (node) {
-  _ when plies <= 0 => true,
+  _ when plies <= 0 => node is! FrontierNode || node.evaluated,
   TerminalNode() => true,
   HorizonNode() || FrontierNode() => false,
   OurNode(:final candidates) => candidates.every(
@@ -343,9 +344,9 @@ bool searchedTo(SearchNode node, int plies) => switch (node) {
 /// is not cut again, because its shares are already renormalised.
 SearchNode cutReplies(SearchNode node, {double? mass, int? most}) =>
     switch (node) {
-      OurNode(:final fen, :final evalForUs, :final candidates) => OurNode.over(
+      OurNode(:final fen, _eval: final eval, :final candidates) => OurNode.over(
         fen: fen,
-        evalForUs: evalForUs,
+        evalForUs: eval,
         candidates: [
           for (final c in candidates)
             CandidateMove(
@@ -356,7 +357,7 @@ SearchNode cutReplies(SearchNode node, {double? mass, int? most}) =>
       ),
       OpponentNode(
         :final fen,
-        :final evalForUs,
+        _eval: final eval,
         :final replies,
         :final repliesFrom,
       ) =>
@@ -368,7 +369,7 @@ SearchNode cutReplies(SearchNode node, {double? mass, int? most}) =>
           );
           return OpponentNode.over(
             fen: fen,
-            evalForUs: evalForUs,
+            evalForUs: eval,
             repliesFrom: repliesFrom,
             replies: [
               for (final r in replies)

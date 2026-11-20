@@ -238,7 +238,7 @@ final class _Search {
         path.reach < config.replyFloor;
     var eval = saved.evaluated ? saved.evalForUs : null;
     if (kind == null && eval == null && (beyond || !_hasMoves(saved))) {
-      eval = await _scored(path);
+      if (!_stopping()) eval = await _scored(path);
       if (eval == null) {
         return PendingNode(path, FrontierNode(fen: path.fen, evalForUs: null));
       }
@@ -805,7 +805,7 @@ SearchNode assembleTree(PendingNode pending) =>
       null => pending.leaf,
       OurMoves(:final admitted) => OurNode.over(
         fen: pending.leaf.fen,
-        evalForUs: pending.leaf.evalForUs,
+        evalForUs: pending.leaf.evaluated ? pending.leaf.evalForUs : null,
         candidates: [
           for (final (move, child) in admitted)
             CandidateMove(move: move, child: assembleTree(child)),
@@ -813,7 +813,7 @@ SearchNode assembleTree(PendingNode pending) =>
       ),
       Replies(:final replies, :final from) => OpponentNode.over(
         fen: pending.leaf.fen,
-        evalForUs: pending.leaf.evalForUs,
+        evalForUs: pending.leaf.evaluated ? pending.leaf.evalForUs : null,
         repliesFrom: from,
         replies: [
           for (final (move, probability, child) in replies)
