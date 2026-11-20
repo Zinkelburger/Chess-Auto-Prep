@@ -468,9 +468,13 @@ final class Library extends ChangeNotifier {
   Future<LibraryResult> restoreChapter(
     DeletedChapter chapter, {
     String? name,
-  }) => _run('restore ${chapter.path}', () {
-    final to = DocumentRef(chapter.restoredAs(name));
-    return _relocate(ChapterRef.at(chapter.path), to);
+  }) => _run('restore ${chapter.path}', () async {
+    var target = chapter.restoredAs(name);
+    if (p.equals(chapter.folder, _root)) {
+      if (_named(name ?? chapter.name) != null) return const LibraryNameTaken();
+      target = p.setExtension(target, p.extension(chapter.path));
+    }
+    return _relocate(ChapterRef.at(chapter.path), DocumentRef(target));
   });
 
   /// Every chapter to the recovery folder, then the folder when it is empty.

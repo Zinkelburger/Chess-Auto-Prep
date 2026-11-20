@@ -8,6 +8,8 @@ import 'atomic_write.dart';
 import 'backup_relocation.dart';
 import 'backups.dart';
 import 'book_references.dart';
+import 'deleted_chapters.dart';
+import 'directory_entries.dart';
 import 'directory_snapshot.dart';
 import 'document_probe.dart';
 import 'document_ref.dart';
@@ -371,6 +373,11 @@ final class FileRelocations {
           'The destination is unreadable or occupied.',
         );
       }
+      if (p.equals(p.dirname(target), _repertoires) &&
+          p.equals(p.dirname(source), p.join(_repertoires, recoveryFolder)) &&
+          await _repertoireNameOccupied(target)) {
+        return const Collision();
+      }
       final record = await _plan(
         operationId,
         source,
@@ -382,6 +389,21 @@ final class FileRelocations {
     } on Object catch (error) {
       return IoFailure(_attention('File', _detail(error)));
     }
+  }
+
+  // The catalog can be stale. Check both spellings under the relocation lock:
+  // a standalone PGN needs its namesake folder when a chapter is added.
+  Future<bool> _repertoireNameOccupied(String target) async {
+    final file = p.basename(target).toLowerCase();
+    final folder = p.basenameWithoutExtension(target).toLowerCase();
+    await for (final entry in directoryEntries(
+      Directory(_repertoires),
+      followLinks: false,
+    )) {
+      final name = p.basename(entry.path).toLowerCase();
+      if (name == file || (entry is Directory && name == folder)) return true;
+    }
+    return false;
   }
 
   MoveResult _moved(RelocationRecord record, Settlement settlement) =>

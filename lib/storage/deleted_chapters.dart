@@ -63,7 +63,7 @@ final class DeletedUnreadable extends DeletedListing {
   final String detail;
 }
 
-/// The chapters in the recovery folder of every repertoire under [root].
+/// The chapters in recovery folders at [root] and beneath it.
 ///
 /// Only chapter files are listed: the recovery folder also holds the old
 /// app's kept versions (`<digest>.bytes`) and whatever else a lock left
@@ -75,10 +75,13 @@ Future<DeletedListing> listDeleted(Directory root) async {
   final found = <DeletedChapter>[];
   try {
     await for (final entry in directoryEntries(root, followLinks: false)) {
-      if (entry is! Directory || p.basename(entry.path).startsWith('.')) {
-        continue;
+      if (entry is! Directory) continue;
+      final name = p.basename(entry.path);
+      if (name == recoveryFolder) {
+        found.addAll(await _deletedIn(root.path));
+      } else if (!name.startsWith('.')) {
+        found.addAll(await _deletedBelow(entry));
       }
-      found.addAll(await _deletedBelow(entry));
     }
   } on FileSystemException catch (error) {
     log.w('list the deleted chapters under ${root.path}', error);

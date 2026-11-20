@@ -212,6 +212,68 @@ void main() {
   Future<List<DeletedChapter>> deletedChapters() async =>
       (await library.deleted() as DeletedChapters).chapters;
 
+  for (final filename in ['French.pgn', 'French.PGN']) {
+    test(
+      'a deleted top-level $filename returns at its original path',
+      () async {
+        final relative = p.join('repertoires', filename);
+        final file = File(at(relative))
+          ..createSync(recursive: true)
+          ..writeAsStringSync('[Event "French"]\n\n1. e4 e6 *\n');
+        final original = file.readAsBytesSync();
+        trainOn(relative);
+        await library.refresh();
+
+        expect(
+          await library.deleteRepertoire(named('French')),
+          isA<LibraryDone>(),
+        );
+        expect(file.existsSync(), isFalse);
+        final gone = await deletedChapters();
+        expect(gone.map((chapter) => chapter.name), ['French']);
+        expect(reviews(), contains(gone.single.path));
+
+        expect(await library.restoreChapter(gone.single), isA<LibraryDone>());
+        expect(named('French').path, file.path);
+        expect(file.readAsBytesSync(), original);
+        expect(reviews(), contains(file.path));
+      },
+    );
+  }
+
+  test('a top-level restore requires a free repertoire name', () async {
+    const original = '[Event "French"]\n\n1. e4 e6 *\n';
+    final file = File(at('repertoires/French.pgn'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(original);
+    await library.refresh();
+    await library.deleteRepertoire(named('French'));
+    final gone = (await deletedChapters()).single;
+    await library.createRepertoire('FRENCH', Side.black);
+    final replacement = File(named('FRENCH').chapters.single.path);
+    final bytes = replacement.readAsBytesSync();
+
+    expect(await library.restoreChapter(gone), isA<LibraryNameTaken>());
+    expect(file.existsSync(), isFalse);
+    expect(File(gone.path).readAsStringSync(), original);
+
+    // A folder created after the catalog was read also occupies its name.
+    File(at('repertoires/Other/Main.pgn'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('// Other\n');
+    expect(
+      await library.restoreChapter(gone, name: 'other'),
+      isA<LibraryNameTaken>(),
+    );
+    expect(
+      await library.restoreChapter(gone, name: 'Recovered'),
+      isA<LibraryDone>(),
+    );
+    expect(File(named('Recovered').path).readAsStringSync(), original);
+    expect(replacement.readAsBytesSync(), bytes);
+    expect(await deletedChapters(), isEmpty);
+  });
+
   test(
     'a deleted repertoire comes back chapter by chapter, rows and all',
     () async {
