@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/features/tactics/puzzle_pane.dart';
+import 'package:chess_auto_prep/ui/app_icons.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -61,7 +62,9 @@ void main() {
     await pumpPane(tester);
     await begin(tester);
     expect(find.text('Black to play · 2 moves'), findsOneWidget);
-    expect(find.textContaining('vs Other'), findsOneWidget);
+    final date = w.trainer.up!.puzzle.date;
+    expect(date, isNotEmpty);
+    expect(find.text('vs Other · $date'), findsOneWidget);
     expect(find.text('You played f6 (mistake)', findRichText: true), findsOne);
     expect(find.textContaining('allowing', findRichText: true), findsNothing);
     expect(find.text('Find the best move.'), findsOneWidget);
@@ -139,6 +142,8 @@ void main() {
     await tester.tap(find.byTooltip('3 stars'));
     await tester.pump();
     expect(w.trainer.up!.rating, 3);
+    expect(find.byIcon(AppIcons.rated), findsNWidgets(3));
+    expect(find.byIcon(AppIcons.unrated), findsNWidgets(2));
     await tester.tap(find.byTooltip('3 stars'));
     await tester.pump();
     expect(w.trainer.up!.rating, 0);

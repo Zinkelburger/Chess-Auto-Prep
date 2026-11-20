@@ -2,6 +2,7 @@ import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/features/tactics/tactics_actions.dart';
 import 'package:chess_auto_prep/storage/my_accounts.dart';
 import 'package:chess_auto_prep/ui/app_action.dart';
+import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/workspace_tabs.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -32,9 +33,12 @@ void main() {
       if (action.group == group) action.label,
   ];
 
-  test('with no sitting the puzzle has no entries', () {
+  test('with no sitting the puzzle has no entries, and Engine on starts '
+      'the engine', () async {
     expect(labels('Tactics'), isEmpty);
-    expect(named('Engine on')!.run, isNotNull, reason: 'no answer hidden');
+    named('Engine on')!.run!();
+    await pumpEventQueue();
+    expect(w.analysis.state, isA<EngineFailed>(), reason: 'it was asked');
   });
 
   test('a puzzle up offers its four entries; the engine waits for the '

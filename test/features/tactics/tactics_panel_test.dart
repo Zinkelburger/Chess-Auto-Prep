@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/features/tactics/puzzle_filters.dart';
 import 'package:chess_auto_prep/features/tactics/tactics_panel.dart';
 import 'package:chess_auto_prep/storage/my_accounts.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/ui/list_row.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -104,13 +105,28 @@ void main() {
     final mistake = w.tactics.queue.firstWhere(
       (puzzle) => puzzle.kind == MistakeKind.mistake,
     );
+    expect(
+      find.text('${mistake.date} · vs ${mistake.opponent}'),
+      findsOneWidget,
+    );
     await tester.tap(find.text(mistake.label));
     expect(played, [mistake]);
 
+    ListRow row(Puzzle puzzle) => tester.widget<ListRow>(
+      find.ancestor(of: find.text(puzzle.label), matching: find.byType(ListRow)),
+    );
+    expect(row(mistake).selected, isFalse);
     await w.trainer.start(first: mistake);
     w.trainer.play('a7a6');
     await tester.pump();
-    expect(find.text('failed'), findsOneWidget);
+    expect(row(mistake).selected, isTrue, reason: 'the puzzle on the board');
+    final other = w.tactics.queue.firstWhere(
+      (p) => p.index != mistake.index,
+    );
+    expect(row(other).selected, isFalse);
+    final failed = tester.widget<Text>(find.text('failed'));
+    final context = tester.element(find.byType(TacticsPanel));
+    expect(failed.style?.color, Theme.of(context).colorScheme.error);
   });
 
   testWidgets('the count says what the queue holds, worst first, and the '
@@ -186,6 +202,13 @@ void main() {
     await tester.pump();
     const words = 'Get games to turn your mistakes into puzzles.';
     expect(find.text(words), findsNothing);
+    expect(
+      find.text(
+        'Add your Lichess or Chess.com username to turn your mistakes into '
+        'puzzles.',
+      ),
+      findsOneWidget,
+    );
     w.accounts.accounts[GameSite.lichess] = const Account('Me');
     await w.myGames.load();
     await tester.pump();

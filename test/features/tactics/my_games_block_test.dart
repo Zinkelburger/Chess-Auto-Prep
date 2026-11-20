@@ -6,12 +6,14 @@ import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/features/tactics/my_games.dart';
 import 'package:chess_auto_prep/features/tactics/my_games_block.dart';
 import 'package:chess_auto_prep/features/tactics/set_additions.dart';
+import 'package:chess_auto_prep/features/tactics/tactics_actions.dart';
 import 'package:chess_auto_prep/features/tactics/tactics_set.dart';
 import 'package:chess_auto_prep/net/recent_games.dart';
 import 'package:chess_auto_prep/storage/my_accounts.dart';
 import 'package:chess_auto_prep/storage/my_games_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
+import 'package:chess_auto_prep/ui/app_action.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document/document_session.dart';
@@ -247,5 +249,35 @@ void main() {
     final line = tester.widget<Text>(find.textContaining('Analysis failed'));
     final context = tester.element(find.byType(MyGamesBlock));
     expect(line.style?.color, Theme.of(context).colorScheme.error);
+  });
+
+  testWidgets('the menu\'s My games entries follow the button: Pause while '
+      'it runs, Resume after, and no accounts dialog meanwhile', (
+    tester,
+  ) async {
+    var asked = 0;
+    List<String> labels() => [
+      for (final action in myGamesActions(games, onAccounts: () => asked++))
+        action.label,
+    ];
+    AppAction named(String label) => myGamesActions(
+      games,
+      onAccounts: () => asked++,
+    ).firstWhere((action) => action.label == label);
+
+    await withAccount(tester);
+    await pumpBlock(tester);
+    expect(labels(), ['Get games', 'My accounts…']);
+    named('Get games').run!();
+    await settle(tester, () => games.running);
+    expect(labels(), ['Pause', 'My accounts…']);
+    expect(named('My accounts…').run, isNull);
+    named('Pause').run!();
+    site.gate.complete();
+    await settle(tester, () => games.status is MyGamesPaused);
+    expect(games.queued, 1);
+    expect(labels(), ['Resume', 'My accounts…']);
+    named('My accounts…').run!();
+    expect(asked, 1);
   });
 }
