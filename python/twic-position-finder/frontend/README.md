@@ -273,7 +273,8 @@ Fairy-Stockfish binary:
   pre-check of tactics, and deduplication against the FICS set and per
   opening line. `--scan-cache` and `--verify-log` make a long run resumable,
   and `--export-verified` exports what a stopped run's verify log holds
-  (`--from-candidates` names its candidate file for the count).
+  (`--from-candidates` names its candidate file, so the log gives the share
+  checked; the source sentence on the page leaves it out).
 
   The published engine set is such a partial mine. The page says only
   "8,287 engine games played by HypeBeast, most of them against other builds

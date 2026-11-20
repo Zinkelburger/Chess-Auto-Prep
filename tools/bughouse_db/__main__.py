@@ -77,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
                            help="with --arena: append each verified candidate here and skip those already in it")
     p_puzzles.add_argument("--export-verified", action="store_true",
                            help="with --arena and --verify-log: export the sound records verified so far, "
-                                "without the engine (--from-candidates names the run's candidates for the count)")
+                                "without the engine (--from-candidates names the run's candidates, for the count in the log)")
     p_puzzles.add_argument("--raw-out", type=Path, help="also keep the verified candidates")
     p_puzzles.add_argument("--from-raw", type=Path,
                            help="re-export a --raw-out file instead of mining (no engine needed)")

@@ -1173,7 +1173,7 @@ class TestArenaGames(unittest.TestCase):
             self.assertEqual([r["pid"] for r in json.loads(raw.read_text())], ["eabcdef-1-B-9"])
             index = json.loads((out / "index.json").read_text())
             self.assertEqual(index["count"], 1)
-            self.assertEqual(index["source"], "3 engine games (2 of the 3 candidate positions checked)")
+            self.assertEqual(index["source"], "3 engine games", "the share checked stays out of the players' sentence")
             self.assertEqual(index["puzzles"][0]["id"], "eabcdef-1-B-9")
 
     def test_source_reads_as_a_player_would_say_it(self):

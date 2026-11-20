@@ -513,13 +513,12 @@ def read_verify_log(path: Path) -> dict[str, P.Candidate]:
 def export_verified(verify_log: Path, out: Path, raw_out: Path | None, source: str,
                     candidates: Path | None = None) -> int:
     """Export the sound records of a verify log, without verifying the rest: a partial run.
-    With the run's candidate file, the source says how many of them were checked."""
+    With the run's candidate file, the log says how many of them were checked; the source
+    sentence, which players read, does not (that fact belongs in the README)."""
     done = read_verify_log(verify_log)
     verified = [c for c in done.values() if not c.reject]
-    if candidates:
-        total = len(json.loads(candidates.read_text()))
-        source += f" ({len(done):,} of the {total:,} candidate positions checked)"
-    print(f"{len(verified)} sound of {len(done)} checked", file=sys.stderr, flush=True)
+    of = f" of the {len(json.loads(candidates.read_text())):,} candidate positions" if candidates else ""
+    print(f"{len(verified)} sound of {len(done):,} checked{of}", file=sys.stderr, flush=True)
     if raw_out:
         raw_out.parent.mkdir(parents=True, exist_ok=True)
         raw_out.write_text(json.dumps([asdict(c) for c in verified]) + "\n")
