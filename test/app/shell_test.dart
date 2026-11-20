@@ -85,6 +85,34 @@ void main() {
   });
 
   testWidgets(
+    'Ctrl+N in Repertoire trainer keeps analysis moves off the chapter',
+    (tester) async {
+      await pump(tester);
+      await showLibrary(tester);
+      await tester.tap(inLibrary(find.text('Main')).last);
+      await tester.pumpAndSettle();
+      final before = (w.store.documents[kid] as Opened).text;
+
+      w.requests.switchTo(Mode.trainer);
+      await tester.pumpAndSettle();
+      expect(w.session.source, kid);
+      expect(w.lineTrainer.lesson, isNull);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      expect(find.text('Analysis'), findsWidgets);
+
+      await tester.enterText(find.byTooltip('Type a move'), 'Nf6');
+      await tester.pumpAndSettle();
+      final board = tester.widget<BoardView>(find.byType(BoardView));
+      expect(board.lastMove, 'g8f6');
+      await w.saver.flush();
+      expect((w.store.documents[kid] as Opened).text, before);
+    },
+  );
+
+  testWidgets(
     'training hides answer previews and restores the outline on leaving',
     (tester) async {
       await pump(tester);

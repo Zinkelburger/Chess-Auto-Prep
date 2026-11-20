@@ -1,7 +1,9 @@
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/features/trainer/lesson_view.dart';
 import 'package:chess_auto_prep/features/trainer/training_outline.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/workspace/analysis/training_analysis_pane.dart';
+import 'package:chess_auto_prep/workspace/board/board_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -32,6 +34,26 @@ void main() {
       expect(find.byType(LessonView), findsOneWidget);
       expect(w.lineTrainer.lesson!.left, greaterThan(0));
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'Analysis from the pane menu keeps played moves off the chapter',
+    (tester) async {
+      await open(tester);
+      final before = (w.store.documents[kidMain] as Opened).text;
+      await tester.tap(find.byTooltip('Open tools and arrange panes').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Analysis'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TrainingAnalysisPane), findsOneWidget);
+
+      await tester.enterText(find.byTooltip('Type a move'), 'Nf6');
+      await tester.pumpAndSettle();
+      final board = tester.widget<BoardView>(find.byType(BoardView));
+      expect(board.lastMove, 'g8f6');
+      await w.saver.flush();
+      expect((w.store.documents[kidMain] as Opened).text, before);
     },
   );
 

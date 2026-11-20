@@ -116,6 +116,20 @@ void main() {
       expect(w.analysis.enabled, isTrue);
     });
 
+    test('revealing help keeps Explorer on the lesson position', () async {
+      view.show(WorkspaceTab.analysis);
+      final pane = view.layout.active;
+      view.layout.show(pane, WorkspaceTab.explorer);
+      final position = w.lineTrainer.lesson!.drill.fen;
+
+      await doors.studyLesson();
+
+      expect(w.session.isScratch, isTrue);
+      expect(w.session.cursor.fen, position);
+      expect(view.layout.pane(pane).selected, WorkspaceTab.explorer);
+      expect(view.layout.isOpen(WorkspaceTab.analysis), isTrue);
+    });
+
     test('outside the trainer, leaves the engine as it was', () async {
       w.requests.switchTo(Mode.study);
       await doors.studyLesson();
