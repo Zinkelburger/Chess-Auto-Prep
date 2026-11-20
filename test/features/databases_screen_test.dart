@@ -10,6 +10,7 @@ import 'package:chess_auto_prep/storage/disk_usage.dart';
 import 'package:chess_auto_prep/storage/master_corpus.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:chess_auto_prep/ui/number_field.dart';
+import 'package:chess_auto_prep/ui/toggle_chip.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -40,8 +41,11 @@ const _someGames = (
 
 /// [total] games, a hundred to a page, and [answer] for the size.
 final class _Corpus implements MasterCorpus {
-  _Corpus({this.total = 250, this.answer = _someGames});
+  _Corpus({this.total = 250, this.answer = _someGames, this.imports = false});
   final int total;
+
+  /// Whether an import finishes; otherwise it runs until the test ends.
+  final bool imports;
   CorpusSize answer;
   final searched = <CorpusFilter>[];
 
@@ -74,7 +78,9 @@ final class _Corpus implements MasterCorpus {
 
   @override
   Future<CorpusResult<(int, int)>> importPgn(String source, String path) =>
-      Completer<CorpusResult<(int, int)>>().future;
+      imports
+      ? Future.value(const CorpusRead((5, 0)))
+      : Completer<CorpusResult<(int, int)>>().future;
 }
 
 void main() {
@@ -151,11 +157,11 @@ void main() {
         games: 1944320,
         bytes: 2147483648,
         firstDate: '2020.01.05',
-        lastDate: '2026.09.28',
+        lastDate: '2026.12.28',
         firstIssue: 1340,
         lastIssue: 1612,
         imports: 2,
-      ), 'Master games · 1,944,320 games · 2.0 GB · Jan 2020 – Sep 2026 · '
+      ), 'Master games · 1,944,320 games · 2.0 GB · Jan 2020 – Dec 2026 · '
           'TWIC issues 1340–1612 · 2 PGN files imported');
     });
 
@@ -338,6 +344,23 @@ void main() {
       ),
       ('', '', '', 0, false),
     );
+  });
+
+  testWidgets('an import that clears the filters shows Strongest first off '
+      'again', (tester) async {
+    final databases = library(_Corpus(imports: true));
+    await show(tester, databases);
+    await tester.tap(find.text('Strongest first'));
+    await searched(tester);
+    expect(databases.filter.strongestFirst, isTrue);
+    await tester.tap(find.text('Import PGN…'));
+    for (var i = 0; i < 3; i++) {
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump();
+    }
+    expect(databases.message, 'Imported 5 games · 0 skipped.');
+    expect(databases.filter.strongestFirst, isFalse);
+    expect(tester.widget<ToggleChip>(find.byType(ToggleChip)).selected, isFalse);
   });
 
   group('an empty list says what to do', () {
