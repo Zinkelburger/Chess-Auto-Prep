@@ -65,11 +65,16 @@ class _BoardLineRowsState extends State<BoardLineRows> {
   BoardNumber get board => widget.board;
 
   /// Rows for another table take the floated board with them; a deeper
-  /// search of the same table keeps it.
+  /// search of the same table keeps it. Once the frame is built: taking the
+  /// board down hides its overlay, which may not happen during a build.
   @override
   void didUpdateWidget(BoardLineRows old) {
     super.didUpdateWidget(old);
-    if (_tableOf(old.lines) != _tableOf(widget.lines)) _leave();
+    if (_tableOf(old.lines) != _tableOf(widget.lines)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _leave();
+      });
+    }
   }
 
   static String? _tableOf(LabLines lines) =>
