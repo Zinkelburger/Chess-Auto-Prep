@@ -13,6 +13,25 @@ final class DocumentCursor implements ValueListenable<NodePath> {
     _path.addListener(closeCommentLine);
   }
 
+  /// Last arrangement in which navigation or an edit selected a different game.
+  int get lastGameSwitch => _lastGameSwitch;
+  int _lastGameSwitch = -1;
+
+  void _followEdit(
+    Chapter before,
+    Chapter after,
+    GamesArranged games,
+    int arrangement,
+  ) {
+    final at = after.game;
+    if (at != null &&
+        at >= 0 &&
+        games.order.elementAtOrNull(at) != before.game) {
+      _lastGameSwitch = arrangement;
+    }
+    _place(samePathIn(before.tree, after.tree, value));
+  }
+
   /// The move tree of the document on screen, read at every step.
   final GameTree? Function() _tree;
 

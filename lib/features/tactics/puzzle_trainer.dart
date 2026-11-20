@@ -58,6 +58,7 @@ final class PuzzleTrainer extends ChangeNotifier {
     this.alternativeEngine,
     this._now = DateTime.now,
   }) : _session = session,
+       _arrangement = session.arrangement,
        _showing = (source: session.source, game: session.game) {
     _session.addListener(_documentChanged);
     _session.anyChange.addListener(_positionChanged);
@@ -77,7 +78,7 @@ final class PuzzleTrainer extends ChangeNotifier {
   /// Where the alternative answer is being checked: the set game and the
   /// expected move's position. A save of the set that keeps both, as a My
   /// games review adding puzzles does, does not cancel the check.
-  ({ChapterRef? source, int? game, Fen expected})? _checking;
+  ({ChapterRef? source, int selection, Fen expected})? _checking;
   PvMove? _alternativeMove;
 
   PuzzleRun? _run;
@@ -96,6 +97,7 @@ final class PuzzleTrainer extends ChangeNotifier {
   /// The document and game the session had on the board when last heard,
   /// so an edit, a flip or an answer hidden is not taken for a game coming.
   ({ChapterRef? source, int? game}) _showing;
+  int _arrangement;
 
   /// The sitting under way, or null.
   PuzzleRun? get run => _run;
@@ -259,7 +261,7 @@ final class PuzzleTrainer extends ChangeNotifier {
     _alternative = check;
     _checking = (
       source: _session.source,
-      game: _session.game,
+      selection: _session.cursor.lastGameSwitch,
       expected: expected.fen,
     );
     _alternativeMove = move;
@@ -277,9 +279,10 @@ final class PuzzleTrainer extends ChangeNotifier {
     if (_disposed ||
         _suspended ||
         !identical(_alternative, check) ||
-        !identical(_up, checking)) {
+        _up == null) {
       return;
     }
+    up = _up!;
     _alternative = null;
     _checking = null;
     board.value = null;
@@ -336,7 +339,7 @@ final class PuzzleTrainer extends ChangeNotifier {
     final checking = _checking;
     return checking != null &&
         _session.source == checking.source &&
-        _session.game == checking.game &&
+        _session.cursor.lastGameSwitch == checking.selection &&
         _session.tree?.nodeAt(up.frontier.mainChild)?.fen == checking.expected;
   }
 
@@ -537,8 +540,15 @@ final class PuzzleTrainer extends ChangeNotifier {
   void _documentChanged() {
     final showing = (source: _session.source, game: _session.game);
     final puzzle = _puzzleShown(showing.game);
+    final up = _up;
+    final switched = _session.cursor.lastGameSwitch > _arrangement;
+    final inPlace = _session.arrangement == _arrangement;
+    _arrangement = _session.arrangement;
+    final sameAnswer =
+        up != null && listEquals(puzzle?.answer, up.puzzle.answer);
     if (showing == _showing &&
-        (_up == null || puzzle?.fen == _up!.puzzle.fen)) {
+        (up == null ||
+            (!switched && puzzle?.fen == up.puzzle.fen && sameAnswer))) {
       return;
     }
     final sameSource = showing.source == _showing.source;
@@ -546,8 +556,14 @@ final class PuzzleTrainer extends ChangeNotifier {
     if (puzzle != null && _run != null && !_parked) {
       // The same puzzle at another index, as when an earlier one is
       // deleted: it keeps its progress, answer and engine.
-      if (sameSource && _up?.puzzle.fen == puzzle.fen) {
-        _up = _up!.copyWith(puzzle: puzzle);
+      if (up != null &&
+          !switched &&
+          sameSource &&
+          up.puzzle.fen == puzzle.fen &&
+          (sameAnswer || (inPlace && up.finished))) {
+        _up = up.copyWith(puzzle: puzzle);
+        if (identical(_replyDue, up)) _replyDue = _up;
+        if (identical(_advanceDue, up)) _advanceDue = _up;
         notifyListeners();
         return;
       }
@@ -609,9 +625,10 @@ final class PuzzleTrainer extends ChangeNotifier {
       return;
     }
     _replyTimer = Timer(replyDelay, () {
+      final due = _replyDue;
       _replyTimer = null;
       _replyDue = null;
-      if (!_disposed && !_suspended && identical(_up, target)) _reply();
+      if (!_disposed && !_suspended && identical(_up, due)) _reply();
     });
   }
 
@@ -623,9 +640,10 @@ final class PuzzleTrainer extends ChangeNotifier {
       return;
     }
     _advanceTimer = Timer(advanceDelay, () {
+      final due = _advanceDue;
       _advanceTimer = null;
       _advanceDue = null;
-      if (!_disposed && !_suspended && autoAdvance && identical(_up, target)) {
+      if (!_disposed && !_suspended && autoAdvance && identical(_up, due)) {
         unawaited(next());
       }
     });

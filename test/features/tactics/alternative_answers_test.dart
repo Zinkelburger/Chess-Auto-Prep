@@ -181,6 +181,48 @@ void main() {
   );
 
   test(
+    'deleting an earlier game keeps the check and grades the moved puzzle',
+    () => sitting((async) {
+      w.trainer.play('e7e5');
+      async.flushMicrotasks();
+      finish(async, 100);
+      unawaited(w.tactics.delete(w.tactics.at(0)!));
+      async.flushMicrotasks();
+      expect(w.trainer.up!.puzzle.index, 2);
+      expect(w.trainer.up!.feedback, isA<CheckingAnswer>());
+      expect(w.trainer.board.value!.lastMove, 'e7e5');
+
+      finish(async, 150);
+      expect(w.trainer.up!.feedback, isA<AlternativeSolved>());
+      expect(w.trainer.up!.puzzle.index, 2);
+      expect(w.trainer.up!.saveProblem, isNull);
+      expect(w.tactics.at(2)!.stats.successes, 1);
+      expect(w.tactics.at(3)!.stats.reviews, 0);
+    }),
+  );
+
+  test(
+    'analysis can extend a solved puzzle by the whole continuation',
+    () => sitting((async) {
+      w.trainer.play('d7d5');
+      expect(w.trainer.up!.decided, Outcome.solved);
+      unawaited(w.analysis.enable());
+      async.flushMicrotasks();
+
+      w.session.playMove('c2c4');
+      expect(w.analysis.position, w.session.cursor.fen);
+      expect(w.session.cursor.boardLastMove, 'c2c4');
+      w.session.playMove('e7e6');
+      expect(w.session.cursor.boardLastMove, 'e7e6');
+      expect(w.trainer.up!.feedback, isA<Solved>());
+      expect(w.session.shownTo, isNull);
+      expect(w.analysis.enabled, isTrue);
+      expect(w.trainer.up!.puzzle.answer, ['d5', 'c4', 'e6']);
+      expect(w.tactics.at(3)!.stats.reviews, 1);
+    }),
+  );
+
+  test(
     'changing puzzles drops a comparison between its two searches',
     () => sitting((async) {
       w.trainer.play('e7e5');

@@ -129,6 +129,100 @@ void main() {
   );
 
   test(
+    'the pending reply is played after an earlier puzzle is deleted',
+    () => sitting((async) {
+      begin(async);
+      final playing = w.trainer.up!.puzzle;
+      expect(playing.index, 1);
+      w.trainer.play('e7e5');
+      expect(w.trainer.up!.waiting, isTrue);
+      async.elapse(replyDelay ~/ 2);
+
+      unawaited(w.tactics.delete(w.tactics.at(0)!));
+      async.flushMicrotasks();
+      expect(w.trainer.up!.puzzle.index, 0);
+      expect(w.trainer.up!.puzzle.fen, playing.fen);
+      expect(w.trainer.up!.waiting, isTrue);
+      async.elapse(replyDelay ~/ 2);
+      expect(w.session.cursor.value, NodePath.of([0, 0]));
+      expect(w.trainer.up!.waiting, isFalse);
+      w.trainer.play('b8c6');
+      expect(w.trainer.up!.decided, Outcome.solved);
+    }),
+  );
+
+  test('a replacement at the same FEN does not inherit a pending reply', () {
+    const fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+    const set =
+        '''
+[Event "Default #1"]
+[SetUp "1"]
+[FEN "$fen"]
+
+1... e5 2. Nf3 *
+
+[Event "Default #2"]
+[SetUp "1"]
+[FEN "$fen"]
+
+1... c5 2. Nf3 *
+''';
+    sitting((async) {
+      begin(async);
+      w.trainer.play('e7e5');
+      expect(w.trainer.up!.waiting, isTrue);
+      unawaited(w.tactics.delete(w.tactics.at(0)!));
+      async.flushMicrotasks();
+      expect(w.trainer.up!.puzzle.answer, ['c5', 'Nf3']);
+      expect(w.trainer.up!.waiting, isFalse);
+      async.elapse(replyDelay);
+      expect(w.session.shownTo, const NodePath.root());
+      expect(w.trainer.up!.found, 0);
+      expect(w.trainer.run!.outcomes, isEmpty);
+      expect(setText(), isNot(contains('ReviewCount')));
+    }, set: set);
+  });
+
+  test('deleting the active game cancels its reply even for a duplicate', () {
+    const game = '''
+[Event "Duplicate"]
+[SetUp "1"]
+[FEN "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"]
+
+1... e5 2. Nf3 *
+''';
+    sitting((async) {
+      begin(async);
+      w.trainer.play('e7e5');
+      expect(w.trainer.up!.waiting, isTrue);
+      unawaited(w.tactics.delete(w.trainer.up!.puzzle));
+      async.flushMicrotasks();
+      async.elapse(replyDelay);
+      expect(w.session.cursor.value, const NodePath.root());
+      expect(w.trainer.up!.waiting, isFalse);
+      expect(w.trainer.run!.outcomes, isEmpty);
+    }, set: '$game\n$game');
+  });
+
+  test(
+    'auto-advance keeps its deadline when the solved puzzle moves',
+    () => sitting((async) {
+      begin(async);
+      w.trainer.play('e7e5');
+      async.elapse(replyDelay);
+      w.trainer.play('b8c6');
+      async.elapse(advanceDelay ~/ 2);
+      unawaited(w.tactics.delete(w.tactics.at(0)!));
+      async.flushMicrotasks();
+      expect(w.trainer.up!.puzzle.index, 0);
+      expect(w.trainer.up!.feedback, isA<Solved>());
+      async.elapse(advanceDelay ~/ 2);
+      expect(w.trainer.up!.puzzle.index, 2);
+      expect(w.trainer.up!.feedback, isNull);
+    }),
+  );
+
+  test(
     'a clean solve is written as a success, and auto-advance brings the '
     'next puzzle',
     () => sitting((async) {

@@ -497,7 +497,7 @@ final class DocumentSession extends ChangeNotifier {
     if (!_isAnotherGame(index)) return;
     final chapter = _chapter!;
     _shown = (chapter: withGame(chapter, index), view: null);
-    _arrangement++;
+    cursor._lastGameSwitch = ++_arrangement;
     _shownTo = null;
     _clearRefusal();
     cursor._place(const NodePath.root());
@@ -859,9 +859,9 @@ final class DocumentSession extends ChangeNotifier {
           );
           if (reason != null) return reason;
         }
-        if (!games.keepsPlaces) _arrangement++;
+        if (!games.keepsPlaces || chapter.game != game) _arrangement++;
         _clearRefusal();
-        cursor._place(samePathIn(chapter.tree, _chapter!.tree, cursor.value));
+        cursor._followEdit(chapter, _chapter!, games, _arrangement);
     }
     notifyListeners();
     return null;
