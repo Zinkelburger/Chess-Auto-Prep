@@ -52,7 +52,8 @@ final class WindowKeys {
     if (!inspecting()) ...AppKey.back.bind(workspace.tree.back),
     ...screen(context),
     ...AppKey.openFile.bind(() => unawaited(requests.openPgnFile())),
-    ...AppKey.paste.bind(() => unawaited(doors.paste())),
+    if (!inspecting() || workspace.inspection!.active)
+      ...AppKey.paste.bind(() => unawaited(doors.paste())),
     ...AppKey.analysisBoard.bind(() => unawaited(actions.analyze())),
     ...AppKey.play.bind(_space),
     ...AppKey.nextGame.bind(() => _walk(1)),

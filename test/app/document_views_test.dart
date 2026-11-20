@@ -8,6 +8,7 @@ library;
 import 'package:chess_auto_prep/app/document_views.dart';
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/app/mode_view.dart';
+import 'package:chess_auto_prep/app/top_bar.dart';
 import 'package:chess_auto_prep/features/pgn_viewer/filter_pane.dart';
 import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
@@ -16,7 +17,9 @@ import 'package:chess_auto_prep/storage/training_progress.dart';
 import 'package:chess_auto_prep/ui/app_action.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/workspace_tabs.dart';
+import 'package:chess_auto_prep/workspace/workspace_view.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_store.dart';
@@ -170,6 +173,80 @@ void main() {
       editing.value = true;
       w.session.cursor.forward();
       expect(w.session.holdsEdits, isFalse);
+    });
+
+    testWidgets('editing the Analysis tab leaves the source variation held', (
+      tester,
+    ) async {
+      start();
+      await w.pumpShell(tester, openFolders: false);
+      await openThreeGames(tester);
+      w.session.cursor.forward(); // 1. e4
+      w.session.playMove('c7c5');
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      expect(w.parts.workspace.inspection!.active, isTrue);
+      expect(w.session.hasHeldEdits, isTrue);
+
+      await chooseAction(tester, 'Edit');
+      await w.saver.flush();
+      final stored = w.store.documents[collectionRef('three')] as Opened;
+      expect(stored.text, threeGameFile);
+      expect(w.session.hasHeldEdits, isTrue);
+    });
+
+    testWidgets('the scratch edit strip stays open on return to its game', (
+      tester,
+    ) async {
+      start();
+      await w.pumpShell(tester, openFolders: false);
+      await openThreeGames(tester);
+      final board = tester.widget<WorkspaceView>(find.byType(WorkspaceView));
+      board.tabs.show(WorkspaceTab.analysis);
+      await tester.pumpAndSettle();
+      await chooseAction(tester, 'Edit');
+      expect(find.byTooltip('Good move'), findsOneWidget);
+
+      await tester.tap(find.text('Moves'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Good move'), findsNothing);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(WorkspaceView),
+          matching: find.text('Analysis'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Good move'), findsOneWidget);
+      expect(w.session.holdsEdits, isTrue);
+    });
+
+    testWidgets('Analysis offers no source edits while the copy is pending', (
+      tester,
+    ) async {
+      start();
+      await w.pumpShell(tester, openFolders: false);
+      await openThreeGames(tester);
+      w.session.cursor.forward();
+      w.session.playMove('c7c5');
+      await tester.pumpAndSettle();
+      final bar = tester.widget<TopBar>(find.byType(TopBar));
+      final board = tester.widget<WorkspaceView>(find.byType(WorkspaceView));
+      expect(on(bar.actions(), 'Edit'), isTrue);
+      board.tabs.show(WorkspaceTab.analysis);
+      // Inspect the menu before the asynchronous scratch copy can finish.
+      expect(w.parts.workspace.inspection!.active, isFalse);
+      expect(bar.actions().map((a) => a.label), isNot(contains('Edit')));
+      board.tabs.show(WorkspaceTab.moves);
+      board.tabs.show(WorkspaceTab.analysis);
+      await tester.pumpAndSettle();
+      expect(w.parts.workspace.inspection!.active, isTrue);
+      expect(on(bar.actions(), 'Edit'), isTrue);
+      expect(w.session.hasHeldEdits, isTrue);
     });
 
     testWidgets("filters by the Analysis tab's board while it is up", (

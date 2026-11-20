@@ -26,6 +26,7 @@ class WorkspaceKeys extends StatefulWidget {
     required this.editing,
     required this.tabs,
     this.extra = const {},
+    this.boardReady = true,
     this.leave = _nothingToLeave,
     this.save,
     this.escapeEndsEditing = true,
@@ -33,6 +34,7 @@ class WorkspaceKeys extends StatefulWidget {
   });
 
   final DocumentSession session;
+  final bool boardReady;
   final ValueNotifier<bool> editing;
   final PaneTabs<Object> tabs;
 
@@ -100,6 +102,13 @@ class _WorkspaceKeysState extends State<WorkspaceKeys> {
 
   Map<ShortcutActivator, VoidCallback> get _bindings {
     final tabs = widget.tabs;
+    final navigation = {
+      ...AppKey.nextTab.bind(tabs.next),
+      ...AppKey.previousTab.bind(tabs.previous),
+      ...AppKey.closeTab.bind(tabs.closeCurrent),
+      ...widget.extra,
+    };
+    if (!widget.boardReady) return navigation;
     return {
       ...AppKey.back.bind(_session.cursor.back),
       ...AppKey.forward.bind(_session.cursor.forward),
@@ -109,10 +118,7 @@ class _WorkspaceKeysState extends State<WorkspaceKeys> {
       ...AppKey.nextGame.bind(_session.nextGame),
       ...AppKey.flip.bind(_session.flip),
       ...AppKey.undo.bind(_undo),
-      ...AppKey.nextTab.bind(tabs.next),
-      ...AppKey.previousTab.bind(tabs.previous),
-      ...AppKey.closeTab.bind(tabs.closeCurrent),
-      ...widget.extra,
+      ...navigation,
     };
   }
 
@@ -124,14 +130,14 @@ class _WorkspaceKeysState extends State<WorkspaceKeys> {
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     final keys = HardwareKeyboard.instance;
     // Save belongs to the document even while an editor owns the caret.
-    if (AppKey.save.accepts(event)) {
+    if (widget.boardReady && AppKey.save.accepts(event)) {
       (widget.save ?? _session.keepHeld)();
       return KeyEventResult.handled;
     }
     if (typingInText()) return KeyEventResult.ignored;
     // Enter is the variation's only while the workspace itself has the
     // focus: a focused button, menu entry or lesson has its own use for it.
-    if (AppKey.enterVariation.accepts(event)) {
+    if (widget.boardReady && AppKey.enterVariation.accepts(event)) {
       final ours = FocusManager.instance.primaryFocus == node;
       return ours && _session.cursor.enterVariation()
           ? KeyEventResult.handled
@@ -141,7 +147,8 @@ class _WorkspaceKeysState extends State<WorkspaceKeys> {
     // the key goes on to whoever else wants it. A held Esc leaves one
     // thing, not the whole ladder.
     if (AppKey.leave.accepts(event)) {
-      return _escape() ? KeyEventResult.handled : KeyEventResult.ignored;
+      final left = widget.boardReady ? _escape() : widget.leave();
+      return left ? KeyEventResult.handled : KeyEventResult.ignored;
     }
     for (final MapEntry(key: activator, value: run) in _bindings.entries) {
       if (activator.accepts(event, keys)) {

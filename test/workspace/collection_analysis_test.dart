@@ -55,6 +55,20 @@ void main() {
     expect(told, greaterThan(before));
   });
 
+  test('each scratch game inherits editing once', () async {
+    await fixture.session.open(fixture.ref, game: 0);
+    expect(await analysis.show(initiallyEditing: true), isTrue);
+    expect(analysis.editing.value, isTrue);
+    analysis.editing.value = false;
+
+    fixture.session.showGame(1);
+    expect(await analysis.show(initiallyEditing: true), isTrue);
+    expect(analysis.editing.value, isTrue);
+    fixture.session.showGame(0);
+    expect(await analysis.show(initiallyEditing: true), isTrue);
+    expect(analysis.editing.value, isFalse);
+  });
+
   test('is not shown while part of the game is hidden', () async {
     fixture.session.showOnlyTo(NodePath.of([0]));
     expect(await analysis.show(), isFalse);
