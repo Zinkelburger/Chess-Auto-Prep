@@ -251,17 +251,24 @@ final class StudySender extends ChangeNotifier {
       studyChapterName(lines[index], index: index, study: studyNameIn(lines)),
       lichessChapterPgn(lines[index]),
     );
-    ChapterEdit linked(Chapter now) => withStudyTag(now, chapterUrlTag, {
-      for (final MapEntry(key: index, value: url) in urls.entries)
-        if (index < now.lines.length &&
-            asSent(now.lines, index) == asSent(sent.lines, index))
-          index: url,
-    });
+    var placed = true;
+    ChapterEdit linked(Chapter now) {
+      final still = {
+        for (final MapEntry(key: index, value: url) in urls.entries)
+          if (index < now.lines.length &&
+              asSent(now.lines, index) == asSent(sent.lines, index))
+            index: url,
+      };
+      placed = still.length == urls.length;
+      return withStudyTag(now, chapterUrlTag, still);
+    }
+
     if (_session.source == source) {
       _session.apply(linked, writes: true);
-      return true;
+      return placed;
     }
-    return await writeAway?.call(source, linked) ?? false;
+    final written = await writeAway?.call(source, linked) ?? false;
+    return written && placed;
   }
 
   static String _counted(int added, int updated) => [

@@ -181,6 +181,10 @@ void main() {
       final round2 = rounds.firstWhere((game) => game.contains('Round 2"]'));
       expect(round1, isNot(contains('chap1000')));
       expect(round2, isNot(contains('chap0000')));
+      expect(
+        (sender.state as SendFailed).sentence,
+        contains('could not keep their links'),
+      );
     },
   );
 
