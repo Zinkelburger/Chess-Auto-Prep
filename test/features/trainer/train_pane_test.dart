@@ -478,6 +478,69 @@ void main() {
     expect(find.text('Review session done.'), findsOneWidget);
   });
 
+  testWidgets('1 rates a reviewed line Again, and it comes round once more', (
+    tester,
+  ) async {
+    final italian = (
+      source: fixture.ref.path,
+      id: 'line_ZTQgZTUgTmYzIE5jNiBCYz',
+    );
+    files.reviews[italian] = dueItalian(italian);
+    await pump(tester, rateReviews: true);
+    await tester.tap(find.text('Review 1'));
+    await tester.pumpAndSettle();
+    for (final uci in ['e2e4', 'g1f3', 'f1c4']) {
+      await play(tester, uci);
+    }
+    await key(tester, LogicalKeyboardKey.digit1);
+    expect(files.reviews[italian]!.lastRating, 'again');
+    expect(find.text('Your move'), findsOneWidget);
+  });
+
+  testWidgets('the recap offers to learn the one line left, and no empty '
+      'review', (tester) async {
+    final italian = (
+      source: fixture.ref.path,
+      id: 'line_ZTQgZTUgTmYzIE5jNiBCYz',
+    );
+    files.reviews[italian] = dueItalian(italian);
+    await pump(tester);
+    await tester.tap(find.text('Review 1'));
+    await tester.pumpAndSettle();
+    for (final uci in ['e2e4', 'g1f3', 'f1c4']) {
+      await play(tester, uci);
+    }
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(find.text('Review session done.'), findsOneWidget);
+    expect(find.textContaining('Review 0'), findsNothing);
+    await tester.tap(find.text('Learn more · 1 left'));
+    await tester.pumpAndSettle();
+    expect(trainer.lesson!.line.name, 'Ruy');
+  });
+
+  testWidgets('a move\'s letters typed in a lesson go to the move field; a '
+      'shortcut\'s do not', (tester) async {
+    await pump(tester);
+    await tester.tap(find.text('Learn 2'));
+    await tester.pumpAndSettle();
+    await key(tester, LogicalKeyboardKey.space);
+    expect(find.text('Your move'), findsOneWidget);
+
+    for (final modifier in [
+      LogicalKeyboardKey.controlLeft,
+      LogicalKeyboardKey.altLeft,
+    ]) {
+      await tester.sendKeyDownEvent(modifier);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+      await tester.sendKeyUpEvent(modifier);
+      await tester.pumpAndSettle();
+    }
+    expect(moves.words.text, isEmpty);
+    await key(tester, LogicalKeyboardKey.keyE);
+    expect(moves.words.text, 'e');
+  });
+
   testWidgets('the recap offers the review the button starts: all learned '
       'lines when reviews take them all', (tester) async {
     final italian = (
