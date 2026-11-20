@@ -670,6 +670,11 @@
 #     never typed in are already empty), :316 the Elo stepper's top (a
 #     default), :42, :127, :143, :304, :450, :456 a width, a line count, an
 #     inset, a field's width, shrink-wrap and dense rows: the look.
+# lib/features/settings, with equivalent mutants a --max 30 sample can draw:
+#   lib/features/settings/update_offer.dart:71 the 4 GiB cap's factors (a
+#     default constant; the cap's boundary is asserted at its value).
+#   lib/features/settings/setting_controls.dart:51 the row's wrap at exactly
+#     the inline width, :243 the token field's `isDense`: the look.
 lib/chess/pgn/game_review.dart|test/workspace/game_review_test.dart|test/chess/pgn/edit_laws_test.dart test/app
 lib/chess/pgn/line_edits.dart|test/chess/pgn/line_edits_test.dart|test/chess/pgn test/workspace
 lib/chess/pgn/chapter_edits.dart|test/chess/pgn/chapter_edits_test.dart|test/chess/pgn test/workspace
@@ -1017,3 +1022,5 @@ lib/features/trainer/study_training_controls.dart|test/app/study_training_workfl
 lib/features/tournaments/schedule.dart|test/features/tournaments/schedule_test.dart test/features/tournaments/tournament_run_test.dart|test/tools/run_engine_tournament_test.dart
 # lib/features/pgn_viewer, lib/features/my_games, lib/features/databases
 lib/features/my_games/book_words.dart|test/features/my_games/game_book_test.dart|test/features/my_games/book_pane_test.dart test/features/my_games/book_pane_swap_test.dart test/features/my_games/my_games_panel_test.dart test/features/my_games/my_games_panel_more_test.dart test/features/players/player_book_pane_test.dart test/app/player_views_test.dart
+# lib/features/settings
+lib/features/settings/update_rows.dart|test/features/settings/app_updates_test.dart|test/features/settings/update_prompt_test.dart test/features/settings/update_prompt_answers_test.dart test/features/settings/app_updates_more_test.dart test/features/settings/setting_rows_test.dart test/features/settings/settings_dialog_test.dart

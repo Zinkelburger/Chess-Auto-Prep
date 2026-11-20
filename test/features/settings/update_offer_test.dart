@@ -87,4 +87,11 @@ void main() {
       isA<Incomplete>(),
     );
   });
+
+  test('a file of one byte or of the largest size allowed is offered', () {
+    for (final size in [1, maxAssetBytes]) {
+      final offer = (check(releaseJson(size: size)) as Newer).offer;
+      expect(offer.asset!.payload.size, size);
+    }
+  });
 }
