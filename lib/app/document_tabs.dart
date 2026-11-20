@@ -186,9 +186,19 @@ final class DocumentTabs {
     _selecting = id;
     try {
       if (page.source case final source?) {
-        final result = page.viewedFile
-            ? await requests.openFile(source, game: page.game, keepPlace: true)
-            : await requests.open(source, game: page.game);
+        final result = switch (mode) {
+          _ when page.viewedFile => await requests.openFile(
+            source,
+            game: page.game,
+            keepPlace: true,
+          ),
+          // Handed to the viewer, it comes back among its games, as then.
+          Mode.pgnViewer when page.game != null => await requests.readInViewer(
+            source,
+            game: page.game,
+          ),
+          _ => await requests.open(source, game: page.game),
+        };
         if (_disposed || result is! RequestDone || session.source != source) {
           return;
         }
@@ -203,6 +213,15 @@ final class DocumentTabs {
     requests.switchTo(mode, from: from);
     session.cursor.goTo(cursor);
     if (session.orientation != side) session.flip();
+  }
+
+  /// Puts back the edits the tab of [source] parked, once Back or Forward
+  /// has read its file again, as picking the tab would.
+  Future<void> restoreParked(ChapterRef source) async {
+    final page = _pages[source];
+    final draft = page?.draft;
+    if (_disposed || page == null || draft == null) return;
+    if (session.source == source) await _restore(page, source, draft);
   }
 
   /// Puts the edits [page] parked back on the file just read, and answers

@@ -4,6 +4,9 @@
 // chapter stops the send, links are written even while reading holds
 // edits, a send that only updated says no "0 added", and a long name is cut
 // at 100 characters.
+import 'dart:async';
+
+import 'package:chess_auto_prep/chess/pgn/study_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/study_lichess.dart';
 import 'package:chess_auto_prep/features/study/study_sender.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -120,6 +123,70 @@ void main() {
     await sender.send();
     expect(lichess.added.single.name, 'L' * 100);
   });
+
+  /// Holds the request for chapter [name] until the returned completer is
+  /// completed; [reached] completes once the request is held.
+  Completer<void> holdAt(String name, Completer<void> reached) {
+    final release = Completer<void>();
+    lichess.beforeAdd = (added) async {
+      if (added != name) return;
+      reached.complete();
+      await release.future;
+    };
+    return release;
+  }
+
+  test('links reach the study after another document was opened '
+      'mid-send, so the next send adds nothing twice', () async {
+    final (fixture, sender) = await open(chapters(2));
+    final reached = Completer<void>();
+    final release = holdAt('Round 2', reached);
+    final sending = sender.send();
+    await reached.future;
+    expect(await fixture.session.showAnalysisBoard(), isTrue);
+    release.complete();
+    await sending;
+    expect(sender.state, isA<SendDone>());
+    expect(fixture.onDisk, contains('wxyz9876/chap0000'));
+    expect(fixture.onDisk, contains('wxyz9876/chap1000'));
+
+    lichess.beforeAdd = null;
+    await fixture.session.open(fixture.ref, game: 0);
+    await sender.send(into: 'wxyz9876');
+    final done = sender.state as SendDone;
+    expect((done.added, done.updated), (0, 2));
+    expect(lichess.added, hasLength(2));
+  });
+
+  test(
+    'a chapter moved mid-send does not take another chapter\'s link',
+    () async {
+      final (fixture, sender) = await open(chapters(2));
+      final reached = Completer<void>();
+      final release = holdAt('Round 2', reached);
+      final sending = sender.send();
+      await reached.future;
+      expect(
+        fixture.session.apply(
+          (now) => moveChapter(now, index: 0, by: 1),
+          writes: true,
+        ),
+        isNull,
+      );
+      release.complete();
+      await sending;
+      await fixture.saver.flush();
+      final rounds = fixture.onDisk.split('[Event ');
+      final round1 = rounds.firstWhere((game) => game.contains('Round 1"]'));
+      final round2 = rounds.firstWhere((game) => game.contains('Round 2"]'));
+      expect(round1, isNot(contains('chap1000')));
+      expect(round2, isNot(contains('chap0000')));
+      expect(
+        (sender.state as SendFailed).sentence,
+        contains('could not keep their links'),
+      );
+    },
+  );
 
   test('a send whose sender is taken down meanwhile says nothing', () async {
     final (fixture, _) = await open(chapters(2));

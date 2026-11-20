@@ -212,6 +212,25 @@ void main() {
     expect(w.session.commentAt(cursor), isNot(contains('Unsaved viewer note')));
   });
 
+  test('a viewer draft comes back when Back returns to its file', () async {
+    w.requests.switchTo(Mode.pgnViewer);
+    await w.requests.open(kidMain);
+    w.session.holdsEdits = true;
+    w.session.cursor.forward();
+    final cursor = w.session.cursor.value;
+    w.session.setComment(cursor, 'Unsaved viewer note');
+    w.requests.switchTo(Mode.repertoires);
+    await pumpEventQueue();
+    expect(w.session.source, isNot(kidMain));
+
+    await w.requests.back();
+    expect(w.requests.mode, Mode.pgnViewer);
+    expect(w.session.source, kidMain);
+    expect(w.session.hasHeldEdits, isTrue);
+    expect(w.session.commentAt(cursor), contains('Unsaved viewer note'));
+    expect(w.store.requestedSaves, isEmpty);
+  });
+
   test('a parked draft put away, by keeping or discarding it, does not come '
       'back with its tab', () async {
     for (final keep in [false, true]) {
