@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:chessground/chessground.dart';
+import 'package:collection/collection.dart' show DeepCollectionEquality;
 import 'package:dartchess/dartchess.dart' show Setup, Side;
 import 'package:flutter/material.dart';
 
@@ -44,6 +46,9 @@ class _SetupState extends State<_Setup> {
     text: widget.previous?.root.value ?? Fen.initial.value,
   );
   late final _seats = [...?widget.previous?.engines];
+  late final _engines = [TournamentEngine.bundled(), ...widget.engines];
+  late final _labels = _engineOptions();
+  late final _options = {for (final e in _engines) _labels[e]!: e};
   late final _time = <String, Object?>{...?(widget.previous?.time)};
   late final _rules = <String, Object?>{...?(widget.previous?.adjudication)};
   late final _values = <String, Object?>{...?(widget.previous?.json)};
@@ -187,18 +192,49 @@ class _SetupState extends State<_Setup> {
     if (edited != null) _change(() => _fen.text = edited.value);
   }
 
+  Map<TournamentEngine, String> _engineOptions() {
+    // Saved seats carry independent snapshots, including their UCI options.
+    const equality = DeepCollectionEquality();
+    final labels = LinkedHashMap<TournamentEngine, String>(
+      equals: (a, b) => equality.equals(a.json, b.json),
+      hashCode: (e) => equality.hash(e.json),
+    );
+    for (final engine in [..._engines, ..._seats]) {
+      labels[engine] = engine.name;
+    }
+    final names = <String>{};
+    final duplicates = {
+      for (final name in labels.values)
+        if (!names.add(name)) name,
+    };
+    for (final engine in labels.keys) {
+      if (!duplicates.contains(engine.name)) continue;
+      final path = engine.executable;
+      final source = path == null || path.isEmpty ? 'Bundled' : path;
+      final base = '${engine.name} · $source';
+      var label = base;
+      for (var n = 2; !names.add(label); n++) {
+        label = '$base ($n)';
+      }
+      labels[engine] = label;
+    }
+    return labels;
+  }
+
   Widget _seat(int index) {
     final engine = _seats[index];
-    final options = [TournamentEngine.bundled(), ...widget.engines];
     return Row(
       children: [
         Expanded(
           child: ChoiceField(
-            text: engine.name,
+            text: _labels[engine]!,
             hint: 'Engine ${index + 1}',
-            options: options.map((e) => e.name).toList(),
-            onChanged: (name) {
-              final found = options.where((e) => e.name == name).firstOrNull;
+            options: _options.keys.toList(),
+            optionName: (label) => _options[label]!.name,
+            onChanged: (label) {
+              final found =
+                  _options[label] ??
+                  _engines.where((e) => e.name == label).firstOrNull;
               if (found != null) _change(() => _seats[index] = found);
             },
           ),

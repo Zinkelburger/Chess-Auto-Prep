@@ -28,6 +28,7 @@ class ChoiceField extends StatefulWidget {
     super.key,
     required this.text,
     required this.options,
+    this.optionName,
     this.onChanged,
     this.onSubmitted,
     required this.hint,
@@ -39,6 +40,9 @@ class ChoiceField extends StatefulWidget {
 
   /// Everything it can suggest; those holding what is typed are shown.
   final List<String> options;
+
+  /// When labels include extra details, matches in the name are shown first.
+  final String Function(String option)? optionName;
 
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
@@ -158,8 +162,15 @@ class _ChoiceFieldState extends State<ChoiceField>
     final typed = value.text == widget.text
         ? ''
         : value.text.trim().toLowerCase();
-    return widget.options
-        .where((option) => option.toLowerCase().contains(typed))
+    final matches = widget.options.where(
+      (option) => option.toLowerCase().contains(typed),
+    );
+    final name = widget.optionName;
+    if (name == null || typed.isEmpty) return matches.take(ChoiceField.shown);
+    bool inName(String option) => name(option).toLowerCase().contains(typed);
+    return matches
+        .where(inName)
+        .followedBy(matches.where((option) => !inName(option)))
         .take(ChoiceField.shown);
   }
 
