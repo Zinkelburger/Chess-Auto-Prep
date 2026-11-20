@@ -911,6 +911,12 @@ class ChapterTest(unittest.TestCase):
         # A tree the builder wrote names no source: it is Stockfish.
         ex.chapters.seed_document(_saved(GURGENIDZE_FEN, source=None), None)
 
+    def test_a_shortlisted_app_tree_cannot_seed_the_full_width_builder(self):
+        doc = _saved(GURGENIDZE_FEN)
+        doc["config"].update(algorithm_version=4, v2_max_our_moves=1, v2_root_moves=4)
+        with self.assertRaises(ToolError):
+            ex.chapters.seed_document(doc, None)
+
     def test_publishing_puts_the_tree_where_the_app_looks(self):
         tree = Path(self.dir.name) / "tree.tree.json"
         tree.write_text(json.dumps(_saved(GURGENIDZE_FEN, horizon=2)), encoding="utf-8")
