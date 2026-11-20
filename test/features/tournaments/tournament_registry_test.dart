@@ -28,6 +28,7 @@ final class _Store implements TournamentStore, TournamentNotifications {
   List<String> engineWarnings = const [];
   String? failRemove;
   String? failSaveEngines;
+  String? failSave;
   Object? requestError;
   String? request;
   @override
@@ -74,7 +75,10 @@ final class _Store implements TournamentStore, TournamentNotifications {
     Tournament after,
     String pgn, {
     required String? expectedPgn,
-  }) => base.save(before, after, pgn, expectedPgn: expectedPgn);
+  }) async => switch (failSave) {
+    final message? => TournamentFailed(message),
+    null => await base.save(before, after, pgn, expectedPgn: expectedPgn),
+  };
   @override
   DocumentRef games(String id) => base.games(id);
 }
@@ -213,4 +217,83 @@ void main() {
     expect(store.base.registry, isEmpty);
     run.running = false;
   });
+
+  test('a refresh during a run keeps the run on screen though the list '
+      'does not have it yet', () async {
+    store.base.records['listed'] = _saved('listed');
+    run
+      ..running = true
+      ..selected = _saved('active');
+    await run.refresh();
+    expect(run.selected?.id, 'active');
+    run.running = false;
+  });
+
+  test('while a save waits for Retry its run cannot be removed; another '
+      'can', () async {
+    store.base.records['other'] = _saved('other');
+    await run.refresh();
+    store.failSave = 'Disk unavailable.';
+    await run.start(config(rules: {'maxMoves': 1}));
+    expect(run.canRetry, isTrue);
+    final active = run.activeId!;
+    await run.remove(run.history.firstWhere((t) => t.id == active));
+    expect(store.base.records, contains(active));
+    await run.remove(run.history.firstWhere((t) => t.id == 'other'));
+    expect(store.base.records, isNot(contains('other')));
+  });
+
+  test('a run that saves leaves the run the player chose selected', () async {
+    final gate = Completer<void>();
+    final waiting = TournamentRun(
+      store: store,
+      pending: pending,
+      jobs: await engineJobsFixture(),
+      launch: (engine, _) async {
+        await gate.future;
+        return Started(ScriptEngine([engine.name == 'A' ? 'e2e4' : 'e7e5']));
+      },
+    );
+    addTearDown(waiting.dispose);
+    store.base.records['other'] = _saved('other');
+    await waiting.refresh();
+    final work = waiting.start(config(rules: {'maxMoves': 1}));
+    while (!waiting.running) {
+      await pumpEventQueue();
+    }
+    waiting.select(waiting.history.firstWhere((t) => t.id == 'other'));
+    gate.complete();
+    await work;
+    expect(waiting.selected?.id, 'other');
+    expect(waiting.history.first.status, 'completed');
+  });
+
+  test(
+    'while an engine is tested the registry takes no other change',
+    () async {
+      final gate = Completer<void>();
+      final testing = TournamentRun(
+        store: store,
+        pending: pending,
+        jobs: await engineJobsFixture(),
+        launch: (_, _) async {
+          await gate.future;
+          return Started(ScriptEngine(['e2e4']));
+        },
+      );
+      addTearDown(testing.dispose);
+      final spec = TournamentEngine.bundled('X');
+      final check = testing.verify(spec);
+      await pumpEventQueue();
+      expect(testing.registryBusy, isTrue);
+      await testing.keepEngines([spec]);
+      expect(store.base.registry, isEmpty);
+      expect(await testing.verify(spec), isA<EngineRejected>());
+      gate.complete();
+      expect(await check, isA<EngineVerified>());
+      expect(testing.registryBusy, isFalse);
+      await testing.keepEngines([spec]);
+      expect(store.base.registry.single.name, 'X');
+    },
+  );
 }
