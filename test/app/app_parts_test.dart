@@ -1,23 +1,30 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_auto_prep/app/mode.dart';
+import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/players/player.dart';
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/chess/tournament/config.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/storage/my_accounts.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart' show Opened;
 import 'package:chess_auto_prep/storage/player_files.dart';
 import 'package:chess_auto_prep/storage/saved_place.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/storage/update_files.dart';
+import 'package:chess_auto_prep/storage/viewer_drafts.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../support/scripted_engine.dart';
+import '../support/scripted_login.dart';
 import '../support/scripted_releases.dart';
+import '../support/scripted_store.dart';
 import '../support/scripted_tournaments.dart';
+import '../support/study_fixture.dart';
 import '../support/window_fixture.dart';
 
 /// How the app starts and is kept in step, as [AppParts] wires it: the
@@ -267,6 +274,105 @@ void main() {
     },
   );
 
+  final original = studyRef('Endgames');
+
+  Future<void> editStudy(WindowFixture window) async {
+    window.store.documents[original] = Opened(
+      twoChapterStudy,
+      scriptedRevision(twoChapterStudy),
+    );
+    await window.parts.start();
+    await window.parts.resumed;
+    await window.requests.openStudy(original);
+    window.session.holdsEdits = true;
+    window.session.setComment(NodePath.of([0]), 'Keep the rook active');
+  }
+
+  testWidgets('close starts the checkpoint while another write is pending', (
+    tester,
+  ) async {
+    final drafts = _StudyDrafts();
+    final window = WindowFixture(viewerDrafts: drafts);
+    try {
+      await editStudy(window);
+      final writing = Completer<void>();
+      window.parts.env.pendingWrites.watch(original, writing.future);
+      window.parts.prepareToClose();
+      final closing = window.parts.exit.mayClose();
+      await tester.pump();
+      expect(
+        (await drafts.find(original.path))?.text,
+        contains('Keep the rook'),
+      );
+      writing.complete();
+      expect(await closing, isTrue);
+      expect(window.question.asked, isEmpty);
+    } finally {
+      window.dispose();
+    }
+  });
+
+  testWidgets('close reports an account save that failed during a checkpoint', (
+    tester,
+  ) async {
+    final writing = Completer<void>();
+    final window = WindowFixture(
+      viewerDrafts: _StudyDrafts(hold: writing.future),
+      login: ScriptedLogin(tokenOutcome: loggedIn(personal: true)),
+      writeAccount: (_) async => false,
+    );
+    try {
+      await editStudy(window);
+      window.parts.prepareToClose();
+      final closing = window.parts.exit.mayClose();
+      await tester.pump();
+      expect(await window.parts.account.useToken('test-token'), isFalse);
+      writing.complete();
+      expect(await closing, isFalse);
+      expect(
+        window.question.asked.single,
+        contains('The account could not be saved.'),
+      );
+    } finally {
+      window.dispose();
+    }
+  });
+
+  testWidgets('closing during a study rename asks before losing held edits', (
+    tester,
+  ) async {
+    final renamed = studyRef('Endgame notes');
+    final drafts = _StudyDrafts(failingPath: renamed.path);
+    final window = WindowFixture(viewerDrafts: drafts);
+    try {
+      await editStudy(window);
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        (await drafts.find(original.path))?.text,
+        contains('Keep the rook active'),
+      );
+
+      window.store.hold = true;
+      final rename = window.studies.rename(original, renamed.name);
+      await tester.pump();
+      expect(window.store.waiting, 1);
+
+      window.parts.prepareToClose();
+      final closing = window.parts.exit.mayClose();
+      // Let close drain the work it can while the file move is still held.
+      await tester.pump();
+      window.store.hold = false;
+      window.store.releaseNext();
+      await rename;
+      expect(window.session.source, renamed);
+      expect(await closing, isFalse);
+      expect(window.question.asked, contains(contains(renamed.name)));
+      expect(drafts.recovered.single.text, contains('Keep the rook active'));
+    } finally {
+      window.dispose();
+    }
+  });
+
   group('an update that did not finish installing', () {
     Future<WindowFixture> started({required bool failed}) async {
       final updates = Directory(p.join(support.path, 'updates'))..createSync();
@@ -479,4 +585,33 @@ void main() {
       expect(failed.reason, endsWith('no engine in this test'));
     });
   });
+}
+
+final class _StudyDrafts implements ViewerDrafts {
+  _StudyDrafts({this.failingPath, this.hold});
+
+  final String? failingPath;
+  final Future<void>? hold;
+  final _kept = <String, ViewerDraft>{};
+  final recovered = <ViewerDraft>[];
+
+  @override
+  Future<void> keep(ViewerDraft draft) async {
+    await hold;
+    if (draft.path == failingPath) {
+      throw FileSystemException('Could not write checkpoint', draft.path);
+    }
+    _kept[draft.path] = draft;
+  }
+
+  @override
+  Future<ViewerDraft?> find(String path) async => _kept[path];
+
+  @override
+  Future<void> drop(String path) async => _kept.remove(path);
+
+  @override
+  Future<void> setAside(String path) async {
+    if (_kept.remove(path) case final draft?) recovered.add(draft);
+  }
 }

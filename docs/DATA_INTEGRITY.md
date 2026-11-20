@@ -114,6 +114,7 @@ and [Backups](ARCHITECTURE.md#backups).
 | `<id>.following`, `<id>.aside` | Beside a record | It landed and lets plain saves pass; it is set aside, to be moved |
 | `backup-moves/` | Support | Kept-version histories still to follow a rename |
 | `recovery-quarantine/<time>/` | Support | Records, settings and drafts the app could not read or finish; never deleted |
+| `<hash>.json.aside`, `<hash>.json.aside.<n>` | Support `viewer-drafts/` | Earlier drafts preserved when the quarantine move failed |
 | `.cap-pgn-history/` | Inside the repertoire | Deleted chapters (`<operation>-<name>`), restored from Deleted chapters |
 | `.cap-reference-history/<operation>/` | Documents | Training files as they were before a relocation rewrote them |
 | `.<name>.v2-tmp` | Beside the target | A staged write; replaced or removed by the next write there |

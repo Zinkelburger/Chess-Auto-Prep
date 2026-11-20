@@ -6,6 +6,10 @@ import 'package:chess_auto_prep/storage/viewer_drafts.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../support/faulty_disk/fault_plan.dart';
+import '../support/faulty_disk/faulty_disk.dart';
+import '../support/faulty_disk/io_trace.dart';
+
 void main() {
   late Directory support;
   setUp(() => support = Directory.systemTemp.createTempSync('viewer-drafts'));
@@ -71,6 +75,58 @@ void main() {
   File draftFile() => Directory(
     p.join(support.path, ViewerDraftFiles.folder),
   ).listSync().whereType<File>().single;
+
+  test(
+    'a blocked quarantine preserves each checkpoint outside lookup',
+    () async {
+      final drafts = ViewerDraftFiles(support);
+      File(p.join(support.path, quarantineFolder)).createSync();
+      await drafts.keep(draft);
+      final live = draftFile();
+      final original = live.readAsStringSync();
+      await drafts.setAside(draft.path);
+      expect(await drafts.find(draft.path), isNull);
+
+      await drafts.keep(
+        ViewerDraft(
+          path: draft.path,
+          revision: draft.revision,
+          game: draft.game,
+          text: 'Another edit',
+        ),
+      );
+      final later = live.readAsStringSync();
+      await drafts.setAside(draft.path);
+      expect(await ViewerDraftFiles(support).find(draft.path), isNull);
+      expect(
+        live.parent.listSync().whereType<File>().map(
+          (f) => f.readAsStringSync(),
+        ),
+        unorderedEquals([original, later]),
+      );
+    },
+  );
+
+  test(
+    'a failed recovery rename reports the error and preserves the bytes',
+    () async {
+      final drafts = ViewerDraftFiles(support);
+      await drafts.keep(draft);
+      final run = await FaultyDisk(support).run(
+        lastingFault((op) => op.kind == IoKind.rename, IoError.eacces),
+        () => ViewerDraftFiles(support).setAside(draft.path),
+      );
+      expect(
+        run.end,
+        isA<Threw<void>>().having(
+          (end) => end.error,
+          'error',
+          isA<FileSystemException>(),
+        ),
+      );
+      expect((await drafts.find(draft.path))?.text, draft.text);
+    },
+  );
 
   test(
     'a record that is not UTF-8 JSON is set aside, large or small',

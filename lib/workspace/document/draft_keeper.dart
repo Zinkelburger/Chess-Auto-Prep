@@ -132,14 +132,30 @@ final class DraftKeeper {
     _timer?.cancel();
     _timer = null;
     _waiting = null;
-    if (_kept.remove(from) case final file?) _kept[to] = file;
-    _unkept.remove(from);
+    _kept.remove(from);
     _path = to;
     // Never written over: a checkpoint at the new name may hold other work.
     _setAside(to);
     _schedule();
+    final replacing = _waiting != null;
     _flush();
-    _inTurn(() => _drop(from));
+    _inTurn(() async {
+      if (replacing && !_unkept.containsKey(to)) {
+        await _drop(from);
+        return;
+      }
+      // The old name can be reused, but its checkpoint may be the only copy.
+      try {
+        await _drafts.setAside(from);
+        _unkept.remove(from);
+      } on Object catch (error) {
+        _unkept[from] = failedBecause(
+          'Could not set aside the unsaved edits to ${p.basename(from)}.',
+          error,
+        );
+        rethrow;
+      }
+    });
   }
 
   /// The edits this visit held are off the board, as the session says: kept
@@ -200,13 +216,21 @@ final class DraftKeeper {
     _inTurn(() => _keep(waiting));
   }
 
+  /// Starts the waiting checkpoint and returns the current queue tail.
+  /// It stays the same future until more work is queued.
+  Future<void> flush() {
+    _flush();
+    return _tail;
+  }
+
+  String? get problem => _unkept.isEmpty ? null : _unkept.values.join('\n');
+
   /// Writes what is waiting now and completes once every checkpoint asked
   /// for is on disk; the window closes after this. Answers which edits are
   /// in no checkpoint and why, or null when every one was written.
   Future<String?> settle() async {
-    _flush();
-    await _tail;
-    return _unkept.isEmpty ? null : _unkept.values.join('\n');
+    await flush();
+    return problem;
   }
 
   /// Completes once the checkpoint of the edits [path] holds is written,

@@ -120,9 +120,16 @@ final class AppParts {
   /// written now rather than when its second is up. Answers what did not
   /// get there, or null.
   Future<String?> _settleWrites() async {
-    final kept = _started ? await _drafts?.settle() : null;
-    final pending = await env.pendingWrites.settle();
-    final problems = [kept, pending].nonNulls;
+    Future<void>? flushDrafts() => _started ? _drafts?.flush() : null;
+    Future<void>? flushed;
+    String? pending;
+    do {
+      flushed = flushDrafts();
+      await flushed;
+      pending = await env.pendingWrites.settle();
+      // A rename can queue another checkpoint while either queue drains.
+    } while (!identical(flushed, flushDrafts()));
+    final problems = [if (_started) _drafts?.problem, pending].nonNulls;
     return problems.isEmpty ? null : problems.join('\n');
   }
 

@@ -55,8 +55,8 @@ abstract interface class ViewerDrafts {
   /// Forgets the draft for [path]: its edits were saved or discarded.
   Future<void> drop(String path);
 
-  /// Moves the draft for [path] into the recovery quarantine, whole: newer
-  /// edits are taking its place and it may hold work nothing else has.
+  /// Moves the draft for [path] whole into quarantine or a recovery file
+  /// beside it. Throws if the draft could not be moved out of live lookup.
   Future<void> setAside(String path);
 }
 
@@ -141,9 +141,18 @@ final class ViewerDraftFiles implements ViewerDrafts {
   Future<void> setAside(String path) async {
     final file = _fileFor(path);
     await withDirectoryLock(_folder, () async {
-      if (await file.exists()) {
-        await quarantine(_support, file, 'newer unsaved edits replaced it');
+      if (!await file.exists()) return;
+      const reason = 'newer unsaved edits replaced it';
+      if (await quarantine(_support, file, reason)) return;
+      // A full volume may still allow a rename within the same directory.
+      var recovery = '${file.path}.aside';
+      var suffix = 2;
+      while (await FileSystemEntity.type(recovery, followLinks: false) !=
+          FileSystemEntityType.notFound) {
+        recovery = '${file.path}.aside.${suffix++}';
       }
+      await file.rename(recovery);
+      log.w('set aside ${file.path} at $recovery', reason);
     });
   }
 
