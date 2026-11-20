@@ -620,11 +620,11 @@ void main() {
       final run = w.trainer.run;
       w.trainer.putDown();
       // Every puzzle of the sitting goes: continuing would end it.
-      for (final puzzle in w.tactics.puzzles.toList()) {
-        unawaited(w.tactics.delete(puzzle));
-        async.flushMicrotasks();
+      for (var i = 0; i < 10 && w.tactics.puzzles.isNotEmpty; i++) {
+        unawaited(w.tactics.delete(w.tactics.puzzles.first));
+        async.elapse(const Duration(milliseconds: 100));
       }
-      async.elapse(const Duration(seconds: 1));
+      expect(w.tactics.puzzles, isEmpty);
       w.trainer.suspend();
       unawaited(w.trainer.start());
       async.flushMicrotasks();
