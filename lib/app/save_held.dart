@@ -16,18 +16,21 @@ Future<void> saveHeld(
   required String collections,
 }) async {
   if (session.readOnly == null) return session.keepHeld();
+  final source = CopySource(session);
+  final game = session.game;
   final where = await showOptionsDialog(
     context,
     title: 'Save your moves',
     options: [for (final target in _HeldTarget.values) (target, target.label)],
   );
-  if (where == null || !context.mounted) return;
+  if (where == null || !context.mounted || !source.matches(session)) return;
   switch (where) {
     case _HeldTarget.copy:
       final name = await askCopyName(context);
-      if (name == null) return;
+      if (name == null || !context.mounted || !source.matches(session)) return;
       sayCopy(requests.say, await session.saveCopy(name, into: collections));
     case _HeldTarget.study:
+      if (session.game != game) return;
       await requests.addToStudy([?gameDraft(session)]);
   }
 }

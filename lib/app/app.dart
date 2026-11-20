@@ -106,8 +106,11 @@ class _ChessAutoPrepState extends State<ChessAutoPrep> {
   Future<CopyResult?> _copyOnLeave(DocumentSession session) async {
     final context = _navigator.currentContext;
     if (context == null) return null;
+    final source = CopySource(session);
     final name = await askCopyName(context);
-    if (name == null) return null;
+    if (name == null || !context.mounted || !source.matches(session)) {
+      return null;
+    }
     return session.copyAside(name);
   }
 

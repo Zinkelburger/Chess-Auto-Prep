@@ -67,6 +67,27 @@ void main() {
     expect(paths(), contains('$collections/Spare.pgn'));
   });
 
+  testWidgets('a pending Actions copy cannot write a newly opened chapter', (
+    tester,
+  ) async {
+    await w.pumpShell(tester);
+    await w.requests.open(kidMain);
+    await tester.pumpAndSettle();
+    await chooseAction(tester, 'Save a copy…');
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(Dialog),
+        matching: find.byType(TextField),
+      ),
+      'KID notes',
+    );
+    await w.requests.open(benkoMain);
+    expect(w.session.source, benkoMain);
+    await tester.tap(find.widgetWithText(FilledButton, 'Save a copy'));
+    await tester.pumpAndSettle();
+    expect(paths(), isNot(contains('/repertoires/benko/KID notes.pgn')));
+  });
+
   testWidgets('cancelling Discard changes in Actions keeps both games’ edits '
       'and undo history', (tester) async {
     final ref = collectionRef('games');

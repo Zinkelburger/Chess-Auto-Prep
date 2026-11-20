@@ -165,14 +165,14 @@ final class WindowActions {
   }
 
   Future<void> _saveCopy(BuildContext context) async {
+    final session = workspace.session;
+    final source = CopySource(session);
     final name = await askCopyName(context);
-    if (name == null || !context.mounted) return;
+    if (name == null || !context.mounted || !source.matches(session)) return;
     // A file this app may not write cannot have a copy beside it either.
-    final result = await workspace.session.saveCopy(
+    final result = await session.saveCopy(
       name,
-      into: workspace.session.readOnly == null
-          ? null
-          : documents.viewer.collections,
+      into: session.readOnly == null ? null : documents.viewer.collections,
     );
     if (!context.mounted) return;
     sayCopy(requests.say, result);
