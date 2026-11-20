@@ -2,23 +2,63 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/chess/pgn/games_written.dart';
+import 'package:chess_auto_prep/features/library/library_state.dart';
+import 'package:chess_auto_prep/storage/chapter_directory.dart';
+import 'package:chess_auto_prep/storage/deleted_chapters.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/file_relocation.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/pgn_file_store.dart';
 import 'package:chess_auto_prep/storage/training_rows.dart';
+import 'package:chess_auto_prep/workspace/document/document_saver.dart';
+import 'package:chess_auto_prep/workspace/document/document_session.dart';
 import 'package:document_file_io/document_file_io.dart'
     show NativeCall, runWithNativeCalls;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../support/library_fixture.dart';
 import 'store_fixture.dart';
 
 void main() {
   late StoreFixture fixture;
   setUp(() async => fixture = await StoreFixture.create());
   tearDown(() => fixture.dispose());
+
+  test('Deleted chapters lists and restores a standalone repertoire', () async {
+    final french = fixture.ref('repertoires/French.pgn');
+    await fixture.put(french, oneGame('1. e4 e6'));
+    final file = File(french.path);
+    final original = await file.readAsBytes();
+    final store = fixture.store;
+    final saver = DocumentSaver(store, delay: Duration.zero);
+    addTearDown(saver.dispose);
+    final session = DocumentSession(store, saver);
+    addTearDown(session.dispose);
+    final library = libraryOver(
+      ChapterDirectory(file.parent, recovery: store.recovery),
+      store,
+      session,
+      saver,
+      root: file.parent.path,
+    );
+    addTearDown(library.dispose);
+    await library.refresh();
+
+    expect(
+      await library.deleteRepertoire(library.repertoires.single),
+      isA<LibraryDone>(),
+    );
+    expect(await file.exists(), isFalse);
+    final deleted = await library.deleted() as DeletedChapters;
+    expect(deleted.chapters.map((chapter) => chapter.name), ['French']);
+    expect(
+      await library.restoreChapter(deleted.chapters.single),
+      isA<LibraryDone>(),
+    );
+    expect(await file.readAsBytes(), original);
+  });
 
   test('file move commits explicit book selectors before returning', () async {
     final from = fixture.ref('repertoires/Course/Main.pgn');
