@@ -618,7 +618,7 @@ _Made _moved(Chapter chapter, EditSpec spec) {
   ];
   if (moves.isEmpty) return none;
   final uci = moves[spec.n % moves.length];
-  switch (addMove(chapter, at: at, uci: uci)) {
+  switch (addMove(chapter, 'move', at: at, uci: uci)) {
     case MoveAdded(:final written) when _nothing(written):
       return none;
     case MoveAdded(chapter: final edited, :final written, :final path):

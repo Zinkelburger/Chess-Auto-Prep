@@ -16,6 +16,7 @@ import '../../chess/pv_text.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/document_ref.dart';
+import '../../storage/operation_id.dart';
 import '../../storage/pgn_document_store.dart' as store;
 import '../../storage/reference_change.dart';
 import '../latest.dart';
@@ -523,12 +524,10 @@ final class DocumentSession extends ChangeNotifier {
     // A move the chapter already holds writes nothing, so following it is
     // reading: a file this app may not write still shows its own lines.
     final here = edits.playedAlready(chapter, at: cursor.value, uci: uci);
-    if (here != null) {
-      cursor._place(here);
-      return;
-    }
+    if (here != null) return cursor._place(here);
     if (_editBlocked() != null) return;
-    switch (edits.addMove(chapter, at: cursor.value, uci: uci)) {
+    final seed = newOperationId();
+    switch (edits.addMove(chapter, seed, at: cursor.value, uci: uci)) {
       case edits.MoveIllegal():
         return;
       case edits.MoveRefused(:final reason):

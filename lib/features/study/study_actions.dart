@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../storage/chapter_files.dart';
+import '../../storage/operation_id.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/name_dialog.dart';
 import '../../workspace/document/document_session.dart';
@@ -81,6 +82,7 @@ Future<void> newStudyChapter(
   if (wanted == null || !context.mounted) return;
   final refusal = addStudyChapter(
     session,
+    newOperationId(),
     name: wanted.name,
     orientation:
         wanted.orientation ??

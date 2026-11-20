@@ -76,7 +76,8 @@ final class MoveRefused extends AddMoveResult {
 /// continuations is a branch point, and a branch is a new game — that is
 /// what a chapter file means by a line.
 AddMoveResult addMove(
-  Chapter chapter, {
+  Chapter chapter,
+  String seed, {
   required NodePath at,
   required String uci,
 }) {
@@ -103,7 +104,7 @@ AddMoveResult addMove(
   } else {
     edited =
         (siblings.isEmpty ? _extended(chapter, prefix, node) : null) ??
-        _appended(chapter, prefix, node);
+        _appended(chapter, prefix, node, seed);
   }
   // Merging keeps the order of the moves a chapter already had and puts the
   // ones only the edited game plays after them, so a move no sibling matched
@@ -219,9 +220,14 @@ _Edited? _extended(Chapter chapter, List<String> prefix, MoveNode node) {
 /// Written straight rather than through the rewrite gate: a new game
 /// replaces no bytes, so there is nothing here for a bad write to lose. That
 /// it reads back as itself is what the assertion in [addMove] checks.
-_Edited _appended(Chapter chapter, List<String> prefix, MoveNode node) {
+_Edited _appended(
+  Chapter chapter,
+  List<String> prefix,
+  MoveNode node,
+  String seed,
+) {
   final tree = lineTree(chapter.tree.rootFen, [...prefix, node.san]);
-  final tags = _newTags(chapter, prefix, tree, node);
+  final tags = _newTags(chapter, prefix, tree, node, seed);
   final lines = [...chapter.lines];
   // The game before it only gains the blank line that puts the new one on a
   // line of its own, which is not a game written again.
@@ -256,6 +262,7 @@ List<PgnTag> _newTags(
   List<String> prefix,
   GameTree tree,
   MoveNode branch,
+  String seed,
 ) {
   final white = chapter.side == Side.white;
   return List.unmodifiable([
@@ -269,7 +276,7 @@ List<PgnTag> _newTags(
     ],
     PgnTag(
       'LineID',
-      newLineId(mainlineSans(tree), chapter.lines.length, idsInUse(chapter)),
+      newVariationId(seed, chapter.lines.length, idsInUse(chapter)),
     ),
   ]);
 }

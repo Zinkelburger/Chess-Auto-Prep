@@ -36,6 +36,7 @@ void main() {
       final study = await readChapter(name: 'Ideas', text: twoChapterStudy);
       final edit = addChapters(
         study,
+        'study',
         study: 'Endgames',
         drafts: [_game, _game.named('')],
       );
@@ -54,6 +55,25 @@ void main() {
       expect(added.text, endsWith('1. e4 c5 0-1'));
       expect(tagValue(edited.lines[3].tags, 'ChapterName'), 'Chapter 4');
       expect(edit.games.order.take(2), [0, 1]);
+    });
+
+    test('appending a batch preserves the id a later draft brings', () {
+      final study = parseChapter(name: 'Endgames', text: twoChapterStudy);
+      Chapter append(List<ChapterDraft> drafts) =>
+          (addChapters(study, 'batch', study: 'Endgames', drafts: drafts)
+                  as ChapterEdited)
+              .chapter;
+      final candidate = append([_game]).lines.last.lineId!;
+      final imported = ChapterDraft(
+        name: 'Imported',
+        orientation: _game.orientation,
+        moves: _game.moves,
+        tags: [PgnTag('LineID', candidate)],
+      );
+      final batch = append([_game, imported]);
+      expect(batch.lines.last.lineId, candidate);
+      expect(batch.lines[2].lineId, isNot(candidate));
+      expect(writeChapter(append([_game, imported])), writeChapter(batch));
     });
   });
 

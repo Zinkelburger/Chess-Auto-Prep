@@ -22,7 +22,7 @@ Chapter reread(Chapter chapter) =>
 /// The chapter the move landed in; the cast fails the test when the move
 /// was rejected.
 Chapter added(Chapter chapter, NodePath at, String uci) =>
-    (addMove(chapter, at: at, uci: uci) as MoveAdded).chapter;
+    (addMove(chapter, 'move', at: at, uci: uci) as MoveAdded).chapter;
 
 /// The chapter the comment landed in; the cast fails the test when the
 /// chapter refused the edit.

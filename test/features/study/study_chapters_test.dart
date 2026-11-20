@@ -1,8 +1,10 @@
 import 'package:chess_auto_prep/chess/fen.dart';
+import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/comment_text.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/line_id_pins.dart';
 import 'package:chess_auto_prep/chess/pgn/study.dart';
+import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
 import 'package:chess_auto_prep/features/study/study_commands.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
@@ -127,6 +129,7 @@ void main() {
       expect(
         addStudyChapter(
           study.session,
+          'study',
           name: 'Bishop endings',
           orientation: Side.black,
         ),
@@ -147,6 +150,7 @@ void main() {
       const fen = '4k3/8/8/8/8/8/4P3/4K3 b - - 0 1';
       addStudyChapter(
         study.session,
+        'study',
         name: 'Mate in one',
         orientation: Side.black,
         root: const Fen(fen),
@@ -164,6 +168,7 @@ void main() {
       final before = study.onDisk;
       addStudyChapter(
         study.session,
+        'study',
         name: 'Broken',
         orientation: Side.white,
         root: const Fen('not a position'),
@@ -263,6 +268,44 @@ void main() {
       );
     },
   );
+
+  test('a replacement study chapter gets its own training id', () async {
+    await open(
+      text: twoChapterStudy.replaceFirst(
+        '1. d4 d5 *',
+        '1. e4 e5 2. Nf3 Nc6 3. Bb5 Nf6 *',
+      ),
+    );
+    List<String?> savedIds() =>
+        trainedIdsOf(parseChapter(name: 'Endgames', text: study.onDisk));
+    final before = savedIds();
+    final moves = lineTree(Fen.initial, [
+      'e4',
+      'e5',
+      'Nf3',
+      'Nc6',
+      'Bb5',
+      'd6',
+    ]);
+    final seen = {before.last!};
+    for (var i = 0; i < 2; i++) {
+      expect(deleteStudyChapter(study.session, index: 1), isNull);
+      expect(
+        addStudyChapter(
+          study.session,
+          'replacement-$i',
+          name: 'Replacement',
+          orientation: Side.black,
+          moves: moves,
+        ),
+        isNull,
+      );
+      await study.saver.flush();
+      final after = savedIds();
+      expect(after.first, before.first);
+      expect(seen.add(after.last!), isTrue);
+    }
+  });
 
   test('chapter operations: the last chapter cannot be deleted', () async {
     await open(text: '[Event "Solo: Only"]\n[ChapterName "Only"]\n\n1. e4 *\n');
@@ -430,7 +473,12 @@ void main() {
     final crlf = twoChapterStudy.replaceAll('\n', '\r\n');
     await open(text: crlf);
     expect(
-      addStudyChapter(study.session, name: 'Third', orientation: Side.white),
+      addStudyChapter(
+        study.session,
+        'study',
+        name: 'Third',
+        orientation: Side.white,
+      ),
       isNull,
     );
     await pumpEventQueue();

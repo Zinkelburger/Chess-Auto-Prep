@@ -1,9 +1,18 @@
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_edit.dart';
+import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/games_written.dart';
 import 'package:chess_auto_prep/chess/pgn/line_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/line_id_pins.dart';
+import 'package:chess_auto_prep/chess/training/schedule.dart';
+import 'package:chess_auto_prep/chess/training/training_line.dart';
+import 'package:chess_auto_prep/features/trainer/progress.dart';
+import 'package:chess_auto_prep/storage/training_progress.dart';
+import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/scripted_progress.dart';
+import '../../support/session_fixture.dart';
 
 /// Two short lines with no id headers, trained under ids worked out from
 /// their moves and their places — short enough that the place is part of
@@ -42,6 +51,55 @@ void main() {
     expect(after.games.rewritten, {1}, reason: 'the pinned game is written');
     expect(writeChapter(after.chapter), contains('[LineID "${ids[1]}"]'));
   });
+
+  test(
+    'a replacement variation starts with its own training history',
+    () async {
+      final fixture = await openSession(
+        _chapter
+            .replaceFirst('[Event "Ruy"]', '[Event "Ruy"]\n[LineID "ruy"]')
+            .replaceFirst('2. Nf3 *', '2. Nf3 Nc6 3. Bb5 a6 *'),
+      );
+      addTearDown(fixture.dispose);
+      final session = fixture.session;
+      final bb5 = NodePath.of([0, 0, 0, 0, 0]);
+      final progress = TrainingProgress(
+        files: ScriptedProgress(),
+        loaded: const ProgressLoaded(reviews: {}, streaks: {}, mistakes: []),
+        time: (now: () => DateTime.utc(2026), jitter: () => 0),
+      );
+      addTearDown(progress.dispose);
+
+      TrainingLine savedBranch(String reply) {
+        final saved = parseChapter(
+          name: fixture.ref.name,
+          text: fixture.onDisk,
+        );
+        return trainingLines(
+          saved,
+          source: fixture.ref.path,
+        ).singleWhere((line) => line.moves.last.san == reply);
+      }
+
+      session.cursor.goTo(bb5);
+      session.playMove('g8f6');
+      await fixture.saver.flush();
+      final berlin = savedBranch('Nf6');
+      expect(
+        await progress.finished(berlin, Rating.good, clean: true),
+        isA<ProgressWritten>(),
+      );
+
+      expect(deleteLine(session, berlin.game), isNull);
+      await fixture.saver.flush();
+      session.cursor.goTo(bb5);
+      session.playMove('d7d6');
+      await fixture.saver.flush();
+      final replacement = savedBranch('d6');
+      expect(progress.reviewOf(replacement).untrained, isTrue);
+      expect(replacement.key, isNot(berlin.key));
+    },
+  );
 
   test('a line given another move keeps the id it was trained under', () {
     final longer = parseChapter(

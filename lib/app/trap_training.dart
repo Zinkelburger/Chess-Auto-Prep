@@ -8,6 +8,7 @@ import '../features/library/library.dart';
 import '../features/trainer/trainer.dart';
 import '../storage/chapter_files.dart';
 import '../storage/finds_store.dart';
+import '../storage/operation_id.dart';
 import '../storage/pgn_document_store.dart';
 import '../workspace/document/document_session.dart';
 import '../workspace/document/generated_draft.dart';
@@ -132,7 +133,8 @@ final class TrapTraining {
         session.source != draft) {
       return;
     }
-    final refused = session.apply((c) => lineAdded(c, kept.find.sans));
+    final seed = newOperationId();
+    final refused = session.apply((c) => lineAdded(c, kept.find.sans, seed));
     if (refused != null || !_played(kept)) {
       requests.say('Could not add the line to ${draft.name}.');
       return;

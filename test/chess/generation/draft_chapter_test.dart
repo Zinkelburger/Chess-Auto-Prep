@@ -50,7 +50,8 @@ void main() {
 
     test('goes into an empty draft whole', () async {
       final empty = await chapterOf('');
-      final edit = lineAdded(empty, ['e4', 'f6', 'd4']) as ChapterEdited;
+      final edit =
+          lineAdded(empty, ['e4', 'f6', 'd4'], 'draft') as ChapterEdited;
       expect(pathOfSans(edit.chapter.tree, ['e4', 'f6', 'd4']), isNotNull);
       expect(edit.chapter.lines, hasLength(1));
       expect(readHeading(edit.chapter.preamble).draft, isTrue);
@@ -58,18 +59,22 @@ void main() {
 
     test('follows what the chapter holds and writes only the rest', () async {
       final holding = await chapterOf('1. e4 e5');
-      final edit = lineAdded(holding, ['e4', 'f6', 'd4']) as ChapterEdited;
+      final edit =
+          lineAdded(holding, ['e4', 'f6', 'd4'], 'draft') as ChapterEdited;
       expect(pathOfSans(edit.chapter.tree, ['e4', 'e5']), isNotNull);
       expect(pathOfSans(edit.chapter.tree, ['e4', 'f6', 'd4']), isNotNull);
       expect(
-        lineAdded(edit.chapter, ['e4', 'f6', 'd4']),
+        lineAdded(edit.chapter, ['e4', 'f6', 'd4'], 'draft'),
         isA<ChapterUnchanged>(),
       );
     });
 
     test('a move that is not legal changes nothing', () async {
       final empty = await chapterOf('');
-      expect(lineAdded(empty, ['e4', 'Ke3']), isA<ChapterEditRefused>());
+      expect(
+        lineAdded(empty, ['e4', 'Ke3'], 'draft'),
+        isA<ChapterEditRefused>(),
+      );
     });
   });
 }

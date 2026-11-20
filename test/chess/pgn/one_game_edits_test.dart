@@ -112,7 +112,7 @@ void main() {
   });
 
   test('a move played in the variation extends that variation', () {
-    final result = addMove(study(), at: variation, uci: 'g1f3');
+    final result = addMove(study(), 'move', at: variation, uci: 'g1f3');
     expect(result, isA<MoveAdded>());
     final added = result as MoveAdded;
     expect(added.path, NodePath.of([0, 1, 1]));

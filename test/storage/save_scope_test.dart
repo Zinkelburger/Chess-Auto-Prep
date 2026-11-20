@@ -73,7 +73,8 @@ void main() {
     // does more than the edit asked for cannot widen it.
     final chapter = parseChapter(name: 'Main', text: threeGames);
     final edit =
-        addMove(chapter, at: NodePath.of([0]), uci: 'g8f6') as MoveAdded;
+        addMove(chapter, 'move', at: NodePath.of([0]), uci: 'g8f6')
+            as MoveAdded;
     expect(edit.written.rewritten, {0});
     final damaged = writeChapter(
       edit.chapter,

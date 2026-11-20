@@ -21,7 +21,7 @@ Chapter reread(Chapter chapter) =>
 /// The chapter the move landed in; the cast fails the test when the move
 /// was rejected.
 Chapter added(Chapter chapter, NodePath at, String uci) =>
-    (addMove(chapter, at: at, uci: uci) as MoveAdded).chapter;
+    (addMove(chapter, 'move', at: at, uci: uci) as MoveAdded).chapter;
 
 /// The chapter the comment landed in; the cast fails the test when the
 /// chapter refused the edit.
@@ -54,7 +54,7 @@ void main() {
       game: read.lines.length,
     );
     expect(
-      addMove(past, at: const NodePath.root(), uci: 'a2a3'),
+      addMove(past, 'move', at: const NodePath.root(), uci: 'a2a3'),
       isA<MoveRefused>(),
     );
   });
@@ -77,7 +77,8 @@ void main() {
       text: '[Event "A"]\n[Result "*"]\n\n[Event "B"]\n[Result "*"]\n',
     );
     final text = writeChapter(
-      (addMove(chapter, at: const NodePath.root(), uci: 'e2e4') as MoveAdded)
+      (addMove(chapter, 'move', at: const NodePath.root(), uci: 'e2e4')
+              as MoveAdded)
           .chapter,
     );
     expect(text, startsWith('[Event "A"]\n[Result "*"]\n\n1. e4'));
@@ -101,7 +102,7 @@ void main() {
   test('the edited file reads back as the tree the edit produced', () {
     expect(movesOf(reread(afterLeaf)), movesOf(afterLeaf));
     expect(
-      addMove(beforeLeaf, at: leaf, uci: 'g8f6'),
+      addMove(beforeLeaf, 'move', at: leaf, uci: 'g8f6'),
       isA<MoveAdded>().having(
         (r) => r.path,
         'path',
@@ -196,18 +197,33 @@ void main() {
 
   test('a new move is the last child of the node it was played from', () {
     // 1. d4 already has d5 and Nf6, so e6 is a branch and a third child.
-    final branched = addMove(white(), at: NodePath.of([0]), uci: 'e7e6');
+    final branched = addMove(
+      white(),
+      'move',
+      at: NodePath.of([0]),
+      uci: 'e7e6',
+    );
     expect((branched as MoveAdded).path, NodePath.of([0, 2]));
     expect(branched.chapter.tree.nodeAt(NodePath.of([0, 2]))?.san, 'e6');
     // 1. d4 Nf6 is the end of its game, so Nf3 extends it as an only child.
-    final extended = addMove(white(), at: NodePath.of([0, 1]), uci: 'g1f3');
+    final extended = addMove(
+      white(),
+      'move',
+      at: NodePath.of([0, 1]),
+      uci: 'g1f3',
+    );
     expect((extended as MoveAdded).path, NodePath.of([0, 1, 0]));
     expect(extended.chapter.tree.nodeAt(NodePath.of([0, 1, 0]))?.san, 'Nf3');
   });
 
   test('a move the chapter already has moves the cursor and nothing else', () {
     final before = black();
-    final result = addMove(before, at: const NodePath.root(), uci: 'c7c5');
+    final result = addMove(
+      before,
+      'move',
+      at: const NodePath.root(),
+      uci: 'c7c5',
+    );
     expect(result, isA<MoveAdded>());
     expect((result as MoveAdded).path, NodePath.of([0]));
     expect(writeChapter(result.chapter), blackChapter);
@@ -222,7 +238,12 @@ void main() {
     });
 
     test('writes a game that holds the move that was played', () {
-      final result = addMove(chapter, at: NodePath.of([0, 0]), uci: 'c2c4');
+      final result = addMove(
+        chapter,
+        'move',
+        at: NodePath.of([0, 0]),
+        uci: 'c2c4',
+      );
       expect(result, isA<MoveAdded>());
       final after = (result as MoveAdded).chapter;
       expect(after.lines, hasLength(3));
@@ -262,7 +283,7 @@ void main() {
     test('extends a study game, either way round', () {
       final study = parseChapter(name: 'Castles', text: castlingGame, game: 0);
       for (final (uci, san) in [('e1g1', 'O-O'), ('e1c1', 'O-O-O')]) {
-        final result = addMove(study, at: end, uci: uci);
+        final result = addMove(study, 'move', at: end, uci: uci);
         expect(result, isA<MoveAdded>(), reason: uci);
         final after = (result as MoveAdded).chapter;
         expect(after.lines.single.text, endsWith('1. a3 a6 2. $san *'));
@@ -273,7 +294,7 @@ void main() {
 
     test('becomes a variation in a study game, as any move does', () {
       final study = parseChapter(name: 'Castles', text: castlingGame, game: 0);
-      final result = addMove(study, at: NodePath.of([0]), uci: 'e8g8');
+      final result = addMove(study, 'move', at: NodePath.of([0]), uci: 'e8g8');
       expect(result, isA<MoveAdded>());
       final text = (result as MoveAdded).chapter.lines.single.text;
       expect(text, endsWith('1. a3 a6 (1... O-O) *'));
@@ -284,12 +305,14 @@ void main() {
         name: 'Castles',
         text: '// Color: White\n\n$castlingGame',
       );
-      final result = addMove(chapter, at: end, uci: 'e1g1') as MoveAdded;
+      final result =
+          addMove(chapter, 'move', at: end, uci: 'e1g1') as MoveAdded;
       expect(result.chapter.lines, hasLength(1));
       expect(result.written.rewritten, {0});
       expect(result.written.appended, 0);
       expect(result.chapter.lines.single.text, endsWith('2. O-O *'));
-      final byRook = addMove(chapter, at: end, uci: 'e1h1') as MoveAdded;
+      final byRook =
+          addMove(chapter, 'move', at: end, uci: 'e1h1') as MoveAdded;
       expect(writeChapter(result.chapter), writeChapter(byRook.chapter));
     });
   });
@@ -309,7 +332,7 @@ void main() {
       ),
     );
     expect(
-      addMove(impossible, at: NodePath.of([0]), uci: 'e2e4'),
+      addMove(impossible, 'move', at: NodePath.of([0]), uci: 'e2e4'),
       isA<MoveNotWritten>(),
     );
   });
@@ -317,11 +340,11 @@ void main() {
   test('a move that cannot be played is reported, not written', () {
     final before = black();
     expect(
-      addMove(before, at: NodePath.of([0]), uci: 'e7e5'),
+      addMove(before, 'move', at: NodePath.of([0]), uci: 'e7e5'),
       isA<MoveIllegal>().having((r) => r.uci, 'uci', 'e7e5'),
     );
     expect(
-      addMove(before, at: const NodePath.root(), uci: 'zz99'),
+      addMove(before, 'move', at: const NodePath.root(), uci: 'zz99'),
       isA<MoveIllegal>(),
     );
     expect(writeChapter(before), blackChapter);

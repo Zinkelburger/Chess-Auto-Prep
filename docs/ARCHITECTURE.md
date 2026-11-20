@@ -412,7 +412,9 @@ hidden recovery or staging folders.
   (`trainedIdsOf`). Any edit that would change that id first writes
   `[LineID]` with the current id (`withIdsPinned`). Progress therefore stays
   keyed by path and id, and chapter changes inside a file never touch the
-  training files.
+  training files. A newly appended repertoire branch or study chapter without an
+  imported id gets a fresh `[LineID]` at creation. Replaying the same edit
+  command writes the same id.
 - **Import writes one file.** A multi-chapter course or study becomes
   `<repertoire>.pgn` with `[ChapterName]` and a distinct `[LineID]` on every
   line (`courseText`). Imports are staged in a `.import-` folder and renamed

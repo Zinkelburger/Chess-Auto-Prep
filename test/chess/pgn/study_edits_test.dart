@@ -83,8 +83,13 @@ void main() {
   });
 
   group('adding a chapter', () {
-    ChapterEdit add(Chapter to, {String name = 'New'}) =>
-        addChapter(to, study: 'S', name: name, orientation: Side.white);
+    ChapterEdit add(Chapter to, {String name = 'New'}) => addChapter(
+      to,
+      'study',
+      study: 'S',
+      name: name,
+      orientation: Side.white,
+    );
 
     test('puts a blank line before it, after a study of one or of more', () {
       for (final chapters in [

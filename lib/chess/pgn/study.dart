@@ -283,6 +283,7 @@ String studyChapterText(
   ChapterDraft draft, {
   required String study,
   required String name,
+  String? lineId,
   String ending = '\n',
 }) {
   final tags = withStudyTags(
@@ -299,6 +300,7 @@ String studyChapterText(
       ..write(tag.text)
       ..write(tag.trailer);
   }
+  if (lineId != null) buffer.write('${PgnTag('LineID', lineId).text}$ending');
   final result = draft.result ?? '*';
   return (buffer
         ..write(ending)

@@ -23,7 +23,8 @@ import '../../workspace/document/document_session.dart';
 
 /// A new chapter at the end, which the session then shows.
 String? addStudyChapter(
-  DocumentSession session, {
+  DocumentSession session,
+  String seed, {
   required String name,
   required Side orientation,
   Fen root = Fen.initial,
@@ -32,6 +33,7 @@ String? addStudyChapter(
   session,
   (chapter) => addChapter(
     chapter,
+    seed,
     study: studyNameOf(chapter),
     name: name.isEmpty ? nextChapterName(studyChapters(chapter.lines)) : name,
     orientation: orientation,

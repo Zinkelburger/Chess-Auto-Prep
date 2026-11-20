@@ -141,7 +141,7 @@ BranchTry tryBranchingBelowANullMove(String path, String text) {
   final from = positionOf(chapter.tree.fenAt(at));
   final move = from == null ? null : _aLegalMove(from);
   if (move == null) return (tried: false, failure: null);
-  final result = addMove(chapter, at: at, uci: move);
+  final result = addMove(chapter, 'move', at: at, uci: move);
   if (result is! MoveAdded) {
     return (tried: true, failure: '$path: $move below a null move was refused');
   }

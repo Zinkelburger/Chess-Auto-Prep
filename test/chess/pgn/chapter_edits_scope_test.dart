@@ -14,7 +14,7 @@ void main() {
   Chapter white() => parseChapter(name: 'Gambit', text: whiteChapter);
 
   GamesWritten wroteAdding(Chapter chapter, NodePath at, String uci) =>
-      (addMove(chapter, at: at, uci: uci) as MoveAdded).written;
+      (addMove(chapter, 'move', at: at, uci: uci) as MoveAdded).written;
 
   GamesWritten wroteCommenting(Chapter chapter, NodePath at, String text) =>
       (setComment(chapter, at: at, text: text) as CommentWritten).written;

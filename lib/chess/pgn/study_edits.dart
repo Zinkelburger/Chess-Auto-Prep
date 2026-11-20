@@ -4,8 +4,10 @@ import '../fen.dart';
 import 'chapter.dart';
 import 'chapter_edit.dart';
 import 'chapter_line.dart';
+import 'game_text.dart';
 import 'game_tree.dart';
 import 'games_written.dart';
+import 'line_id_pins.dart';
 import 'pgn_reader.dart';
 import 'rewrite_gate.dart';
 import 'study.dart';
@@ -21,7 +23,8 @@ import 'study.dart';
 /// order means by last, and the focus moved onto it. [moves] are its moves
 /// from [root], when it is made from a board that has some.
 ChapterEdit addChapter(
-  Chapter chapter, {
+  Chapter chapter,
+  String seed, {
   required String study,
   required String name,
   required Side orientation,
@@ -29,6 +32,7 @@ ChapterEdit addChapter(
   GameTree? moves,
 }) => addChapters(
   chapter,
+  seed,
   study: study,
   drafts: [
     ChapterDraft(
@@ -45,11 +49,18 @@ ChapterEdit addChapter(
 /// Every game already in the file is kept byte for byte; only the one that
 /// was last gains the whitespace that separates it from the next.
 ChapterEdit addChapters(
-  Chapter chapter, {
+  Chapter chapter,
+  String seed, {
   required String study,
   required List<ChapterDraft> drafts,
 }) {
   final ending = _endingIn(chapter);
+  final taken = {
+    for (final line in chapter.lines) ?line.lineId,
+    for (final draft in drafts)
+      for (final tag in draft.tags.whereType<PgnTag>())
+        if (tag.key == 'LineID') tag.value.trim(),
+  };
   var lines = chapter.lines;
   for (final draft in drafts) {
     final name = draft.name.trim().isEmpty
@@ -60,6 +71,9 @@ ChapterEdit addChapters(
       study: study,
       name: name,
       ending: ending,
+      lineId: idHeaderAt(draft.tags) < 0
+          ? newVariationId(seed, lines.length, taken)
+          : null,
     );
     final read = readGame(text);
     if (read.issues.isNotEmpty || read.tree == null) {

@@ -245,6 +245,18 @@ String headerText(List<PgnHeader> tags) {
   return buffer.toString();
 }
 
+/// An id for a newly created game, reproducible from its command's [seed].
+/// The leading dash cannot occur in a derived id (encoded SAN or hex), so
+/// reserving headers is enough even for a study with unread games.
+String newVariationId(String seed, int index, Set<String> taken) {
+  var attempt = 0;
+  while (true) {
+    final hash = sha256.convert(utf8.encode('$seed|$index|${attempt++}'));
+    final id = 'line_-${base64Url.encode(hash.bytes).substring(0, 21)}';
+    if (taken.add(id)) return id;
+  }
+}
+
 /// The `[LineID]` a game written for [sans] at file position [index] gets.
 ///
 /// It is the id a game that carries no id header is trained under —

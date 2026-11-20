@@ -12,6 +12,7 @@ import '../../storage/chapter_files.dart';
 import '../../storage/deleted_chapters.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/edit_scope.dart' show GamesRearranged;
+import '../../storage/operation_id.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/pgn_document_store.dart' as store;
 import '../../storage/pgn_export.dart';
@@ -190,7 +191,8 @@ final class Studies extends ChangeNotifier {
       case NewStudy(:final name):
         if (nameProblem(name) case final wrong?) return StudyProblem(wrong);
         final empty = await readChapter(name: name, text: '');
-        final edit = pgn.addChapters(empty, study: name, drafts: drafts);
+        final seed = newOperationId();
+        final edit = pgn.addChapters(empty, seed, study: name, drafts: drafts);
         if (edit is! ChapterEdited) return _refusedAdd(edit);
         final created = await _created(name, writeChapter(edit.chapter));
         return created is StudyDone
@@ -214,8 +216,10 @@ final class Studies extends ChangeNotifier {
       return const StudyProblem('Open that study from its list first.');
     }
     final first = chapter.lines.length;
+    final seed = newOperationId();
     final refused = _session.apply(
-      (open) => pgn.addChapters(open, study: studyNameOf(open), drafts: drafts),
+      (open) =>
+          pgn.addChapters(open, seed, study: studyNameOf(open), drafts: drafts),
       writes: true,
     );
     return refused == null
@@ -243,6 +247,7 @@ final class Studies extends ChangeNotifier {
     final chapter = await readChapter(name: study.name, text: text);
     final edit = pgn.addChapters(
       chapter,
+      newOperationId(),
       study: studyNameIn(chapter.lines) ?? study.name,
       drafts: drafts,
     );

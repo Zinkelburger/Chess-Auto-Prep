@@ -343,6 +343,7 @@ void main() {
         local.session.apply(
           (c) => addChapter(
             c,
+            'study',
             study: 'Openings',
             name: 'Delta',
             orientation: Side.white,

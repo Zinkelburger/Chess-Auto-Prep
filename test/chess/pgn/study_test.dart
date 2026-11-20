@@ -228,12 +228,12 @@ void main() {
         draft('Three', ['c4']),
       ];
       final edit =
-          addChapters(before, study: 'Endgames', drafts: drafts)
+          addChapters(before, 'study', study: 'Endgames', drafts: drafts)
               as ChapterEdited;
       var oneByOne = before;
       for (final one in drafts) {
         final added =
-            addChapters(oneByOne, study: 'Endgames', drafts: [one])
+            addChapters(oneByOne, 'study', study: 'Endgames', drafts: [one])
                 as ChapterEdited;
         oneByOne = parseChapter(
           name: 'Endgames',
@@ -250,6 +250,7 @@ void main() {
       final edit =
           addChapters(
                 before,
+                'study',
                 study: 'Endgames',
                 drafts: [
                   for (var i = 0; i < 1000; i++) draft('', ['e4']),
