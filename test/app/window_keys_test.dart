@@ -79,6 +79,33 @@ void main() {
     expect(inspection.session.cursor.value.isRoot, isTrue);
   });
 
+  testWidgets('Ctrl+N in the trainer keeps analysis moves off the repertoire', (
+    tester,
+  ) async {
+    const chapter =
+        '// Color: White\n\n[Event "Main"]\n[Result "*"]\n\n1. e4 *\n';
+    w.store.documents[benkoMain] = Opened(chapter, scriptedRevision(chapter));
+    await w.pumpShell(tester);
+    await w.requests.open(benkoMain);
+    await tester.pumpAndSettle();
+    w.requests.switchTo(Mode.trainer);
+    await tester.pumpAndSettle();
+    expect(w.session.source, benkoMain);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    tester.semantics.tap(find.semantics.byLabel('d2, White pawn'));
+    await tester.pump();
+    tester.semantics.tap(find.semantics.byLabel('d4, empty'));
+    await tester.pumpAndSettle();
+    await w.saver.flush();
+
+    expect(find.bySemanticsLabel('d4, White pawn'), findsOneWidget);
+    expect((w.store.documents[benkoMain] as Opened).text, chapter);
+  });
+
   group("the mouse's buttons", () {
     late Mode first;
 
