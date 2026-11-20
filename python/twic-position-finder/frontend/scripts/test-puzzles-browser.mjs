@@ -25,7 +25,11 @@ const browser = await puppeteer.launch({
 });
 const text = (page, selector) => page.$eval(selector, (el) => el.textContent.trim());
 const hashId = (page) => page.evaluate(() => decodeURIComponent(location.hash.slice(1)));
+// The solver's turn, not the intro (the opponent's last move arriving, board locked), which reads the same.
+const solverTurn = () => document.querySelector('#bp-turn').classList.contains('turn-turn')
+  && document.querySelector('#bp-turn-title').textContent.endsWith('to move');
 const ready = (page) => page.waitForFunction(() => document.querySelector('#bp').dataset.state === 'ready'
+  && document.querySelector('#bp-turn').classList.contains('turn-turn')
   && document.querySelector('#bp-turn-title').textContent.endsWith('to move'), { timeout: 15_000 });
 const chipLabels = (page, box) => page.$$eval(`${box} label`, (ls) => ls.map((l) => ({ text: l.textContent, checked: l.querySelector('input').checked })));
 
@@ -78,7 +82,8 @@ try {
 
   // Settings: From names both sets, the FICS one chosen; the missed filter speaks of a player.
   await page.click('#bp-settings-open');
-  await page.waitForFunction(() => document.querySelectorAll('#bp-set label b').length === 2, { timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelectorAll('#bp-set label b').length === 2
+    && !document.querySelector('#bp-settings').getAnimations().length, { timeout: 10_000 });
   const from = await chipLabels(page, '#bp-set');
   console.log('From:', from.map((c) => `${c.text}${c.checked ? ' (chosen)' : ''}`).join(' | '));
   assert.match(from[0].text, /^Human games\d+$/);
@@ -87,7 +92,7 @@ try {
   assert.match(await text(page, '#bp-missed label'), /^Only ones the player missed\d+$/);
 
   // Engine games: the set, its source line and the missed filter's wording change together.
-  await page.click('#bp-set label:nth-child(2) input');
+  await page.click('#bp-set label:nth-child(2)');
   await page.waitForFunction(() => /engine games/.test(document.querySelector('#bp-source').textContent), { timeout: 10_000 });
   assert.match(await text(page, '#bp-missed label'), /^Only ones the engine missed\d+$/);
   await page.screenshot({ path: path.join(output, 'puzzles-engine-settings.png') });
@@ -107,7 +112,7 @@ try {
     const bottom = puzzle.fen.split(' ')[1] === 'w' ? 'white' : 'black';
     console.log(`solving ${puzzle.id}: ${puzzle.kind}, ${puzzle.san.join(' ')} (${puzzle.white} v ${puzzle.black}, found in the game: ${puzzle.found})`);
     for (let i = 0; i < puzzle.line.length; i += 2) {
-      await page.waitForFunction(() => document.querySelector('#bp-turn-title').textContent.endsWith('to move'), { timeout: 5000 });
+      await page.waitForFunction(solverTurn, { timeout: 5000 });
       await play(page, puzzle.line[i], bottom);
       if (i + 1 < puzzle.line.length) await page.waitForFunction((n) => document.querySelectorAll('#bp-line .san-token').length >= n, { timeout: 5000 }, i + 2);
     }
@@ -139,7 +144,9 @@ try {
 
   // Back to Human games: the FICS place comes back, then a deep link to the engine puzzle reopens its set.
   await page.click('#bp-settings-open');
-  await page.click('#bp-set label:nth-child(1) input');
+  // Wait out the sheet's slide-in so the chip is where the click lands.
+  await page.waitForFunction(() => document.querySelector('#bp-settings').open && !document.querySelector('#bp-settings').getAnimations().length);
+  await page.click('#bp-set label:nth-child(1)');
   await page.click('#bp-settings-close');
   await ready(page);
   assert.equal(await hashId(page), humanId, 'the FICS set reopens where it was');

@@ -75,6 +75,9 @@ def main(argv: list[str] | None = None) -> int:
                            help="with --arena: keep the scan's scores here and reuse them")
     p_puzzles.add_argument("--verify-log", type=Path,
                            help="with --arena: append each verified candidate here and skip those already in it")
+    p_puzzles.add_argument("--export-verified", action="store_true",
+                           help="with --arena and --verify-log: export the sound records verified so far, "
+                                "without the engine (--from-candidates names the run's candidates for the count)")
     p_puzzles.add_argument("--raw-out", type=Path, help="also keep the verified candidates")
     p_puzzles.add_argument("--from-raw", type=Path,
                            help="re-export a --raw-out file instead of mining (no engine needed)")
@@ -120,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.arena, args.jobs, args.engine, args.out or arena_api.WEB_OUT, args.raw_out, kinds,
                 args.from_raw, rules=rules, candidates_out=args.candidates_out,
                 from_candidates=args.from_candidates, verify_nodes=args.verify_nodes,
-                scan_cache=args.scan_cache, verify_log=args.verify_log,
+                scan_cache=args.scan_cache, verify_log=args.verify_log, only_verified=args.export_verified,
             )
         return puzzles_api.run(
             args.year, args.games, args.min_elo, args.jobs, args.engine, args.out or puzzles_api.WEB_OUT,

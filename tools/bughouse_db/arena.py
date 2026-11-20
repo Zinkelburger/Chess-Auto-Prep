@@ -52,6 +52,10 @@ Deduplication. Candidates are deduplicated on placement, side and pockets
 `WEB_OUT`; verified puzzles keep at most one per solution line among games
 that share an opening (`dedupe_lines`).
 
+A stopped run keeps what it verified (`--verify-log`); `--export-verified`
+exports those records without the engine, and the source line then says how
+many of the candidates were checked.
+
 Records. The page's version-2 records, with readable engine names
 (`HypeBeast`, `HiveMind`, `Fairy-Stockfish`; never a build name), ratings
 0, the match's start date, `game` a stable integer from the match and round,
@@ -492,15 +496,50 @@ def _score(fen: str) -> tuple[str, P.Score | None]:
     return fen, ((best[0], best[1]) if best else None)
 
 
+def read_verify_log(path: Path) -> dict[str, P.Candidate]:
+    """The verify log's records by puzzle id (else position), the last one for each winning;
+    a line cut short by a stopped run is skipped."""
+    done: dict[str, P.Candidate] = {}
+    for line in path.read_text().splitlines():
+        try:
+            record = P.Candidate(**json.loads(line))
+        except (ValueError, TypeError):
+            continue
+        done[record.pid or position_key(record.fen)] = record
+    return done
+
+
+def export_verified(verify_log: Path, out: Path, raw_out: Path | None, source: str,
+                    candidates: Path | None = None) -> int:
+    """Export the sound records of a verify log, without verifying the rest: a partial run.
+    With the run's candidate file, the source says how many of them were checked."""
+    done = read_verify_log(verify_log)
+    verified = [c for c in done.values() if not c.reject]
+    if candidates:
+        total = len(json.loads(candidates.read_text()))
+        source += f" ({len(done):,} of the {total:,} candidate positions checked)"
+    print(f"{len(verified)} sound of {len(done)} checked", file=sys.stderr, flush=True)
+    if raw_out:
+        raw_out.parent.mkdir(parents=True, exist_ok=True)
+        raw_out.write_text(json.dumps([asdict(c) for c in verified]) + "\n")
+    export(verified, out, source)
+    return 0
+
+
 def run(roots: list[Path], jobs: int, engine: str | None, out: Path, raw_out: Path | None,
         kinds: frozenset[str] = frozenset(P.KINDS), from_raw: Path | None = None,
         rules: P.TacticRules = P.RULES, candidates_out: Path | None = None,
         from_candidates: Path | None = None, verify_nodes: int = P.VERIFY_NODES,
-        scan_cache: Path | None = None, verify_log: Path | None = None) -> int:
+        scan_cache: Path | None = None, verify_log: Path | None = None,
+        only_verified: bool = False) -> int:
     dirs = match_dirs(roots)
     games = [g for d in dirs for g in read_match(d)]
     source = source_text(games)
     print(f"{len(games)} games in {len(dirs)} matches", file=sys.stderr, flush=True)
+    if only_verified:
+        if not verify_log:
+            raise SystemExit("--export-verified needs --verify-log")
+        return export_verified(verify_log, out, raw_out, source, from_candidates)
     if from_raw:
         export([P.Candidate(**r) for r in json.loads(from_raw.read_text())], out, source)
         return 0
@@ -546,14 +585,7 @@ def run(roots: list[Path], jobs: int, engine: str | None, out: Path, raw_out: Pa
     unique = [c for c in unique if c.kind in kinds]
     for c in unique:
         c.reject, c.precheck = None, None
-    done: dict[str, P.Candidate] = {}
-    if verify_log and verify_log.exists():
-        for line in verify_log.read_text().splitlines():
-            try:
-                record = P.Candidate(**json.loads(line))
-            except (ValueError, TypeError):
-                continue
-            done[record.pid or position_key(record.fen)] = record
+    done = read_verify_log(verify_log) if verify_log and verify_log.exists() else {}
     todo_v = [c for c in unique if (c.pid or position_key(c.fen)) not in done]
     print(f"verifying {len(todo_v)} candidates ({len(unique) - len(todo_v)} done before) "
           f"{dict(Counter(c.kind for c in todo_v))}", file=sys.stderr, flush=True)

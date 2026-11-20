@@ -269,7 +269,18 @@ Fairy-Stockfish binary:
   (see `tools/bughouse_db/arena.py`). The same scan and verify, plus
   candidates from the games' own recorded evaluation swings, a cheap
   pre-check of tactics, and deduplication against the FICS set and per
-  opening line. `--scan-cache` and `--verify-log` make a long run resumable.
+  opening line. `--scan-cache` and `--verify-log` make a long run resumable,
+  and `--export-verified` exports what a stopped run's verify log holds
+  (`--from-candidates` names its candidate file for the count).
+
+  The published engine set is such a partial mine, and its source line says
+  so: 8,287 games (8,266 HypeBeast self-play, 17 against HiveMind, 4 against
+  Fairy-Stockfish) gave 109,540 distinct candidate positions, of which the
+  first 50,336 were checked (pre-check or full verify) before the run was
+  stopped. 816 were sound; 706 are published (542 mates, 164 tactics) after
+  the mate-in-one rule (the engine found 108 of them) and the FICS and
+  repeated-line deduplication (2). Of the 1,177 pre-check rejects verified in
+  full anyway, none was sound.
 
 Each puzzle is one board of a real game with the reserves frozen: captures go
 to the partner and nothing arrives. The engine plays that rule through

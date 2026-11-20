@@ -1136,6 +1136,32 @@ class TestArenaGames(unittest.TestCase):
                  for i in range(2000)]
         self.assertTrue(20 < sum(picks) < 100, "about 3 in 100, fixed by id")
 
+    def test_a_stopped_run_exports_what_it_verified(self):
+        import json
+        from dataclasses import asdict
+        from bughouse_db import arena
+        from bughouse_db.puzzles import Candidate
+
+        fen = "r4k1r/ppN2ppp/3Pp3/2Np4/1n1P4/4Pq2/PPPKBb1P/R2Q1Bq1[Nrnp] w - - 4 27"
+        base: dict[str, Any] = dict(fen=fen, dual="", board="B", ply=9, last=None, played="Nd7+", game=1,
+                    date="2026.11.10", tc="120+0", white="HypeBeast", black="HiveMind", welo=0, belo=0,
+                    kind="mate", line=["c5d7", "f8g8", "N@e7"], mates=["N@e7"], pid="eabcdef-1-B-9")
+        first = Candidate(**{**base, "reject": "mate: mate not forced"})
+        again = Candidate(**base)  # verified again later: the last record wins
+        other = Candidate(**{**base, "pid": "eabcdef-2-B-9", "fen": fen.replace("4 27", "4 28"),
+                             "reject": "advantage: no clear best move (pre-check)"})
+        with tempfile.TemporaryDirectory() as tmp:
+            log, out, raw, cands = (Path(tmp) / n for n in ("verify.jsonl", "out", "raw.json", "cands.json"))
+            log.write_text("".join(json.dumps(asdict(c)) + "\n" for c in (first, other, again)) + '{"fen": "cut sh')
+            cands.write_text(json.dumps([asdict(first), asdict(other), {}]))
+            with mock.patch.object(arena, "fics_keys", return_value=set()):
+                arena.export_verified(log, out, raw, "3 engine games", cands)
+            self.assertEqual([r["pid"] for r in json.loads(raw.read_text())], ["eabcdef-1-B-9"])
+            index = json.loads((out / "index.json").read_text())
+            self.assertEqual(index["count"], 1)
+            self.assertEqual(index["source"], "3 engine games (2 of the 3 candidate positions checked)")
+            self.assertEqual(index["puzzles"][0]["id"], "eabcdef-1-B-9")
+
     def test_one_puzzle_per_line_per_opening_and_none_from_the_fics_set(self):
         import json
         from bughouse_db import arena
