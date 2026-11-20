@@ -26,6 +26,7 @@ class WorkspaceKeys extends StatefulWidget {
     required this.editing,
     required this.tabs,
     this.extra = const {},
+    this.boardReady = true,
     this.leave = _nothingToLeave,
     this.save,
     this.escapeEndsEditing = true,
@@ -33,6 +34,7 @@ class WorkspaceKeys extends StatefulWidget {
   });
 
   final DocumentSession session;
+  final bool boardReady;
   final ValueNotifier<bool> editing;
   final PaneTabs<Object> tabs;
 
@@ -123,6 +125,13 @@ class _WorkspaceKeysState extends State<WorkspaceKeys> {
   /// handled and the field would never see it.
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     final keys = HardwareKeyboard.instance;
+    if (!widget.boardReady &&
+        !widget.extra.keys.any((key) => key.accepts(event, keys)) &&
+        !AppKey.nextTab.accepts(event) &&
+        !AppKey.previousTab.accepts(event) &&
+        !AppKey.closeTab.accepts(event)) {
+      return KeyEventResult.ignored;
+    }
     // Save belongs to the document even while an editor owns the caret.
     if (AppKey.save.accepts(event)) {
       (widget.save ?? _session.keepHeld)();

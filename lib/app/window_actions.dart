@@ -101,7 +101,10 @@ final class WindowActions {
 
   List<AppAction> _modeActions(BuildContext context) => [
     if (!inspecting()) ..._view.layout.actions,
-    ..._documentModeActions(context),
+    if (inspecting() && workspace.inspection?.active != true)
+      ...tabActions(_view.tabs)
+    else
+      ..._documentModeActions(context),
   ];
 
   List<AppAction> _documentModeActions(BuildContext context) => inspecting()
@@ -109,7 +112,7 @@ final class WindowActions {
           ...documentActions(
             session: _boardWorkspace.session,
             analysis: _boardWorkspace.analysis,
-            editing: editing,
+            editing: workspace.inspection!.editing,
             onSaveCopy: () {},
           ),
           ...doors.entries(context),

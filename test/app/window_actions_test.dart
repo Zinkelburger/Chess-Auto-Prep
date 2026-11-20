@@ -4,8 +4,14 @@
 // settings alone; and no pane splits while the Analysis tab holds a board
 // of its own.
 import 'package:chess_auto_prep/app/mode.dart';
+import 'package:chess_auto_prep/app/top_bar.dart';
 import 'package:chess_auto_prep/features/settings/setting_rows.dart';
+import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/ui/pane_tabs.dart';
+import 'package:chess_auto_prep/workspace/board/board_view.dart';
+import 'package:chess_auto_prep/workspace/workspace_keys.dart';
+import 'package:chess_auto_prep/workspace/workspace_tabs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -90,6 +96,87 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Training'), findsWidgets);
     expect(find.text('Look'), findsNothing);
+  });
+
+  Future<ChapterRef> openWithHeldMove(WidgetTester tester) async {
+    final ref = collectionRef('games');
+    w.store.documents[ref] = Opened(
+      threeGameFile,
+      scriptedRevision(threeGameFile),
+    );
+    await w.pumpShell(tester);
+    await w.requests.openFile(ref);
+    await tester.pumpAndSettle();
+    tester.widget<BoardView>(find.byType(BoardView)).onMove('b2b3');
+    await tester.pumpAndSettle();
+    return ref;
+  }
+
+  testWidgets('editing the scratch board keeps the source PGN in Read '
+      'with its move unsaved', (tester) async {
+    final ref = await openWithHeldMove(tester);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(w.parts.workspace.inspection!.active, isTrue);
+    expect(w.session.hasHeldEdits, isTrue);
+
+    await chooseAction(tester, 'Edit');
+    await w.saver.flush();
+    expect((w.store.documents[ref] as Opened).text, threeGameFile);
+    expect(w.session.hasHeldEdits, isTrue);
+    expect(find.text('Done'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Close Analysis').last);
+    await tester.pumpAndSettle();
+    final readEdit = tester.widget<SegmentedButton<bool>>(
+      find.byType(SegmentedButton<bool>),
+    );
+    expect(readEdit.selected, {false});
+  });
+
+  testWidgets('Analysis waits for its game and restores its edit strip', (
+    tester,
+  ) async {
+    await openWithHeldMove(tester);
+    final bar = tester.widget<TopBar>(find.byType(TopBar));
+    final tabs = tester.widget<WorkspaceKeys>(find.byType(WorkspaceKeys)).tabs;
+
+    // Read the menu before the pending scratch copy gets its next microtask.
+    tabs.show(WorkspaceTab.analysis);
+    expect(w.parts.workspace.inspection!.active, isFalse);
+    final actions = bar.actions().where((action) => action.run != null);
+    expect(actions.map((action) => action.label), isNot(contains('Edit')));
+    await tester.pumpAndSettle();
+    expect(w.parts.workspace.inspection!.active, isTrue);
+    expect(w.session.hasHeldEdits, isTrue);
+    expect(w.store.requestedSaves, isEmpty);
+    await chooseAction(tester, 'Edit');
+    expect(find.text('Done'), findsOneWidget);
+
+    final strip = find.byType(PaneTabStrip<WorkspaceTab>);
+    Future<void> selectTab(String name) async {
+      await tester.tap(find.descendant(of: strip, matching: find.text(name)));
+      await tester.pumpAndSettle();
+    }
+
+    await selectTab('Moves');
+    expect(w.parts.workspace.inspection!.active, isFalse);
+    await selectTab('Analysis');
+    expect(find.text('Done'), findsOneWidget);
+
+    await selectTab('Moves');
+    w.viewer.showGame(1);
+    await tester.pumpAndSettle();
+    await selectTab('Analysis');
+    expect(find.text('Done'), findsNothing);
+    await selectTab('Moves');
+    w.viewer.showGame(0);
+    await tester.pumpAndSettle();
+    await selectTab('Analysis');
+    expect(find.text('Done'), findsOneWidget);
   });
 
   testWidgets('no pane splits while the Analysis tab holds its own board', (
