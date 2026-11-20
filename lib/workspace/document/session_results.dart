@@ -7,6 +7,7 @@
 /// taken, an undo refused, an edit refused. The widget writes the sentences.
 library;
 
+import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/comment_edits.dart';
 
 sealed class OpenResult {
@@ -34,7 +35,9 @@ sealed class CopyResult {
 }
 
 final class CopySaved extends CopyResult {
-  const CopySaved(this.name, {this.nowEditing = false});
+  const CopySaved(this.name, {this.nowEditing = false, this.draft});
+
+  final Chapter? draft;
 
   /// The file name the copy was written under.
   final String name;

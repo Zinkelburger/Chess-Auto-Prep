@@ -287,5 +287,16 @@ final class ExternalDocumentEdits {
 
 /// Only the session decides when editors must hand over their text.
 final class _Editors extends ChangeNotifier {
-  void commit() => notifyListeners();
+  int _refusals = 0;
+
+  bool refuse() {
+    _refusals++;
+    return false;
+  }
+
+  bool commit() {
+    final before = _refusals;
+    notifyListeners();
+    return before == _refusals;
+  }
 }

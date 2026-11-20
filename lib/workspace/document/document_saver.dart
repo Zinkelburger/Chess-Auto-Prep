@@ -744,7 +744,7 @@ final class DocumentSaver extends ChangeNotifier {
       if (operation.committed) _copies.remove(key);
     }
     return switch (result) {
-      store.Created() => CopySaved(file),
+      store.Created() => CopySaved(file, draft: chapter),
       store.Collision() => const CopyNameTaken(),
       store.IoFailure(:final detail) => CopyFailed(detail),
     };

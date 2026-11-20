@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
+import '../chess/pgn/chapter.dart';
 import '../diagnostics/log.dart';
 import '../storage/disk_problems.dart';
 import '../ui/theme.dart';
@@ -49,9 +50,10 @@ final class Stay extends LeaveAnswer {
 /// user answered by saving a copy, for the screen to say so once it has
 /// gone where it was going; null when nothing had to be kept elsewhere.
 final class Go extends LeaveAnswer {
-  const Go({this.copy});
+  const Go({this.copy, this.draft});
 
   final String? copy;
+  final Chapter? draft;
 }
 
 /// What the user is walking away from.
@@ -82,6 +84,7 @@ final class ExitGuard {
     required this._saver,
     required this._question,
     this._saveCopy,
+    this.currentDraft,
     this.wait = const Duration(seconds: 5),
     this.settleFeatures,
   });
@@ -93,7 +96,8 @@ final class ExitGuard {
   /// Writes the words somewhere else and answers the file it wrote, or null
   /// when it wrote none. Null itself when this guard has nowhere to write
   /// them, and then the question does not offer it.
-  final Future<String?> Function()? _saveCopy;
+  final Future<Go?> Function()? _saveCopy;
+  final Chapter? Function()? currentDraft;
 
   /// How long the file is given before the user is asked about it.
   final Duration wait;
@@ -266,7 +270,7 @@ final class ExitGuard {
         ]);
       case _Answer.close:
         log.w('${kind.action} with unsaved words', _saver.documentPath);
-        return const Go();
+        return Go(draft: currentDraft?.call());
       case _Answer.stay:
         return const Stay();
     }
@@ -277,8 +281,7 @@ final class ExitGuard {
   Future<LeaveAnswer> _copied() async {
     final copy = _saveCopy;
     if (copy == null) return const Stay();
-    final written = await copy();
-    return written == null ? const Stay() : Go(copy: written);
+    return await copy() ?? const Stay();
   }
 
   _Answer _answerFor(DraftChoice? choice) => switch (choice) {

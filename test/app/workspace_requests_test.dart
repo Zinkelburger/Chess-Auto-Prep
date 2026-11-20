@@ -15,7 +15,9 @@ import 'package:chess_auto_prep/storage/saved_place.dart';
 import 'package:chess_auto_prep/workspace/document/study_choice.dart';
 import 'package:chess_auto_prep/workspace/document/study_drafts.dart';
 import 'package:chess_auto_prep/workspace/document/study_picker.dart';
+import 'package:chess_auto_prep/workspace/reading/comment_field.dart';
 import 'package:dartchess/dartchess.dart' show Side;
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_store.dart';
@@ -375,9 +377,168 @@ void main() {
   });
 
   group('Close file', () {
+    final study = studyRef('Endgames');
+    final move = NodePath.of([0]);
+    final note = find.byType(TextField);
+
+    Future<void> openStudy() async {
+      w.store.documents[study] = Opened(
+        twoChapterStudy,
+        scriptedRevision(twoChapterStudy),
+      );
+      await w.requests.openStudy(study);
+    }
+
+    Future<void> editNote(WidgetTester tester) async {
+      await openStudy();
+      w.session.cursor.goTo(move);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: CommentField(session: w.session)),
+        ),
+      );
+    }
+
     test('with nothing open does nothing', () async {
       expect(await w.requests.closeFile(), isA<RequestDropped>());
       expect(w.question.asked, isEmpty);
+    });
+
+    testWidgets('saves a study note typed while closing waits for a save', (
+      tester,
+    ) async {
+      await editNote(tester);
+      await tester.enterText(note, 'Occupy the centre');
+      w.store.hold = true;
+      w.session.cursor.forward(); // Leaving e4 commits its note.
+      await tester.pump();
+      expect(w.store.requestedSaves.single.text, contains('Occupy the centre'));
+
+      final closing = w.requests.closeFile();
+      await tester.enterText(note, 'Contest the centre');
+      w.store
+        ..hold = false
+        ..releaseAll();
+      expect(await closing, isA<RequestDone>());
+      await tester.pump(w.exitWait);
+
+      final written = (w.store.documents[study]! as Opened).text;
+      expect(written, contains('e4 {Occupy the centre}'));
+      expect(written, contains('e5 {Contest the centre}'));
+    });
+
+    testWidgets('closes the same study after its rename lands', (tester) async {
+      await editNote(tester);
+      w.store.hold = true;
+      final rename = w.studies.rename(study, 'Rook endings');
+      await tester.pump();
+      expect(w.saver.referencesPending, isTrue);
+
+      final closing = w.requests.closeFile();
+      await tester.enterText(note, 'Follow the study');
+      w.store
+        ..hold = false
+        ..releaseAll();
+      await rename;
+      expect(await closing, isA<RequestDone>());
+      final renamed = w.store.documents[studyRef('Rook endings')]! as Opened;
+      expect(renamed.text, contains('e4 {Follow the study}'));
+      expect(w.session.source, isNull);
+      expect(w.question.asked, isEmpty);
+      await tester.pump(w.exitWait);
+    });
+
+    testWidgets('closes after copying the note committed during the wait', (
+      tester,
+    ) async {
+      await editNote(tester);
+      w.question.answer = DraftChoice.saveACopy;
+      w.store
+        ..hold = true
+        ..saves.add(const Conflict(null));
+      w.session.setComment(move, 'First draft');
+      final closing = w.requests.closeFile();
+      await tester.pump();
+      expect(w.store.requestedSaves.single.text, contains('First draft'));
+      await tester.enterText(note, 'Updated note');
+      w.store
+        ..hold = false
+        ..releaseAll();
+
+      expect(await closing, isA<RequestDone>());
+      final copy = w.store.documents[studyRef('Main copy')]! as Opened;
+      expect(copy.text, contains('e4 {Updated note}'));
+      expect(w.question.asked, hasLength(1));
+      expect(w.requests.status, 'Saved a copy as Main copy.pgn');
+      expect(w.session.source, isNull);
+      await tester.pump(w.exitWait);
+    });
+
+    testWidgets('keeps edits made after the copy started', (tester) async {
+      await openStudy();
+      final gate = w.store.createGate = Completer<void>();
+      w.store.saves.add(const Conflict(null));
+      w.question.answer = DraftChoice.saveACopy;
+      w.session.setComment(move, 'Copied note');
+      final closing = w.requests.closeFile();
+      await tester.pump();
+      expect(w.store.createGate, isNull);
+      w.session.setComment(move, 'Later note');
+      w.question.answer = DraftChoice.keepWaiting;
+      gate.complete();
+
+      expect(await closing, isA<RequestDropped>());
+      final copy = w.store.documents[studyRef('Main copy')]! as Opened;
+      expect(copy.text, contains('e4 {Copied note}'));
+      expect(w.question.asked, hasLength(2));
+      expect(w.session.source, study);
+      expect(w.session.commentAt(move), 'Later note');
+      await tester.pump(w.exitWait);
+    });
+
+    testWidgets('a reload at the same path supersedes close', (tester) async {
+      await openStudy();
+      final gate = w.store.createGate = Completer<void>();
+      w.store.saves.add(const Conflict(null));
+      w.question.answer = DraftChoice.saveACopy;
+      w.session.setComment(move, 'Before reload');
+      final closing = w.requests.closeFile();
+      await tester.pump();
+      expect(w.store.createGate, isNull);
+      await w.session.reloadFromDisk();
+      gate.complete();
+      expect(await closing, isA<RequestDropped>());
+      expect(w.session.source, study);
+      expect(w.question.asked, hasLength(1));
+      await tester.pump(w.exitWait);
+    });
+
+    testWidgets('keeps a refused note in the field until corrected', (
+      tester,
+    ) async {
+      await editNote(tester);
+      w.store.hold = true;
+      w.session.setComment(move, 'On disk');
+      final closing = w.requests.closeFile();
+      await tester.enterText(note, 'On disk [%note }]');
+      w.store
+        ..hold = false
+        ..releaseAll();
+
+      expect(await closing, isA<RequestDropped>());
+      expect(w.session.source, study);
+      expect(
+        tester.widget<TextField>(note).controller!.text,
+        'On disk [%note }]',
+      );
+      expect(await w.requests.closeFile(), isA<RequestDropped>());
+      await tester.enterText(note, 'Corrected');
+      expect(await w.requests.closeFile(), isA<RequestDone>());
+      expect(
+        (w.store.documents[study]! as Opened).text,
+        contains('e4 {Corrected}'),
+      );
+      await tester.pump(w.exitWait);
     });
 
     test('over a draft the user stays with keeps it', () async {

@@ -111,6 +111,7 @@ final class AppParts {
     saver: saver,
     question: _question,
     saveCopy: _copied,
+    currentDraft: () => session.chapter,
     wait: env.exitWait,
     settleFeatures: _settleWrites,
   );
@@ -129,9 +130,11 @@ final class AppParts {
   /// The copy the question on the way out asked for: the name of the file
   /// it wrote, or null. A copy that failed leaves the user where they were,
   /// so the bar says why.
-  Future<String?> _copied() async {
+  Future<Go?> _copied() async {
     final written = await _copyOnLeave(session);
-    if (written is CopySaved) return written.name;
+    if (written is CopySaved) {
+      return Go(copy: written.name, draft: written.draft);
+    }
     if (written != null) sayCopy(requests.say, written);
     return null;
   }

@@ -884,11 +884,26 @@ final class WorkspaceRequests extends ChangeNotifier {
   Future<RequestResult> closeFile() async {
     final ticket = _nextRequest();
     if (_session.source == null) return const RequestDropped();
-    final leave = await _leaving.mayLeaveDocument();
-    if (ticket.overtaken || leave is! Go) return const RequestDropped();
+    final document = _session.generation;
+    var draft = _session.snapshot(requireCommitted: true);
+    var copied = const Go();
+    while (true) {
+      if (draft == null) return const RequestDropped();
+      final leave = await _leaving.mayLeaveDocument();
+      if (ticket.overtaken || leave is! Go) return const RequestDropped();
+      if (document != _session.generation) return const RequestDropped();
+      if (leave.copy != null) copied = leave;
+      final approved = leave.draft ?? draft;
+      draft = _session.snapshot(requireCommitted: true);
+      if (draft != null &&
+          draft.lines == approved.lines &&
+          draft.preamble == approved.preamble) {
+        break;
+      }
+    }
     _session.closed();
     _viewer.closed();
-    _saidCopy(leave);
+    _saidCopy(copied);
     return const RequestDone();
   }
 

@@ -155,6 +155,24 @@ void main() {
     },
   );
 
+  test('discard applies to the draft present when the user answers', () async {
+    fixture.externalEdit('// Color: Black\n\n1. d4 *\n');
+    edit('Before the prompt');
+    final question = _Question(waits: true);
+    final guard = ExitGuard(
+      saver: fixture.saver,
+      question: question,
+      currentDraft: () => fixture.session.chapter,
+      wait: moment,
+    );
+    final leaving = guard.mayLeaveDocument();
+    await question.first;
+    edit('Committed on focus loss');
+    final discarded = fixture.session.chapter;
+    question.answerNow(DraftChoice.closeAnyway);
+    expect((await leaving as Go).draft, same(discarded));
+  });
+
   test('a conflicted document is not told that waiting will help', () async {
     fixture.externalEdit('// Color: Black\n\n1. d4 *\n');
     edit('one');
@@ -285,7 +303,7 @@ void main() {
       edit('one');
       await pumpEventQueue();
       final question = _Question(waits: true);
-      final copying = Completer<String?>();
+      final copying = Completer<Go?>();
       final guard = ExitGuard(
         saver: fixture.saver,
         question: question,
@@ -302,7 +320,7 @@ void main() {
       await question.first;
       question.answerNow(DraftChoice.keepWaiting);
       expect(await closing, isFalse);
-      copying.complete('Accepted copy.pgn');
+      copying.complete(const Go(copy: 'Accepted copy.pgn'));
       await pumpEventQueue();
     },
   );
@@ -328,7 +346,7 @@ void main() {
     final guard = ExitGuard(
       saver: fixture.saver,
       question: question,
-      saveCopy: () async => 'Main copy.pgn',
+      saveCopy: () async => const Go(copy: 'Main copy.pgn'),
       wait: moment,
     );
     final first = guard.mayLeaveDocument();
