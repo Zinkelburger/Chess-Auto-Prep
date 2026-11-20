@@ -469,6 +469,14 @@ class _Notices extends StatelessWidget {
             ],
           ),
         for (final warning in players.warnings) ProblemLine(warning),
+        if (players.loadError case final error?)
+          ProblemLine(
+            error,
+            action: OutlinedButton(
+              onPressed: players.busy ? null : players.load,
+              child: const Text('Try again'),
+            ),
+          ),
         if (saved.problem case final problem?)
           ProblemLine(
             problem,
@@ -477,7 +485,7 @@ class _Notices extends StatelessWidget {
               child: const Text('Try again'),
             ),
           ),
-        if (players.error case final error?)
+        if (players.saveError case final error?)
           ProblemLine(
             error,
             action: players.needsRetry

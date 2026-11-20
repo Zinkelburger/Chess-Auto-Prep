@@ -25,7 +25,8 @@ final class Players extends ChangeNotifier {
   String? groupId;
   String query = '';
   bool showingGroups = false, busy = false, loaded = false;
-  String? error;
+  String? saveError, loadError;
+  String? get error => saveError ?? loadError;
   List<String> warnings = const [];
   bool _disposed = false;
   PendingObligation<void>? _failed;
@@ -65,21 +66,32 @@ final class Players extends ChangeNotifier {
   Future<void> load() async {
     if (busy || _disposed) return;
     busy = true;
-    error = null;
+    if (!needsRetry) saveError = null;
+    loadError = null;
     changed();
     try {
-      await _read();
-    } on Object catch (e) {
-      error = 'Could not load players: $e';
+      await _refresh();
     } finally {
       busy = false;
       changed();
     }
   }
 
+  Future<bool> _refresh() async {
+    try {
+      await _read();
+      return true;
+    } on Object catch (e) {
+      log.w('load players', e);
+      loadError = 'Could not load players: $e';
+      return false;
+    }
+  }
+
   Future<void> _read() async {
     final read = await store.read();
     if (_disposed) return;
+    loadError = null;
     players = read.players;
     groups = read.groups;
     warnings = read.warnings;
@@ -90,7 +102,7 @@ final class Players extends ChangeNotifier {
   Future<bool> _write(String label, Future<void> Function() work) async {
     if (busy || _disposed || _failed != null) return false;
     busy = true;
-    error = null;
+    saveError = null;
     changed();
     final obligation = pending.accept<void>(
       resource: this,
@@ -100,13 +112,12 @@ final class Players extends ChangeNotifier {
     );
     try {
       await obligation.run();
-      await _read();
-      return true;
+      return await _refresh();
     } on PlayerConflict catch (e) {
       // Replaying an edit of a row that changed can never land, so it is
       // not kept to retry; the rows as they are now are shown instead.
       obligation.discard();
-      error = e.message;
+      saveError = e.message;
       try {
         await _read();
       } on Object {
@@ -116,7 +127,7 @@ final class Players extends ChangeNotifier {
     } on Object catch (e) {
       log.w(label, e);
       if (!obligation.committed) _failed = obligation;
-      error = failedBecause('Could not save.', e);
+      saveError = failedBecause('Could not save.', e);
       return false;
     } finally {
       busy = false;
@@ -133,13 +144,13 @@ final class Players extends ChangeNotifier {
     try {
       await failed.run();
       _failed = null;
-      error = null;
-      await _read();
+      saveError = null;
+      await _refresh();
     } on PlayerConflict catch (e) {
       // The row changed since the failed save; as in [_write], it is dropped.
       failed.discard();
       _failed = null;
-      error = e.message;
+      saveError = e.message;
       try {
         await _read();
       } on Object {
@@ -147,7 +158,7 @@ final class Players extends ChangeNotifier {
       }
     } on Object catch (e) {
       log.w('save players', e);
-      error = failedBecause('Could not save.', e);
+      saveError = failedBecause('Could not save.', e);
     } finally {
       busy = false;
       changed();
@@ -157,6 +168,7 @@ final class Players extends ChangeNotifier {
   Future<void> discardFailed() async {
     if (_failed?.discard() != true) return;
     _failed = null;
+    saveError = null;
     await load();
   }
 

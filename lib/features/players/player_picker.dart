@@ -46,7 +46,9 @@ class _PlayerPickerState extends State<PlayerPicker> {
 
   @override
   Widget build(BuildContext context) {
-    final all = widget.players.players;
+    final players = widget.players;
+    final all = players.players;
+    final retry = players.needsRetry ? players.retry : players.load;
     final shown = [
       for (final player in all)
         if (player.search.contains(_query)) player,
@@ -54,12 +56,15 @@ class _PlayerPickerState extends State<PlayerPicker> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (widget.players.error case final error?)
+        if (players.loadError case final loadError?
+            when players.saveError != null)
+          ListMessage(loadError),
+        if (players.error case final error?)
           ListMessage(
             error,
             action: OutlinedButton(
-              onPressed: widget.players.load,
-              child: const Text('Try again'),
+              onPressed: players.busy ? null : retry,
+              child: Text(players.needsRetry ? 'Retry save' : 'Try again'),
             ),
           ),
         if (all.isEmpty)
