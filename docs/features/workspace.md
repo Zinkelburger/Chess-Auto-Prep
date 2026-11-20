@@ -218,7 +218,9 @@ FEN first.` Ctrl+N / `New analysis tab` opens the `Analysis` tab: a scratch
 copy of the whole current game at the cursor, facing the same way, that never
 writes the source. While that tab is up, paste and set-up fill it instead. In
 the builder `Save to repertoire…` and in Study `Add game to study…` ask where,
-then a chapter name; `Save to repertoire…` also offers `New repertoire…`,
+then a chapter name. A pasted game keeps its players in the study. Its result
+travels with the complete original main line. A partial game or a changed
+main line is saved with `*`. `Save to repertoire…` also offers `New repertoire…`,
 which asks its name and makes the board's lines its first chapter. Closing the window forgets analysis boards.
 
 **Edit position** — Actions ▸ `Edit position…` → the

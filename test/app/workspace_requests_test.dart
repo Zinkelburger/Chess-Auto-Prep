@@ -7,11 +7,13 @@ import 'package:chess_auto_prep/app/workspace_requests.dart';
 import 'package:chess_auto_prep/chess/explorer_answer.dart';
 import 'package:chess_auto_prep/chess/explorer_choice.dart';
 import 'package:chess_auto_prep/chess/fen.dart';
+import 'package:chess_auto_prep/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/study.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/saved_place.dart';
+import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
 import 'package:chess_auto_prep/workspace/document/study_choice.dart';
 import 'package:chess_auto_prep/workspace/document/study_drafts.dart';
 import 'package:chess_auto_prep/workspace/document/study_picker.dart';
@@ -565,6 +567,44 @@ void main() {
       expect(w.session.orientation, Side.black);
       expect(w.session.cursor.currentMove?.san, 'Nf3');
     });
+
+    test('a copy of a hand-played board has no players', () async {
+      w.session.playMove('e2e4');
+      expect(await w.requests.newAnalysisBoard(), isA<RequestDone>());
+      final draft = gameDraft(w.session)!;
+      expect(draft.moves.mainLine.single.san, 'e4');
+      expect(tagValue(draft.tags, 'White'), isNull);
+      expect(tagValue(draft.tags, 'Black'), isNull);
+    });
+
+    test(
+      'promoting a variation clears the result, including on a copy',
+      () async {
+        input.clipboardText =
+            '[Event "Club"]\n[White "Rivera"]\n[Black "Chen"]\n[Result "1-0"]\n\n'
+            '1. e4 (1. f3 e5 2. g4 Qh4#) e5 1-0';
+        expect(await w.requests.paste(), isA<RequestDone>());
+        w.session.setComment(NodePath.of([0]), 'Played in the game');
+        expect(gameDraft(w.session)!.result, '1-0');
+        expect(promoteVariation(w.session, NodePath.of([1])), isNull);
+        final page = w.session.analysisPage;
+        expect(await w.requests.newAnalysisBoard(), isA<RequestDone>());
+        final draft = gameDraft(w.session)!;
+        expect(draft.moves.mainLine.last.san, 'Qh4#');
+        expect(tagValue(draft.tags, 'White'), 'Rivera');
+        expect(tagValue(draft.tags, 'Black'), 'Chen');
+        expect(tagValue(draft.tags, 'Result'), '*');
+        expect(
+          studyChapterText(draft, study: 'Club', name: 'Line'),
+          endsWith(' *'),
+        );
+
+        expect(await w.requests.analysisBoard(page: page), isA<RequestDone>());
+        await w.session.undo();
+        expect(gameDraft(w.session)!.result, '1-0');
+        expect(tagValue(gameDraft(w.session)!.tags, 'Result'), '1-0');
+      },
+    );
 
     test('is gone back to as it was left', () async {
       w.session.playMove('d2d4');

@@ -1,9 +1,12 @@
+import 'package:flutter/foundation.dart' show listEquals;
+
 import '../../chess/pgn/chapter_line.dart';
 import '../../chess/pgn/game_summary.dart';
+import '../../chess/pgn/game_text.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/move_label.dart' show numberedMoves;
 import '../../chess/pgn/study.dart';
-import '../../chess/pgn/tree_edit.dart' show lineTree;
+import '../../chess/pgn/tree_edit.dart' show lineTree, mainlineSans;
 import 'document_session.dart';
 
 /// What the board holds, as chapters on their way into a study: the game
@@ -16,12 +19,24 @@ ChapterDraft? gameDraft(DocumentSession session) {
   final chapter = session.chapter;
   if (chapter == null) return null;
   final line = _lineOnBoard(session);
+  final scratch = session.isScratch ? session.analysisPage.gameRecord : null;
+  final original = scratch != null && scratch.isWhole ? scratch.tree : null;
+  final intact =
+      original != null &&
+      original.rootFen == chapter.tree.rootFen &&
+      listEquals(mainlineSans(original), mainlineSans(chapter.tree));
+  final tags = [
+    if (scratch != null)
+      for (final tag in scratch.tags.whereType<PgnTag>())
+        if (tag.isPlayer || (intact && tag.key == 'Result')) tag,
+    if (scratch != null && !intact) const PgnTag('Result', '*'),
+  ];
   return ChapterDraft(
     name: line == null ? '' : summarizeGame(line, index: 0).title,
     orientation: session.orientation,
     moves: chapter.tree,
-    tags: line?.tags ?? const [],
-    result: line?.terminator,
+    tags: line?.tags ?? tags,
+    result: line?.terminator ?? (intact ? scratch?.terminator : null),
   );
 }
 

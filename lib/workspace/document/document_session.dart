@@ -7,6 +7,7 @@ import '../../chess/pgn/analysis_board.dart';
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/chapter_edit.dart' as edits;
 import '../../chess/pgn/chapter_edits.dart' as edits;
+import '../../chess/pgn/chapter_line.dart';
 import '../../chess/pgn/chapter_sections.dart';
 import '../../chess/pgn/comment_edits.dart' as edits;
 import '../../chess/pgn/game_tree.dart';
@@ -72,6 +73,9 @@ final class DocumentSession extends ChangeNotifier {
 
   /// Identity and undo history of the active temporary analysis tab.
   KeptBoard get analysisPage => _board;
+
+  ChapterLine? get gameRecord =>
+      isScratch ? _board.gameRecord : _chapter?.treeGames.singleOrNull;
 
   RetainedDraft? get retainedDraft => _held == null
       ? null
@@ -424,12 +428,17 @@ final class DocumentSession extends ChangeNotifier {
   /// when another document was asked for meanwhile, or the session went.
   Future<bool> showAnalysisBoard([Chapter? board]) {
     if (board == null) return _selectAnalysis(_board, leftAsIs: _leftAsIs);
+    return showAnalysisCopy(board, board.treeGames.singleOrNull);
+  }
+
+  Future<bool> showAnalysisCopy(Chapter board, ChapterLine? gameRecord) {
     final leftAsIs = _leftAsIs;
     _editors.commit();
     final blank = isScratch && !_board.canUndo && tree!.children.isEmpty;
     return _selectAnalysis(
       blank ? _board : KeptBoard(board),
       fresh: board,
+      gameRecord: gameRecord,
       leftAsIs: leftAsIs,
     );
   }
@@ -446,6 +455,7 @@ final class DocumentSession extends ChangeNotifier {
   Future<bool> _selectAnalysis(
     KeptBoard page, {
     Chapter? fresh,
+    ChapterLine? gameRecord,
     required bool leftAsIs,
   }) async {
     if (_disposed) return false;
@@ -467,7 +477,7 @@ final class DocumentSession extends ChangeNotifier {
         ..cursor = cursor.value;
     }
     _board = page;
-    if (fresh != null) page.restart(fresh);
+    if (fresh != null) page.restart(fresh, gameRecord);
     _showBoard();
     return true;
   }

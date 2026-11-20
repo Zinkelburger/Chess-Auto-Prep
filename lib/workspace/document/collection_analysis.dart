@@ -61,12 +61,13 @@ final class CollectionAnalysis extends ChangeNotifier {
     var page = _pages[key];
     final created = page == null;
     if (page == null) {
+      final record = source.gameRecord;
       final chapter = withSide(
         await readChapter(name: analysisBoardName, text: gameText(source)),
         side,
       );
       if (ticket.overtaken || key != _sourceKey) return false;
-      page = KeptBoard(chapter)..cursor = cursor;
+      page = KeptBoard(chapter, gameRecord: record)..cursor = cursor;
       _pages[key] = page;
     }
     if (!await session.restoreAnalysisPage(page) ||

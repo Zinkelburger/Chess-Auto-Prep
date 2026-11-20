@@ -1,11 +1,13 @@
 // The Analysis tab's own board: a copy of the game on screen to try things
 // on, kept per game, which never writes the file it came from.
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
+import 'package:chess_auto_prep/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pv_text.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/document/collection_analysis.dart';
+import 'package:chess_auto_prep/workspace/document/study_drafts.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';
@@ -53,6 +55,16 @@ void main() {
     analysis.hide();
     expect(analysis.active, isFalse);
     expect(told, greaterThan(before));
+  });
+
+  test('a scratch line copied into Analysis keeps its players empty', () async {
+    await fixture.session.showAnalysisBoard();
+    fixture.session.playMove('e2e4');
+    expect(await analysis.show(), isTrue);
+    final draft = gameDraft(analysis.session)!;
+    expect(draft.moves.mainLine.single.san, 'e4');
+    expect(tagValue(draft.tags, 'White'), isNull);
+    expect(tagValue(draft.tags, 'Black'), isNull);
   });
 
   test('is not shown while part of the game is hidden', () async {

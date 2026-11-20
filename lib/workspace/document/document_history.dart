@@ -1,4 +1,5 @@
 import '../../chess/pgn/chapter.dart';
+import '../../chess/pgn/chapter_line.dart';
 import '../../chess/pgn/chapter_sections.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../storage/document_ref.dart';
@@ -58,7 +59,7 @@ final class HeldEdits {
 /// Only the session touches it; it is a part of the session's state, kept
 /// apart so the session's own fields stay about the document that is up.
 final class KeptBoard {
-  KeptBoard(this.chapter);
+  KeptBoard(this.chapter, {this.gameRecord});
 
   /// How many edits undo can take back.
   static const undoDepth = 200;
@@ -66,6 +67,9 @@ final class KeptBoard {
   /// The board as last seen: current while the board is up only after
   /// the session puts it aside.
   Chapter chapter;
+
+  /// The source game, before scratch edits or generated repertoire headers.
+  ChapterLine? gameRecord;
 
   NodePath cursor = const NodePath.root();
 
@@ -76,8 +80,9 @@ final class KeptBoard {
 
   /// A new board in place of this one, with the cursor at the end of its
   /// main line and nothing to undo.
-  void restart(Chapter board) {
+  void restart(Chapter board, [ChapterLine? gameRecord]) {
     chapter = board;
+    this.gameRecord = gameRecord;
     cursor = board.tree.endOfLineFrom(const NodePath.root());
     _undo.clear();
   }

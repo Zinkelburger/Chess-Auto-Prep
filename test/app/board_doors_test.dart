@@ -5,8 +5,11 @@ import 'package:chess_auto_prep/app/board_doors.dart';
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/generation/finds.dart';
+import 'package:chess_auto_prep/chess/pgn/chapter.dart';
+import 'package:chess_auto_prep/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/storage/finds_store.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/ui/app_action.dart';
 import 'package:chess_auto_prep/ui/app_keys.dart';
 import 'package:dartchess/dartchess.dart' show Side;
@@ -14,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/study_fixture.dart';
 import '../support/window_fixture.dart';
 
 void main() {
@@ -149,7 +153,9 @@ void main() {
 
   group('the board\'s entries in the Actions menu', () {
     Future<BuildContext> context(WidgetTester tester) async {
-      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      await tester.pumpWidget(
+        MaterialApp(navigatorKey: w.navigator, home: const SizedBox()),
+      );
       return tester.element(find.byType(SizedBox));
     }
 
@@ -167,6 +173,56 @@ void main() {
       ]);
       expect(labels(doors.entries(at, paste: false)).first, 'Paste FEN');
     });
+
+    testWidgets(
+      'adding a pasted game to a study keeps its players and result',
+      (tester) async {
+        const pgn =
+            '[Event "Club championship"]\n'
+            '[White "Rivera"]\n[Black "Chen"]\n[Result "1-0"]\n\n'
+            '1. e4 e5 2. Bc4 Nc6 3. Qh5 Nf6 4. Qxf7# 1-0';
+        final messenger = tester.binding.defaultBinaryMessenger;
+        messenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async =>
+              call.method == 'Clipboard.getData' ? {'text': pgn} : null,
+        );
+        addTearDown(
+          () =>
+              messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+        );
+        w.requests.switchTo(Mode.study);
+        await doors.paste();
+
+        final at = await context(tester);
+        final actions = boardActions(
+          at,
+          doors: doors,
+          library: w.library,
+          onAnalyze: null,
+        );
+        actions
+            .singleWhere((action) => action.label == 'Add game to study…')
+            .run!();
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('New study…'));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Study name'),
+          'Club',
+        );
+        await tester.tap(find.text('Create'));
+        await tester.pumpAndSettle();
+
+        final saved = w.store.documents[studyRef('Club')]! as Opened;
+        final game = parseChapter(name: 'Club', text: saved.text).lines.single;
+        expect(game.tree!.mainLine.last.san, 'Qxf7#');
+        expect(tagValue(game.tags, 'White'), 'Rivera');
+        expect(tagValue(game.tags, 'Black'), 'Chen');
+        expect(tagValue(game.tags, 'Result'), '1-0');
+        expect(game.terminator, '1-0');
+      },
+    );
 
     testWidgets('take a FEN only over a repertoire file, where Ctrl+V makes '
         'a repertoire', (tester) async {

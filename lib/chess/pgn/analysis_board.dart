@@ -27,11 +27,13 @@ Chapter analysisBoard({
   required Side side,
   Fen root = Fen.initial,
   List<String> sans = const [],
+  List<PgnHeader> sourceTags = const [],
 }) {
   if (root == Fen.initial && sans.isEmpty) return _chapterOf(side, '');
   final tree = lineTree(root, sans);
   final tags = [
     const PgnTag('Event', analysisBoardName),
+    ...sourceTags.whereType<PgnTag>().where((tag) => tag.isPlayer),
     const PgnTag('Result', '*'),
     if (root != Fen.initial) ...[
       PgnTag('FEN', root.value),
@@ -97,7 +99,12 @@ Pasted pastedBoard(String text, {required Side side}) {
   // own start, so the rest of the text is never half-shown.
   if (read.issues.isNotEmpty) {
     return PastedBoard(
-      analysisBoard(side: facing, root: tree.rootFen, sans: mainlineSans(tree)),
+      analysisBoard(
+        side: facing,
+        root: tree.rootFen,
+        sans: mainlineSans(tree),
+        sourceTags: read.tags,
+      ),
     );
   }
   return PastedBoard(_chapterOf(facing, game));

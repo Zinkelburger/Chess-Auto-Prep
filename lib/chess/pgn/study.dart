@@ -292,7 +292,10 @@ String studyChapterText(
     orientation: draft.orientation,
     root: draft.moves.rootFen,
     ending: ending,
-  );
+  ).toList();
+  // A new chapter begins at its Event line in the study file.
+  final event = tags.indexWhere((tag) => tag is PgnTag && tag.key == 'Event');
+  if (event > 0) tags.insert(0, tags.removeAt(event));
   final buffer = StringBuffer();
   for (final tag in tags) {
     buffer

@@ -1,12 +1,20 @@
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
+import 'package:chess_auto_prep/chess/pgn/chapter.dart';
+import 'package:chess_auto_prep/chess/pgn/chapter_edit.dart';
+import 'package:chess_auto_prep/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/chess/pgn/study_edits.dart';
+import 'package:chess_auto_prep/storage/edit_scope.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart' as storage;
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document/document_session.dart';
 import 'package:chess_auto_prep/workspace/document/session_results.dart';
+import 'package:chess_auto_prep/workspace/document/study_drafts.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
+import '../storage/store_fixture.dart';
 import '../support/fixtures.dart';
 import '../support/scripted_store.dart';
 import '../support/session_fixture.dart';
@@ -107,6 +115,59 @@ void main() {
       expect(session.tree!.children.single.comment, 'King pawn');
       expect(session.tree!.children.single.children.length, 2);
     });
+
+    test('a pasted game appends through the guarded study save', () async {
+      const text = '[Event "Club: Intro"]\n\n1. c4 *\n';
+      final disk = await StoreFixture.create();
+      addTearDown(disk.dispose);
+      final ref = disk.ref('studies/Club.pgn');
+      final revision = await disk.put(ref, text);
+      expect(
+        await paste(
+          '[Event "Final"]\n[White "Rivera"]\n[Black "Chen"]\n[Result "1-0"]\n\n'
+          '1. e4 e5 1-0',
+        ),
+        isNull,
+      );
+      final before = parseChapter(name: 'Club', text: text);
+      final added =
+          addChapters(before, study: 'Club', drafts: [gameDraft(session)!])
+              as ChapterEdited;
+      final saved = await disk.store.save(
+        ref,
+        writeChapter(added.chapter),
+        expected: revision,
+        scope: GamesRearranged(added.games),
+      );
+      expect(saved, isA<storage.Saved>());
+      final opened = await disk.store.open(ref) as storage.Opened;
+      final lines = parseChapter(name: 'Club', text: opened.text).lines;
+      expect(lines, hasLength(2));
+      expect(lines.first.text, before.lines.single.text);
+      expect(tagValue(lines.last.tags, 'White'), 'Rivera');
+      expect(tagValue(lines.last.tags, 'Black'), 'Chen');
+      expect(tagValue(lines.last.tags, 'Result'), '1-0');
+      expect(lines.last.terminator, '1-0');
+    });
+
+    test(
+      'a readable prefix keeps the players and has an unknown result',
+      () async {
+        expect(
+          await paste(
+            '[Event "Final"]\n[White "Rivera"]\n[Black "Chen"]\n[Result "1-0"]\n\n'
+            '1. e4 e5 unreadable 1-0',
+          ),
+          isNull,
+        );
+        final draft = gameDraft(session)!;
+        expect(draft.moves.mainLine.map((move) => move.san), ['e4', 'e5']);
+        expect(tagValue(draft.tags, 'White'), 'Rivera');
+        expect(tagValue(draft.tags, 'Black'), 'Chen');
+        expect(tagValue(draft.tags, 'Result'), '*');
+        expect(draft.result, '*');
+      },
+    );
 
     test('bare moves are a game', () async {
       expect(await paste('1.e4 c5 2.Nf3'), isNull);

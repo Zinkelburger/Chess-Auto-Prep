@@ -664,6 +664,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     _session.snapshot();
     final cursor = _session.cursor.value;
     final preview = _session.cursor.commentLine.value;
+    final record = _session.gameRecord;
     final side = _session.orientation;
     final board = withSide(
       await readChapter(
@@ -675,7 +676,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (ticket.overtaken) return const RequestDropped();
     final leave = await _leavingFile();
     if (ticket.overtaken || leave == null) return const RequestDropped();
-    final shown = await _session.showAnalysisBoard(board);
+    final shown = await _session.showAnalysisCopy(board, record);
     if (!shown || ticket.overtaken) return const RequestDropped();
     _session.cursor.goTo(cursor);
     // A read-only line preview belongs only in the new scratch tab. Preserve

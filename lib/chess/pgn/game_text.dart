@@ -30,6 +30,8 @@ final class PgnTag extends PgnHeader {
 
   final String key;
 
+  bool get isPlayer => key == 'White' || key == 'Black';
+
   /// The value as prose: `\"` in the file is a quote here and `\\` is a
   /// backslash. A value this app sets can hold a quote without cutting the
   /// rest of the header off, because writing escapes it again.
