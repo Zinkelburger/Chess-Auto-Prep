@@ -161,7 +161,10 @@ void main() {
         ..emit(line(depth: 14, score: const Centipawns(-20)))
         ..end();
       await asked;
-      expect(cache.read(Fen(afterE4.fen).position, minDepth: 14), 20);
+      expect(
+        cache.readVerdict(Fen(afterE4.fen).position, minDepth: 14)?.cpWhite,
+        20,
+      );
     });
 
     test('a search cut short is not written to the cache', () async {
@@ -171,7 +174,10 @@ void main() {
       engine.current.emit(line(depth: 5, score: const Centipawns(80)));
       await engine.quit();
       expect(await asked, isA<EvaluationUnavailable>());
-      expect(cache.read(Fen(start.fen).position, minDepth: 0), isNull);
+      expect(
+        cache.readVerdict(Fen(start.fen).position, minDepth: 0)?.cpWhite,
+        isNull,
+      );
     });
 
     test('a verdict too shallow for this run is asked again', () async {
