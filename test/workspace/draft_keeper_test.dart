@@ -171,6 +171,31 @@ void main() {
     run.kill();
   });
 
+  test('a failed quarantine preserves the offered checkpoint', () async {
+    final drafts = ViewerDraftFiles(support);
+    final first = _Run(store, drafts);
+    await first.session.open(ref, game: 0);
+    first.session.setComment(NodePath.of(const [0]), 'Old note');
+    await first.keeper.settle();
+    first.kill();
+
+    final checkpoint = (await drafts.find(ref.path))!.text;
+    expect(checkpoint, contains('Old note'));
+    await File(p.join(support.path, quarantineFolder)).create();
+    final next = _Run(store, drafts);
+    addTearDown(next.kill);
+    await next.session.open(ref, game: 0);
+    await next.keeper.settle();
+    expect(next.keeper.offered?.text, checkpoint);
+
+    next.session.setComment(NodePath.of(const [0]), 'New note');
+    expect(await next.keeper.settle(), isNotNull);
+    expect((await drafts.find(ref.path))?.text, checkpoint);
+    next.session.discardHeld();
+    expect(await next.keeper.settle(), isNull);
+    expect((await drafts.find(ref.path))?.text, checkpoint);
+  });
+
   test('discarding the edits forgets their copy', () async {
     final drafts = _MemoryDrafts();
     final run = _Run(store, drafts);
@@ -355,6 +380,30 @@ void main() {
       first.kill();
       await until(() => draftFiles().isNotEmpty);
       expect(draftFiles().single.readAsStringSync(), contains('way down'));
+    });
+
+    test('restart offers the newer edits when quarantine fails', () async {
+      final first = run();
+      await first.session.open(games, game: 0);
+      first.session.setComment(NodePath.of(const [0]), 'Earlier note');
+      await first.keeper.settle();
+      first.kill();
+
+      await File(p.join(disk.support.path, quarantineFolder)).create();
+      final editing = run();
+      await editing.session.open(games, game: 0);
+      await editing.keeper.settle();
+      expect(editing.keeper.offered?.text, contains('Earlier note'));
+      editing.session.setComment(NodePath.of(const [0]), 'Latest note');
+      await editing.keeper.settle();
+      editing.kill();
+
+      final reopened = run();
+      addTearDown(reopened.kill);
+      await reopened.session.open(games, game: 0);
+      await reopened.keeper.settle();
+      expect(reopened.keeper.offered?.text, contains('Latest note'));
+      expect(fileText(games), threeGameFile);
     });
 
     test('a checkpoint that could not be written is named when settling, '
