@@ -7,11 +7,15 @@ import 'package:chess_auto_prep/features/library/outline_panel.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/recent_pgn_files.dart';
+import 'package:chess_auto_prep/ui/app_keys.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/board/board_view.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
 import 'package:chess_auto_prep/workspace/search/search_pane.dart';
+import 'package:chess_auto_prep/workspace/workspace_keys.dart';
+import 'package:chess_auto_prep/workspace/workspace_tabs.dart';
 import 'package:dartchess/dartchess.dart' show Side;
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -83,6 +87,69 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'board moves leave the source chapter intact while Analysis opens',
+    (tester) async {
+      await pump(tester);
+      await showLibrary(tester);
+      await tester.tap(inLibrary(find.text('Main')).last);
+      await tester.pumpAndSettle();
+      expect(w.session.source, kid);
+      final original = textOf(w.store, kid);
+      final from = tester.getCenter(find.bySemanticsLabel('g8, Black knight'));
+      final to = tester.getCenter(find.bySemanticsLabel('f6, empty'));
+
+      // Hold the copy's continuation where a large chapter awaits its parser.
+      // The widget clock can still render the tab and deliver pointer input.
+      final keys = tester.widget<WorkspaceKeys>(find.byType(WorkspaceKeys));
+      final copy = FakeAsync();
+      copy.run((_) => keys.extra[AppKey.analysisBoard.keys.first]!());
+      await tester.pump();
+      expect(keys.tabs.selected, WorkspaceTab.analysis);
+
+      await tester.tapAt(from);
+      await tester.pump();
+      await tester.tapAt(to);
+      await w.saver.flush();
+      copy.flushMicrotasks();
+      await tester.pump();
+      expect(textOf(w.store, kid), original);
+    },
+  );
+
+  testWidgets(
+    'undo before the first Analysis frame preserves the source draft',
+    (tester) async {
+      await pump(tester);
+      await showLibrary(tester);
+      await tester.tap(inLibrary(find.text('Main')).last);
+      await tester.pumpAndSettle();
+      w.session.holdsEdits = true;
+      w.session.cursor.forward();
+      final at = w.session.cursor.value;
+      w.session.setComment(at, 'Keep this draft');
+      final square = find.bySemanticsLabel('g8, Black knight');
+      Focus.of(tester.element(square)).requestFocus();
+      await tester.pump();
+      expect(w.session.hasHeldEdits, isTrue);
+      expect(w.session.canUndo, isTrue);
+
+      final keys = tester.widget<WorkspaceKeys>(find.byType(WorkspaceKeys));
+      final copy = FakeAsync();
+      copy.run((_) => keys.extra[AppKey.analysisBoard.keys.first]!());
+      expect(keys.tabs.selected, WorkspaceTab.analysis);
+      // Deliver Undo to the still-mounted keyboard handler before any pump.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      copy.flushMicrotasks();
+      await tester.pump();
+
+      expect(w.session.hasHeldEdits, isTrue);
+      expect(w.session.commentAt(at), 'Keep this draft');
+    },
+  );
 
   testWidgets(
     'training hides answer previews and restores the outline on leaving',
