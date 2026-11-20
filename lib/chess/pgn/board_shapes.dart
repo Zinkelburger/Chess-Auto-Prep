@@ -71,6 +71,27 @@ List<BoardShape> shapesIn(String? comment) {
   ];
 }
 
+/// Drawings [arriving] adds on squares [host] has not already marked.
+Iterable<String> additionalShapeTokens(String host, String arriving) sync* {
+  if (!arriving.contains('[%c')) return;
+  Object key((String, BoardShape?) written) {
+    final (entry, shape) = written;
+    return shape == null ? entry : (shape.from, shape.to);
+  }
+
+  for (final (name, pattern, circle) in [
+    ('csl', _circles, true),
+    ('cal', _arrows, false),
+  ]) {
+    final seen = _written(pattern, host, circle: circle).map(key).toSet();
+    final added = [
+      for (final entry in _written(pattern, arriving, circle: circle))
+        if (seen.add(key(entry))) entry.$1,
+    ];
+    if (added.isNotEmpty) yield '[%$name ${added.join(',')}]';
+  }
+}
+
 /// [comment] with its shape tokens saying exactly [shapes], its words and
 /// other tokens left as they were.
 ///

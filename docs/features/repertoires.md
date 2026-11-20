@@ -149,7 +149,11 @@ workspace; a line row puts the cursor on that line's last move.
 **Move lines** — Ctrl-click / Shift-click pick lines; drag them onto another
 chapter to make them its lines, or onto a line of the open chapter to fold
 them in as variations; their comments and glyphs on the moves both lines
-play are added after the host's. `Move to chapter…` does the first by name, and also
+play are added after the host's. Shared moves keep the host's quiz markers
+and clock times. An incoming arrow or circle keeps its colour unless the host
+already has that drawing. An incoming evaluation fills a missing one. If a
+review supplied it, clearing the review also clears that evaluation.
+`Move to chapter…` does the first by name, and also
 offers `New chapter…` (made with the open chapter's side). Picks last through
 moves, comments and the side changing, and go when another chapter opens or
 is read again, on an undo, or when a line is deleted, put back, moved or

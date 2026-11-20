@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/diagnostics/log.dart';
 import 'package:chess_auto_prep/features/library/library_messages.dart';
@@ -120,6 +121,41 @@ void main() {
     final here = fixture.textAt('/repertoires/KID/Main.pgn')!;
     expect(here, contains('1. d4 d5 (1... Nf6) 2. c4 e6 *'));
     expect(here, isNot(contains('[Event "Indian"]')));
+  });
+
+  test('folding a line keeps its arrow on the commented move', () async {
+    const pgn = '''
+// Main
+// Color: White
+
+[Event "Host"]
+[Result "*"]
+
+1. e4 {Main move} *
+
+[Event "Arrow"]
+[Result "*"]
+
+1. e4 {[%cal Ge2e4]} *
+''';
+    final chapter = ref('KID', 'Main');
+    fixture = await openLibrary([kid], text: pgn, open: chapter);
+
+    expect(
+      await fixture.library.moveLines(games: {1}, to: chapter, asSidelineOf: 0),
+      isA<LibraryDone>(),
+    );
+    await fixture.saver.flush();
+
+    final saved = parseChapter(
+      name: chapter.name,
+      text: fixture.textAt(chapter.path)!,
+    );
+    expect(saved.lines, hasLength(1));
+    final move = saved.lines.single.tree!.children.single;
+    expect(move.san, 'e4');
+    expect(move.comment, contains('Main move'));
+    expect(move.comment, contains('[%cal Ge2e4]'));
   });
 
   const withPartial = '''

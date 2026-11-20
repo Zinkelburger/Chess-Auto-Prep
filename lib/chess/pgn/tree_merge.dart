@@ -1,3 +1,4 @@
+import 'board_shapes.dart';
 import 'comment_text.dart';
 import 'game_tree.dart';
 
@@ -26,11 +27,14 @@ import 'game_tree.dart';
 /// With [joinNotes], a move present in both keeps [a]'s comments and NAGs
 /// and adds [b]'s after them instead of dropping them. That is folding a
 /// line into another for good, where the line folded in is deleted after
-/// and a note only it carried would be in neither game.
+/// and a note only it carried would be in neither game. [hostMoves] tracks
+/// the original host through recursion so repeats inside a new variation
+/// can keep the arriving game's own annotations.
 List<MoveNode> mergeForests(
   List<MoveNode> a,
   List<MoveNode> b, {
   bool joinNotes = false,
+  List<MoveNode>? hostMoves,
 }) {
   if (b.isEmpty) return a;
   if (a.isEmpty && !_playsAMoveTwice(b)) return b;
@@ -38,22 +42,26 @@ List<MoveNode> mergeForests(
   for (final incoming in b) {
     final i = merged.indexWhere((node) => node.san == incoming.san);
     if (i < 0) {
-      merged.add(_folded(incoming));
+      merged.add(_folded(incoming, joinNotes: joinNotes));
       continue;
     }
     final existing = merged[i];
+    final host = joinNotes ? (hostMoves ?? a).elementAtOrNull(i) : null;
+    String? join(String? first, String? next) =>
+        host == null && first == null ? next : joinedComment(first, next);
     final children = mergeForests(
       existing.children,
       incoming.children,
       joinNotes: joinNotes,
+      hostMoves: host?.children ?? const [],
     );
     merged[i] = joinNotes
         ? existing.copyWith(
-            startingComment: joinedComment(
+            startingComment: join(
               existing.startingComment,
               incoming.startingComment,
             ),
-            comment: joinedComment(existing.comment, incoming.comment),
+            comment: join(existing.comment, incoming.comment),
             nags: [
               ...existing.nags,
               for (final nag in incoming.nags)
@@ -72,21 +80,40 @@ List<MoveNode> mergeForests(
   return List.unmodifiable(merged);
 }
 
-/// [host]'s comment with the prose of [arriving] it does not already say
-/// added after it. Only [host]'s machine tokens are kept when both have a
-/// comment, so one move never carries two evals or two clocks.
+final _gameTokens = RegExp(
+  r' ?\[%(?:tstart|tend|clk|emt|egt|mct)(?:\s+[^\]]*)?\] ?',
+);
+final _eval = RegExp(r'\[%eval\s+[^\]]*\]');
+
+/// Adds prose, drawings and a missing evaluation to a shared position.
 String? joinedComment(String? host, String? arriving) {
-  if (host == null) return arriving;
   if (arriving == null) return host;
+  if (host == null) {
+    final text = arriving.replaceAll(_gameTokens, ' ').trim();
+    if (text.isEmpty) return null;
+    return _eval.hasMatch(text)
+        ? text
+        : withToken(text, 'cap_review_eval', present: false);
+  }
   final prose = displayComment(arriving);
-  if (prose.isEmpty || displayComment(host).contains(prose)) return host;
-  return '$host $prose';
+  final eval = host.contains('[%eval') || hasToken(host, 'cap_review_eval')
+      ? null
+      : _eval.firstMatch(arriving);
+  return [
+    host,
+    if (prose.isNotEmpty && !displayComment(host).contains(prose)) prose,
+    ...additionalShapeTokens(host, arriving),
+    if (eval != null) ...[
+      eval[0]!,
+      if (hasToken(arriving, 'cap_review_eval')) '[%cap_review_eval]',
+    ],
+  ].join(' ');
 }
 
 /// [node] with the moves under it folded, or [node] itself when there was
 /// nothing to fold, which is the whole of an ordinary game.
-MoveNode _folded(MoveNode node) {
-  final children = mergeForests(const [], node.children);
+MoveNode _folded(MoveNode node, {required bool joinNotes}) {
+  final children = mergeForests(const [], node.children, joinNotes: joinNotes);
   return identical(children, node.children)
       ? node
       : node.copyWith(children: children);

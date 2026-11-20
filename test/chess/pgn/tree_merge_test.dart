@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess/pgn/board_shapes.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/pgn_reader.dart';
@@ -46,6 +47,40 @@ void main() {
     final merged = mergeForests(first.children, second.children);
     expect(merged.single.san, 'd4');
     expect(merged.single.children.map((n) => n.san), ['d5', 'Nf6']);
+  });
+
+  test(
+    'folding drawings keeps the host colours and each shape erases once',
+    () {
+      const host = 'Plan [%cal Gf3e5] [%csl Bd4]';
+      const arriving = '[%cal Rf3e5,yf3g5] [%csl Gd4,Pe4]';
+      final merged = joinedComment(host, arriving);
+      expect(merged, contains('[%csl Pe4]'));
+      expect(merged, contains('[%cal yf3g5]'));
+      expect(joinedComment(merged, arriving), merged);
+
+      var drawn = shapesIn(merged);
+      for (final shape in shapesIn(host)) {
+        drawn = withShapeDrawn(drawn, shape);
+      }
+      expect(drawn, shapesIn('[%cal yf3g5] [%csl Pe4]'));
+    },
+  );
+
+  test('folding a new branch joins the notes on its repeated reply', () {
+    final host = readGame('1. d4 *').tree!.children;
+    final source = readGame(
+      '1. e4 e5 {Open game} (1... e5 {[%cal Gf1c4]} 2. Nf3 {[%clk 0:12:00]}) '
+      '2. Nf3 *',
+    ).tree!.children;
+    final folded = mergeForests(host, source, joinNotes: true);
+    final reply = folded.last.children.single;
+    expect(reply.comment, 'Open game [%cal Gf1c4]');
+    expect(reply.children.single.comment, '[%clk 0:12:00]');
+    expect(
+      mergeForests(host, source).last.children.single.comment,
+      'Open game',
+    );
   });
 
   test('every move of a merged chapter is found where the tree holds it', () {
