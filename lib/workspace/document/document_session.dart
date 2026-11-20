@@ -716,17 +716,19 @@ final class DocumentSession extends ChangeNotifier {
   }
 
   /// Writes the held edits to the file, as one save; read-only ones stay.
-  void keepHeld() {
+  void keepHeld({Ticket? editing}) {
     _editors.commit();
     final held = _held;
     if (held == null || _readOnly != null) return;
-    _held = null;
-    _ended = HeldEditsEnded.kept;
-    // An edit that gave the file a chapter took the board to it, and the
-    // saver waited for the edits to be kept before going there too.
-    if (_source case final ref?) _saver.relocated(ref);
-    _saver.save(held.text, held.scope);
-    notifyListeners();
+    _saver.keepWhenWritable(held, () {
+      if (_disposed || _held != held) return;
+      _held = null;
+      _ended = HeldEditsEnded.kept;
+      // The saver now follows any chapter name introduced by the draft.
+      if (_source case final ref?) _saver.relocated(ref);
+      _saver.save(held.text, held.scope);
+      notifyListeners();
+    }, editing: editing);
   }
 
   /// Throws the held edits away and shows the file as it is on disk.
@@ -829,16 +831,14 @@ final class DocumentSession extends ChangeNotifier {
   ///
   /// [writes] is for a change to the document itself rather than to its
   /// moves — a chapter renamed, moved or tagged, chapters added, a link to
-  /// where they were sent — which is written even while edits are held,
-  /// taking the held ones with it: leaving it unsaved would lose what was
-  /// asked for.
+  /// where they were sent — and saves it together with any held moves.
   String? apply(
     edits.ChapterEdit Function(Chapter chapter) edit, {
     ReferenceChanges? references,
     bool writes = false,
   }) {
     if (writes && _held != null && _readOnly == null && _chapter != null) {
-      keepHeld();
+      if (!_saver.referencesPending) keepHeld();
     }
     final chapter = _chapter;
     if (chapter == null) return 'there is nothing open to edit';

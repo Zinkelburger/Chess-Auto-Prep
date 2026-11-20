@@ -445,6 +445,38 @@ final class DocumentSaver extends ChangeNotifier {
   /// Whether this saver is still writing this document at all.
   bool get takesWords => !referencesPending && _state.takesWords;
 
+  ({Object draft, Ticket document, Ticket? editing, VoidCallback keep})?
+  _deferredKeep;
+
+  /// A held draft can wait for a command to release this document. An
+  /// explicit Save still counts if a later switch to Edit is cancelled.
+  void keepWhenWritable(Object draft, VoidCallback keep, {Ticket? editing}) {
+    if (editing?.overtaken == true) return;
+    if (takesWords) return keep();
+    if (!referencesPending) return;
+    final pending = _deferredKeep;
+    if (identical(pending?.draft, draft) && pending?.editing == null) return;
+    if (pending == null) addListener(_resumeKeep);
+    _deferredKeep = (
+      draft: draft,
+      document: _opens.now,
+      editing: editing,
+      keep: keep,
+    );
+  }
+
+  void _resumeKeep() {
+    if (referencesPending) return;
+    final pending = _deferredKeep!;
+    _deferredKeep = null;
+    removeListener(_resumeKeep);
+    if (takesWords &&
+        pending.document.current &&
+        pending.editing?.overtaken != true) {
+      pending.keep();
+    }
+  }
+
   /// The store's answer to one write, with an exception it was not supposed
   /// to throw turned into the failure it is. A throw that got out would
   /// leave the saver believing a write was still going and hand the error to

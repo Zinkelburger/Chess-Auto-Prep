@@ -27,6 +27,7 @@ import '../workspace/document/chapter_commands.dart';
 import '../workspace/document/document_actions.dart';
 import '../workspace/document/game_ordering.dart';
 import '../workspace/document/study_drafts.dart';
+import '../workspace/latest.dart';
 import '../workspace/reading/move_tree_view.dart' show MoveMenu;
 import '../workspace/review/solitaire.dart';
 import '../workspace/review/solitaire_pane.dart';
@@ -299,6 +300,7 @@ abstract base class _ReadingView extends _DocumentModeView {
 
   final DocumentModes _modes;
   final ValueNotifier<bool> editing;
+  final _editSwitch = Latest();
 
   Solitaire? get _solitaire => workspace.solitaire;
 
@@ -322,6 +324,7 @@ abstract base class _ReadingView extends _DocumentModeView {
 
   @override
   void left() {
+    _editSwitch.cancel();
     editing.removeListener(_switched);
     workspace.session.removeListener(_hold);
     _modes.autoplay.stop();
@@ -333,9 +336,10 @@ abstract base class _ReadingView extends _DocumentModeView {
   /// saying they want what is on screen. Another mode or document coming
   /// up never does, so its edits are not written by arriving.
   void _switched() {
+    final ticket = _editSwitch.begin();
     final session = workspace.session;
     if (editing.value && session.readOnly == null && session.hasHeldEdits) {
-      session.keepHeld();
+      session.keepHeld(editing: ticket);
     }
     _hold();
   }

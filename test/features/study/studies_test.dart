@@ -7,6 +7,7 @@ import 'package:chess_auto_prep/chess/pgn/tree_edit.dart' show lineTree;
 import 'package:chess_auto_prep/chess/players/player.dart';
 import 'package:chess_auto_prep/features/study/studies.dart';
 import 'package:chess_auto_prep/features/study/studies_state.dart';
+import 'package:chess_auto_prep/features/study/study_commands.dart';
 import 'package:chess_auto_prep/features/study/study_import_source.dart';
 import 'package:chess_auto_prep/net/lichess_studies.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
@@ -160,6 +161,58 @@ void main() {
     },
   );
 
+  test('Save during rename writes the held move to the renamed file', () async {
+    final study = await openStudy(twoChapterStudy);
+    addTearDown(study.dispose);
+    study.session
+      ..holdsEdits = true
+      ..cursor.toEnd()
+      ..playMove('b8c6');
+    expect(study.session.hasHeldEdits, isTrue);
+    study.store.hold = true;
+    final rename = study.studies.rename(study.ref, 'Renamed');
+    await pumpEventQueue();
+    expect(study.store.waiting, 1);
+    expect(study.saver.takesWords, isFalse);
+    study.session.keepHeld();
+    expect(study.session.hasHeldEdits, isTrue);
+    expect(study.store.requestedSaves, isEmpty);
+    study.store.hold = false;
+    study.store.releaseNext();
+
+    expect(await rename, isA<StudyDone>());
+    await study.saver.flush();
+    final renamed = studyRef('Renamed');
+    expect(study.session.source, renamed);
+    expect(study.session.hasHeldEdits, isFalse);
+    expect(study.store.requestedSaves.single.ref, renamed);
+    expect((study.store.documents[renamed] as Opened).text, contains('Nc6'));
+  });
+
+  test('discard cancels a Save waiting for a rename retry', () async {
+    final study = await openStudy(twoChapterStudy);
+    addTearDown(study.dispose);
+    study.session
+      ..holdsEdits = true
+      ..cursor.toEnd()
+      ..playMove('b8c6');
+    study.store.moves.add(const IoFailure('interrupted'));
+    expect(
+      await study.studies.rename(study.ref, 'Renamed'),
+      isA<StudyProblem>(),
+    );
+    study.session.keepHeld();
+    expect(study.session.hasHeldEdits, isTrue);
+    study.session.discardHeld();
+    expect(await study.studies.retryRename(), isA<StudyDone>());
+    await study.saver.flush();
+    expect(study.store.requestedSaves, isEmpty);
+    expect(
+      (study.store.documents[studyRef('Renamed')] as Opened).text,
+      twoChapterStudy,
+    );
+  });
+
   test('rename keeps the selected chapter and PGN bytes', () async {
     final study = await openStudy(twoChapterStudy, chapter: 1);
     addTearDown(study.dispose);
@@ -178,6 +231,10 @@ void main() {
     () async {
       final study = await openStudy(twoChapterStudy);
       addTearDown(study.dispose);
+      study.session
+        ..holdsEdits = true
+        ..cursor.toEnd()
+        ..playMove('b8c6');
       study.store.moves.add(const IoFailure('interrupted'));
       expect(
         await study.studies.rename(study.ref, 'Renamed'),
@@ -185,10 +242,14 @@ void main() {
       );
       expect(study.studies.canRetryRename, isTrue);
       expect(study.saver.takesWords, isFalse);
+      renameStudyChapter(study.session, index: 0, name: 'Rooks');
+      expect(study.session.refusedEdit, isA<EditNotWritten>());
       expect(await study.studies.retryRename(), isA<StudyDone>());
       expect(study.session.source, studyRef('Renamed'));
       expect(study.studies.canRetryRename, isFalse);
       expect(study.saver.takesWords, isTrue);
+      expect(study.session.hasHeldEdits, isTrue);
+      expect(study.store.requestedSaves, isEmpty);
     },
   );
   test(

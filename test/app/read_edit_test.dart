@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/features/study/studies_state.dart';
 import 'package:chess_auto_prep/features/study/study_commands.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
@@ -102,6 +103,51 @@ void main() {
     expect(editing(tester), isFalse);
     expect(tester.takeException(), isNull);
   });
+
+  for (final backToRead in [false, true]) {
+    testWidgets(
+      backToRead
+          ? 'returning to Read during rename keeps the move off disk'
+          : 'switching to Edit during rename saves this move and the next',
+      (tester) async {
+        final (w, ref) = await openStudy(tester);
+        await tester.tap(find.text('Read'));
+        await tester.pumpAndSettle();
+        w.session.cursor.toEnd();
+        w.session.playMove('b8c6');
+        await tester.pumpAndSettle();
+        expect(w.session.hasHeldEdits, isTrue);
+
+        w.store.hold = true;
+        final rename = w.studies.rename(ref, 'Renamed');
+        await tester.pump();
+        expect(w.saver.takesWords, isFalse);
+        await tester.tap(find.text('Edit'));
+        await tester.pump();
+        if (backToRead) {
+          await tester.tap(find.text('Read'));
+          await tester.pump();
+        }
+        expect(w.session.hasHeldEdits, isTrue);
+        w.store.hold = false;
+        w.store.releaseAll();
+        expect(await rename, isA<StudyDone>());
+        await w.saver.flush();
+        final renamed = studyRef('Renamed');
+        expect(w.session.source, renamed);
+        expect(w.session.hasHeldEdits, backToRead);
+        if (backToRead) {
+          expect(onDisk(w, renamed), twoChapterStudy);
+        } else {
+          expect(onDisk(w, renamed), contains('Nc6'));
+          w.session.playMove('f1b5');
+          await w.saver.flush();
+          expect(onDisk(w, renamed), contains('Nc6 3. Bb5'));
+        }
+        await tester.pumpAndSettle();
+      },
+    );
+  }
 
   testWidgets('reading a study, a chapter renamed is written at once with '
       'the moves held so far', (tester) async {
