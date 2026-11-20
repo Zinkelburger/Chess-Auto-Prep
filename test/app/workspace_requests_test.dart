@@ -633,6 +633,31 @@ void main() {
 
   group('keeping the analysis board', () {
     test(
+      'a continuation of a partial paste reopens in the repertoire',
+      () async {
+        input.clipboardText = '1. e4 e5 2. Nf3 {unfinished';
+        expect(await w.requests.paste(), isA<RequestDone>());
+        w.session.playMove('b8c6');
+        expect(w.session.cursor.currentMove?.san, 'Nc6');
+        await w.library.refresh();
+        final into = w.library.repertoires.firstWhere((f) => f.name == 'KID');
+        expect(
+          await w.requests.saveBoardToRepertoire(into, 'Open game'),
+          isA<RequestDone>(),
+        );
+
+        expect(w.session.source?.path, '/repertoires/KID/Open game.pgn');
+        expect(w.session.chapter!.issues, isEmpty);
+        expect(w.session.chapter!.lines, hasLength(1));
+        w.session.cursor.goTo(const NodePath.root());
+        for (final move in ['e2e4', 'e7e5', 'g1f3', 'b8c6']) {
+          w.session.playMove(move, existingOnly: true);
+        }
+        expect(w.session.cursor.currentMove?.san, 'Nc6');
+      },
+    );
+
+    test(
       'saved to a repertoire becomes a chapter open in the builder',
       () async {
         w.requests.switchTo(Mode.study);

@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/chess/pgn/pgn_issue.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document/document_session.dart';
 import 'package:chess_auto_prep/workspace/document/session_results.dart';
@@ -108,10 +109,70 @@ void main() {
       expect(session.tree!.children.single.children.length, 2);
     });
 
+    test('an unfinished comment preserves the annotated game', () async {
+      const pgn =
+          '[Event "Lesson"]\n\n'
+          '1. e4! {Control the centre} e5 (1... c5) 2. Nf3 {unfinished';
+      expect(await paste(pgn), isNull);
+
+      final chapter = session.chapter!;
+      final source = chapter.partialPaste!;
+      expect(source.text, pgn);
+      expect(source.issues.single, isA<UnterminatedComment>());
+      expect(chapter.lines.single.isWhole, isTrue);
+      final e4 = chapter.tree.children.single;
+      expect(e4.children.map((node) => node.san), ['e5', 'c5']);
+      expect(e4.comment, 'Control the centre');
+      expect(e4.nags, [1]);
+
+      final at = NodePath.of([0]);
+      session
+        ..setComment(at, 'Edited note')
+        ..setGlyph(at, 3);
+      expect(session.refusedEdit, isNull);
+      expect(session.commentAt(at), 'Edited note');
+      expect(session.tree!.nodeAt(at)!.nags, [3]);
+      expect(session.chapter!.partialPaste, source);
+    });
+
+    test('an unwritable comment leaves other annotations editable', () async {
+      const pgn = '1. e4! ;literal } in a comment\ne5 (1... c5 {Sicilian})';
+      expect(await paste(pgn), isNull);
+      expect(session.chapter!.partialPaste!.text, pgn);
+      expect(
+        session.chapter!.partialPaste!.issues.single,
+        isA<CommentHoldsBrace>(),
+      );
+      final e4 = session.tree!.children.single;
+      expect(e4.children.last.comment, 'Sicilian');
+      expect(e4.nags, [1]);
+      final at = NodePath.of([0]);
+      session.setComment(at, 'New note');
+      expect(session.commentAt(at), 'New note');
+    });
+
     test('bare moves are a game', () async {
       expect(await paste('1.e4 c5 2.Nf3'), isNull);
       expect(line(), ['e4', 'c5', 'Nf3']);
     });
+
+    test(
+      'a partial game keeps its starting position and custom tags',
+      () async {
+        final pgn =
+            '[FEN "${_afterE4.value}"]\n[Site "Club"]\n\n'
+            '1... c5 (1... e5) 2. Nf3 Qa8';
+        expect(await paste(pgn), isNull);
+        final chapter = session.chapter!;
+        expect(chapter.partialPaste!.issues.single, isA<IllegalMove>());
+        expect(chapter.tree.rootFen, _afterE4);
+        expect(chapter.side, Side.black);
+        expect(chapter.tree.children.map((node) => node.san), ['c5', 'e5']);
+        expect(chapter.lines.single.text, contains('[Site "Club"]'));
+        expect(chapter.lines.single.text, contains('[SetUp "1"]'));
+        expect(line(), ['c5', 'Nf3']);
+      },
+    );
 
     test('a FEN is where the board starts, counters or not', () async {
       final fields = _sicilian.split(' ').take(4).join(' ');

@@ -12,6 +12,9 @@ import 'pgn_reader.dart';
 import 'study.dart';
 import 'tree_merge.dart';
 
+/// Clipboard text kept with a scratch chapter when its first game was partial.
+typedef PartialPaste = ({String text, List<PgnIssue> issues});
+
 /// A repertoire chapter: the file's preamble, its games, and every game
 /// from the same starting position merged into one tree.
 ///
@@ -36,9 +39,13 @@ final class Chapter {
     this.game,
     this.sideStated = true,
     this.lineIds,
+    this.partialPaste,
   });
 
   final String name;
+
+  /// The original paste and its reader diagnostics, kept only in memory.
+  final PartialPaste? partialPaste;
 
   /// The side the repertoire is for; also the board orientation.
   final Side side;
@@ -236,7 +243,12 @@ List<GameRead> _gamesRead(String text) => [
 /// another one costs more than the work.
 const readOffThreadFrom = 64 * 1024;
 
-Chapter parseChapter({required String name, required String text, int? game}) {
+Chapter parseChapter({
+  required String name,
+  required String text,
+  int? game,
+  PartialPaste? partialPaste,
+}) {
   final document = splitChapterText(text);
   final lines = <ChapterLine>[];
   for (final span in document.games) {
@@ -258,6 +270,7 @@ Chapter parseChapter({required String name, required String text, int? game}) {
     preamble: document.preamble,
     lines: List.unmodifiable(lines),
     game: game,
+    partialPaste: partialPaste,
   );
 }
 
@@ -278,6 +291,7 @@ Chapter withLines(
   preamble: preamble ?? chapter.preamble,
   lines: List.unmodifiable(lines),
   game: game ?? chapter.game,
+  partialPaste: chapter.partialPaste,
 );
 
 /// [chapter] showing its game at [game], over the very same games.
@@ -293,6 +307,7 @@ Chapter withGame(Chapter chapter, int game) => _built(
   lines: chapter.lines,
   game: game,
   lineIds: chapter.lineIds,
+  partialPaste: chapter.partialPaste,
 );
 
 /// [lines] with the whitespace between games kept where the file had it.
@@ -329,6 +344,7 @@ Chapter _built({
   required List<ChapterLine> lines,
   required int? game,
   List<String?>? lineIds,
+  PartialPaste? partialPaste,
 }) {
   final focused = game != null && game >= 0 && game < lines.length
       ? lines[game]
@@ -345,6 +361,7 @@ Chapter _built({
         : focused?.tree ?? const GameTree(rootFen: Fen.initial),
     game: game,
     lineIds: lineIds,
+    partialPaste: partialPaste,
   );
 }
 
@@ -387,6 +404,7 @@ Chapter renamedChapter(Chapter chapter, String name) => Chapter(
   tree: chapter.tree,
   game: chapter.game,
   lineIds: chapter.lineIds,
+  partialPaste: chapter.partialPaste,
 );
 
 /// [chapter] trained under [ids], one for each of its lines.
@@ -399,6 +417,7 @@ Chapter withLineIds(Chapter chapter, List<String?> ids) => Chapter(
   tree: chapter.tree,
   game: chapter.game,
   lineIds: List.unmodifiable(ids),
+  partialPaste: chapter.partialPaste,
 );
 
 /// The exact text of the game [chapter] is showing, or null when it shows
@@ -433,6 +452,7 @@ Chapter withSide(Chapter chapter, Side side) => Chapter(
   preamble: preambleWithSide(chapter.preamble, side),
   lines: chapter.lines,
   tree: chapter.tree,
+  partialPaste: chapter.partialPaste,
 );
 
 /// [preamble] with its `// Color:` line saying [side].

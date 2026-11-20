@@ -4,7 +4,11 @@ import '../fen.dart';
 import '../position_setup.dart';
 import 'chapter.dart';
 import 'game_text.dart';
+import 'movetext_reader.dart';
+import 'pgn_issue.dart';
+import 'pgn_lexer.dart';
 import 'pgn_reader.dart';
+import 'pgn_token.dart';
 import 'tree_edit.dart';
 
 /// The analysis board as a document: a chapter no file holds.
@@ -75,13 +79,14 @@ Pasted pastedBoard(String text, {required Side side}) {
   }
   if (_fenFields(trimmed) != null) return pastedPosition(trimmed);
   final games = splitChapterText(trimmed).games;
+  final source = games.firstOrNull?.text ?? trimmed;
   // A file is cut into games at their `[Event` lines, so moves pasted with
   // no header, or a header without that tag, are given one to be a game.
   final game = games.isEmpty
       ? '[Event "$analysisBoardName"]\n'
             '${trimmed.startsWith('[') ? '' : '\n'}$trimmed'
-      : games.first.text;
-  final read = readGame(game);
+      : source;
+  final read = readGame(source);
   final tree = read.tree;
   if (tree == null || (tree.children.isEmpty && tree.rootFen == Fen.initial)) {
     final why = read.issues.firstOrNull?.detail;
@@ -92,12 +97,27 @@ Pasted pastedBoard(String text, {required Side side}) {
     );
   }
   final facing = tree.rootFen == Fen.initial ? side : _toMove(tree.rootFen);
-  // Moves after the first one that cannot be read are dropped, as a chapter
-  // would drop them; the board shows what could be played, from the game's
-  // own start, so the rest of the text is never half-shown.
   if (read.issues.isNotEmpty) {
+    // A semicolon comment containing '}' cannot go in a writable PGN.
+    // Keep it in the source and leave just that token out of the scratch copy.
+    final editable = read.issues.any((issue) => issue is CommentHoldsBrace)
+        ? readMovetext(source, [
+            for (final token in lexGame(source))
+              if (token is! CommentToken || !token.text.contains('}')) token,
+          ], positionOf(tree.rootFen)!).tree
+        : tree;
+    final end = read.terminator ?? '*';
+    final tags = [
+      PgnTag('Event', tagValue(read.tags, 'Event') ?? analysisBoardName),
+      if (tagValue(read.tags, 'Result') == null) PgnTag('Result', end),
+      if (tagValue(read.tags, 'FEN') != null) const PgnTag('SetUp', '1'),
+      for (final tag in read.tags.whereType<PgnTag>())
+        if (tag.key != 'Event' && tag.key != 'SetUp')
+          PgnTag(tag.key, tag.value),
+    ];
+    final pgn = writeGameText(tags, editable, terminator: end, separator: '\n');
     return PastedBoard(
-      analysisBoard(side: facing, root: tree.rootFen, sans: mainlineSans(tree)),
+      _chapterOf(facing, pgn, (text: text, issues: read.issues)),
     );
   }
   return PastedBoard(_chapterOf(facing, game));
@@ -169,8 +189,9 @@ String _unquoted(String text) {
 
 Side _toMove(Fen fen) => fen.whiteToMove ? Side.white : Side.black;
 
-Chapter _chapterOf(Side side, String game) => parseChapter(
+Chapter _chapterOf(Side side, String game, [PartialPaste? raw]) => parseChapter(
   name: analysisBoardName,
+  partialPaste: raw,
   text:
       '// Color: ${side == Side.white ? 'White' : 'Black'}\n\n'
       '${game.isEmpty ? '' : '$game\n'}',

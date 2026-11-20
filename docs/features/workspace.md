@@ -212,7 +212,10 @@ opens an empty one. Ctrl+V (`Paste PGN or FEN`) puts a pasted PGN (first
 game, variations and comments kept), bare moves or a FEN on a new analysis
 board from any mode, except that in the builder and trainer a PGN becomes a
 repertoire (Actions ▸ `Paste PGN as repertoire`; there Actions ▸ `Paste FEN`
-takes a FEN only). A FEN may be quoted, a `[FEN "…"]` tag or cut short; one that cannot be
+takes a FEN only). For a partial PGN, the scratch board keeps the original
+paste and its diagnostics in memory. Edits and saves use the readable moves,
+variations and writable annotations.
+A FEN may be quoted, a `[FEN "…"]` tag or cut short; one that cannot be
 played says why (`Not a playable FEN. …`); `Nothing to paste: copy a PGN or
 FEN first.` Ctrl+N / `New analysis tab` opens the `Analysis` tab: a scratch
 copy of the whole current game at the cursor, facing the same way, that never
