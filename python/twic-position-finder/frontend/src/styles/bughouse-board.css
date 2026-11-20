@@ -6,7 +6,7 @@
    the squares and coordinates below are Lichess's default brown, #f0d9b5 and
    #b58863, at full brightness. Coordinates are lowercase and bold inside the board, ranks at
    the top right of the right-hand file and files at the bottom left of the
-   bottom rank, each in the colour of the other kind of square. */
+   bottom rank, in one dark brown that reads on both square colours. */
 .bb-board { width: 100%; height: 100%; }
 .bb-board cg-board { background-color: #f0d9b5; background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8" shape-rendering="crispEdges"><rect width="8" height="8" fill="%23f0d9b5"/><path fill="%23b58863" d="M1 0h1v1h-1zM3 0h1v1h-1zM5 0h1v1h-1zM7 0h1v1h-1zM0 1h1v1h-1zM2 1h1v1h-1zM4 1h1v1h-1zM6 1h1v1h-1zM1 2h1v1h-1zM3 2h1v1h-1zM5 2h1v1h-1zM7 2h1v1h-1zM0 3h1v1h-1zM2 3h1v1h-1zM4 3h1v1h-1zM6 3h1v1h-1zM1 4h1v1h-1zM3 4h1v1h-1zM5 4h1v1h-1zM7 4h1v1h-1zM0 5h1v1h-1zM2 5h1v1h-1zM4 5h1v1h-1zM6 5h1v1h-1zM1 6h1v1h-1zM3 6h1v1h-1zM5 6h1v1h-1zM7 6h1v1h-1zM0 7h1v1h-1zM2 7h1v1h-1zM4 7h1v1h-1zM6 7h1v1h-1z"/></svg>'); }
 .bb-board coords { opacity: 1; font-family: var(--sans, sans-serif); font-size: 11px; font-weight: 700; line-height: 1; text-transform: none; }
@@ -14,13 +14,14 @@
 .bb-board coords.ranks coord { transform: none; text-align: right; padding: 2px 3px 0 0; }
 .bb-board coords.files, .bb-board coords.files.black { left: 0; bottom: 0; height: auto; text-align: left; }
 .bb-board coords.files coord { padding: 0 0 2px 3px; text-transform: lowercase; }
-/* Each coordinate in the other square colour, as on Lichess. */
-.bb-board coord.coord-light { color: #b58863; }
-.bb-board coord.coord-dark { color: #f0d9b5; }
+/* One dark brown on both squares: 4.7:1 on #b58863, 10.8:1 on #f0d9b5. Two
+   classes on the wrap, to outrank chessground's own alternating label colours. */
+.bb-board.cg-wrap coord.coord-light, .bb-board.cg-wrap coord.coord-dark { color: #36240f; }
 .bb-board, .zh-slot:not(:disabled) { touch-action: none; }
 
 /* A reserve as lila's crazyhouse pocket (ui/lib/css/chess/_zh-pocket.scss):
-   five square slots in a grey inset well, counts on lila's orange accent,
+   five square slots in a grey inset well, counts on lila's orange accent
+   (a shade darker, for 4.6:1 under the white count),
    empty slots faint in place. Its width is five eighths of the board, so a
    slot is a board square. */
 .zh-pocket { display: flex; flex: none; width: 62.5%; background: #888; border-radius: 4px; box-shadow: 0 3px 5px rgb(0 0 0 / 0.3) inset; font-size: clamp(12px, 1.5vmin, 15px); }
@@ -30,7 +31,7 @@
 .zh-slot img { display: block; width: 100%; height: 100%; pointer-events: none; }
 .zh-slot[data-nb="0"] img { opacity: 0.1; }
 .zh-slot:disabled { opacity: 1; }
-.zh-nb { position: absolute; right: 0; bottom: 0; padding: 3px 0.3em; border-radius: 4px; background: #d64f00; box-shadow: 0 3px 4px hsl(0 0% 0% / 0.15) inset; color: #fff; font-size: 1.1em; font-weight: 700; line-height: 0.9; font-variant-numeric: tabular-nums; text-shadow: 0 1px 1px #000; }
+.zh-nb { position: absolute; right: 0; bottom: 0; padding: 3px 0.3em; border-radius: 4px; background: #cc4a00; box-shadow: 0 3px 4px hsl(0 0% 0% / 0.15) inset; color: #fff; font-size: 1.1em; font-weight: 700; line-height: 0.9; font-variant-numeric: tabular-nums; text-shadow: 0 1px 1px #000; }
 .zh-slot:not(:disabled) { cursor: pointer; }
 .zh-slot:not(:disabled):hover { background-color: #aaa; }
 .zh-slot[aria-pressed="true"], .zh-slot[aria-pressed="true"]:not(:disabled):hover { background-color: rgb(20 85 30 / 0.5); }
