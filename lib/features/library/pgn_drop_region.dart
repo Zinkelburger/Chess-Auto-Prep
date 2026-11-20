@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../../storage/chapter_files.dart';
 import '../../ui/attempting.dart';
+import '../../ui/listening_state.dart';
 import '../../ui/status_bar.dart';
 import 'library.dart';
 import 'library_messages.dart';
@@ -27,31 +28,41 @@ class PgnDropRegion extends StatefulWidget {
 }
 
 class _PgnDropRegionState extends State<PgnDropRegion>
-    with Attempting<PgnDropRegion> {
+    with Attempting<PgnDropRegion>, ListeningState<PgnDropRegion> {
   bool _hovering = false;
 
+  @override
+  Listenable listenableOf(PgnDropRegion widget) => widget.library;
+
+  @override
+  void changed() => setState(() {
+    if (widget.library.busy) _hovering = false;
+  });
+
   Future<void> _drop(DropDoneDetails detail) async {
-    if (busy) return;
+    if (!mounted || busy) return;
     setState(() => _hovering = false);
     final paths = detail.files
         .map((file) => file.path)
         .where((path) => p.extension(path).toLowerCase() == '.pgn')
         .toSet();
+    final library = widget.library;
     final say = StatusScope.of(context);
     if (paths.isEmpty) say('Drop a PGN file to import a repertoire.');
     const failed = 'The dropped PGN could not be imported.';
-    await attempt('import dropped PGN files', () async {
-      for (final path in paths) {
-        if (!mounted) return;
-        final result = await announce(
-          context,
-          widget.library.importPath(path),
+    await attempt('import dropped PGN files', () {
+      return library.importPaths(paths, (path, result) {
+        final message = libraryMessage(
+          result,
           thing: 'repertoire',
           name: p.basenameWithoutExtension(path),
           failed: failed,
         );
-        if (mounted && result is LibraryAdded) widget.onOpen(result.first);
-      }
+        if (message != null) say(message);
+        if (mounted && widget.library == library && result is LibraryAdded) {
+          widget.onOpen(result.first);
+        }
+      });
     }, failure: failed);
     if (problem case final sentence?) say(sentence);
   }

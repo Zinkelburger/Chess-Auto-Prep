@@ -221,6 +221,32 @@ final class Library extends ChangeNotifier {
     ),
   );
 
+  /// Keep the whole drop pending, including files waiting for a change that
+  /// started while the previous file's catalog refresh was in flight.
+  Future<void> importPaths(
+    Iterable<String> paths,
+    void Function(String path, LibraryResult result) onResult,
+  ) {
+    final batch = paths.toList();
+    Future<void> importAll() async {
+      if (busy && batch.isNotEmpty) {
+        onResult(batch.first, const LibraryBusy());
+        return;
+      }
+      for (final path in batch) {
+        while (busy) {
+          await _writes.settleFor(this);
+        }
+        if (_disposed) return;
+        onResult(path, await importPath(path));
+      }
+    }
+
+    final work = importAll();
+    _writes.watch(batch, work);
+    return work;
+  }
+
   /// [text] as a new repertoire called [name], or [name] with ` (2)`,
   /// ` (3)`… when that is taken; [LibraryImports.importText] says what
   /// becomes of its variations and chapters.
@@ -486,14 +512,13 @@ final class Library extends ChangeNotifier {
   /// One change at a time, then the list is read again: a half-applied change
   /// must be visible, and the store is the only thing that knows what landed.
   final PendingWrites? pendingWrites;
+  late final _writes = pendingWrites ?? PendingWrites();
   final BackupHistory? backupHistory;
 
   Future<LibraryResult> _run(
     String action,
     Future<LibraryResult> Function() body,
-  ) =>
-      pendingWrites?.track(this, _perform(action, body), label: 'Library') ??
-      _perform(action, body);
+  ) => _writes.track(this, _perform(action, body), label: 'Library');
 
   Future<LibraryResult> _perform(
     String action,
