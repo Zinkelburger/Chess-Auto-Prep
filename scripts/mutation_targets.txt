@@ -526,6 +526,9 @@
 #     leave(), which clears it, before the first lesson; without a lesson its
 #     one reader compares `_read` with the session, which every follow keeps
 #     equal outside a sitting).
+#   lib/features/trainer/training_outline.dart:110 the loading message while
+#     a chosen repertoire is read (a progress line), :268 `on ?? false` (the
+#     box has no third state); the rest is the look.
 lib/chess/pgn/game_review.dart|test/workspace/game_review_test.dart|test/chess/pgn/edit_laws_test.dart test/app
 lib/chess/pgn/line_edits.dart|test/chess/pgn/line_edits_test.dart|test/chess/pgn test/workspace
 lib/chess/pgn/chapter_edits.dart|test/chess/pgn/chapter_edits_test.dart|test/chess/pgn test/workspace

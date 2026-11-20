@@ -40,14 +40,14 @@ const _main = '''
 1. e4 e5 2. Nf3 Nc6 3. Bc4 *
 ''';
 
-/// One line to train, a model game to read and a line with none of the
-/// user's moves: only the first counts as a line of the chapter.
+/// One line to train, of one move of the user's; a model game to read; and a
+/// line with none of the user's moves: only the first is a line to train.
 const _other = '''
 // Color: White
 
 [Event "Queen's Gambit"]
 
-1. d4 d5 2. c4 *
+1. d4 d5 *
 
 [Event "Model"]
 [ModelGameResult "1-0"]
@@ -419,6 +419,62 @@ void main() {
       (chip('Due'), chip('All learned'), chip('Choose lines')),
       (true, false, false),
     );
+  });
+
+  testWidgets('a model game and a line with none of the user\'s moves are '
+      'read only', (tester) async {
+    await pump(tester);
+    await tap(tester, find.byTooltip('Expand chapter').at(1));
+    expect(find.text('Read only'), findsNWidgets(2));
+    expect(find.text('New'), findsOneWidget, reason: "the Queen's Gambit");
+    expect(
+      find.descendant(
+        of: find.byType(TrainingOutline),
+        matching: find.byType(Checkbox),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('the outline marks the scope on the desk', (tester) async {
+    bool selected(String title) => tester
+        .widget<ListTile>(find.widgetWithText(ListTile, title).first)
+        .selected;
+    await pump(tester);
+    expect((selected('Whole repertoire'), selected('Main')), (true, false));
+    await tap(tester, find.text('Main'));
+    expect((selected('Whole repertoire'), selected('Main')), (false, true));
+    expect(selected('Ruy'), isFalse);
+    await tap(tester, find.text('Ruy').first);
+    expect((selected('Main'), selected('Ruy')), (false, true));
+    expect(selected('Italian'), isFalse);
+  });
+
+  testWidgets('searching by a chapter\'s name shows all its lines; by a move, '
+      'only the lines that play it', (tester) async {
+    await pump(tester);
+    await tester.enterText(find.byType(TextField).last, 'other');
+    await tester.pumpAndSettle();
+    expect(find.text('Other'), findsOneWidget);
+    expect(find.text("Queen's Gambit"), findsWidgets);
+    expect(find.text('Stub'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).last, 'd4');
+    await tester.pumpAndSettle();
+    expect(find.text('Model'), findsOneWidget);
+    expect(find.text('Stub'), findsNothing);
+  });
+
+  testWidgets('an excluded line cannot be learned from its menu', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tap(tester, find.byTooltip('Expand chapter').first);
+    await menu(tester, 'Line training actions', 'Exclude from training');
+    await tap(tester, find.byTooltip('Line training actions').first);
+    final learn = tester.widget<MenuItemButton>(
+      find.widgetWithText(MenuItemButton, 'Learn this line'),
+    );
+    expect(learn.onPressed, isNull);
   });
 
   testWidgets('a line marked learned from the desk', (tester) async {
