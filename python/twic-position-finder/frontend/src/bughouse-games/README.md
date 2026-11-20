@@ -93,8 +93,8 @@ In the order the moves were made across both boards.
 - `eval`: the mover's engine score for its own board in centipawns from that
   board's White side (positive is good for that board's White), or null.
   `mate`: moves to a forced mate on that board with the same sign rule, or
-  null. Opening moves that come from the opening book have `book: true` and
-  no eval.
+  null. The starting moves, taken from a human game and not chosen by an
+  engine, have `book: true` and no eval.
 - `waited`: null, or `{"seconds": 6.5, "why": "partner_mate"}` when the seat
   sat (declined to move) before making this move. `why` is one of a short
   list of codes the builder documents; the viewer shows a fixed phrase per
@@ -149,27 +149,23 @@ Moves inside text are in SAN exactly as they appear in the data (`N@f3+`,
   or line is left out with a console warning; a game whose moves break it is
   refused whole (its positions cannot be trusted) and the page says the file
   does not follow the games format.
-- `view.ts` is where the reader is: a move (-1 is the start) and, inside a
-  variation, a line of that move and a ply in it. A line moves only its own
-  board; the other board stands where the line begins (`before`: after the
-  previous move; `after`: after this move). Clocks and board scores in a
-  variation are those of that moment.
+- The page shows each game's `title`, `event` and `date` but not the
+  annotation: the `summary` and every move's `note`, `glyph` and `lines` are
+  read and checked, never shown.
+- Moves with `book: true` are shown as the starting moves from a human game,
+  which is what they are: the engines did not choose them.
+- `view.ts` is where the reader is: a move (-1 is the start).
 - `words.ts` has the phrases. `waited.why` codes with a phrase:
   `partner_mate`, `mated`, `deny_feed`, `wait_delivery` (the builder's four);
   any other code reads "waited N s".
-  Line kinds: `played`, `instead`, `threat`, `arrives`; any other kind is
-  shown as a plain "Line".
 - Each board's header shows the last `eval`/`mate` given on that board at or
   before the current move. Scores beyond ±20 pawns show as `>+20` / `<−20`
-  (the exact number on hover); a mate is `#n`. A line's score with `mate`
-  set reads in words, "White mates in 3": inside a line the SAN of a mating
-  move may end in `+`, since a bughouse mate depends on the other board.
-- The index's `source` is shown under the list's introduction; it is where
-  the collection says who wrote the notes.
+  (the exact number on hover); a mate is `#n`.
+- The index's `source` is shown under the list's introduction.
 - `public/bughouse-games/` holds the served files, written by the builder;
   replace the whole directory to update the collection. `npm run test:games`
   checks whatever is there against what the contract guarantees (contract,
-  file-name hashes, the index's counts, known line kinds and wait codes, and
-  every line moving only its own board); exact expectations use a small game
+  file-name hashes, the index's counts, known line kinds and wait codes);
+  exact expectations use a small game
   inside `tests/games.ts`. `npm run test:games:browser` picks its games and
   moves from the files at run time.

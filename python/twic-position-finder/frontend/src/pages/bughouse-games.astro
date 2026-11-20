@@ -2,6 +2,7 @@
 import Base from '../layouts/Base.astro';
 import '../styles/trainer.css';
 import '../styles/bughouse-board.css';
+import '../styles/analysis.css';
 import '../styles/bughouse-puzzles.css';
 import '../styles/bughouse-games.css';
 
@@ -17,7 +18,7 @@ const boards = ['A', 'B'] as const;
 ---
 <Base
   title="Bughouse Games"
-  description="Bughouse games played by engines, HypeBeast against itself or another engine, with notes written from the engines’ search logs. Step through both boards at once and see why a move was played."
+  description="Bughouse games played by engines, HypeBeast against itself or another engine, Step through both boards at once, with the clocks, the engines’ scores and HypeBeast to analyse any position."
   full
 >
   <div class="bg" id="bg" data-view="list" data-state="loading">
@@ -25,8 +26,8 @@ const boards = ['A', 'B'] as const;
       <header class="bg-list-head">
         <h1 id="bg-list-title">Bughouse Games</h1>
         <p class="lede">
-          Bughouse between engines, both boards at once, with notes on why a move was chosen, what was expected next
-          and what was weighed instead.
+          Bughouse between engines, both boards at once, with the clocks and the engines’ own scores. Switch on
+          HypeBeast to analyse any position.
         </p>
         <p class="bg-source" id="bg-source"></p>
       </header>
@@ -43,7 +44,7 @@ const boards = ['A', 'B'] as const;
           <section class="bg-board" data-board={b} aria-label={`Board ${b}`}>
             <div class="bg-board-head">
               <span class="bg-board-name">Board {b}</span>
-              <span class="bg-var-tag" id={`bg-var-tag-${b}`} hidden>Variation</span>
+              <span class="bg-var-tag" id={`bg-var-tag-${b}`} hidden>Engine line</span>
               <span class="bg-eval num" id={`bg-eval-${b}`}></span>
             </div>
             <div class="bg-seat" id={`bg-seat-${b}-top`}></div>
@@ -55,7 +56,7 @@ const boards = ['A', 'B'] as const;
           </section>
         ))}
 
-        <aside class="bg-side" aria-label="Moves and notes">
+        <aside class="bg-side" aria-label="Moves">
           <div class="bg-head">
             <a href="/bughouse-games" class="bg-icon bg-back" id="bg-back" title="Back to games" aria-label="Back to games">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.back}/></svg>
@@ -72,6 +73,29 @@ const boards = ['A', 'B'] as const;
           <div class="bg-var-bar" id="bg-var-bar" hidden>
             <span id="bg-var-text"></span>
             <button type="button" class="btn btn-outline btn-sm" id="bg-var-back" title="Back to the game (Esc)">Back to the game</button>
+          </div>
+
+          <div class="bg-engine" id="bg-engine">
+            <div class="ch-ceval" id="bg-ceval">
+              <label class="ch-switch" title="Analyse with HypeBeast (L)">
+                <input type="checkbox" id="bg-engine-on" aria-label="Analyse with HypeBeast" />
+                <span aria-hidden="true"></span>
+              </label>
+              <span class="ch-pearl num" id="bg-pearl"></span>
+              <div class="ch-engine">
+                <span class="ch-engine-name" id="bg-engine-name">HypeBeast</span>
+                <span class="ch-engine-info num" id="bg-engine-info"></span>
+              </div>
+              <button type="button" class="btn btn-outline btn-sm" id="bg-engine-action" hidden></button>
+              <p class="visually-hidden" id="bg-eval-live" aria-live="polite"></p>
+              <div class="ch-bar" aria-hidden="true"><span id="bg-bar"></span></div>
+            </div>
+            <div class="ch-pvs" id="bg-pvs"></div>
+            <div class="ch-pv-board" id="bg-pv-board" role="img" hidden>
+              <div class="ch-pv-hand ch-pv-hand-black"></div>
+              <div class="ch-pv-board-cg bb-board"></div>
+              <div class="ch-pv-hand ch-pv-hand-white"></div>
+            </div>
           </div>
 
           <div class="bg-note scroll-thin" id="bg-note" aria-live="polite"></div>
@@ -92,8 +116,6 @@ const boards = ['A', 'B'] as const;
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.last}/></svg>
             </button>
             <span class="bg-controls-gap"></span>
-            <button type="button" class="btn btn-text btn-sm" id="bg-prev-note" title="Previous note (P)">‹ Note</button>
-            <button type="button" class="btn btn-text btn-sm" id="bg-next-note" title="Next note (N)">Note ›</button>
             <button type="button" class="bg-icon" id="bg-flip" title="Flip the boards (F)" aria-label="Flip the boards" aria-pressed="false">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon.flip}/></svg>
             </button>

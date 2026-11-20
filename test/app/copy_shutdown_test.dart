@@ -15,7 +15,10 @@ void main() {
     test(
       'shutdown drains an accepted copy and ${failCopy ? 'reports its failure' : 'accepts its commit'}',
       () async {
-        final w = WindowFixture();
+        // The copy is held on purpose while the close waits for it: the
+        // fixture's 20 ms wait could run out in real time on a loaded machine
+        // and turn the drain into a "writes have not finished" question.
+        final w = WindowFixture(exitWait: const Duration(minutes: 1));
         addTearDown(w.dispose);
         await w.requests.open(kidMain);
         expect(w.saver.settled, isTrue);

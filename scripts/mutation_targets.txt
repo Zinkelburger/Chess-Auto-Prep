@@ -652,6 +652,24 @@
 #     a new read of the final positions is under way the last ones stay a
 #     moment longer), :102, :107-108, :213, :248, :253 sizes and gaps: the
 #     look.
+# lib/features/pgn_viewer, lib/features/my_games and lib/features/databases,
+# with equivalent mutants a --max 30 sample can draw:
+#   lib/features/pgn_viewer/viewer_reading.dart:45 the 1 s settle (timing
+#     only), :175 `>=` -> `>` (the game and the lines come from one chapter,
+#     whose game is always one of its lines), :248 `.first` -> `.last` (only
+#     the order the queued files' places are written in: each is written).
+#   lib/features/pgn_viewer/player_side_choice.dart:42 one line: the look.
+#   lib/features/pgn_viewer/export_dialog.dart: no mutant compiles (each
+#     `== null` -> `!=` breaks the null promotion the next line needs);
+#     test/features/pgn_viewer/export_dialog_test.dart drives it.
+#   lib/features/databases/twic_download_dialog.dart:29 the 52 weeks offered
+#     (a default), :83-84 the stepper's bounds, :52 the bar's fraction (the
+#     progress shown), :66 `canFail` (the look).
+#   lib/features/databases/databases_screen.dart:251 `?? false` -> `?? true`
+#     (the one outside change to the filter is an import's reset, and fields
+#     never typed in are already empty), :316 the Elo stepper's top (a
+#     default), :42, :127, :143, :304, :450, :456 a width, a line count, an
+#     inset, a field's width, shrink-wrap and dense rows: the look.
 lib/chess/pgn/game_review.dart|test/workspace/game_review_test.dart|test/chess/pgn/edit_laws_test.dart test/app
 lib/chess/pgn/line_edits.dart|test/chess/pgn/line_edits_test.dart|test/chess/pgn test/workspace
 lib/chess/pgn/chapter_edits.dart|test/chess/pgn/chapter_edits_test.dart|test/chess/pgn test/workspace
@@ -997,3 +1015,5 @@ lib/features/trainer/training_home.dart|test/features/trainer/training_desk_test
 lib/features/trainer/study_training_controls.dart|test/app/study_training_workflow_test.dart|
 # lib/features/tournaments
 lib/features/tournaments/schedule.dart|test/features/tournaments/schedule_test.dart test/features/tournaments/tournament_run_test.dart|test/tools/run_engine_tournament_test.dart
+# lib/features/pgn_viewer, lib/features/my_games, lib/features/databases
+lib/features/my_games/book_words.dart|test/features/my_games/game_book_test.dart|test/features/my_games/book_pane_test.dart test/features/my_games/book_pane_swap_test.dart test/features/my_games/my_games_panel_test.dart test/features/my_games/my_games_panel_more_test.dart test/features/players/player_book_pane_test.dart test/app/player_views_test.dart

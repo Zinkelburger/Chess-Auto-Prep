@@ -138,6 +138,54 @@ void main() {
     expect(find.byKey(const ValueKey('player-side')), findsNothing);
   });
 
+  testWidgets('a player followed by name is offered a colour for one game, '
+      'or one game of each, but not for none', (tester) async {
+    fixture = await viewerOver(threeGameFile);
+    addTearDown(fixture.dispose);
+    await fixture.open();
+    Widget choice() =>
+        PlayerSideChoice(viewer: fixture.viewer, filter: fixture.filter);
+    fixture.viewer.follow('Carlsen, Magnus');
+    await pump(tester, choice());
+    expect(find.text('All 1'), findsOneWidget);
+    expect(find.text('White 1'), findsOneWidget);
+    expect(find.text('Black 0'), findsOneWidget);
+
+    fixture.viewer.follow('Nobody, At All');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('player-side')), findsNothing);
+  });
+
+  testWidgets('a player with as many games as White as Black is offered '
+      'both', (tester) async {
+    fixture = await viewerOver(_annBothSides);
+    addTearDown(fixture.dispose);
+    await fixture.open();
+    fixture.viewer.follow('Ann');
+    await pump(
+      tester,
+      PlayerSideChoice(viewer: fixture.viewer, filter: fixture.filter),
+    );
+    expect(find.text('All 2'), findsOneWidget);
+    expect(find.text('White 1'), findsOneWidget);
+    expect(find.text('Black 1'), findsOneWidget);
+  });
+
+  test('only a `contains` rule on White or Black naming the player is the '
+      'side kept; any other rule is the user\'s own and stays', () {
+    const player = 'Kasparov, Gary';
+    const others = [
+      HeaderRule(field: 'White', value: 'Karpov, Anatoly'),
+      HeaderRule(field: 'Event', value: player),
+      HeaderRule(field: 'Black', rule: FilterRule.excludes, value: player),
+    ];
+    for (final rule in others) {
+      final filter = GameFilter(rules: [rule]);
+      expect(sideKept(filter, player), isNull, reason: '$rule');
+      expect(keepingSide(filter, player, null).rules, [rule]);
+    }
+  });
+
   test('keeping a side leaves the other rules and replaces its own', () {
     const other = HeaderRule(field: 'ECO', value: 'B22');
     final white = keepingSide(
@@ -176,4 +224,20 @@ const _kasparov = '''
 [Result "1/2-1/2"]
 
 1. d4 Nf6 1/2-1/2
+''';
+
+const _annBothSides = '''
+[Event "Club"]
+[White "Ann"]
+[Black "Bob"]
+[Result "1-0"]
+
+1. e4 e5 1-0
+
+[Event "Club"]
+[White "Cat"]
+[Black "Ann"]
+[Result "0-1"]
+
+1. d4 d5 0-1
 ''';

@@ -2,7 +2,7 @@
 import { defineConfig } from 'astro/config';
 
 // https://astro.build/config
-// The bughouse board needs cross-origin isolation for its threaded engine;
+// The bughouse board and the Bughouse Games page need cross-origin isolation for their threaded engine;
 // public/_headers sets the same headers for these paths on Cloudflare.
 /** @type {import('vite').Plugin} */
 const crossOriginIsolated = {
@@ -10,7 +10,7 @@ const crossOriginIsolated = {
   configureServer(server) {
     server.middlewares.use((req, res, next) => {
       const path = req.url?.split('?')[0] ?? '';
-      if (path === '/bughouse' || path.startsWith('/bughouse/') || path.startsWith('/bughouse-engine/') || path.startsWith('/hypebeast-engine/')) {
+      if (path === '/bughouse' || path.startsWith('/bughouse/') || path === '/bughouse-games' || path === '/bughouse-games/' || path.startsWith('/bughouse-engine/') || path.startsWith('/hypebeast-engine/')) {
         res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
         res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
       } else if (!req.headers.accept?.includes('text/html')) {
