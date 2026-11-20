@@ -30,6 +30,12 @@ class _RecoveryState extends State<_Recovery> with Attempting<_Recovery> {
     _listing = widget.studies.deleted();
   }
 
+  /// Reads the deleted studies again. A block, not an arrow: the arrow
+  /// would hand `setState` the listing's future, which it refuses.
+  void _readAgain() => setState(() {
+    _listing = widget.studies.deleted();
+  });
+
   /// The last restore went through.
   bool _restored = false;
 
@@ -76,7 +82,7 @@ class _RecoveryState extends State<_Recovery> with Attempting<_Recovery> {
         action: OutlinedButton(
           onPressed: busy
               ? null
-              : () => setState(() => _listing = widget.studies.deleted()),
+              : _readAgain,
           child: const Text('Try again'),
         ),
       );
@@ -169,7 +175,7 @@ class _RecoveryState extends State<_Recovery> with Attempting<_Recovery> {
         TextButton(
           onPressed: busy
               ? null
-              : () => setState(() => _listing = widget.studies.deleted()),
+              : _readAgain,
           child: const Text('Refresh'),
         ),
       ],

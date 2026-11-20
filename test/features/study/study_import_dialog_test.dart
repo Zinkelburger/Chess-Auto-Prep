@@ -46,6 +46,7 @@ void main() {
 
   testWidgets('a new study takes the name typed for it', (tester) async {
     await preview(tester, '[Event "Added"]\n\n1. c4 e5 *\n');
+    await tester.ensureVisible(find.text('New study'));
     await tester.tap(find.text('New study'));
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -75,6 +76,7 @@ void main() {
       findsOneWidget,
     );
     expect(confirm(tester, 'Add chapters').onPressed, isNull);
+    await tester.ensureVisible(find.text('New study'));
     await tester.tap(find.text('New study'));
     await tester.pumpAndSettle();
     expect(confirm(tester, 'Import study').onPressed, isNotNull);

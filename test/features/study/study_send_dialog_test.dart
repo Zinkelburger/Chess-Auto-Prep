@@ -24,14 +24,6 @@ void main() {
   late ScriptedStudyWriter lichess;
   late StudyFixture study;
 
-  Future<void> openSend(WidgetTester tester, String text) async {
-    lichess = ScriptedStudyWriter();
-    study = await openStudy(text, lichessWriter: lichess);
-    addTearDown(study.dispose);
-    await tester.pumpWidget(const MaterialApp(home: Scaffold()));
-    await sendAgain(tester);
-  }
-
   Future<void> sendAgain(WidgetTester tester) async {
     unawaited(
       sendStudyToLichess(
@@ -41,6 +33,14 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+  }
+
+  Future<void> openSend(WidgetTester tester, String text) async {
+    lichess = ScriptedStudyWriter();
+    study = await openStudy(text, lichessWriter: lichess);
+    addTearDown(study.dispose);
+    await tester.pumpWidget(const MaterialApp(home: Scaffold()));
+    await sendAgain(tester);
   }
 
   FilledButton button(WidgetTester tester, String label) =>
