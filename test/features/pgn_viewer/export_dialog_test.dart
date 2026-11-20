@@ -55,7 +55,10 @@ void main() {
     await tester.tap(find.text('Export'));
     await tester.pumpAndSettle();
     expect(find.text('Export games'), findsOneWidget);
-    await tester.enterText(find.widgetWithText(TextField, 'PGN file name'), name);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'PGN file name'),
+      name,
+    );
     await tester.tap(find.text('Choose folder'));
     await tester.pumpAndSettle();
     // The export's disk work answers on the real clock, a pump at a time.
@@ -68,9 +71,8 @@ void main() {
     expect(finished, isTrue);
   }
 
-  List<String> written() => [
-    for (final file in folder.listSync()) p.basename(file.path),
-  ]..sort();
+  List<String> written() =>
+      [for (final file in folder.listSync()) p.basename(file.path)]..sort();
 
   testWidgets('the name is given `.pgn` when it lacks one, and the games '
       'shown are written', (tester) async {

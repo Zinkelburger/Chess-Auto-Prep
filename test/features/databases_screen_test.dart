@@ -153,31 +153,39 @@ void main() {
     }
 
     testWidgets('everything known', (tester) async {
-      await expectSummary(tester, (
-        games: 1944320,
-        bytes: 2147483648,
-        firstDate: '2020.01.05',
-        lastDate: '2026.12.28',
-        firstIssue: 1340,
-        lastIssue: 1612,
-        imports: 2,
-      ), 'Master games · 1,944,320 games · 2.0 GB · Jan 2020 – Dec 2026 · '
-          'TWIC issues 1340–1612 · 2 PGN files imported');
+      await expectSummary(
+        tester,
+        (
+          games: 1944320,
+          bytes: 2147483648,
+          firstDate: '2020.01.05',
+          lastDate: '2026.12.28',
+          firstIssue: 1340,
+          lastIssue: 1612,
+          imports: 2,
+        ),
+        'Master games · 1,944,320 games · 2.0 GB · Jan 2020 – Dec 2026 · '
+        'TWIC issues 1340–1612 · 2 PGN files imported',
+      );
     });
 
     testWidgets('one issue, one import, one gigabyte, one month', (
       tester,
     ) async {
-      await expectSummary(tester, (
-        games: 5,
-        bytes: 1 << 30,
-        firstDate: '2026.09.01',
-        lastDate: '2026.09.30',
-        firstIssue: 1500,
-        lastIssue: 1500,
-        imports: 1,
-      ), 'Master games · 5 games · 1.0 GB · Sep 2026 · TWIC issue 1500 · '
-          '1 PGN file imported');
+      await expectSummary(
+        tester,
+        (
+          games: 5,
+          bytes: 1 << 30,
+          firstDate: '2026.09.01',
+          lastDate: '2026.09.30',
+          firstIssue: 1500,
+          lastIssue: 1500,
+          imports: 1,
+        ),
+        'Master games · 5 games · 1.0 GB · Sep 2026 · TWIC issue 1500 · '
+        '1 PGN file imported',
+      );
     });
 
     testWidgets('only one readable date, in megabytes', (tester) async {
@@ -360,7 +368,10 @@ void main() {
     }
     expect(databases.message, 'Imported 5 games · 0 skipped.');
     expect(databases.filter.strongestFirst, isFalse);
-    expect(tester.widget<ToggleChip>(find.byType(ToggleChip)).selected, isFalse);
+    expect(
+      tester.widget<ToggleChip>(find.byType(ToggleChip)).selected,
+      isFalse,
+    );
   });
 
   group('an empty list says what to do', () {
@@ -527,7 +538,8 @@ void main() {
     await tester.tap(find.text('Storage · 3.0 KB'));
     await tester.pumpAndSettle();
     bool deletable(String name) =>
-        tester.widget<IconButton>(
+        tester
+            .widget<IconButton>(
               find.ancestor(
                 of: find.byTooltip('Delete $name…'),
                 matching: find.byType(IconButton),

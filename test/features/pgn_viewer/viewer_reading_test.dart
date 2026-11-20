@@ -255,26 +255,78 @@ void main() {
       expect(fixture.session.game, 0);
     });
 
-    test('a place found after another file was asked for is not shown', () async {
-      var current = true;
-      final restoring = reading.restore(place, () => current);
-      current = false;
-      lookup.complete(499);
-      await restoring;
-      expect(fixture.session.game, 0);
-    });
+    test(
+      'a place found after another file was asked for is not shown',
+      () async {
+        var current = true;
+        final restoring = reading.restore(place, () => current);
+        current = false;
+        lookup.complete(499);
+        await restoring;
+        expect(fixture.session.game, 0);
+      },
+    );
 
-    test('a place found after the user moved is not shown: the move stands', () async {
-      final restoring = reading.restore(place, () => true);
-      fixture.session.cursor.goTo(NodePath.of(const [0]));
-      lookup.complete(499);
-      await restoring;
-      expect(fixture.session.game, 0);
-      expect(fixture.session.cursor.value, NodePath.of(const [0]));
-    });
+    test(
+      'a place found after the user moved is not shown: the move stands',
+      () async {
+        final restoring = reading.restore(place, () => true);
+        fixture.session.cursor.goTo(NodePath.of(const [0]));
+        lookup.complete(499);
+        await restoring;
+        expect(fixture.session.game, 0);
+        expect(fixture.session.cursor.value, NodePath.of(const [0]));
+      },
+    );
   });
 
-  test('of two restores in flight only the newer one places the file', () async {
+  test(
+    'of two restores in flight only the newer one places the file',
+    () async {
+      final text = [
+        for (var i = 0; i < 500; i++) '[Event "Game $i"]\n\n1. e4 e5 *',
+      ].join('\n\n');
+      final fixture = await openSession(text);
+      addTearDown(fixture.dispose);
+      await fixture.session.open(fixture.ref, game: 0);
+      final filter = FileFilter(fixture.session);
+      addTearDown(filter.dispose);
+      final lookups = <Completer<int>>[];
+      final reading = ViewerReading(
+        session: fixture.session,
+        filter: filter,
+        pending: PendingWrites(),
+        store: _Places(),
+        activePath: () => fixture.ref.path,
+        sort: () => GameOrder.fileOrder,
+        setSort: (_) {},
+        perspective: () => const FollowCollectionPlayer(),
+        changed: () {},
+        locateElsewhere: (_, _) {
+          final lookup = Completer<int>();
+          lookups.add(lookup);
+          return lookup.future;
+        },
+      )..start();
+      addTearDown(reading.dispose);
+      ReadingPlace at(int game) => ReadingPlace(
+        game: game,
+        key: 'k$game',
+        path: const NodePath.root(),
+        sort: GameOrder.fileOrder,
+      );
+      final older = reading.restore(at(499), () => true);
+      final newer = reading.restore(at(10), () => true);
+      lookups.first.complete(499);
+      await older;
+      expect(fixture.session.game, 0, reason: 'the older place is not shown');
+      lookups.last.complete(10);
+      await newer;
+      expect(fixture.session.game, 10);
+    },
+  );
+
+  test('an overtaken restore whose lookup fails says nothing', () async {
     final text = [
       for (var i = 0; i < 500; i++) '[Event "Game $i"]\n\n1. e4 e5 *',
     ].join('\n\n');
@@ -301,38 +353,73 @@ void main() {
       },
     )..start();
     addTearDown(reading.dispose);
-    ReadingPlace at(int game) => ReadingPlace(
-      game: game,
-      key: 'k$game',
-      path: const NodePath.root(),
+    const place = ReadingPlace(
+      game: 10,
+      key: 'k',
+      path: NodePath.root(),
       sort: GameOrder.fileOrder,
     );
-    final older = reading.restore(at(499), () => true);
-    final newer = reading.restore(at(10), () => true);
-    lookups.first.complete(499);
+    final older = reading.restore(place, () => true);
+    final newer = reading.restore(place, () => true);
+    lookups.first.completeError(StateError('Isolate exited'));
     await older;
-    expect(fixture.session.game, 0, reason: 'the older place is not shown');
+    expect(reading.problem, isNull);
     lookups.last.complete(10);
     await newer;
+    expect(reading.problem, isNull);
     expect(fixture.session.game, 10);
   });
 
-  test('a move within edits not yet on disk is not kept as the place', () async {
-    final (reading, places, fixture) = await started();
+  test('a restored place goes to its move only while that move still '
+      'reaches the position it was left at', () async {
+    final (reading, _, fixture) = await started();
     addTearDown(reading.dispose);
-    reading.capture();
-    await pumpEventQueue();
-    places.saved.clear();
     final session = fixture.session;
-    session.holdsEdits = true;
-    session.setComment(const NodePath.root(), 'Held note');
-    expect(session.hasHeldEdits, isTrue);
+    final key = readingGameKey(session.chapter!.lines.first);
     final moved = NodePath.of(const [0, 0]);
-    session.cursor.goTo(moved);
-    reading.capture();
-    await reading.pending.settle();
-    expect(places.saved.map((place) => place.path), isNot(contains(moved)));
+    final there = session.tree!.fenAt(moved).value;
+    ReadingPlace at(String? fen) => ReadingPlace(
+      game: 0,
+      key: key,
+      path: moved,
+      fen: fen,
+      sort: GameOrder.fileOrder,
+    );
+
+    await reading.restore(at(there), () => true);
+    expect(session.cursor.value, moved);
+
+    session.cursor.toStart();
+    await reading.restore(
+      at(session.tree!.fenAt(const NodePath.root()).value),
+      () => true,
+    );
+    expect(
+      session.cursor.value,
+      const NodePath.root(),
+      reason: 'the file changed',
+    );
   });
+
+  test(
+    'a move within edits not yet on disk is not kept as the place',
+    () async {
+      final (reading, places, fixture) = await started();
+      addTearDown(reading.dispose);
+      reading.capture();
+      await pumpEventQueue();
+      places.saved.clear();
+      final session = fixture.session;
+      session.holdsEdits = true;
+      session.setComment(const NodePath.root(), 'Held note');
+      expect(session.hasHeldEdits, isTrue);
+      final moved = NodePath.of(const [0, 0]);
+      session.cursor.goTo(moved);
+      reading.capture();
+      await reading.pending.settle();
+      expect(places.saved.map((place) => place.path), isNot(contains(moved)));
+    },
+  );
 
   test('a restored filter is judged by the games it keeps once it has '
       'filtered them, not while it is still filtering', () async {
