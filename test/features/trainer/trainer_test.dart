@@ -19,6 +19,7 @@ import 'package:chess_auto_prep/features/trainer/training_scope.dart';
 import 'package:chess_auto_prep/storage/book_file.dart';
 import 'package:chess_auto_prep/storage/chapter_directory.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/document_repository.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
@@ -668,6 +669,92 @@ void main() {
         'Italian',
         "Queen's Gambit",
       ]);
+    });
+  });
+
+  test('opening a chapter of another repertoire trains that repertoire', () {
+    fakeAsync((async) {
+      final qgd = ref('KID', 'QGD');
+      final benko = ref('benko', 'Other');
+      fixture.store.documents[qgd] = Opened(_other, scriptedRevision(_other));
+      fixture.store.documents[benko] = Opened(_other, scriptedRevision(_other));
+      final listing = ScriptedFiles(
+        listing: Repertoires([
+          RepertoireFolder(
+            name: 'KID',
+            path: '/repertoires/KID',
+            modified: _now,
+            chapters: [fixture.ref, qgd],
+          ),
+          folder('benko', ['Other']),
+        ]),
+      );
+      final trainer = ready(async, listing: listing)
+        ..setScope(TrainScope.repertoire);
+      async.flushMicrotasks();
+      unawaited(fixture.session.open(benko));
+      async.flushMicrotasks();
+      expect(readyState(trainer).chapters.map((c) => c.ref), [benko]);
+    });
+  });
+
+  test('a change under the repertoire being trained reads it again; one '
+      'elsewhere does not', () {
+    fakeAsync((async) {
+      final qgd = ref('KID', 'QGD');
+      final benko = ref('benko', 'Other');
+      fixture.store.documents[qgd] = Opened(_other, scriptedRevision(_other));
+      fixture.store.documents[benko] = Opened(_other, scriptedRevision(_other));
+      final listing = ScriptedFiles(
+        listing: Repertoires([
+          RepertoireFolder(
+            name: 'KID',
+            path: '/repertoires/KID',
+            modified: _now,
+            chapters: [fixture.ref, qgd],
+          ),
+          folder('benko', ['Other']),
+        ]),
+      );
+      final repository = DocumentRepository(fixture.store);
+      addTearDown(repository.dispose);
+      final catalog = RepertoireCatalog(
+        files: listing,
+        documents: repository,
+        root: '/repertoires',
+      );
+      addTearDown(catalog.dispose);
+      unawaited(catalog.refresh());
+      async.flushMicrotasks();
+      final trainer = trainerOver(listing: listing, catalog: catalog)
+        ..show()
+        ..setScope(TrainScope.repertoire);
+      async.flushMicrotasks();
+      final reads = files.reads;
+
+      unawaited(
+        repository.save(
+          benko,
+          '$_other\n',
+          expected: scriptedRevision(_other),
+          scope: const WholeDocument(),
+        ),
+      );
+      async.flushMicrotasks();
+      expect(files.reads, reads, reason: 'another repertoire changed');
+
+      const slav = '$_other\n[Event "Slav"]\n\n1. d4 d5 2. c4 c6 *\n';
+      unawaited(
+        repository.save(
+          qgd,
+          slav,
+          expected: scriptedRevision(_other),
+          scope: const WholeDocument(),
+        ),
+      );
+      async.flushMicrotasks();
+      expect(files.reads, reads + 1);
+      expect(readyState(trainer).lines.map((l) => l.name), contains('Slav'));
     });
   });
 

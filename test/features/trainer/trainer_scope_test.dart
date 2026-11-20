@@ -166,6 +166,34 @@ void main() {
     },
   );
 
+  test('a book being trained follows an edit of the book, and only then', () {
+    fakeAsync((clock) {
+      final kid = (chapters.listing as Repertoires).folders.single;
+      trainer.show();
+      clock.flushMicrotasks();
+      final reads = progress.reads;
+      books.setChapter(books.chosen!, kid, ref('KID', 'Other'), false);
+      clock.flushMicrotasks();
+      expect(
+        progress.reads,
+        reads,
+        reason: 'the chapter is trained, not the book',
+      );
+
+      trainer.setScope(TrainScope.book);
+      clock.flushMicrotasks();
+      expect((trainer.state as TrainerReady).chapters.map((c) => c.ref.name), [
+        'Main',
+      ]);
+      books.setChapter(books.chosen!, kid, ref('KID', 'Other'), true);
+      clock.flushMicrotasks();
+      expect((trainer.state as TrainerReady).chapters.map((c) => c.ref.name), [
+        'Main',
+        'Other',
+      ]);
+    });
+  });
+
   test('a book whose last edit did not save is still trained', () {
     fakeAsync((clock) {
       bookStore.fail = true;
