@@ -23,6 +23,7 @@ import '../storage/chapter_files.dart';
 import '../storage/my_games_files.dart';
 import '../storage/pgn_document_store.dart';
 import '../storage/pgn_file_import.dart';
+import '../storage/player_files.dart';
 import '../ui/file_names.dart';
 import '../workspace/document/study_choice.dart';
 import '../workspace/document/study_drafts.dart';
@@ -209,12 +210,14 @@ final class PlayerModes {
     if (_disposed) return null;
     // A file already under this name was made by an earlier click whose
     // link was not saved; it is adopted unless someone else links it.
-    if (made is! Created && (made is! Collision || _linkedElsewhere(ref))) {
+    if (made is! Created &&
+        (made is! Collision || await _linkedElsewhere(ref, player.id))) {
       requests.say(
         'Could not create the prep study. A file with that name may already exist; use Link study to open it.',
       );
       return null;
     }
+    if (_disposed) return null;
     unawaited(studies.refresh());
     final saved = await directory.save(
       player.edited({'prep_file': ref.path}),
@@ -251,16 +254,16 @@ final class PlayerModes {
     }
   }
 
-  /// Whether a player or group already links [ref], so that a file found
-  /// under a derived name is theirs and not one to adopt. Case is ignored:
-  /// names differing only by case share one file on Windows and macOS.
-  bool _linkedElsewhere(ChapterRef ref) {
+  /// Whether another owner links [ref]. A player can adopt a file from
+  /// their own additional studies. A group checks every player.
+  Future<bool> _linkedElsewhere(ChapterRef ref, [String? playerId]) async {
     bool same(Object? path) =>
         path is String &&
         path.isNotEmpty &&
         p.equals(path.toLowerCase(), ref.path.toLowerCase());
     return directory.players.any((person) => same(person.text('prep_file'))) ||
-        directory.groups.any((g) => same(g.study));
+        directory.groups.any((g) => same(g.study)) ||
+        await env.players.hasLinkedStudy(ref.path, exceptPlayer: playerId);
   }
 
   Future<void> openStudy(Player player) async {
@@ -404,7 +407,8 @@ final class PlayerModes {
       );
       final made = await env.store.create(ref, '${chapters.join('\n\n')}\n');
       // As for a player's study: one left by a link that was not saved.
-      if (made is! Created && (made is! Collision || _linkedElsewhere(ref))) {
+      if (made is! Created &&
+          (made is! Collision || await _linkedElsewhere(ref))) {
         throw StateError(
           'A study with this name already exists. Rename the group or link its existing study.',
         );

@@ -132,8 +132,9 @@ request at a time (700 ms apart, 20 s timeout) to
 **Prep study** — `New prep study` creates `Documents/studies/Prep – <name>.pgn`
 with `As White` and `As Black` chapters (each its own orientation), links it as
 `prep_file`, and opens it in Study; `Open prep study` opens the link. A linked
-file that is gone is made again; a file already under that name that nobody
-links is adopted; an unreadable one is reported, never replaced.
+file that is gone is made again; a file already under that name can be adopted
+if no other player or group links it, even if the player linked it through
+`Link study…`; an unreadable one is reported, never replaced.
 `Link study…` picks a PGN and adds it to `studies`; a chip opens it (at its
 chapter when the link names one).
 

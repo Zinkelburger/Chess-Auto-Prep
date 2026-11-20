@@ -62,6 +62,31 @@ void main() {
     expect(onDisk(), rows, reason: 'reading changes nothing');
   });
 
+  test(
+    'a case-only study link blocks adoption only for the same file',
+    () async {
+      final prep = File(p.join(dir.path, 'Prep – Ann.pgn'));
+      final linked = File(p.join(dir.path, 'Prep – Ann.PGN'));
+      await prep.writeAsString('1. e4 *');
+      final sharesFile = await linked.exists();
+      final files = PlayerFiles(dir);
+      final bo = (await files.read()).players.last;
+      await files.savePlayer(bo.withStudy(linked.path), expected: bo);
+
+      expect(
+        await files.hasLinkedStudy(prep.path, exceptPlayer: 'p1'),
+        sharesFile,
+      );
+      if (!sharesFile) {
+        await linked.writeAsString('1. e4 *');
+        expect(
+          await files.hasLinkedStudy(prep.path, exceptPlayer: 'p1'),
+          isFalse,
+        );
+      }
+    },
+  );
+
   test('saves, edits and removals keep the bad rows as they were', () async {
     final files = PlayerFiles(dir);
     final read = await files.read();

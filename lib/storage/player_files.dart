@@ -24,6 +24,30 @@ abstract interface class PlayerStore {
   Future<void> removeGroup(PlayerGroup group);
 }
 
+extension PrepStudyLinks on PlayerStore {
+  /// A player can adopt a study they already linked. Other players' links,
+  /// including ones saved by another window, protect the file from adoption.
+  Future<bool> hasLinkedStudy(String path, {String? exceptPlayer}) async {
+    try {
+      final current = await read();
+      final others = current.players.where((p) => p.id != exceptPlayer);
+      for (final link in others.expand((p) => p.studies)) {
+        if (link.path == path) return true;
+        if (!p.equals(link.path.toLowerCase(), path.toLowerCase())) continue;
+        try {
+          if (await FileSystemEntity.identical(link.path, path)) return true;
+        } on PathNotFoundException {
+          // A missing case variant does not own the existing file.
+        }
+      }
+      return false;
+    } on Object catch (error) {
+      log.w('check prep study links', error);
+      return true;
+    }
+  }
+}
+
 /// A save or removal refused because the row is no longer what the caller
 /// read: another window changed it. Retrying the same edit cannot succeed.
 final class PlayerConflict implements Exception {
