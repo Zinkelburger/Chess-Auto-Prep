@@ -173,8 +173,7 @@ bool _isModelGame(ChapterLine line) {
       tagValue(line.tags, 'ModelGameResult') != null) {
     return true;
   }
-  final result = tagValue(line.tags, 'Result')?.trim() ?? '*';
-  return result.isNotEmpty && result != '*';
+  return isFinishedResult(tagValue(line.tags, 'Result') ?? line.terminator);
 }
 
 /// `[CumProb "0.1253"]`, a likelihood from 0 to 1; null for any other

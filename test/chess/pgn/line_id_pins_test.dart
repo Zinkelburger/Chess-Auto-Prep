@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_edit.dart';
+import 'package:chess_auto_prep/chess/pgn/chapter_line.dart';
 import 'package:chess_auto_prep/chess/pgn/games_written.dart';
 import 'package:chess_auto_prep/chess/pgn/line_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/line_id_pins.dart';
@@ -102,6 +103,49 @@ void main() {
     final after = pinned(lineDeleted(chapter, game: 1));
     expect(after.chapter.lines.last.text, chapter.lines.last.text);
     expect(after.games.rewritten, isEmpty);
+  });
+
+  test('editing the focused repertoire game leaves the other moves unread', () {
+    final other = chapter.lines[1];
+    final unread = ChapterLine.unread(
+      tags: other.tags,
+      text: other.text,
+      trailer: other.trailer,
+    );
+    final before = withLines(withGame(chapter, 0), [
+      chapter.lines.first,
+      unread,
+    ]);
+    final edit = renamedLine(before, game: 0, name: 'Renamed') as ChapterEdited;
+    final after = withIdsPinned(before, edit.chapter, edit.games);
+    expect(after.chapter.lines.first.nameAt(0), 'Renamed');
+    expect(after.chapter.lines.last, same(unread));
+    expect(unread.isRead, isFalse);
+  });
+
+  test('deleting the last study chapter leaves other games unread', () {
+    final study = parseChapter(
+      name: 'Study',
+      text: _chapter.replaceFirst(
+        '[Event "Ruy"]',
+        '[Event "Ruy"]\n[TrainingSide "White"]',
+      ),
+      game: 0,
+    );
+    final lines = [
+      for (final line in study.lines)
+        ChapterLine.unread(
+          tags: line.tags,
+          text: line.text,
+          trailer: line.trailer,
+        ),
+    ];
+    final before = withLines(study, lines);
+    final edit = lineDeleted(before, game: 2) as ChapterEdited;
+    final after = withIdsPinned(before, edit.chapter, edit.games);
+    expect(after.chapter, same(edit.chapter));
+    expect(lines.skip(1).every((line) => !line.isRead), isTrue);
+    expect(after.chapter.lines.last.isRead, isFalse);
   });
 
   test('a viewer file is not pinned', () {

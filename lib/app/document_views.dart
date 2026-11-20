@@ -334,8 +334,15 @@ abstract base class _ReadingView extends _DocumentModeView {
   /// up never does, so its edits are not written by arriving.
   void _switched() {
     final session = workspace.session;
-    if (editing.value && session.readOnly == null && session.hasHeldEdits) {
-      session.keepHeld();
+    if (editing.value &&
+        session.readOnly == null &&
+        session.hasHeldEdits &&
+        !session.keepHeld()) {
+      // Edit writes every change, which the file cannot take yet: the
+      // edits stay held on Read rather than be dropped.
+      editing.value = false;
+      requests.say('Stayed in Read: the file cannot take your edits yet.');
+      return;
     }
     _hold();
   }

@@ -288,6 +288,22 @@ void main() {
     expect(opened.single.id, 'lichess_Mine1234');
   });
 
+  testWidgets('an empty position with a partial account read offers a retry', (
+    tester,
+  ) async {
+    final myGames = ScriptedLocalGames()
+      ..state = const TreeBuilt(notice: 'Could not read your Lichess games.')
+      ..answer = ExplorerAnswer.empty;
+    addTearDown(myGames.dispose);
+    await show(tester, myGames: myGames);
+    await tester.tap(find.text('My games'));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not read your Lichess games.'), findsOneWidget);
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(myGames.forgotten, 1);
+  });
+
   testWidgets(
     'authentication rejection offers login and retries after success',
     (tester) async {

@@ -1,14 +1,17 @@
 import 'package:flutter/foundation.dart';
 
 import '../../chess/pgn/chapter.dart';
+import '../../chess/pgn/chapter_edit.dart';
 import '../../chess/pgn/chapter_line.dart';
 import '../../chess/pgn/game_text.dart';
 import '../../chess/pgn/study.dart';
 import '../../chess/pgn/study_cleanup.dart';
 import '../../chess/pgn/study_lichess.dart';
+import '../../diagnostics/log.dart';
 import '../../net/lichess_studies.dart';
 import '../../net/lichess_study_writes.dart';
 import '../../storage/chapter_files.dart' show ChapterRef;
+import '../../storage/pending_writes.dart';
 import '../../workspace/document/document_session.dart';
 import 'study_commands.dart' show studyNameOf;
 
@@ -22,7 +25,23 @@ import 'study_commands.dart' show studyNameOf;
 /// written into the study as `ChapterURL`, as one undoable edit, so sending
 /// again updates them instead of adding them twice.
 final class StudySender extends ChangeNotifier {
-  StudySender(this._writer, this._session, {required this.openPage});
+  StudySender(
+    this._writer,
+    this._session, {
+    required this.openPage,
+    this.pendingWrites,
+    this.writeAway,
+  });
+
+  /// Writes an edit into a study that is no longer the one open, and
+  /// answers whether it landed: where the links go when the user left the
+  /// study before Lichess answered.
+  final Future<bool> Function(ChapterRef, ChapterEdit Function(Chapter))?
+  writeAway;
+
+  /// What the app waits for at exit: a send, up to its links being written
+  /// into the study, so a send cut short does not add the chapters twice.
+  final PendingWrites? pendingWrites;
 
   final LichessStudyWriter _writer;
   final DocumentSession _session;
@@ -51,7 +70,13 @@ final class StudySender extends ChangeNotifier {
 
   /// Sends the open study: into the Lichess study [into], or into a new
   /// private one when it is null.
-  Future<void> send({String? into}) async {
+  Future<void> send({String? into}) {
+    final sending = _send(into);
+    pendingWrites?.watch(this, sending);
+    return sending;
+  }
+
+  Future<void> _send(String? into) async {
     if (_state is Sending) return;
     final chapter = _session.snapshot();
     final source = _session.source;
@@ -70,18 +95,42 @@ final class StudySender extends ChangeNotifier {
       return;
     }
     _set(Sending(0, chapter!.lines.length));
-    final study = into ?? await _created(chapter);
+    final String? study;
+    try {
+      study = into ?? await _created(chapter);
+    } on Object catch (error) {
+      // Only the kind of failure: the error may carry the credential.
+      log.w('send the study to Lichess', error.runtimeType);
+      _set(const SendFailed('The study could not be sent.'));
+      return;
+    }
     if (study == null) return;
     final run = _Run(study, fresh: into == null);
-    for (final (index, line) in chapter.lines.indexed) {
-      if (_disposed) return;
-      _set(Sending(index, chapter.lines.length));
-      if (await _sent(run, index, line, studyNameIn(chapter.lines)) == false) {
-        break;
+    try {
+      for (final (index, line) in chapter.lines.indexed) {
+        if (_disposed) return;
+        _set(Sending(index, chapter.lines.length));
+        if (await _sent(run, index, line, studyNameIn(chapter.lines)) ==
+            false) {
+          break;
+        }
       }
+    } on Object catch (error) {
+      // The chapters Lichess already made keep their links below.
+      log.w('write a Lichess study chapter', error.runtimeType);
+      run.failure = const LichessNotWritten(LichessWriteProblem.unreachable);
     }
     if (_disposed) return;
-    _record(source!, run.urls);
+    if (!await _record(source!, chapter, run.urls)) {
+      _set(
+        SendFailed(
+          'The chapters went to Lichess, but the study could not keep their '
+          'links, so sending again adds them again.',
+          study: study,
+        ),
+      );
+      return;
+    }
     _set(switch (run.failure) {
       final failed? => SendFailed(
         run.added + run.updated == 0
@@ -188,13 +237,38 @@ final class StudySender extends ChangeNotifier {
   }
 
   /// Where the chapters Lichess made live, written into the study they were
-  /// sent from while it is still the one open.
-  void _record(ChapterRef source, Map<int, String> urls) {
-    if (urls.isEmpty || _session.source != source) return;
-    _session.apply(
-      (now) => withStudyTag(now, chapterUrlTag, urls),
-      writes: true,
+  /// sent from: through its editor while it is open, else on disk. A link
+  /// goes only to the chapter [sent] had in its place, as it was sent, so a
+  /// chapter moved or changed meanwhile takes none. False when the links
+  /// could not be written.
+  Future<bool> _record(
+    ChapterRef source,
+    Chapter sent,
+    Map<int, String> urls,
+  ) async {
+    if (urls.isEmpty) return true;
+    (String, String?) asSent(List<ChapterLine> lines, int index) => (
+      studyChapterName(lines[index], index: index, study: studyNameIn(lines)),
+      lichessChapterPgn(lines[index]),
     );
+    var placed = true;
+    ChapterEdit linked(Chapter now) {
+      final still = {
+        for (final MapEntry(key: index, value: url) in urls.entries)
+          if (index < now.lines.length &&
+              asSent(now.lines, index) == asSent(sent.lines, index))
+            index: url,
+      };
+      placed = still.length == urls.length;
+      return withStudyTag(now, chapterUrlTag, still);
+    }
+
+    if (_session.source == source) {
+      _session.apply(linked, writes: true);
+      return placed;
+    }
+    final written = await writeAway?.call(source, linked) ?? false;
+    return written && placed;
   }
 
   static String _counted(int added, int updated) => [

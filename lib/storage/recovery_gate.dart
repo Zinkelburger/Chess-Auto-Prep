@@ -8,6 +8,7 @@ import 'document_ref.dart';
 import 'file_lock.dart';
 import 'file_relocation.dart';
 import 'mutation_guards.dart';
+import 'recovery_files.dart';
 import 'recovery_ledger.dart';
 
 /// Why a write an unfinished operation guards is refused; the next write
@@ -119,6 +120,9 @@ final class RecoveryGate {
   final Duration escalateAfter;
   final DateTime Function() _clock;
 
+  /// Whether the repertoires folder could not be made, once logged.
+  bool _rootBlocked = false;
+
   /// Runs [action] under the profile lock, first finishing what a stopped
   /// process or a failed command left half done, if a pass is due.
   Future<T> run<T>(Future<T> Function() action) =>
@@ -133,8 +137,17 @@ final class RecoveryGate {
     required T Function(String detail) owed,
   }) async {
     final root = Directory(p.join(documents.path, 'repertoires'));
-    await root.create(recursive: true);
-    final canonical = await root.resolveSymbolicLinks();
+    String canonical;
+    try {
+      await root.create(recursive: true);
+      canonical = await root.resolveSymbolicLinks();
+    } on FileSystemException catch (error) {
+      // The lock only needs the name. A file where the repertoires folder
+      // goes must not block studies, books or training.
+      if (!_rootBlocked) log.w('make ${root.path}', error);
+      _rootBlocked = true;
+      canonical = p.join(canonicalRecoveryRoot(documents).path, 'repertoires');
+    }
     return withDirectoryLock(
       Directory(p.join(canonical, '.cap-directory-domain')),
       () async {

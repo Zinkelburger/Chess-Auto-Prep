@@ -167,15 +167,33 @@ final class GitHubReleases implements AppReleases {
 
   @override
   Future<AssetDownload> download(Uri url) async {
+    // A request given up on is aborted, so its connection is not held.
+    final abort = Completer<void>();
     final http.StreamedResponse response;
     try {
       response = await _client
           .send(
-            http.Request('GET', url)
+            http.AbortableRequest('GET', url, abortTrigger: abort.future)
               ..headers['User-Agent'] = appUserAgent
               ..headers['Accept'] = 'application/octet-stream',
           )
-          .timeout(downloadStartTimeout);
+          .then((reply) {
+            // A transport may still deliver headers after the abort.
+            if (abort.isCompleted) {
+              unawaited(reply.stream.listen(null).cancel());
+            }
+            return reply;
+          })
+          .timeout(
+            downloadStartTimeout,
+            onTimeout: () {
+              abort.complete();
+              throw TimeoutException(
+                'No download headers',
+                downloadStartTimeout,
+              );
+            },
+          );
     } on Object catch (error) {
       log.w('download the update', error);
       return const AssetRefused();

@@ -57,6 +57,7 @@ abstract interface class ViewerDrafts {
 
   /// Moves the draft for [path] into the recovery quarantine, whole: newer
   /// edits are taking its place and it may hold work nothing else has.
+  /// Throws when it could not be moved; it is then still in place.
   Future<void> setAside(String path);
 }
 
@@ -141,8 +142,13 @@ final class ViewerDraftFiles implements ViewerDrafts {
   Future<void> setAside(String path) async {
     final file = _fileFor(path);
     await withDirectoryLock(_folder, () async {
-      if (await file.exists()) {
-        await quarantine(_support, file, 'newer unsaved edits replaced it');
+      if (!await file.exists()) return;
+      if (!await quarantine(
+        _support,
+        file,
+        'newer unsaved edits replaced it',
+      )) {
+        throw FileSystemException('Could not set aside the draft', file.path);
       }
     });
   }

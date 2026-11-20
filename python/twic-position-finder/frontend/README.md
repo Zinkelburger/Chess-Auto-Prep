@@ -10,6 +10,7 @@ Static Astro site deployed to Cloudflare Pages. Browser preparation tools, one s
 | `/tactics`            | Tactics Trainer — Stockfish in the browser mines puzzles from games  | `src/tactics/*`                        |
 | `/bughouse`           | Bughouse — one board or both, + and − on every piece in both hands, lila's board editor, and what one more piece is worth; HypeBeast in the browser | `src/analysis/*`, `../../../tools/prepare_hypebeast_web.py` |
 | `/bughouse-puzzles`   | Bughouse Puzzles — mates and tactics mined from FICS games and engine games, reserves frozen | `src/bughouse-puzzles/*`, `public/bughouse-puzzles/` |
+| `/bughouse-games`     | Bughouse Games — annotated engine games, both boards, notes and variations | `src/bughouse-games/*`, `public/bughouse-games/` |
 | `/charles-clock`      | Charles Clock — a full-screen phone clock with its own `<html>`      | `src/pages/charles-clock.astro`, `src/lib/charles-clock.ts` |
 | `/meow-chess/`        | Meow Chess — the Meow-Chess tournament director app, a Flutter web build copied in from its own repository | `public/meow-chess/` (built), `functions/meow-chess/fetch.js` |
 
@@ -86,8 +87,9 @@ checksum-verified chunks. Every file fits Cloudflare Pages' 25 MiB asset limit.
 - `src/prep/` — the PGN and Expectimax tabs (below). `pgn.ts`,
   `pgn-client.ts`/`pgn.worker.ts` and `storage.ts` (IndexedDB
   `cap-preparation`) are also used by the Tactics Trainer.
-- `src/tactics/`, `src/bughouse-puzzles/` — see below. `src/bughouse/` holds
-  the small board, pocket, promotion and FEN helpers of the puzzle board.
+- `src/tactics/`, `src/bughouse-puzzles/`, `src/bughouse-games/` — see below.
+  `src/bughouse/` holds the small board, pocket, promotion and FEN helpers of
+  the puzzle and games boards.
 - `public/stockfish/` — stockfish.js 18 single-threaded build (`stockfish.js` +
   `stockfish.wasm`). `public/piece/` — cburnett SVGs used by every board.
   `public/_headers` — caching and cross-origin isolation (below).
@@ -363,6 +365,30 @@ the Tactics Trainer), the board and pocket in `src/styles/bughouse-board.css`
 (Lichess's default brown at full brightness, lila's pocket; also used by the
 analysis boards), plus `src/styles/bughouse-puzzles.css`.
 
+## Bughouse games
+
+`/bughouse-games` lists annotated bughouse games played by engines (HypeBeast
+against itself or another engine) and opens one with both boards as partners
+sit, board B turned the other way. The files under `public/bughouse-games/`
+are written by the HypeBeast repo's builder, never by hand; their format, a
+fixed contract with that builder, is
+[src/bughouse-games/README.md](src/bughouse-games/README.md). The page
+generates no moves: every position is a FEN from the data.
+
+```
+games.ts        types, contract checks (parseIndex, parseGame), #<id>:<move> links, GameStore
+view.ts         the cursor (move, or a line and ply in it) and what each board shows there
+words.ts        line kinds, waits, scores, clocks, seats and results in words
+board.ts        one read-only chessground board with its pockets, engines and clocks
+app.ts          page controller: the list, a game, keys (← → Home End ↑ ↓, N/P notes, F flip, Esc)
+```
+
+`public/_headers` caches `index.json` for ten minutes. Game files are named by
+content hash but share the directory with `index.json`, so no rule marks
+them immutable. `npm run test:games` checks the served files and the pure
+modules; `npm run test:games:browser` drives the built page at desktop,
+1024×768 and phone sizes and writes screenshots to `build/bughouse-games-web/`.
+
 ## Meow Chess
 
 `public/meow-chess/` is the browser build of
@@ -389,15 +415,15 @@ host allowlist; add a host there when Meow-Chess learns to read a new site.
 
 ## Checks
 
-`npm run test:analysis`, `test:puzzles` and `test:prep` bundle the focused
+`npm run test:analysis`, `test:puzzles`, `test:games` and `test:prep` bundle the focused
 TypeScript tests in `tests/` with esbuild and run them in Node (`npm run
-build` runs all three and `astro check` first). Lichess answers non-browser
+build` runs all four and `astro check` first). Lichess answers non-browser
 user agents with 404, so a headless run that reaches it needs
 `page.setUserAgent(...)`.
 
 Three browser checks drive the built site in headless Chrome (`puppeteer-core`
 is a dev dependency; Chrome must be installed, `CHROME_BIN` overrides
-`/usr/bin/google-chrome`). Both serve `dist/` on loopback with
+`/usr/bin/google-chrome`). All serve `dist/` on loopback with
 `public/_headers` applied (`scripts/static-server.mjs`), so an isolation
 mistake fails locally. From the repository root:
 
@@ -405,6 +431,7 @@ mistake fails locally. From the repository root:
 scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run build
 scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test:prep:browser
 scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test:bughouse:browser
+scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test:games:browser
 scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test:puzzles:browser
 ```
 

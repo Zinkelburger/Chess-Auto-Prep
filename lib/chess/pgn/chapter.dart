@@ -152,9 +152,9 @@ Future<Chapter> readChapter({
 ///
 /// A file of thousands of games takes seconds to read whole, nearly all of
 /// it replaying moves of games nobody is looking at. So a large file is cut
-/// into its games and only their headers are read before this answers; the
-/// game on the board reads its own moves when they are asked for
-/// ([ChapterLine.unread]). The moves of every game are read meanwhile on
+/// into its games and only their headers and results are read before this
+/// answers; the game on the board reads its own moves when they are asked
+/// for ([ChapterLine.unread]). The moves of every game are read meanwhile on
 /// another isolate and handed to the same lines when they are done, and
 /// [movesBeingRead] says when that is, for whoever needs them all.
 ///
@@ -171,14 +171,7 @@ Future<Chapter> readChapterShowing({
   // the same answer later: nothing is waited on that cannot be done here.
   final moves = Isolate.run(() => _gamesRead(text))..ignore();
   final heads = await Isolate.run(() => _headsRead(text));
-  final lines = List<ChapterLine>.unmodifiable([
-    for (final (index, span) in heads.games.indexed)
-      ChapterLine.unread(
-        tags: heads.tags[index],
-        text: span.text,
-        trailer: span.trailer,
-      ),
-  ]);
+  final lines = heads.lines;
   final taken = _take(lines, moves);
   for (final line in lines) {
     _reading[line] = taken;
@@ -216,13 +209,20 @@ Future<void> _take(
   }
 }
 
-({String preamble, List<GameSpan> games, List<List<PgnHeader>> tags})
-_headsRead(String text) {
+/// The lines are made here, off the calling isolate, because each one
+/// without a `Result` header lexes its moves for [ChapterLine.result].
+({String preamble, List<ChapterLine> lines}) _headsRead(String text) {
   final document = splitChapterText(text);
   return (
     preamble: document.preamble,
-    games: document.games,
-    tags: [for (final span in document.games) readHeaders(span.text)],
+    lines: List<ChapterLine>.unmodifiable([
+      for (final span in document.games)
+        ChapterLine.unread(
+          tags: readHeaders(span.text),
+          text: span.text,
+          trailer: span.trailer,
+        ),
+    ]),
   );
 }
 

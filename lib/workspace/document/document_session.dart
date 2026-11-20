@@ -348,7 +348,7 @@ final class DocumentSession extends ChangeNotifier {
     if (ticket.overtaken) return const OpenOvertaken();
     final version = access.versionOf(ref.path);
     final receipt = _saver.lastReceipt;
-    final leftAsIs = !_saver.settled;
+    final (leftAsIs, drafts) = (!_saver.settled, _saver.drafts);
     final read = await readDocument(_store, ref, game: game, parsed: _parsed);
     if (ticket.overtaken) return const OpenOvertaken();
     if (access.versionOf(ref.path) != version) {
@@ -363,9 +363,9 @@ final class DocumentSession extends ChangeNotifier {
         shown = read;
     }
     _editors.commit();
-    if (!leftAsIs && !_saver.settled) {
-      // Words typed during the read go to their file before the handover.
-      // If the file will not take them, keep that document on screen.
+    if ((!leftAsIs || _saver.drafts != drafts) && !_saver.settled) {
+      // Words typed during the read, a Save among them, go to their file
+      // before the handover. If the file will not take them, it stays up.
       final into = _saver.documentPath;
       await _saver.flush();
       if (ticket.overtaken || !_saver.settled) {
@@ -614,7 +614,7 @@ final class DocumentSession extends ChangeNotifier {
     if (_saver.referencesPending || _saver.state is DocumentFollowing) {
       return _editRefused('the chapter must finish saving or be read again');
     }
-    if (_restoring) {
+    if (_restoring || (_saver.undoing && _holdsEdits)) {
       return _editRefused('an undo is still putting the chapter back');
     }
     return null;
@@ -714,15 +714,16 @@ final class DocumentSession extends ChangeNotifier {
     return Restored(writeChapter(restored.chapter));
   }
 
-  /// Writes the held edits to the file, as one save; read-only ones stay.
-  void keepHeld() {
+  /// Writes the held edits as one save; false when they stay held.
+  bool keepHeld() {
     _editors.commit();
     _saveHeld();
+    return _held == null;
   }
 
   void _saveHeld() {
     final held = _held;
-    if (held == null || _readOnly != null) return;
+    if (held == null || _readOnly != null || !_saver.takesWords) return;
     _held = null;
     _ended = HeldEditsEnded.kept;
     // An edit that gave the file a chapter took the board to it, and the

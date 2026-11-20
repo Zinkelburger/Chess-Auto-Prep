@@ -124,10 +124,11 @@ final class GameBook extends ChangeNotifier {
   /// The time controls the last read was for.
   Set<GameSpeed> _speedsSeen;
 
-  /// The book as the last read saw it: another book in use, or an edit to
-  /// this one, reads again.
-  (Book, int)? _bookSeen;
-  (Book, int) get _bookInput => (_books.active, _books.revision);
+  /// The book as the last read saw it: another book in use, an edit to
+  /// this one, or the books becoming readable again, reads again.
+  (Book, int, bool, String?)? _bookSeen;
+  (Book, int, bool, String?) get _bookInput =>
+      (_books.active, _books.revision, _books.current, _books.problem);
 
   BookState _state = const BookReading();
   String _query = '';
@@ -271,6 +272,12 @@ final class GameBook extends ChangeNotifier {
       }
       final accounts = (accountRead as AccountsSnapshot).accounts;
       if (accounts.isEmpty) return _become(const BookNoAccounts());
+      // Books that could not be read, or are still settling, would check
+      // the games against every repertoire instead of the chosen book.
+      if (!_books.current) {
+        if (_books.problem case final detail?) throw StateError(detail);
+        return;
+      }
       final read = await _readCorpus(accounts, overtaken);
       if (read == null || overtaken()) return;
       final (corpus, failed) = read;

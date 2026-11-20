@@ -64,7 +64,8 @@ available.`, `Could not rename the book.`, `Could not delete the book.`
 **Back / Forward** — the arrows in the top bar, Alt+← / Alt+→, or the mouse's
 back and forward buttons. A mode switch or a jump into the builder (`Open in
 builder`, a book move's file, My games' open-in-builder) is remembered
-with its file and position; Back reopens them. Up to 30 places; the tooltip
+with its file and position, or which analysis board was up; Back reopens
+them, with unsaved reading edits their tab kept. Up to 30 places; the tooltip
 names the place.
 
 ## Data

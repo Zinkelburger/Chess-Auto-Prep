@@ -169,7 +169,11 @@ void main() {
       unawaited(HivemindProcess.start(process).then((e) => engine = e!));
       time.flushMicrotasks();
       HivemindAnswer? answer;
-      unawaited(engine.search(question()).then((a) => answer = a));
+      unawaited(
+        engine
+            .search(question(budget: const NodeBudget(20000)))
+            .then((a) => answer = a),
+      );
       // Reports keep it alive well past ten minutes of searching.
       for (var minute = 0; minute < 15; minute++) {
         time.elapse(const Duration(minutes: 1));
@@ -188,6 +192,88 @@ void main() {
       expect(exit, EngineExit.unresponsive);
     });
   });
+
+  test(
+    'repeated reports after stop release the queued search within the deadline',
+    () {
+      fakeAsync((time) {
+        late HivemindProcess engine;
+        final process = AnsweringProcess(live: true);
+        unawaited(HivemindProcess.start(process).then((e) => engine = e!));
+        time.flushMicrotasks();
+        HivemindAnswer? stopped;
+        HivemindAnswer? next;
+        unawaited(engine.search(question()).then((a) => stopped = a));
+        time.flushMicrotasks();
+        process.say(liveSearch.first);
+        time.flushMicrotasks();
+        engine.stop();
+        expect(process.sent.last, 'stop');
+        process.next = ['bestmove (e2e4,pass)'];
+        unawaited(engine.search(question(team: Team.cd)).then((a) => next = a));
+        for (var second = 0; second < 29; second++) {
+          time.elapse(const Duration(seconds: 1));
+          process.say(liveSearch.first);
+          time.flushMicrotasks();
+        }
+        expect(stopped, isNull);
+        time.elapse(const Duration(seconds: 1));
+        expect(stopped, isA<HivemindFailed>());
+        expect(next, isNotNull);
+      });
+    },
+  );
+
+  // Measured on the real engine under load: `bestmove` came 2 to 3 s
+  // after `stop`, the time to finish the batch it was evaluating.
+  test('an engine that takes seconds to answer stop keeps its search', () {
+    fakeAsync((time) {
+      late HivemindProcess engine;
+      final process = AnsweringProcess(live: true);
+      unawaited(HivemindProcess.start(process).then((e) => engine = e!));
+      time.flushMicrotasks();
+      HivemindAnswer? stopped;
+      unawaited(engine.search(question()).then((a) => stopped = a));
+      time.flushMicrotasks();
+      process.say(liveSearch.first);
+      time.flushMicrotasks();
+      engine.stop();
+      time.elapse(const Duration(seconds: 8));
+      process
+        ..say(liveSearch.first)
+        ..say('bestmove (e2e4,pass)');
+      time.flushMicrotasks();
+      expect(stopped, isA<HivemindSearched>());
+      expect(process.killed, isFalse);
+    });
+  });
+
+  for (final budget in [
+    const NodeBudget(200),
+    const TimeBudget(Duration(seconds: 2)),
+  ]) {
+    test('${budget.go} expires despite increasing reports', () {
+      fakeAsync((time) {
+        final process = AnsweringProcess(live: true);
+        late HivemindProcess engine;
+        unawaited(HivemindProcess.start(process).then((e) => engine = e!));
+        time.flushMicrotasks();
+        HivemindAnswer? answer;
+        unawaited(
+          engine.search(question(budget: budget)).then((a) => answer = a),
+        );
+        time.flushMicrotasks();
+        for (var second = 0; second < 62; second++) {
+          process.say(
+            'info depth 3 score cp 10 nodes ${200 + second} pv (d2d4,pass)',
+          );
+          time.elapse(const Duration(seconds: 1));
+        }
+        expect(answer, isA<HivemindFailed>());
+        expect(process.killed, isTrue);
+      });
+    });
+  }
 
   test('a search reads the joint lines, rank 1 first, then by score', () async {
     final (engine, process) = await started();

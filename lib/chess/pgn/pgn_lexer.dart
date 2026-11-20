@@ -36,6 +36,27 @@ List<PgnToken> lexHeader(String text) {
   return tokens;
 }
 
+/// The first termination marker outside every variation — the one the
+/// movetext reader takes as the game's — found by lexing [text] without
+/// playing any move. Markers in comments and escape lines are not tokens.
+String? mainlineTermination(String text) {
+  final scan = _Scan(text);
+  var depth = 0;
+  while (scan.i < text.length) {
+    switch (scan.next()) {
+      case VariationOpen():
+        depth++;
+      case VariationClose() when depth > 0:
+        depth--;
+      case TerminationToken(:final text) when depth == 0:
+        return text;
+      default:
+        break;
+    }
+  }
+  return null;
+}
+
 /// Games spell a ply where nobody moved four ways. `0000` is why move
 /// numbers are read before words: `10000.` is move ten thousand, not a null
 /// move with a dot after it.

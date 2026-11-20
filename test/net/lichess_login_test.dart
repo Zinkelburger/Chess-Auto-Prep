@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:chess_auto_prep/diagnostics/log.dart';
 import 'package:chess_auto_prep/features/settings/lichess_account.dart';
@@ -113,6 +114,103 @@ void main() {
       expect(lines.join(), isNot(contains(secret)));
     },
   );
+
+  test('cancelling during bind prevents the browser from opening', () {
+    fakeAsync((time) {
+      final bind = Completer<ServerSocket>();
+      final listener = _CallbackListener();
+      var binding = false;
+      var opens = 0;
+      final login = LichessLoginApi(
+        lichess(),
+        openBrowser: (_) async {
+          opens++;
+          return true;
+        },
+      );
+      LoginOutcome? result;
+      IOOverrides.runZoned(
+        () {
+          unawaited(
+            login
+                .logIn(waiting: (_, {required opened}) {})
+                .then((value) => result = value),
+          );
+        },
+        serverSocketBind:
+            (_, _, {backlog = 0, v6Only = false, shared = false}) {
+              binding = true;
+              return bind.future;
+            },
+      );
+      time.flushMicrotasks();
+      expect(binding, isTrue);
+      unawaited(login.cancel());
+      time.flushMicrotasks();
+      bind.complete(listener);
+      time.elapse(login.wait);
+      expect(opens, 0);
+      expect(result, isA<LoginCancelled>());
+      expect(listener.closed, isTrue);
+    });
+  });
+
+  test('cancelling during the token exchange discards and revokes the '
+      'grant', () async {
+    final listener = _CallbackListener();
+    final page = Completer<Uri>();
+    final exchanging = Completer<void>();
+    final token = Completer<http.Response>();
+    final revoked = Completer<String?>();
+    final client = MockClient((request) async {
+      if (request.url.path == '/api/token' && request.method == 'DELETE') {
+        revoked.complete(request.headers['Authorization']);
+        return http.Response('', 204);
+      }
+      if (request.url.path == '/api/token') {
+        exchanging.complete();
+        return token.future;
+      }
+      return http.Response('{"username":"Player"}', 200);
+    });
+    final login = LichessLoginApi(
+      client,
+      openBrowser: (uri) async {
+        page.complete(uri);
+        return true;
+      },
+    );
+    var writes = 0;
+    final owner = LichessAccountState(
+      login: login,
+      read: () async => null,
+      write: (_) async {
+        writes++;
+        return true;
+      },
+    );
+    addTearDown(owner.dispose);
+    final loggingIn = IOOverrides.runZoned(
+      owner.logIn,
+      serverSocketBind:
+          (_, _, {backlog = 0, v6Only = false, shared = false}) async =>
+              listener,
+    );
+    final uri = await page.future;
+    listener.callback(uri.queryParameters['state']!);
+    await exchanging.future;
+    final cancelling = owner.cancel();
+    token.complete(http.Response('{"access_token":"lip_grant"}', 200));
+    await cancelling;
+    await loggingIn;
+    expect(writes, 0);
+    expect(owner.status, isA<SignedOut>());
+    // Lichess issued a token nobody here keeps; it must not stay valid.
+    expect(
+      await revoked.future.timeout(const Duration(seconds: 5)),
+      'Bearer lip_grant',
+    );
+  });
 
   test('a stalled browser launcher times out and frees the account', () {
     fakeAsync((time) {
@@ -457,9 +555,57 @@ final class _CallbackListener extends StreamView<Socket>
   @override
   InternetAddress get address => InternetAddress.loopbackIPv4;
 
+  void callback(String state) {
+    final bytes = ascii.encode(
+      'GET /callback?code=c0de&state=$state HTTP/1.1\r\n'
+      'Host: localhost\r\nConnection: close\r\n\r\n',
+    );
+    _connections.add(_CallbackSocket(bytes));
+  }
+
   @override
   Future<ServerSocket> close() async {
     await _connections.close();
     return this;
   }
+}
+
+/// The browser sends one GET and consumes the entire response.
+final class _CallbackSocket extends Fake implements Socket {
+  _CallbackSocket(List<int> request) {
+    _input.add(Uint8List.fromList(request));
+  }
+
+  final _input = StreamController<Uint8List>();
+
+  @override
+  StreamSubscription<Uint8List> listen(
+    void Function(Uint8List)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) => _input.stream.listen(
+    onData,
+    onError: onError,
+    onDone: onDone,
+    cancelOnError: cancelOnError,
+  );
+
+  @override
+  InternetAddress get address => InternetAddress.loopbackIPv4;
+
+  @override
+  bool setOption(SocketOption option, bool enabled) => true;
+
+  @override
+  void add(List<int> bytes) {}
+
+  @override
+  Future<void> addStream(Stream<List<int>> stream) => stream.drain<void>();
+
+  @override
+  Future<void> flush() async {}
+
+  @override
+  void destroy() => unawaited(_input.close());
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' show AppExitResponse;
 
@@ -94,6 +95,29 @@ void main() {
     await until(() => second.requests.statusAction != null);
     expect(second.requests.statusAction?.label, 'Restore unsaved edits');
   });
+
+  test(
+    'exit checkpoints a held edit produced during the pending-write drain',
+    () async {
+      final w = await start();
+      addTearDown(w.dispose);
+      const root = NodePath.root();
+      w.session.setComment(root, 'First draft');
+      final release = Completer<void>();
+      w.parts.env.pendingWrites.watch(
+        w,
+        release.future.then((_) {
+          w.session.setComment(root, 'Final draft');
+          return null;
+        }),
+      );
+      final leaving = w.parts.exit.mayClose();
+      await pumpEventQueue();
+      release.complete();
+      expect(await leaving, isTrue);
+      expect(checkpointHas('Final draft'), isTrue);
+    },
+  );
 
   test('edits left in a closed tab are offered when the file opens again, '
       'and are neither dropped nor written over unseen', () async {

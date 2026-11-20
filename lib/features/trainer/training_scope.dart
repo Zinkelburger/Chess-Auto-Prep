@@ -58,18 +58,29 @@ final class ScopeReader {
   }
 
   /// Every chapter of every repertoire that [wanted] takes, in the folders'
-  /// order, with [open] taken as it is on the board.
-  Future<List<ChapterLines>> chaptersWhere(
+  /// order, with [open] taken as it is on the board; or why the repertoire
+  /// list could not be read, which is not the same as an empty book.
+  Future<({List<ChapterLines> chapters, String? problem})> chaptersWhere(
     bool Function(ChapterRef ref) wanted,
     ChapterLines? open,
   ) async {
     final listing = await _files.list();
-    if (listing is! Repertoires) return const [];
-    return _read([
+    if (listing is RepertoiresUnreadable) {
+      log.w('list repertoires for training', listing.detail);
+      return (
+        chapters: const <ChapterLines>[],
+        problem: 'Could not read the repertoire list: ${listing.detail}',
+      );
+    }
+    if (listing is! Repertoires) {
+      return (chapters: const <ChapterLines>[], problem: null);
+    }
+    final chapters = await _read([
       for (final folder in listing.folders)
         for (final ref in folder.chapters)
           if (wanted(ref)) ref,
     ], open);
+    return (chapters: chapters, problem: null);
   }
 
   Future<List<ChapterLines>> _read(

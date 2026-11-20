@@ -13,6 +13,7 @@ import 'package:chess_auto_prep/storage/pgn_document_store.dart' show IoFailure;
 import 'package:chess_auto_prep/storage/recovery_gate.dart';
 import 'package:chess_auto_prep/ui/status_bar.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
+import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -92,6 +93,68 @@ void main() {
     for (final row in tester.widgetList<LineRow>(find.byType(LineRow)))
       if (row.selected) row.line.name,
   ];
+
+  testWidgets('changing chapter during naming leaves both files alone', (
+    tester,
+  ) async {
+    await show(tester);
+    await tester.tap(find.byTooltip('Actions').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Move to chapter…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New chapter…'));
+    await tester.pumpAndSettle();
+    await fixture.session.open(ref('KID', 'Sidelines'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Moved');
+    await tester.tap(find.text('Move'));
+    await tester.pumpAndSettle();
+    expect(fixture.textAt('/repertoires/KID/Moved.pgn'), isNull);
+    for (final chapter in ['Main', 'Sidelines']) {
+      expect(fixture.textAt('/repertoires/KID/$chapter.pgn'), _threeLines);
+    }
+  });
+
+  testWidgets('a sibling edit while choosing a destination is kept', (
+    tester,
+  ) async {
+    await show(tester);
+    await tester.tap(find.byTooltip('Actions').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Move to chapter…'));
+    await tester.pumpAndSettle();
+    expect(renameLine(fixture.session, 0, 'Edited sibling'), isNull);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sidelines').last);
+    await tester.pumpAndSettle();
+    final source = fixture.textAt('/repertoires/KID/Main.pgn');
+    expect(source, contains('Edited sibling'));
+    expect(source, isNot(contains('[Event "Slav"]')));
+    final destination = fixture.textAt('/repertoires/KID/Sidelines.pgn')!;
+    expect('[Event "Slav"]'.allMatches(destination), hasLength(2));
+  });
+
+  testWidgets('a drag started before deleting a line moves nothing', (
+    tester,
+  ) async {
+    await show(tester);
+    final rows = tester.widgetList<LineRow>(find.byType(LineRow));
+    final drag = rows.elementAt(1).drag;
+    expect(deleteLine(fixture.session, 0), isNull);
+    await tester.pumpAndSettle();
+    final source = fixture.textAt('/repertoires/KID/Main.pgn');
+    final target = tester
+        .widgetList<ChapterRow>(find.byType(ChapterRow))
+        .singleWhere((row) => row.chapter.name == 'Sidelines');
+    target.onDrop!(drag);
+    await tester.pumpAndSettle();
+    expect(fixture.textAt('/repertoires/KID/Main.pgn'), source);
+    expect(fixture.textAt('/repertoires/KID/Sidelines.pgn'), _threeLines);
+    expect(
+      find.text('The chapter changed before its lines could move.'),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('a rename backed out of changes nothing', (tester) async {
     await show(tester);

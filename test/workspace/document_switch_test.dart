@@ -38,6 +38,27 @@ void main() {
   }
 
   group('words typed while another document is read', () {
+    test('a Save pressed during the read goes out though the first write '
+        'failed', () async {
+      final fixture = await slowSession();
+      final session = fixture.session;
+      session.setComment(sicilian, 'Autosave');
+      session.holdsEdits = true;
+      session.setComment(sicilian, 'Explicit save');
+      fixture.store.saves.add(const IoFailure('disk full'));
+      final gate = fixture.store.readEarly = Completer<void>();
+      final opening = session.open(other);
+      await pumpEventQueue();
+      expect(fixture.store.readEarly, isNull);
+      expect(fixture.onDisk, isNot(contains('Autosave')));
+      expect(session.keepHeld(), isTrue);
+      gate.complete();
+
+      expect(await opening, isA<DocumentOpened>());
+      expect(fixture.onDisk, contains('Explicit save'));
+      expect(session.source, other);
+    });
+
     test('reach the file they were typed into', () async {
       final fixture = await slowSession();
       fixture.store.hold = true;

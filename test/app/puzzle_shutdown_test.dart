@@ -17,6 +17,42 @@ import '../support/window_fixture.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test(
+    'shutdown waits for a confirmed deletion from a closed puzzle set',
+    () async {
+      final w = WindowFixture(exitWait: const Duration(minutes: 1));
+      addTearDown(w.dispose);
+      await w.requests.open(kidMain);
+      await w.tactics.load();
+      final puzzle = w.tactics.puzzles[1];
+      final release = w.store.readEarly = Completer<void>();
+      final deleting = w.tactics.delete(puzzle);
+      await pumpEventQueue();
+      expect(
+        w.store.readEarly,
+        isNull,
+        reason: 'the deletion is reading the set',
+      );
+      final exit = AppExit(
+        guard: w.parts.exit,
+        prepare: w.parts.prepareToClose,
+        stopEngines: () async {},
+        closeLog: () async {},
+      );
+      addTearDown(exit.closing.dispose);
+      final closing = exit.leave().then(
+        (response) =>
+            (response, (w.store.documents[tacticsRef]! as Opened).text),
+      );
+      await pumpEventQueue();
+      release.complete();
+      expect(await deleting, isNull);
+      final (response, savedAtClose) = await closing;
+      expect(response, AppExitResponse.exit);
+      expect(savedAtClose, isNot(contains('Default #2')));
+    },
+  );
+
   for (final solved in [false, true]) {
     test(
       'shutdown suspends puzzle ${solved ? 'advance' : 'reply'} while engines stop',

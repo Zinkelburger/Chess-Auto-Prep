@@ -113,8 +113,26 @@ void main() {
       await built();
       expect(tree.state, isA<TreeBuilt>());
       expect(movesOf(tree.answerAt(Fen.initial)), ['c2c4']);
+      expect(
+        (tree.state as TreeBuilt).notice,
+        'Could not read your Lichess games.',
+      );
     },
   );
+
+  test('the only account file failing to read says so, not that no games '
+      'are saved', () async {
+    accounts.accounts[GameSite.lichess] = const Account('Me');
+    files.documents[cache.refFor(GameSite.lichess, 'Me')] = const Unreadable(
+      'permission denied',
+    );
+    await built();
+    expect(tree.state, isA<TreeFailed>());
+    expect(
+      (tree.state as TreeFailed).sentence,
+      'Could not read your Lichess games.',
+    );
+  });
 
   test(
     'reading counts from nothing: none of none, then none of the games',

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/games_written.dart';
 import 'package:chess_auto_prep/chess/training/records.dart';
+import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/chapter_directory.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/compound_write.dart';
@@ -116,6 +117,77 @@ void main() {
       () => _firstAccess(fixture, firstAccess),
     );
   }
+
+  test(
+    'a linked repertoires folder still keys the profile lock by its target',
+    () async {
+      final target = await Directory(
+        p.join(fixture.root.path, 'shelves'),
+      ).create();
+      await Link(
+        p.join(fixture.documents.path, 'repertoires'),
+      ).create(target.path);
+      final key = Directory(
+        p.join(await target.resolveSymbolicLinks(), '.cap-directory-domain'),
+      );
+      final gate = fixture.store.recovery;
+      await gate.run(() async {});
+      var entered = false;
+      late Future<void> access;
+      await withDirectoryLock(key, () async {
+        access = gate.run(() async {
+          entered = true;
+        });
+        await expectLater(
+          access.timeout(const Duration(milliseconds: 200)),
+          throwsA(isA<TimeoutException>()),
+        );
+        expect(entered, isFalse);
+      });
+      await access;
+      expect(entered, isTrue);
+    },
+    skip: Platform.isWindows ? 'symlink privileges not assumed' : false,
+  );
+
+  test('a file named repertoires leaves studies and books readable', () async {
+    // This Documents folder already contains a user file with that name
+    // when the application first opens the profile.
+    await File(
+      p.join(fixture.documents.path, 'repertoires'),
+    ).writeAsString('notes');
+    final root = await Directory(
+      p.join(fixture.documents.path, 'studies'),
+    ).create();
+    final study = await File(
+      p.join(root.path, 'Endgame.pgn'),
+    ).writeAsString(oneGame('1. c4'));
+    const books = BookList(
+      books: [Book(id: 'a', name: 'Match prep')],
+      active: 'a',
+    );
+    await File(
+      p.join(fixture.support.path, 'books.json'),
+    ).writeAsString(books.encode());
+    final store = restarted(fixture);
+    final studies = StudyDirectory(root, recovery: store.recovery);
+    await Future.wait([
+      expectLater(
+        studies.list(),
+        completion(
+          isA<StudiesListed>().having(
+            (listed) => listed.studies.map((ref) => ref.path),
+            'studies',
+            [study.path],
+          ),
+        ),
+      ),
+      expectLater(
+        store.books.snapshot().then((read) => read.value.activeBook?.name),
+        completion('Match prep'),
+      ),
+    ]);
+  });
 
   test('a corrupt note blocks no training, listing or import', () async {
     final flat = fixture.ref('repertoires/Flat.pgn');

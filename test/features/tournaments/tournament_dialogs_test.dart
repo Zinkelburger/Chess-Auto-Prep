@@ -144,6 +144,109 @@ void main() {
     await closed;
   });
 
+  for (final openFirst in [true, false]) {
+    testWidgets(
+      'engine editor preserves arguments refreshed ${openFirst ? 'after' : 'before'} opening',
+      (tester) async {
+        final engine = TournamentEngine({
+          'id': 'external',
+          'name': 'Club engine',
+          'executablePath': '/engines/club',
+          'arguments': ['old'],
+        });
+        final store = ScriptedTournaments()..registry = [engine];
+        addTearDown(store.dispose);
+        final run = TournamentRun(
+          store: store,
+          pending: PendingWrites(),
+          jobs: await engineJobsFixture(),
+          launch: (_, _) async => Started(_OpeningEngine()),
+        );
+        addTearDown(run.dispose);
+        await run.refresh();
+        final context = await _host(tester);
+        unawaited(manageTournamentEngines(context, run));
+        await tester.pumpAndSettle();
+
+        Future<void> edit() async {
+          await tester.tap(find.byTooltip('Edit Club engine…'));
+          await tester.pumpAndSettle();
+        }
+
+        if (openFirst) await edit();
+        final newer = TournamentEngine({
+          ...engine.json,
+          'arguments': ['new'],
+        });
+        await store.saveEngines([engine], [newer]);
+        await run.refresh();
+        expect(run.engines.single.arguments, ['new']);
+        // The registry changed, but Flutter has not rebuilt the old row.
+        if (!openFirst) await edit();
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Name'),
+          'Renamed',
+        );
+        await tester.tap(find.text('Test and save'));
+        await tester.pumpAndSettle();
+        final saved = store.registry.single;
+        expect(saved.arguments, ['new']);
+        expect(saved.name, engine.name);
+        expect(
+          find.textContaining(
+            RegExp('changed|conflict|stale', caseSensitive: false),
+          ),
+          findsWidgets,
+        );
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+        expect(await run.pending.settle(), isNull);
+      },
+    );
+  }
+
+  for (final remove in [false, true]) {
+    testWidgets(
+      'an unrelated refresh permits engine ${remove ? 'removal' : 'editing'}',
+      (tester) async {
+        final engine = TournamentEngine({'id': 'a', 'name': 'Club engine'});
+        final store = ScriptedTournaments()..registry = [engine];
+        addTearDown(store.dispose);
+        final run = TournamentRun(
+          store: store,
+          pending: PendingWrites(),
+          jobs: await engineJobsFixture(),
+          launch: (_, _) async => Started(_OpeningEngine()),
+        );
+        addTearDown(run.dispose);
+        await run.refresh();
+        final context = await _host(tester);
+        unawaited(manageTournamentEngines(context, run));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byTooltip(remove ? 'Remove Club engine…' : 'Edit Club engine…'),
+        );
+        await tester.pumpAndSettle();
+        final other = TournamentEngine({'id': 'b', 'name': 'Added elsewhere'});
+        store.registry = [TournamentEngine(engine.json), other];
+        await run.refresh();
+        if (!remove) {
+          await tester.enterText(
+            find.widgetWithText(TextField, 'Name'),
+            'Renamed',
+          );
+        }
+        await tester.tap(find.text(remove ? 'Remove' : 'Test and save'));
+        await tester.pumpAndSettle();
+        expect(store.registry.map((e) => e.name), [
+          if (!remove) 'Renamed',
+          'Added elsewhere',
+        ]);
+        expect(await run.pending.settle(), isNull);
+      },
+    );
+  }
+
   testWidgets('an engine row counts one core as a core', (tester) async {
     final store = ScriptedTournaments();
     addTearDown(store.dispose);

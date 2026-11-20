@@ -54,8 +54,8 @@ Top to bottom, left to right:
   brings another mode's document along: the mode's own latest tab comes back at
   its game, move and held edits, and a mode with none gets the empty analysis
   board, which travels with the user rather than multiplying. Picking another
-  mode's tab goes to that mode; closing a tab brings up the next one of the same
-  mode. The builder and the trainer share their documents (one repertoire
+  mode's tab goes to that mode, a viewer tab with the file's game list;
+  closing a tab brings up the next one of the same mode. The builder and the trainer share their documents (one repertoire
   list), so a shared tab is named for whichever of the two is up (`Builder ·
   Main`, `Trainer · Main`); modes with a screen of their own leave the board
   as it is.
@@ -287,7 +287,9 @@ focus: arrows, Enter/Space, Esc. A text field with focus keeps its keys.
   entries); nothing on disk.
 - **Local sources** — TWIC reads `master_games.db` with no network; `This
   file` indexes the open file's main lines to ply 50 (`indexedPlies`) and
-  lists 100 games; `My games` reads the downloaded games.
+  lists 100 games; `My games` reads the downloaded games. An account whose
+  games cannot be read is left out and named (`Could not read your Lichess
+  games.`, with `Try again`); the others still answer.
   Both are built once and answered from memory.
 - **Book source** — files indexed once and re-parsed only when their bytes
   change; each chapter of a course file indexed from its own games; the open

@@ -161,6 +161,7 @@ class _OutlinePanelState extends State<OutlinePanel> {
     final games = _selected.contains(line.game) ? {..._selected} : {line.game};
     return LineDrag(
       games,
+      session: widget.session,
       label: games.length == 1 ? line.moves : '${games.length} lines',
     );
   }
@@ -169,6 +170,8 @@ class _OutlinePanelState extends State<OutlinePanel> {
   /// one named here, which is made and takes them in one change.
   Future<void> _moveTo(OutlineLine line) async {
     final open = widget.session.source;
+    // Taken now: the games are the ones picked when the menu was used.
+    final drag = _dragOf(line);
     final into = widget.outline.repertoire;
     final to = await showChoiceDialog<_Destination>(
       context,
@@ -188,10 +191,18 @@ class _OutlinePanelState extends State<OutlinePanel> {
     if (to == null || !mounted) return;
     switch (to) {
       case _Existing(:final ref):
-        await _move(_dragOf(line), ref);
+        await _move(drag, ref);
       case _NewChapter():
-        await _moveToNew(_dragOf(line), into!);
+        if (_stillPicked(drag)) await _moveToNew(drag, into!);
     }
+  }
+
+  /// Whether the chapter still holds the lines [drag] picked; says why
+  /// nothing moves when it does not.
+  bool _stillPicked(LineDrag drag) {
+    if (drag.stillIn(widget.session)) return true;
+    StatusScope.of(context)('The chapter changed before its lines could move.');
+    return false;
   }
 
   Future<void> _moveToNew(LineDrag drag, RepertoireFolder into) async {
@@ -201,7 +212,7 @@ class _OutlinePanelState extends State<OutlinePanel> {
       label: 'Chapter name',
       confirm: 'Move',
     );
-    if (name == null || !mounted) return;
+    if (name == null || !mounted || !_stillPicked(drag)) return;
     setState(() => _selected = {});
     await announce(
       context,
@@ -217,7 +228,7 @@ class _OutlinePanelState extends State<OutlinePanel> {
   }
 
   Future<void> _move(LineDrag drag, ChapterRef to, {int? asSidelineOf}) async {
-    if (!mounted) return;
+    if (!mounted || !_stillPicked(drag)) return;
     setState(() => _selected = {});
     final result = await widget.library.moveLines(
       games: drag.games,

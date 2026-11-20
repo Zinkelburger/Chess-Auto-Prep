@@ -18,6 +18,9 @@
 /bughouse-puzzles/index.json
   Cache-Control: public, max-age=600
 
+/bughouse-games/index.json
+  Cache-Control: public, max-age=600
+
 /bughouse-puzzles/engine/s*.json
   Cache-Control: public, max-age=31536000, immutable
 

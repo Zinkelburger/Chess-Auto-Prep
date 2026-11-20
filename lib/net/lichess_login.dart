@@ -145,17 +145,27 @@ final class LichessLoginApi implements LichessLogin {
 
   _Flow? _flow;
 
+  /// Counts logins and cancels: a login that sees it change was cancelled
+  /// while it bound its port or exchanged its code, before [_flow] could.
+  int _attempt = 0;
+
   @override
   Future<LoginOutcome> logIn({
     required void Function(Uri page, {required bool opened}) waiting,
   }) async {
     await cancel();
+    final attempt = _attempt;
     final HttpServer server;
     try {
       server = await _bind();
     } on SocketException catch (error) {
+      if (attempt != _attempt) return const LoginCancelled();
       log.w('log into Lichess', error.runtimeType);
       return const LoginFailed(LoginProblem.portBusy);
+    }
+    if (attempt != _attempt) {
+      await server.close(force: true);
+      return const LoginCancelled();
     }
     final verifier = _randomToken(64);
     final state = _randomToken(24);
@@ -194,12 +204,19 @@ final class LichessLoginApi implements LichessLogin {
       // A callback or cancellation can arrive before the launcher answers.
       await Future.any<void>([flow.code.future, launchAndWait()]).timeout(wait);
       final code = await flow.code.future.timeout(wait);
-      return switch (code) {
+      final outcome = switch (code) {
         null => const LoginCancelled(),
         _Denied() => const LoginFailed(LoginProblem.denied),
         final String code => await _exchange(code, verifier, redirect),
         _ => const LoginFailed(LoginProblem.http),
       };
+      if (attempt == _attempt) return outcome;
+      // A grant that arrives after Cancel is not the user's to keep, and
+      // nothing here keeps it: Lichess is asked to forget it.
+      if (outcome case LoggedIn(:final account)) {
+        unawaited(revoke(account.token));
+      }
+      return const LoginCancelled();
     } on TimeoutException {
       log.w('log into Lichess', 'no callback in ${wait.inMinutes} minutes');
       return const LoginFailed(LoginProblem.timedOut);
@@ -367,6 +384,7 @@ final class LichessLoginApi implements LichessLogin {
 
   @override
   Future<void> cancel() async {
+    _attempt++;
     final flow = _flow;
     if (flow == null) return;
     if (!flow.code.isCompleted) flow.code.complete(null);

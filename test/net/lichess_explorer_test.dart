@@ -237,6 +237,18 @@ void main() {
     expect(pgn, endsWith('1. e4 *'));
   });
 
+  test('unreadable move rows leave usable siblings on screen', () {
+    const bad = '{"uci":"d2d4","san":"d4","white":-1}';
+    const good = '{"uci":"e2e4","san":"e4","white":3}';
+    final answer = parseExplorerAnswer('{"moves":[null,$bad,$good]}');
+    expect(answer.moves.single.uci, 'e2e4');
+    expect(answer.moves.single.white, 3);
+    expect(
+      () => parseExplorerAnswer('{"moves":[null,$bad]}'),
+      throwsFormatException,
+    );
+  });
+
   test('a count the answer leaves out is none', () {
     final answer = parseExplorerAnswer(
       '{"moves": [{"uci": "e2e4", "san": "e4", "white": 3}]}',

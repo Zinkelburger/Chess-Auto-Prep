@@ -40,8 +40,9 @@ final class DeletedChapter {
   String get repertoire => p.basename(folder);
 
   /// Where restoring it as [as] puts it: back in its folder, under its old
-  /// name unless the user chose another.
-  String restoredAs([String? as]) => p.join(folder, '${as ?? name}.pgn');
+  /// name and extension (`.PGN` stays `.PGN`) unless the user chose another.
+  String restoredAs([String? as]) =>
+      p.join(folder, as == null ? '$name${p.extension(path)}' : '$as.pgn');
 }
 
 sealed class DeletedListing {

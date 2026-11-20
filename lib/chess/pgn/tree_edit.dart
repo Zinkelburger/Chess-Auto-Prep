@@ -41,7 +41,7 @@ Position? positionOf(Fen fen) {
 /// back, so a castle kept as `e1g1` would be refused as another move.
 MoveNode? moveNode(Fen fen, Move move) {
   final position = positionOf(fen);
-  if (position == null || !position.isLegal(move)) return null;
+  if (position == null || !isLegalMove(position, move)) return null;
   final played = move is NormalMove ? position.normalizeMove(move) : move;
   final (next, san) = position.makeSan(played);
   return MoveNode(san: san, uci: played.uci, fen: Fen(next.fen));
@@ -162,16 +162,40 @@ GameTree lineTree(Fen rootFen, List<String> sans) {
 /// hand-edited `// Root:` heading can hold any of them.
 (MoveNode, Position)? replayed(Position position, String san) {
   if (san == nullMoveSan) return nullMovePlayed(position, spelling: san);
-  final Move? move;
-  try {
-    move = position.parseSan(san);
-  } on Object {
-    return null;
-  }
+  final move = parseLegalSan(position, san);
   if (move == null) return null;
   final (next, spelled) = position.makeSanUnchecked(move);
   return (MoveNode(san: spelled, uci: move.uci, fen: fenOf(next)), next);
 }
+
+/// The legal move [san] names in [position], or null when it names none.
+///
+/// dartchess answers an unplayable move with null for most spellings and
+/// with a `RangeError` for a few — it reads the first character of a SAN it
+/// has already cut annotations off, so a token like `xe4` leaves it with
+/// nothing to read. It also takes a pawn reaching the last rank without a
+/// promotion piece, which no game can play. A move nobody can play is a move
+/// nobody can play; the caller reports it either way.
+Move? parseLegalSan(Position position, String san) {
+  try {
+    final move = position.parseSan(san);
+    return move == null || _missingPromotion(position, move) ? null : move;
+  } on Object {
+    return null;
+  }
+}
+
+/// Whether [move] — an engine's, the board's, a stored line's — can be
+/// played in [position]. dartchess says yes to a pawn reaching the last rank
+/// with no promotion piece; that move is not legal here.
+bool isLegalMove(Position position, Move move) =>
+    !_missingPromotion(position, move) && position.isLegal(move);
+
+bool _missingPromotion(Position position, Move move) =>
+    move is NormalMove &&
+    move.promotion == null &&
+    SquareSet.backranks.has(move.to) &&
+    position.board.pawns.has(move.from);
 
 /// [tree] with [node] appended to the children of the node at [at].
 GameTree withChildAdded(GameTree tree, NodePath at, MoveNode node) =>

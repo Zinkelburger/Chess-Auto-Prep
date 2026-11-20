@@ -11,14 +11,7 @@ import '../../chess/bughouse/table_setup.dart';
 
 /// How many boards the Bughouse mode shows: board 1 alone, its partner
 /// board held still behind it, or the whole table.
-enum LabBoards {
-  one('1 board'),
-  two('2 boards');
-
-  const LabBoards(this.label);
-
-  final String label;
-}
+enum LabBoards { one, two }
 
 /// The Bughouse mode's table: the two boards, the line played on them with
 /// a cursor per board, how many boards are shown, the clock case the engine
@@ -179,6 +172,11 @@ final class BughouseLab extends ChangeNotifier {
   /// dropped a piece a move taken out had captured.
   void deleteFrom(int node) {
     final board = _line.nodes[node].board;
+    if (_line.dropBrokenByRemoving(node) case final broken?) {
+      _focus = board;
+      _refuse(DeleteRefused(broken));
+      return;
+    }
     final next = _line.without(node);
     switch (next.replay()) {
       case LineReplayed(:final position):
