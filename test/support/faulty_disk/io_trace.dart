@@ -154,6 +154,8 @@ final _stamps = [
   (RegExp(r'\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(\.\d+)?Z'), '<time>'),
   // Journal and note ids: `<µs since epoch>-<random hex>`.
   (RegExp(r'\d{13,}-[0-9a-f]{1,8}(?![0-9A-Za-z])'), '<id>'),
+  // Removed player groups: `.removed/<group>-<µs in base 36>-<random>.json`.
+  (RegExp(r'(?<=/\.removed/[^/]*)-[0-9a-z]+-[0-9a-z]+(?=\.json$)'), '-<id>'),
   // Import staging folders: `.import-<µs in base 36>`.
   (RegExp(r'\.import-[0-9a-z]+'), '.import-<id>'),
   // Not digits inside a hex id, such as the kept-versions id of a staging
