@@ -154,6 +154,28 @@ Chapter gameAfterUndo(Chapter file, String? showing) {
   return (chapter: shown?.chapter ?? file, view: shown);
 }
 
+/// Transient game slots, shared by views and edits that keep the same order.
+final _slots = Expando<Map<int, Object>>();
+
+Object? gameSlotOf(Chapter? chapter, SectionView? view, int? index) {
+  final at = index ?? (chapter?.lines.length == 1 ? 0 : -1);
+  if (chapter == null || at < 0 || at >= chapter.lines.length) return null;
+  final lines = (view?.file ?? chapter).lines;
+  final place = view?.places[at] ?? at;
+  return (_slots[lines] ??= {})[place] ??= Object();
+}
+
+void carryGameSlots(Chapter before, Chapter after, GamesArranged games) {
+  if (identical(before.lines, after.lines)) return;
+  final slots = _slots[before.lines] ??= {};
+  _slots[after.lines] = games.order.length == games.before && games.keepsPlaces
+      ? slots
+      : {
+          for (final (place, from) in games.order.indexed)
+            if (from != null) place: slots[from] ??= Object(),
+        };
+}
+
 /// An edit of the chapter on the board as its file takes it: the file's
 /// text, the scope the store checks that text against, and the chapter to
 /// show afterwards — with its [SectionView] when it is one chapter of a
@@ -194,6 +216,7 @@ Landing? landing(
 }) {
   if (view == null) {
     final pinned = withIdsPinned(before, edited, games);
+    carryGameSlots(before, pinned.chapter, games);
     return (
       text: writeChapter(pinned.chapter),
       scope: written == null
@@ -218,6 +241,7 @@ Landing fileLanding(
   String? section,
 ) {
   final edit = fileEdit(file, edited, games, section);
+  carryGameSlots(file, edit.file, games);
   return (
     text: writeChapter(edit.file),
     scope: GamesRearranged(edit.games),

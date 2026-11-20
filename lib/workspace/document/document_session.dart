@@ -204,6 +204,7 @@ final class DocumentSession extends ChangeNotifier {
   ChapterRef? get source => _source;
 
   int? get game => _chapter?.game;
+  Object? gameSlot(int? index) => gameSlotOf(_chapter, _view, index);
   GameTree? get tree => _chapter?.tree;
 
   /// Asks editors to commit their text before saving or leaving the document,
@@ -806,17 +807,10 @@ final class DocumentSession extends ChangeNotifier {
   /// look like: that would agree with the text, and the store would have
   /// nothing to refuse.
   void _replace(Chapter edited, GamesWritten written) {
-    if (_onBoard(edited)) return;
     final before = _chapter!;
-    _land(
-      landing(
-        before,
-        _view,
-        edited,
-        GamesArranged.of(written, before: before.lines.length),
-        written: written,
-      ),
-    );
+    final games = GamesArranged.of(written, before: before.lines.length);
+    if (_onBoard(edited, games)) return;
+    _land(landing(before, _view, edited, games, written: written));
   }
 
   /// Shows what [edit] made of the open chapter and writes the games it says
@@ -849,7 +843,7 @@ final class DocumentSession extends ChangeNotifier {
       case edits.ChapterEditRefused(:final reason):
         return _editRefused(reason);
       case edits.ChapterEdited(chapter: final edited, :final games):
-        if (!_onBoard(edited)) {
+        if (!_onBoard(edited, games)) {
           final reason = _land(
             withReferenceChanges(
               landing(chapter, _view, edited, games),
@@ -908,9 +902,10 @@ final class DocumentSession extends ChangeNotifier {
   /// Takes [edited] in memory when the analysis board is up, keeping the
   /// version it replaces for undo; nothing is written anywhere. False when
   /// a file is up and the edit is the saver's to write.
-  bool _onBoard(Chapter edited) {
+  bool _onBoard(Chapter edited, GamesArranged games) {
     final before = _chapter;
     if (!isScratch || before == null) return false;
+    carryGameSlots(before, edited, games);
     _board.remember(before);
     _shown = (chapter: edited, view: null);
     return true;

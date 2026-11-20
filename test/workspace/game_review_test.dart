@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_edit.dart';
 import 'package:chess_auto_prep/chess/pgn/comment_edits.dart';
@@ -8,6 +9,7 @@ import 'package:chess_auto_prep/chess/pgn/rewrite_gate.dart';
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
 import 'package:chess_auto_prep/engines/engine_line.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/features/study/study_commands.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_jobs.dart';
@@ -493,6 +495,145 @@ void main() {
     expect(last.comment ?? '', isNot(contains('[%eval')));
     expect(last.nags.where((n) => n == 2 || n == 4 || n == 6), isEmpty);
   });
+
+  const placement = '7k/8/8/8/8/8/R7/6K1 w - -';
+  const sameMoves =
+      '[Event "A"]\n[SetUp "1"]\n[FEN "$placement 0 1"]\n\n1. Ra3 *\n\n'
+      '[Event "B"]\n[SetUp "1"]\n[FEN "$placement 0 1"]\n\n1. Ra3 *\n';
+
+  Future<void> openSameMoves() async {
+    final ref = chapterRef('Study', 'Endings');
+    fixture.store.documents[ref] = Opened(
+      sameMoves,
+      scriptedRevision(sameMoves),
+    );
+    await fixture.session.open(ref, game: 0);
+  }
+
+  Future<void> finishPositions(int count) async {
+    for (var i = 0; i < count; i++) {
+      await pumpEventQueue();
+      engine.current.emit(line(depth: 14, score: const Centipawns(20), pv: []));
+      engine.current.end();
+    }
+  }
+
+  test('batch review keeps a comment across navigation and preserves a '
+      'review added to the next game', () async {
+    await openSameMoves();
+    final session = fixture.session;
+    final running = review.startAll();
+    await pumpEventQueue();
+    session.setComment(const NodePath.root(), 'Keep this note');
+    session.showGame(1);
+    expect(
+      session.apply(
+        (chapter) => annotateGame(chapter, const [
+          ReviewValue(715, '7.15', []),
+          ReviewValue(710, '7.10', []),
+        ]),
+      ),
+      isNull,
+    );
+    final reviewed = session.chapter!.lines[1].text;
+    expect(reviewed, contains('[%eval 7.10]'));
+
+    await finishPositions(4);
+    await running;
+    expect(review.problem, isNull);
+    final lines = session.chapter!.lines;
+    expect(hasReview(lines.first.tree!), isTrue);
+    expect(lines.first.tree!.rootComment, contains('Keep this note'));
+    expect(lines[1].text, reviewed);
+  });
+
+  test('a cached review belongs to its game after a reorder, even when '
+      'both games have identical positions', () async {
+    await openSameMoves();
+    final session = fixture.session;
+    review.setAnnotate(false);
+    final running = review.start();
+    await finishPositions(2);
+    await running;
+    expect(review.values.map((v) => v?.cp), [20, -20]);
+
+    expect(moveStudyChapter(session, index: 1, by: -1), isNull);
+    session.showGame(0);
+    final other = session.chapter!.lines.first.text;
+    expect(other, contains('[Event "B"]'));
+    expect(review.values, everyElement(isNull));
+    review.setAnnotate(true);
+    expect(session.chapter!.lines.first.text, other);
+
+    session.showGame(1);
+    expect(review.values.map((v) => v?.cp), [20, -20]);
+    review.setAnnotate(true);
+    expect(review.annotated, isTrue);
+  });
+
+  test(
+    'changing only the halfmove clock invalidates a cached review',
+    () async {
+      await openSameMoves();
+      final session = fixture.session;
+      review.setAnnotate(false);
+      final running = review.start();
+      await finishPositions(2);
+      await running;
+      expect(review.values.map((v) => v?.cp), [20, -20]);
+
+      expect(setStudyRoot(session, 0, const Fen('$placement 99 1')), isNull);
+      session.playMove('a2a3');
+      expect(session.tree!.rootFen.value, '$placement 99 1');
+      expect(session.tree!.children.single.san, 'Ra3');
+      expect(review.values, everyElement(isNull));
+      review.setAnnotate(true);
+      expect(review.annotated, isFalse);
+    },
+  );
+
+  test(
+    'batch review preserves a reviewed chapter moved into the target slot',
+    () async {
+      const games =
+          '[Event "A"]\n[SetUp "1"]\n[FEN "$placement 0 1"]\n\n1. Ra3 *\n\n'
+          '[Event "B"]\n[SetUp "1"]\n[FEN "$placement 99 1"]\n\n1. Ra3 *\n';
+      final ref = chapterRef('Study', 'Endings');
+      fixture.store.documents[ref] = Opened(games, scriptedRevision(games));
+      final session = fixture.session;
+      await session.open(ref, game: 0);
+      const oldScores = [
+        ReviewValue(715, '7.15', []),
+        ReviewValue(710, '7.10', []),
+      ];
+      expect(
+        session.apply(
+          (chapter) => annotateGame(chapter, oldScores, game: 1),
+          writes: true,
+        ),
+        isNull,
+      );
+      await fixture.saver.flush();
+      final reviewed = session.chapter!.lines[1].text;
+      expect(reviewed, contains('[%eval 7.10]'));
+      expect(review.unreviewedGames, [0]);
+
+      final running = review.startAll();
+      await pumpEventQueue();
+      expect(engine.current.fen.value, '$placement 0 1');
+      expect(moveStudyChapter(session, index: 1, by: -1), isNull);
+      expect(session.chapter!.lines.first.text, reviewed);
+      for (final cp in [20, -30]) {
+        if (engine.current.ended) break;
+        engine.current.emit(line(depth: 14, score: Centipawns(cp), pv: []));
+        engine.current.end();
+        await pumpEventQueue();
+      }
+      await running;
+      expect(review.problem, isNull);
+      expect(session.chapter!.lines.first.text, reviewed);
+    },
+  );
 
   test('every game is reviewed in turn, each written into its own game, '
       'and moving between them does not stop it', () async {

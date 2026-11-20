@@ -56,7 +56,7 @@ final class GameReview extends ChangeNotifier {
   /// main line is still the one it reviewed.
   ({Object? game, List<Fen> fens, List<ReviewValue> values})? _last;
 
-  Object? get _game => (session.source, session.game);
+  Object? get _game => (session.source, session.gameSlot(session.game));
 
   List<ReviewValue>? get _lastHere {
     final last = _last;
@@ -65,7 +65,7 @@ final class GameReview extends ChangeNotifier {
     final fens = _mainlineFens(tree);
     if (fens.length != last.fens.length) return null;
     for (var ply = 0; ply < fens.length; ply++) {
-      if (fens[ply].position != last.fens[ply].position) return null;
+      if (fens[ply] != last.fens[ply]) return null;
     }
     return last.values;
   }
@@ -282,7 +282,11 @@ final class GameReview extends ChangeNotifier {
     if (source == null || chapter == null) return;
     final games = [
       for (final index in unreviewedGames)
-        (index: index, fens: _mainlineFens(chapter.lines[index].tree!)),
+        (
+          index: index,
+          slot: session.gameSlot(index),
+          fens: _mainlineFens(chapter.lines[index].tree!),
+        ),
     ];
     if (games.isEmpty) return;
     if (!_jobs.take(this, 'Reviewing the games', kind: EngineJobKind.review)) {
@@ -318,7 +322,9 @@ final class GameReview extends ChangeNotifier {
         _applying = true;
         try {
           problem = session.apply(
-            (now) => _sameMainline(now, game.index, game.fens)
+            (now) =>
+                session.gameSlot(game.index) == game.slot &&
+                    _sameMainline(now, game.index, game.fens)
                 ? annotateGame(now, values, game: game.index)
                 : const ChapterUnchanged(),
           );
@@ -354,11 +360,11 @@ final class GameReview extends ChangeNotifier {
     final tree = index < chapter.lines.length
         ? chapter.lines[index].tree
         : null;
-    if (tree == null) return false;
+    if (tree == null || hasReview(tree)) return false;
     final now = _mainlineFens(tree);
     if (now.length != fens.length) return false;
     for (var ply = 0; ply < now.length; ply++) {
-      if (now[ply].position != fens[ply].position) return false;
+      if (now[ply] != fens[ply]) return false;
     }
     return true;
   }
