@@ -16,6 +16,7 @@ import 'package:path/path.dart' as p;
 import '../storage/store_fixture.dart';
 import '../support/big_chapter.dart';
 import '../support/scripted_store.dart';
+import '../support/study_fixture.dart';
 import '../support/viewer_fixture.dart';
 
 /// One run of the app over the file: a session showing it game by game,
@@ -169,6 +170,75 @@ void main() {
     await run.keeper.settle();
     expect(drafts.kept, isEmpty);
     run.kill();
+  });
+
+  test(
+    'a failed checkpoint write after rename preserves the old draft',
+    () async {
+      final study = await openStudy(twoChapterStudy);
+      addTearDown(study.dispose);
+      final drafts = _MemoryDrafts();
+      final keeper = DraftKeeper(
+        session: study.session,
+        saver: study.saver,
+        drafts: drafts,
+        say: (_, {action, problem = true}) {},
+      )..start();
+      addTearDown(keeper.dispose);
+      study.session
+        ..holdsEdits = true
+        ..setComment(NodePath.of([0]), 'Held through rename');
+      await keeper.settle();
+      final old = drafts.kept[study.ref.path]!.text;
+      expect(old, contains('Held through rename'));
+
+      final renamed = studyRef('Renamed');
+      drafts.unwritablePath = renamed.path;
+      await study.studies.rename(study.ref, renamed.name);
+      expect(study.session.source, renamed);
+      expect(await keeper.settle(), isNotNull);
+      expect(drafts.kept[study.ref.path]?.text, old);
+
+      final reused = ViewerDraft(
+        path: study.ref.path,
+        game: 0,
+        revision: scriptedRevision('another study'),
+        text: 'Work under the reused name',
+      );
+      await drafts.keep(reused);
+      drafts.unwritablePath = null;
+      expect(await keeper.settle(), isNull);
+      expect(drafts.kept[renamed.path]?.text, old);
+      expect(drafts.kept[study.ref.path], same(reused));
+    },
+  );
+
+  test('closing after a failed rename checkpoint preserves edits made by '
+      'another session at the new name', () async {
+    final drafts = _MemoryDrafts();
+    final first = _Run(store, drafts, delay: const Duration(hours: 1));
+    addTearDown(first.kill);
+    await first.session.open(ref, game: 0);
+    first.session.setComment(NodePath.of(const [0]), 'First session');
+    expect(await first.keeper.settle(), isNull);
+
+    final renamed = collectionRef('games2');
+    store.documents[renamed] = store.documents.remove(ref)!;
+    drafts.unwritablePath = renamed.path;
+    first.session.relocated(renamed);
+    expect(await first.keeper.settle(), isNotNull);
+
+    drafts.unwritablePath = null;
+    final second = _Run(store, drafts, delay: const Duration(hours: 1));
+    addTearDown(second.kill);
+    await second.session.open(renamed, game: 0);
+    second.session.setComment(NodePath.of(const [0]), 'Second session');
+    expect(await second.keeper.settle(), isNull);
+    final checkpoint = drafts.kept[renamed.path]!;
+    expect(checkpoint.text, contains('Second session'));
+
+    await first.keeper.settle();
+    expect(drafts.kept[renamed.path], same(checkpoint));
   });
 
   test('discarding the edits forgets their copy', () async {
@@ -519,9 +589,15 @@ List<File> _checkpoints(Directory support) {
 final class _MemoryDrafts implements ViewerDrafts {
   final kept = <String, ViewerDraft>{};
   final setAsideFor = <String>[];
+  String? unwritablePath;
 
   @override
-  Future<void> keep(ViewerDraft draft) async => kept[draft.path] = draft;
+  Future<void> keep(ViewerDraft draft) async {
+    if (draft.path == unwritablePath) {
+      throw FileSystemException('Cannot write checkpoint', draft.path);
+    }
+    kept[draft.path] = draft;
+  }
 
   @override
   Future<ViewerDraft?> find(String path) async => kept[path];
