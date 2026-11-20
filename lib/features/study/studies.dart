@@ -84,6 +84,7 @@ final class Studies extends ChangeNotifier {
       _session,
       openPage: _openPage,
       pendingWrites: pendingWrites,
+      writeAway: _writeAway,
     ),
     null => null,
   };
@@ -228,10 +229,59 @@ final class Studies extends ChangeNotifier {
         : StudyProblem('Could not add to ${study.name}: $refused.');
   }
 
-  Future<StudyResult> _addOnDisk(
+  Future<StudyResult> _addOnDisk(ChapterRef study, List<ChapterDraft> drafts) =>
+      _editOnDisk(
+        study,
+        (chapter) => pgn.addChapters(
+          chapter,
+          study: studyNameIn(chapter.lines) ?? study.name,
+          drafts: drafts,
+        ),
+        refused: _refusedAdd,
+        done: (before) =>
+            StudyDone(opened: study, chapter: before.lines.length),
+      );
+
+  /// Writes [edit] into [study], held against opening it meanwhile: where a
+  /// send's chapter links go once the user has left the study. Answers
+  /// whether they are in it.
+  Future<bool> _writeAway(
     ChapterRef study,
-    List<ChapterDraft> drafts,
+    ChapterEdit Function(Chapter) edit,
   ) async {
+    StudyResult result;
+    try {
+      result = await _changes.changing(study.path, () async {
+        if (_session.source?.path == study.path) {
+          final refused = _session.apply(edit, writes: true);
+          return refused == null ? const StudyDone() : StudyProblem(refused);
+        }
+        return _editOnDisk(
+          study,
+          edit,
+          refused: (edit) =>
+              edit is ChapterUnchanged ? const StudyDone() : _refusedAdd(edit),
+          done: (_) => const StudyDone(),
+        );
+      });
+    } on Object catch (error) {
+      result = StudyProblem('${error.runtimeType}');
+    }
+    if (result case StudyProblem(:final sentence)) {
+      log.w('write the Lichess chapter links into ${study.path}', sentence);
+    }
+    return result is StudyDone;
+  }
+
+  /// [edit] made to [study] on disk, against the revision just read and
+  /// touching only the games it says it wrote. [refused] answers an edit
+  /// that wrote nothing; [done] is told the study as it was read.
+  Future<StudyResult> _editOnDisk(
+    ChapterRef study,
+    ChapterEdit Function(Chapter) edit, {
+    required StudyResult Function(ChapterEdit) refused,
+    required StudyResult Function(Chapter before) done,
+  }) async {
     final String text;
     final Revision revision;
     switch (await _store.open(study)) {
@@ -246,20 +296,16 @@ final class Studies extends ChangeNotifier {
         return StudyProblem('Could not read ${study.name}.');
     }
     final chapter = await readChapter(name: study.name, text: text);
-    final edit = pgn.addChapters(
-      chapter,
-      study: studyNameIn(chapter.lines) ?? study.name,
-      drafts: drafts,
-    );
-    if (edit is! ChapterEdited) return _refusedAdd(edit);
+    final edited = edit(chapter);
+    if (edited is! ChapterEdited) return refused(edited);
     final saved = await _store.save(
       study,
-      writeChapter(edit.chapter),
+      writeChapter(edited.chapter),
       expected: revision,
-      scope: GamesRearranged(edit.games),
+      scope: GamesRearranged(edited.games),
     );
     return switch (saved) {
-      store.Saved() => StudyDone(opened: study, chapter: chapter.lines.length),
+      store.Saved() => done(chapter),
       store.Conflict() => studyChangedOnDisk,
       store.SaveDidNotLand(:final detail) => StudyProblem(
         'Could not add to ${study.name}: $detail',
