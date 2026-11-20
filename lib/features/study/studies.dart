@@ -551,7 +551,7 @@ final class Studies extends ChangeNotifier {
 
   StudiesLoadFailed _loadFailed(String detail) {
     log.w('list the studies under $_root', detail);
-    return StudiesLoadFailed(detail);
+    return const StudiesLoadFailed();
   }
 
   void _set(StudiesState state) {
