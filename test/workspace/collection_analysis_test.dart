@@ -2,10 +2,13 @@
 // on, kept per game, which never writes the file it came from.
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/chess/pgn/repertoire_import.dart';
 import 'package:chess_auto_prep/chess/pv_text.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/document/collection_analysis.dart';
+import 'package:chess_auto_prep/workspace/document/document_actions.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';
@@ -94,6 +97,74 @@ void main() {
     expect(await analysis.show(), isTrue);
     expect(mainLine(), ['d4', 'd5', 'c4']);
   });
+
+  test('a large paste cannot replace a later paste', () async {
+    expect(await analysis.show(), isTrue);
+    final first = analysis.paste(blackChapter.padRight(readOffThreadFrom));
+    expect(await analysis.paste('1. Nf3 *'), isNull);
+    await first;
+    expect(mainLine(), ['Nf3']);
+  });
+
+  test('copying and pasting a scratch game keeps a new variation', () async {
+    await fixture.session.open(fixture.ref, game: 0);
+    fixture.session.cursor.toStart();
+    expect(await analysis.show(), isTrue);
+    final scratch = analysis.session;
+    Iterable<String> replies() =>
+        scratch.tree!.children.map((move) => move.san);
+
+    scratch.playMove('e7e5');
+    expect(replies(), ['c5', 'e5']);
+    final copied = gameText(scratch);
+    final imported = readImport(copied, created: DateTime(2026));
+    expect((imported as ImportedChapters).side, Side.black);
+    expect(await analysis.paste(copied), isNull);
+    expect(replies(), ['c5', 'e5']);
+  });
+
+  test(
+    'a copied repertoire keeps every record on the analysis board',
+    () async {
+      final text = blackChapter.replaceFirst(
+        '1... c5 2. Nc3',
+        '1... c5 {A different note on the same move} 2. Nc3',
+      );
+      fixture.externalEdit(text);
+      await fixture.session.open(fixture.ref);
+      expect(await analysis.show(), isTrue);
+      expect(gameText(analysis.session), text);
+
+      expect(await analysis.paste(gameText(fixture.session)), isNull);
+      expect(gameText(analysis.session), text);
+      expect(analysis.session.chapter!.skippedGames, 1);
+      expect(
+        analysis.session.tree!.children.single.children.map((n) => n.san),
+        ['Nf3', 'Nc3'],
+      );
+    },
+  );
+
+  test(
+    'a scratch branch preserves the unread part of its source game',
+    () async {
+      const game = '[Event "Partial"]\n\n1. d4 e6 -- 2. c4 {keep this} *';
+      fixture.externalEdit(game);
+      await fixture.session.open(fixture.ref, game: 0);
+      expect(await analysis.show(), isTrue);
+      final scratch = analysis.session;
+      scratch
+        ..cursor.toStart()
+        ..playMove('e2e4');
+
+      final copied = gameText(scratch);
+      expect(copied, contains(game));
+      expect(await analysis.paste(copied), isNull);
+      expect(scratch.chapter!.lines.first.text, game);
+      expect(scratch.chapter!.protectedGames, 1);
+      expect(scratch.tree!.children.map((move) => move.san), ['d4', 'e4']);
+    },
+  );
 
   test('once taken down, it shows nothing', () async {
     analysis.dispose();

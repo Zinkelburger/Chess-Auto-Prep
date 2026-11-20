@@ -740,9 +740,11 @@ final class WorkspaceRequests extends ChangeNotifier {
         boards.pastedFen(text) == null) {
       return _importPasted(ticket, text.trim());
     }
-    return switch (positionOnly
+    final pasted = positionOnly
         ? boards.pastedPosition(text)
-        : boards.pastedBoard(text, side: _session.orientation)) {
+        : await boards.readPastedBoard(text, side: _session.orientation);
+    if (ticket.overtaken) return const RequestDropped();
+    return switch (pasted) {
       boards.PasteRefused(:final reason) => _refused(reason),
       boards.PastedBoard(:final chapter) => _toBoard(ticket, chapter),
     };

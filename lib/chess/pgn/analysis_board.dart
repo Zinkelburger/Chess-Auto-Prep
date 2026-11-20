@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:dartchess/dartchess.dart' show Side;
 
 import '../fen.dart';
@@ -62,19 +64,35 @@ final class PasteRefused extends Pasted {
   final String reason;
 }
 
+/// Parses large clipboard contents off the UI isolate.
+Future<Pasted> readPastedBoard(String text, {required Side side}) =>
+    text.length < readOffThreadFrom
+    ? Future.value(pastedBoard(text, side: side))
+    : Isolate.run(() => pastedBoard(text, side: side));
+
 /// [text] as an analysis board: a FEN, at that position and seen from the
 /// side to move; a PGN — its first game, variations and comments included —
 /// or bare moves such as `1.e4 c5 2.Nf3`, played from [side], or from the
 /// side to move when the game starts from a position of its own. Text that
 /// holds no position and no move is refused rather than shown as an empty
-/// board, which would look like a paste that worked.
+/// board, which would look like a paste that worked. A multi-game chapter
+/// with a `// Color:` heading keeps its games together on the board.
 Pasted pastedBoard(String text, {required Side side}) {
   final trimmed = text.trim();
   if (trimmed.isEmpty) {
     return const PasteRefused('Nothing to paste: copy a PGN or FEN first.');
   }
   if (_fenFields(trimmed) != null) return pastedPosition(trimmed);
-  final games = splitChapterText(trimmed).games;
+  final (:preamble, :games) = splitChapterText(trimmed);
+  // A copied chapter carries its lines as separate games. Keep their bytes
+  // and let the chapter build the displayed variations from them.
+  if (games.length > 1 && statedSide(preamble) != null) {
+    final chapter = parseChapter(name: analysisBoardName, text: text);
+    final tree = chapter.tree;
+    if (tree.children.isNotEmpty || tree.rootFen != Fen.initial) {
+      return PastedBoard(chapter);
+    }
+  }
   // A file is cut into games at their `[Event` lines, so moves pasted with
   // no header, or a header without that tag, are given one to be a game.
   final game = games.isEmpty

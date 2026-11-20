@@ -39,6 +39,7 @@ final class CollectionAnalysis extends ChangeNotifier {
   final _pages = <Object, KeptBoard>{};
   Object? _key;
   final _shows = Latest();
+  final _pastes = Latest();
   bool _disposed = false;
   bool active = false;
 
@@ -91,9 +92,14 @@ final class CollectionAnalysis extends ChangeNotifier {
   /// Paste stays in this scratch game and cannot replace the source file.
   /// Answers why nothing was pasted, or null.
   Future<String?> paste(String text, {bool positionOnly = false}) async {
-    switch (positionOnly
+    final paste = _pastes.begin();
+    final page = _shows.now;
+    final key = _sourceKey;
+    final pasted = positionOnly
         ? pastedPosition(text)
-        : pastedBoard(text, side: session.orientation)) {
+        : await readPastedBoard(text, side: session.orientation);
+    if (paste.overtaken || page.overtaken || key != _sourceKey) return null;
+    switch (pasted) {
       case PasteRefused(:final reason):
         return reason;
       case PastedBoard(:final chapter):
