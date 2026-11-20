@@ -136,6 +136,14 @@
 .bg-glyph-blunder { color: #df5353; }
 .bg-note-head .bg-glyph { font-size: 1rem; }
 
+/* The engine on request: the analysis board's panel (analysis.css), off until switched on. */
+.bg-engine { position: relative; flex: none; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
+.bg-engine .ch-ceval { min-height: 44px; }
+.bg-engine .ch-ceval:last-child, .bg-engine .ch-ceval:has(+ .ch-pvs:empty) { border-bottom: 0; }
+.bg-engine .ch-pvs { border-bottom: 0; }
+.bg-engine .ch-pearl { font-size: 1.3rem; }
+.bg-engine .ch-ceval.off .ch-pearl { display: none; }
+
 .bg-controls { display: flex; align-items: center; gap: 2px; flex: none; }
 .bg-controls-gap { flex: 1; }
 .bg-controls .btn-text { padding: 6px 8px; }

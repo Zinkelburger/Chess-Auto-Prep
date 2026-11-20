@@ -5,10 +5,14 @@
  * (board B turned the other way), the moves of both boards in the order they
  * were played, the current move's note and lines, and steps with the arrow
  * keys. Every position comes from the data (games.ts); where the reader is
- * lives in view.ts, the words in words.ts.
+ * lives in view.ts, the words in words.ts. HypeBeast analyses the board in
+ * focus when switched on (engine.ts); a click on a move of its line shows the
+ * line on that board until the reader moves on.
  */
+import { playLine, positionOf } from '../analysis/tree';
 import type { BoardName, Colour } from '../bughouse/types';
 import { GameBoard, type SeatView } from './board';
+import { GameEngine } from './engine';
 import { GameStore, gameHash, isContractError, parseHash, type Game, type IndexEntry, type Line, type Move, type Seat } from './games';
 import {
   START, analysisLink, clocksAt, end, enterLine, evalOn, focusBoard, goTo, home, leaveLine, lineAt, noteStep, notedMoves,
@@ -60,6 +64,11 @@ export class BughouseGamesApp {
   /** Counts up on every opened game, so a slow file cannot land on a later choice. */
   private generation = 0;
   private indexLoaded = false;
+  private readonly engine = new GameEngine($<HTMLInputElement>('bg-engine-on'), {
+    showLine: (board, fen, pv, upTo) => this.showEngineLine(board, fen, pv, upTo),
+  });
+  /** An engine line shown on one board, over the game, until the reader moves. */
+  private preview: { board: BoardName; fen: string; last: string; text: string } | null = null;
 
   constructor() {
     this.bind();
@@ -104,6 +113,8 @@ export class BughouseGamesApp {
 
   private showList(message?: string) {
     this.generation += 1;
+    this.preview = null;
+    this.engine.hide();
     this.setView('list');
     document.title = 'Bughouse Games — Chess Auto Prep';
     this.renderList(message);
@@ -159,7 +170,7 @@ export class BughouseGamesApp {
     $('bg-prev-note').onclick = () => this.nav(this.game && noteStep(this.game, this.cursor, -1));
     $('bg-next-note').onclick = () => this.nav(this.game && noteStep(this.game, this.cursor, 1));
     $('bg-flip').onclick = () => this.flip();
-    $('bg-var-back').onclick = () => this.nav(leaveLine(this.cursor));
+    $('bg-var-back').onclick = () => this.back();
     $('bg-moves').addEventListener('click', (e) => {
       const row = (e.target as HTMLElement).closest<HTMLElement>('[data-i]');
       if (row && this.game) this.nav(goTo(this.game, Number(row.dataset.i)));
@@ -172,7 +183,8 @@ export class BughouseGamesApp {
     window.addEventListener('popstate', () => this.route());
     document.addEventListener('keydown', (e) => {
       if (!this.game || $('bg').dataset.view !== 'game') return;
-      if ((e.target as HTMLElement).matches('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
+      // The engine switch keeps focus after a click; only Space is its key.
+      if ((e.target as HTMLElement).matches('input:not([type="checkbox"]), select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
       const key = e.key;
       let to: Cursor | null = null;
       if (key === 'ArrowLeft') to = step(this.game, this.cursor, -1);
@@ -181,8 +193,9 @@ export class BughouseGamesApp {
       else if (key === 'End' || key === 'ArrowDown') to = end(this.game);
       else if (key === 'n' || key === 'N') to = noteStep(this.game, this.cursor, e.shiftKey ? -1 : 1) ?? this.cursor;
       else if (key === 'p' || key === 'P') to = noteStep(this.game, this.cursor, -1) ?? this.cursor;
-      else if (key === 'Escape' && this.cursor.line) to = leaveLine(this.cursor);
+      else if (key === 'Escape' && (this.cursor.line || this.preview)) { e.preventDefault(); this.back(); return; }
       else if (key === 'f' || key === 'F') { e.preventDefault(); this.flip(); return; }
+      else if (key === 'l' || key === 'L') { e.preventDefault(); this.engine.setOn(!this.engine.enabled); return; }
       if (!to) return;
       e.preventDefault();
       this.nav(to);
@@ -236,7 +249,8 @@ export class BughouseGamesApp {
   private go(to: Cursor, force = false) {
     const game = this.game!;
     const moved = !sameCursor(to, this.cursor);
-    if (!moved && !force) return;
+    if (!moved && !force && !this.preview) return;
+    this.preview = null;
     const sameMove = to.move === this.cursor.move;
     this.cursor = to;
     history.replaceState(null, '', gameHash(game.id, to.move));
@@ -244,6 +258,26 @@ export class BughouseGamesApp {
     if (!sameMove || force) this.renderNote();
     else this.markLineToken();
     this.renderActiveMove();
+    this.renderControls();
+  }
+
+  /** "Back to the game": out of an engine line, else out of the game's variation. */
+  private back() {
+    if (this.preview) {
+      this.preview = null;
+      this.renderBoards();
+      this.renderControls();
+    } else this.nav(leaveLine(this.cursor));
+  }
+
+  /** Shows HypeBeast's line on `board` up to and including move `upTo`; the engine keeps searching the game's position. */
+  private showEngineLine(board: BoardName, fen: string, pv: string[], upTo: number) {
+    if (!this.game) return;
+    const moves = playLine(fen, pv, upTo + 1);
+    const at = moves.at(-1);
+    if (!at) return;
+    this.preview = { board, fen: at.fen, last: at.uci, text: `HypeBeast’s line on board ${board}: ${moves.map((m) => m.san).join(' ')}` };
+    this.renderBoards();
     this.renderControls();
   }
 
@@ -263,22 +297,31 @@ export class BughouseGamesApp {
     for (const b of BOARDS) {
       // Partners sit side by side: board A with White at the bottom, board B with Black.
       const bottom: Colour = (b === 'A') !== this.flipped ? 'white' : 'black';
-      const turn = turnOf(view.fen[b]);
-      const seatView = (colour: Colour): SeatView => {
+      const seatView = (colour: Colour, fen: string): SeatView => {
         const seat = `${b}${colour}` as Seat;
-        return { seat, name: game.seats[seat], clock: formatClock(clocks[seat]), toMove: turn === colour };
+        return { seat, name: game.seats[seat], clock: formatClock(clocks[seat]), toMove: turnOf(fen) === colour };
       };
-      this.boards![b].render({ fen: view.fen[b], bottom, last: view.last[b], check: view.check[b], seats: { white: seatView('white'), black: seatView('black') } });
+      const p = this.preview?.board === b ? this.preview : null;
+      const fen = p ? p.fen : view.fen[b];
+      this.boards![b].render({
+        fen, bottom, last: p ? p.last : view.last[b], check: p ? positionOf(p.fen).isCheck() : view.check[b],
+        seats: { white: seatView('white', fen), black: seatView('black', fen) },
+      });
       const score = evalOn(game, this.cursor, b);
       const evalEl = $(`bg-eval-${b}`);
       evalEl.textContent = score ? formatEval(score.eval, score.mate, true) : '';
       evalEl.title = score
         ? `${score.mate !== null ? mateWords(score.mate) : formatEval(score.eval, null)}: the engine’s own score after ${moveName(game.moves[score.move])}, from White’s side of board ${b}`
         : '';
-      $(`bg-var-tag-${b}`).hidden = view.variation !== b;
-      document.querySelector<HTMLElement>(`.bg-board[data-board="${b}"]`)!.classList.toggle('in-variation', view.variation === b);
+      const varied = view.variation === b || !!p;
+      const tag = $(`bg-var-tag-${b}`);
+      tag.hidden = !varied;
+      tag.textContent = p ? 'Engine line' : 'Variation';
+      document.querySelector<HTMLElement>(`.bg-board[data-board="${b}"]`)!.classList.toggle('in-variation', varied);
     }
     $('bg-flip').setAttribute('aria-pressed', String(this.flipped));
+    const focus = focusBoard(game, this.cursor);
+    this.engine.show({ fens: view.fen, board: focus, orientation: (focus === 'A') !== this.flipped ? 'white' : 'black' });
   }
 
   private renderControls() {
@@ -293,8 +336,9 @@ export class BughouseGamesApp {
     $<HTMLButtonElement>('bg-prev-note').disabled = !noteStep(game, c, -1);
     $<HTMLButtonElement>('bg-next-note').disabled = !noteStep(game, c, 1);
     const bar = $('bg-var-bar');
-    bar.hidden = !line;
-    if (line) {
+    bar.hidden = !line && !this.preview;
+    if (this.preview) $('bg-var-text').textContent = this.preview.text;
+    else if (line) {
       const title = kindTitle(line, game.moves[c.move]);
       $('bg-var-text').textContent = `Variation on board ${line.board}: ${title.charAt(0).toLowerCase()}${title.slice(1)}`;
     }

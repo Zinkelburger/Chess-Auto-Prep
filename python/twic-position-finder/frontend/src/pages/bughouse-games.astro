@@ -2,6 +2,7 @@
 import Base from '../layouts/Base.astro';
 import '../styles/trainer.css';
 import '../styles/bughouse-board.css';
+import '../styles/analysis.css';
 import '../styles/bughouse-puzzles.css';
 import '../styles/bughouse-games.css';
 
@@ -72,6 +73,29 @@ const boards = ['A', 'B'] as const;
           <div class="bg-var-bar" id="bg-var-bar" hidden>
             <span id="bg-var-text"></span>
             <button type="button" class="btn btn-outline btn-sm" id="bg-var-back" title="Back to the game (Esc)">Back to the game</button>
+          </div>
+
+          <div class="bg-engine" id="bg-engine">
+            <div class="ch-ceval" id="bg-ceval">
+              <label class="ch-switch" title="Analyse with HypeBeast (L)">
+                <input type="checkbox" id="bg-engine-on" aria-label="Analyse with HypeBeast" />
+                <span aria-hidden="true"></span>
+              </label>
+              <span class="ch-pearl num" id="bg-pearl"></span>
+              <div class="ch-engine">
+                <span class="ch-engine-name" id="bg-engine-name">HypeBeast</span>
+                <span class="ch-engine-info num" id="bg-engine-info"></span>
+              </div>
+              <button type="button" class="btn btn-outline btn-sm" id="bg-engine-action" hidden></button>
+              <p class="visually-hidden" id="bg-eval-live" aria-live="polite"></p>
+              <div class="ch-bar" aria-hidden="true"><span id="bg-bar"></span></div>
+            </div>
+            <div class="ch-pvs" id="bg-pvs"></div>
+            <div class="ch-pv-board" id="bg-pv-board" role="img" hidden>
+              <div class="ch-pv-hand ch-pv-hand-black"></div>
+              <div class="ch-pv-board-cg bb-board"></div>
+              <div class="ch-pv-hand ch-pv-hand-white"></div>
+            </div>
           </div>
 
           <div class="bg-note scroll-thin" id="bg-note" aria-live="polite"></div>

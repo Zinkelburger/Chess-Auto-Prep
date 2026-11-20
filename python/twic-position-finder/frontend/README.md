@@ -374,22 +374,35 @@ against itself or another engine) and opens one with both boards as partners
 sit, board B turned the other way. The files under `public/bughouse-games/`
 are written by the HypeBeast repo's builder, never by hand; their format, a
 fixed contract with that builder, is
-[src/bughouse-games/README.md](src/bughouse-games/README.md). The page
-generates no moves: every position is a FEN from the data.
+[src/bughouse-games/README.md](src/bughouse-games/README.md). Every position
+of the game and its notes is a FEN from the data.
+
+HypeBeast runs on the page itself, off until the reader switches it on (the
+switch above the note, or L). It then searches the board in focus (the
+current move's board, or a variation's) with both boards as the game has
+them, and follows the reader through the game; finished searches are kept, so
+stepping back shows them at once. The panel is the analysis board's
+(`src/analysis/ceval.ts`, `engine.ts`) and its lines, threads and search time
+are that board's settings. Pressing a move of an engine line shows the line on
+that board under an "Engine line" tag until the reader moves, Esc or **Back
+to the game**; the engine keeps searching the game's position. So the page is
+cross-origin isolated like `/bughouse` (`public/_headers`, `astro.config.mjs`).
 
 ```
 games.ts        types, contract checks (parseIndex, parseGame), #<id>:<move> links, GameStore
 view.ts         the cursor (move, or a line and ply in it) and what each board shows there
 words.ts        line kinds, waits, scores, clocks, seats and results in words
 board.ts        one read-only chessground board with its pockets, engines and clocks
-app.ts          page controller: the list, a game, keys (← → Home End ↑ ↓, N/P notes, F flip, Esc)
+engine.ts       HypeBeast on request for the board in focus, in the analysis board's panel
+app.ts          page controller: the list, a game, keys (← → Home End ↑ ↓, N/P notes, F flip, L engine, Esc)
 ```
 
 `public/_headers` caches `index.json` for ten minutes. Game files are named by
 content hash but share the directory with `index.json`, so no rule marks
 them immutable. `npm run test:games` checks the served files and the pure
 modules; `npm run test:games:browser` drives the built page at desktop,
-1024×768 and phone sizes and writes screenshots to `build/bughouse-games-web/`.
+1024×768 and phone sizes (at desktop it also switches HypeBeast on, opens one
+of its lines and steps on) and writes screenshots to `build/bughouse-games-web/`.
 
 ## Meow Chess
 

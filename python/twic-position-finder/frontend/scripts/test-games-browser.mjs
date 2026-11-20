@@ -164,6 +164,38 @@ try {
     await open(page, first.id);
     await page.click(`.bg-mv[data-i="${noted.i}"]`);
     await atHash(page, `#${first.id}:${noted.i}`);
+    // HypeBeast on request: switched on it searches the board in focus, a click on a move of its line shows
+    // the line on that board, Escape returns to the game, and the next move is searched in turn.
+    if (label === 'desktop') {
+      const settled = async (b) => { await new Promise((r) => setTimeout(r, 400)); return pieces(page, b); };
+      const evaluated = () => page.waitForFunction(() => /^[+\-#]?\d/.test(document.querySelector('#bg-pearl').textContent)
+        && document.querySelectorAll('#bg-pvs .ch-pv-move').length > 0, { timeout: 180_000 });
+      assert.equal(await page.evaluate(() => crossOriginIsolated), true, 'the page is cross-origin isolated for the engine');
+      assert.match(await text(page, '#bg-engine-info'), /^Off/);
+      await page.click('#bg-ceval .ch-switch');
+      await evaluated();
+      const focus = (await text(page, '#bg-engine-name')).match(/^HypeBeast · board ([AB])$/)?.[1];
+      assert.ok(focus, 'the engine names the board it searches');
+      assert.equal(focus, noted.board, 'it searches the board the move was played on');
+      const before = await settled(focus);
+      // A press at the move's place, as a player's: the rows are redrawn with each engine update.
+      // Measured in one step: a handle can be redrawn away between finding it and measuring it.
+      const at = await page.evaluate(() => { const r = document.querySelector('#bg-pvs .ch-pv-move').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+      await page.mouse.click(at.x, at.y);
+      await page.waitForFunction(() => !document.querySelector('#bg-var-bar').hidden);
+      assert.match(await text(page, '#bg-var-text'), new RegExp(`^HypeBeast’s line on board ${focus}: \\S+$`));
+      assert.notEqual(await settled(focus), before, 'the line is on the board');
+      await shot(page, `${label}-engine-line`);
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => document.querySelector('#bg-var-bar').hidden);
+      assert.equal(await settled(focus), before, 'Escape puts the game back');
+      await page.keyboard.press('ArrowRight');
+      await page.waitForFunction((n) => decodeURIComponent(location.hash).endsWith(`:${n}`), {}, noted.i + 1);
+      await evaluated();
+      await page.keyboard.press('l');
+      await page.waitForFunction(() => document.querySelector('#bg-engine-info').textContent.startsWith('Off'));
+      assert.equal(await page.$$eval('#bg-pvs .ch-pv', (r) => r.length), 0, 'off shows no lines');
+    }
     // Flip turns both boards; partners stay side by side.
     await page.click('#bg-flip');
     assert.equal(await orientation(page, 'A'), 'black');
