@@ -31,6 +31,28 @@ void main() {
       await tester.tap(find.widgetWithText(OutlinedButton, 'Train study'));
       await tester.pumpAndSettle();
       expect(w.lineTrainer.state, isA<TrainerEmpty>());
+      expect(
+        find.text(
+          '3 chapters need a training side. Ready chapters can be practiced.',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Training sides…'));
+      await tester.pumpAndSettle();
+      expect(find.text('Unreadable chapter'), findsNothing);
+      await tester.tap(find.text('White').at(0));
+      await tester.pump();
+      await tester.tap(find.text('White').at(1));
+      await tester.pump();
+      await tester.tap(find.text('Save sides'));
+      await tester.pumpAndSettle();
+      expect((w.lineTrainer.state as TrainerReady).lines, hasLength(2));
+      expect(
+        find.text(
+          '1 chapter needs a training side. Ready chapters can be practiced.',
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Training sides…'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Set missing to White'));
@@ -38,6 +60,8 @@ void main() {
       await tester.tap(find.text('Save sides'));
       await tester.pumpAndSettle();
       expect((w.lineTrainer.state as TrainerReady).lines, hasLength(3));
+      expect(find.textContaining('need a training side'), findsNothing);
+      expect(find.textContaining('needs a training side'), findsNothing);
       expect(
         w.lineTrainer.studyDocument!.lines.map(studyOrientation),
         everyElement(Side.white),

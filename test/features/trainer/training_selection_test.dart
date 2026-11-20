@@ -103,4 +103,113 @@ void main() {
     expect(selection.root, '/repertoires/Benoni');
     expect(selection.repertoirePaused, isTrue);
   });
+  group('entering the trainer', () {
+    late SettingsStore fresh;
+    late TrainingSelection entering;
+
+    setUp(() {
+      fresh = SettingsStore();
+      entering = TrainingSelection(catalog, fresh);
+    });
+
+    tearDown(() {
+      entering.dispose();
+      fresh.dispose();
+    });
+
+    test('a new selection shows every line, choosing none', () {
+      expect(entering.active, isFalse);
+      expect(entering.choosing, isFalse);
+    });
+
+    test('takes the repertoire of the chapter on the board and remembers '
+        'it, leaving line choosing off', () {
+      entering.chooseLines(true);
+      entering.enter(ref('KID', 'Main'));
+
+      expect(entering.active, isTrue);
+      expect(entering.root, '/repertoires/KID');
+      expect(entering.choosing, isFalse);
+      expect(fresh.value.training.repertoirePath, '/repertoires/KID');
+    });
+
+    test('with nothing on the board, the only repertoire is the choice', () {
+      entering.enter(null);
+
+      expect(entering.root, '/repertoires/KID');
+      expect(entering.repertoire?.name, 'KID');
+    });
+  });
+
+  test('choosing a repertoire ends choosing lines', () {
+    selection.chooseLines(true);
+    selection.choose(catalog.repertoires.single);
+    expect(selection.choosing, isFalse);
+  });
+
+  group('following the document', () {
+    test('leaves the trainer\'s own browsing', () {
+      selection.select(chapter: ref('KID', 'Main'));
+      selection.followDocument();
+
+      expect(selection.active, isFalse);
+      expect(selection.chapter, isNull);
+    });
+
+    test('ends choosing lines, which would hide every line from the other '
+        'Train tabs', () {
+      final idle = TrainingSelection(catalog, null);
+      addTearDown(idle.dispose);
+      idle.chooseLines(true);
+      idle.followDocument();
+      expect(idle.choosing, isFalse);
+    });
+
+    test('says nothing when the trainer was not browsing', () {
+      final idle = TrainingSelection(catalog, null);
+      addTearDown(idle.dispose);
+      var heard = 0;
+      idle.addListener(() => heard++);
+      idle.followDocument();
+      expect(heard, 0);
+    });
+  });
+
+  group('a chapter renamed inside the chosen repertoire', () {
+    final other = ref('KID', 'Other');
+    final renamed = ref('KID', 'Sämisch');
+
+    Future<int> rename() async {
+      var heard = 0;
+      selection.addListener(() => heard++);
+      await documents.move(other, renamed, expected: scriptedRevision(_text));
+      await catalog.synchronize();
+      return heard;
+    }
+
+    test('changes nothing shown when nothing of it was selected', () async {
+      selection.select(chapter: ref('KID', 'Main'));
+      expect(await rename(), 0);
+      expect(selection.chapter?.path, ref('KID', 'Main').path);
+    });
+
+    test('takes the selected chapter along', () async {
+      selection.select(chapter: other);
+      expect(await rename(), greaterThan(0));
+      expect(selection.chapter?.path, renamed.path);
+    });
+
+    test('takes the selected line along', () async {
+      selection.select(line: (source: other.path, id: 'x'));
+      expect(await rename(), greaterThan(0));
+      expect(selection.line, (source: renamed.path, id: 'x'));
+    });
+
+    test('takes the picked lines along', () async {
+      selection.chooseLines(true);
+      selection.pick((source: other.path, id: 'x'), true);
+      expect(await rename(), greaterThan(0));
+      expect(selection.picked, {(source: renamed.path, id: 'x')});
+    });
+  });
 }

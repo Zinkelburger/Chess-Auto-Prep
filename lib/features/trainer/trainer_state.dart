@@ -68,7 +68,7 @@ final class TrainerReady extends TrainerState {
   TrainerReady({
     required this.chapters,
     required this.progress,
-    this.study = false,
+    required this.study,
   });
 
   /// A study stays a file of separate games when a line is opened to read.
