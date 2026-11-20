@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
+import 'package:chess_auto_prep/chess/bughouse/table_setup.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/engines/hivemind_engine.dart';
 import 'package:chess_auto_prep/engines/hivemind_install.dart';
@@ -71,6 +72,47 @@ void main() {
       expect(engines.pids, isEmpty);
     },
     // A gate that names an engine must run it, never skip.
+    skip: named || Platform.isLinux && binary.existsSync()
+        ? false
+        : 'no installed Hivemind on this machine',
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+
+  test(
+    'only a legal en passant capture distinguishes a repetition',
+    () async {
+      final engines = EngineSupervisor();
+      addTearDown(engines.dispose);
+      final start = await engines.startHivemind(_files, cores: 2);
+      final engine = (start as HivemindStarted).engine;
+      for (final pinned in [false, true]) {
+        // On e8 the rook pins e5 to the king. On f8 White can play exd6.
+        final rank = pinned ? 'kn2r3' : 'kn3r2';
+        final setup = readDualFen('$rank/3p4/8/4P3/8/8/8/4K1N1 b - - 0 1');
+        var table = (setup as SetupReady).position
+            .play(BoardNumber.one, 'd7d5')!
+            .after;
+        expect(
+          table.play(BoardNumber.one, 'e5d6'),
+          pinned ? isNull : isNotNull,
+        );
+        const cycle = ['g1f3', 'b8c6', 'f3g1', 'c6b8'];
+        for (final uci in [...cycle, ...cycle]) {
+          table = table.play(BoardNumber.one, uci)!.after;
+        }
+        final answer =
+            await engine.search((
+                  position: table,
+                  team: Team.ab,
+                  maySit: false,
+                  mustMove: MustMove.one,
+                  lines: 1,
+                  budget: const NodeBudget(40),
+                ))
+                as HivemindSearched;
+        expect(answer.best, pinned ? isNull : isNotNull);
+      }
+    },
     skip: named || Platform.isLinux && binary.existsSync()
         ? false
         : 'no installed Hivemind on this machine',

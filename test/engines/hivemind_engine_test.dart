@@ -5,6 +5,8 @@ import 'package:chess_auto_prep/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/engines/engine.dart';
 import 'package:chess_auto_prep/engines/hivemind_engine.dart';
 import 'package:chess_auto_prep/engines/uci_process.dart';
+import 'package:chess_auto_prep/features/bughouse/bughouse_lab.dart';
+import 'package:chess_auto_prep/features/bughouse/lab_engine.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -24,8 +26,11 @@ final class AnsweringProcess implements UciProcess {
   final _out = StreamController<String>();
   bool killed = false;
 
-  /// What the next `go` prints; left unset, the search never ends.
+  /// What the next `go` prints. Without a scripted reply it never ends.
   List<String>? next;
+
+  /// Scripts a reply from the position actually sent over UCI.
+  List<String> Function(String position)? replyToPosition;
 
   @override
   int get pid => 4343;
@@ -47,7 +52,11 @@ final class AnsweringProcess implements UciProcess {
     } else if (line == 'isready') {
       say('readyok');
     } else if (line.startsWith('go')) {
-      final printed = next;
+      final printed =
+          next ??
+          replyToPosition?.call(
+            sent.lastWhere((s) => s.startsWith('position ')),
+          );
       next = null;
       printed?.forEach(say);
     } else if (line == 'quit') {
@@ -234,6 +243,55 @@ void main() {
         'stop',
       ]),
     );
+  });
+
+  test('analysis offers no move after a played threefold repetition', () {
+    fakeAsync((time) {
+      const cycle = ['g1f3', 'b8c6', 'f3g1', 'c6b8'];
+      final moves = [...cycle, ...cycle];
+      final replay = 'moves ${moves.map((uci) => '1$uci').join(' ')}';
+      final startFen = TablePosition.initial.dualFen;
+
+      final lab = BughouseLab()..showBoards(LabBoards.two);
+      final analysis = LabEngine(
+        lab: lab,
+        passes: const [200],
+        startEngine: () async {
+          final (engine, process) = await started();
+          // Hivemind sees the third occurrence only when it gets the replay.
+          process.replyToPosition = (position) {
+            if (position == 'position fen $startFen $replay' ||
+                position == 'position startpos $replay') {
+              return const ['bestmove (none)'];
+            }
+            return startSearch;
+          };
+          return HivemindStarted(engine);
+        },
+      );
+      List<EngineRow> rows() {
+        time.flushMicrotasks();
+        expect((analysis.lines as LinesOn).thinking, isFalse);
+        return analysis.rowsOn(BoardNumber.one);
+      }
+
+      for (final uci in moves) {
+        lab.play(BoardNumber.one, uci);
+        expect(lab.problem, isNull);
+      }
+      analysis.open();
+      analysis.toggle();
+      expect(rows(), isEmpty);
+
+      // The same FEN without the moves must miss the played game's cache entry.
+      final fen = lab.position.dualFen;
+      lab.loadDualFen(fen);
+      expect(lab.position.dualFen, fen);
+      expect(rows().map((row) => row.move), contains('d2d4'));
+      analysis.dispose();
+      time.flushMicrotasks();
+      lab.dispose();
+    });
   });
 
   test('options that have not changed are not sent again', () async {
