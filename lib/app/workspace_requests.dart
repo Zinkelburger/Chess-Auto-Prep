@@ -357,6 +357,8 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (_disposed || ticket.overtaken) return const RequestDropped();
     final result = await _open(ticket, source, game: place.game, left: leave);
     if (_disposed || result is! RequestDone) return stayed(result);
+    await documents.restoreParked(source);
+    if (_disposed || ticket.overtaken) return const RequestDropped();
     if (viewing && ticket.current && (away || _viewer.file != source)) {
       await _viewer.opened(
         source,

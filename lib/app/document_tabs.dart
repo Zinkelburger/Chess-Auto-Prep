@@ -215,6 +215,15 @@ final class DocumentTabs {
     if (session.orientation != side) session.flip();
   }
 
+  /// Puts back the edits the tab of [source] parked, once Back or Forward
+  /// has read its file again, as picking the tab would.
+  Future<void> restoreParked(ChapterRef source) async {
+    final page = _pages[source];
+    final draft = page?.draft;
+    if (_disposed || page == null || draft == null) return;
+    if (session.source == source) await _restore(page, source, draft);
+  }
+
   /// Puts the edits [page] parked back on the file just read, and answers
   /// whether the tab may carry on. A draft of a file that changed since is
   /// not put back over it when its checkpoint holds it: the keeper offers it
