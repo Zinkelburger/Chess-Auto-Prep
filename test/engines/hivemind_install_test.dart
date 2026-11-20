@@ -71,6 +71,29 @@ void main() {
     }
   });
 
+  test('the macOS app uses its bundled Hivemind helper for analysis', () async {
+    final contents = Directory(p.join(support.path, 'Chess.app', 'Contents'));
+    final macos = await Directory(
+      p.join(contents.path, 'MacOS'),
+    ).create(recursive: true);
+    final helpers = await Directory(p.join(contents.path, 'Helpers')).create();
+    final helper = File(p.join(helpers.path, 'hivemind-macos'));
+    await helper.writeAsBytes(bundle.files['hivemind-macos']!);
+    await Process.run('chmod', ['+x', helper.path]);
+    await File(
+      p.join(helpers.path, 'libonnxruntime.dylib'),
+    ).writeAsBytes(bundle.files['libonnxruntime.dylib']!);
+    final packaged = HivemindInstall(
+      appDirectory: macos,
+      supportDirectory: Directory(p.join(support.path, 'Application Support')),
+      readAsset: bundle.read,
+    );
+
+    final located = await packaged.locate() as HivemindReady;
+
+    expect(located.files.executable, helper.path);
+  }, skip: !Platform.isMacOS);
+
   test('two launches during the first install share one install', () async {
     // The Bughouse mode starting its engine while a match start is still
     // unpacking: each launch makes its own install.
