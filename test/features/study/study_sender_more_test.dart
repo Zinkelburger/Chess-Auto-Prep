@@ -4,8 +4,12 @@
 // chapter stops the send, links are written even while reading holds
 // edits, a send that only updated says no "0 added", and a long name is cut
 // at 100 characters.
+import 'package:chess_auto_prep/chess/pgn/game_text.dart';
+import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/study_lichess.dart';
+import 'package:chess_auto_prep/features/study/study_import_source.dart';
 import 'package:chess_auto_prep/features/study/study_sender.dart';
+import 'package:chess_auto_prep/net/lichess_studies.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/scripted_study_writer.dart';
@@ -77,6 +81,65 @@ void main() {
     await sender.send(into: 'wxyz9876');
     expect(lichess.replaced, isEmpty);
     expect(lichess.added, hasLength(1));
+  });
+
+  test(
+    'reimporting a chapter preserves the original annotation on send',
+    () async {
+      const url = 'https://lichess.org/study/wxyz9876/oldchap0';
+      final exported = _chapter('Round 1', url: url);
+      final (fixture, sender) = await open(exported);
+      fixture.session.setComment(NodePath.of([0]), 'Control the center.');
+      fixture.lichess.answer = StudyFetched(exported);
+      final preview = await fixture.studies.imports.url(url) as StudyImportData;
+      await fixture.studies.importPreview(preview, into: fixture.ref);
+      expect(fixture.session.chapter!.lines, hasLength(2));
+
+      await sender.send(into: 'wxyz9876');
+
+      final lines = fixture.session.chapter!.lines;
+      final original = lichess.chapterPgns[('wxyz9876', 'oldchap0')];
+      expect(original, contains('Control the center.'));
+      expect(tagValue(lines[0].tags, chapterUrlTag), url);
+      final copy = parseStudyLink(tagValue(lines[1].tags, chapterUrlTag)!);
+      expect(copy!.studyId, 'wxyz9876');
+      final copyId = copy.chapterId!;
+      expect(copyId, isNot('oldchap0'));
+      expect(
+        lichess.chapterPgns[('wxyz9876', copyId)],
+        lichessChapterPgn(lines[1]),
+      );
+      expect((sender.state as SendDone).updated, 1);
+      expect(lichess.added, hasLength(1));
+
+      lichess.replaced.clear();
+      await sender.send(into: 'wxyz9876');
+      expect(
+        lichess.replaced.map((r) => r.chapter),
+        unorderedEquals(['oldchap0', copyId]),
+      );
+      expect(lichess.added, hasLength(1));
+    },
+  );
+
+  test('a refused copy still leaves an unrelated chapter updated', () async {
+    const a = 'https://lichess.org/study/wxyz9876/oldchap0';
+    const b = 'https://lichess.org/study/wxyz9876/oldchap1';
+    final (_, sender) = await open(
+      [
+        _chapter('Original', url: a),
+        _chapter('Copy', url: a),
+        _chapter('Round 2', url: b, moves: '1. d4 {New annotation.} *'),
+      ].join('\n'),
+    );
+    lichess.refuse.add('Copy');
+
+    await sender.send(into: 'wxyz9876');
+
+    expect(
+      lichess.chapterPgns[('wxyz9876', 'oldchap1')],
+      contains('New annotation.'),
+    );
   });
 
   test('a refused chapter stops the send there', () async {

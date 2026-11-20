@@ -24,6 +24,7 @@ final class ScriptedStudyWriter implements LichessStudyWriter {
   final added = <({String study, String name, Side side, bool initial})>[];
   final replaced = <({String chapter, Map<String, String> tags})>[];
   final pgns = <String>[];
+  final chapterPgns = <(String, String), String>{};
   var _next = 0;
 
   @override
@@ -53,7 +54,9 @@ final class ScriptedStudyWriter implements LichessStudyWriter {
     }
     added.add((study: study, name: name, side: orientation, initial: initial));
     pgns.add(pgn);
-    return LichessWritten('chap${_next++}'.padRight(8, '0'));
+    final chapter = 'chap${_next++}'.padRight(8, '0');
+    chapterPgns[(study, chapter)] = pgn;
+    return LichessWritten(chapter);
   }
 
   @override
@@ -69,6 +72,7 @@ final class ScriptedStudyWriter implements LichessStudyWriter {
     }
     replaced.add((chapter: chapter, tags: tags));
     pgns.add(pgn);
+    chapterPgns[(study, chapter)] = pgn;
     return const LichessWritten();
   }
 }
