@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/players/player.dart';
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/features/players/player_analysis.dart';
@@ -52,6 +53,41 @@ void main() {
     expect(black.unknown, 1);
     expect(black.score, isNull);
   });
+  test(
+    'ID-less games with the same moves keep distinct starting positions',
+    () {
+      const tags = '[White "Alex"]\n[Black "Bob"]\n[Result "*"]\n';
+      const setup =
+          'rnbqkbnr/1ppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+      final recounted = setup.replaceFirst('0 1', '6 12');
+      const file = DocumentRef('/games.pgn');
+      final corpus = buildPlayerCorpus(
+        {'alex'},
+        [
+          const PlayerGame(file: file, index: 0, text: '$tags\n1. Nf3 *'),
+          const PlayerGame(
+            file: file,
+            index: 1,
+            text: '$tags[SetUp "1"]\n[FEN "$setup"]\n\n1. Nf3 *',
+          ),
+          PlayerGame(
+            file: file,
+            index: 2,
+            text: '$tags[SetUp "1"]\n[FEN "$recounted"]\n\n12. Nf3 *',
+          ),
+        ],
+      );
+      expect(corpus.unread, 0);
+      expect(corpus.games.map((g) => g.source.index), [0, 1]);
+      expect(
+        {
+          for (final p in corpus.positions)
+            if (p.ply == 0) p.fen.value,
+        },
+        {Fen.initial.value, setup},
+      );
+    },
+  );
   test('a game from a set position numbers its moves from there', () {
     const fromPosition =
         '[Event "Club"]\n[White "Bob"]\n[Black "Alex"]\n[Result "*"]\n'
