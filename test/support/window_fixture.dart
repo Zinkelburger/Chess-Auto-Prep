@@ -97,6 +97,7 @@ final class WindowFixture {
     this.now,
     this.launchTournament,
     this._players,
+    this.saveDelay = Duration.zero,
     this.exitWait = const Duration(milliseconds: 20),
     this._maia = const NoOpinion(),
     this.lichessWriter,
@@ -142,6 +143,9 @@ final class WindowFixture {
   /// The clock; the tactics set's day, standing still, unless the test
   /// gives one.
   final DateTime Function()? now;
+
+  /// How long an edit waits for autosave unless the test flushes it.
+  final Duration saveDelay;
 
   /// How long closing waits on writes before it asks; short, so a test of
   /// the question does not wait long for it.
@@ -257,7 +261,7 @@ final class WindowFixture {
       setFullScreen: (on) async => fullScreenAsked.add(on),
       bughouse: bughouse.outside,
       now: now ?? () => tacticsToday,
-      saveDelay: Duration.zero,
+      saveDelay: saveDelay,
       explorerDelay: Duration.zero,
       exitWait: exitWait,
     );

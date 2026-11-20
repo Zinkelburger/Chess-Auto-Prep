@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/app/document_tabs.dart';
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart' as store;
 import 'package:chess_auto_prep/storage/saved_place.dart';
+import 'package:chess_auto_prep/workspace/reading/comment_field.dart';
+import 'package:flutter/material.dart' show TextField;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_store.dart';
@@ -210,6 +214,150 @@ void main() {
     expect(w.store.requestedSaves, isEmpty);
     w.session.discardHeld();
     expect(w.session.commentAt(cursor), isNot(contains('Unsaved viewer note')));
+  });
+
+  testWidgets('a variation played while a parked viewer tab reopens survives '
+      'draft restoration', (tester) async {
+    w = WindowFixture(saveDelay: const Duration(seconds: 1));
+    final first = collectionRef('First');
+    final second = collectionRef('Second');
+    for (final ref in [first, second]) {
+      w.store.documents[ref] = store.Opened(
+        threeGameFile,
+        scriptedRevision(threeGameFile),
+      );
+    }
+    await w.pumpShell(tester, openFolders: false);
+    w.requests.switchTo(Mode.pgnViewer);
+    await w.requests.openFile(first);
+    await tester.pumpAndSettle();
+    w.session.setComment(const NodePath.root(), 'Parked note');
+    expect(w.session.hasHeldEdits, isTrue);
+    w.session.flip();
+    final parkedSide = w.session.orientation;
+    await w.requests.openFile(second);
+    await tester.pumpAndSettle();
+    expect(w.viewer.file, second);
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
+
+    final release = Completer<void>();
+    w.recent.saveGate = release.future;
+    final reopening = w.requests.documents.select(first);
+    await tester.pump();
+    expect(w.viewer.file, first);
+    expect(w.recent.saved.last.first, first.path);
+    w.session.playMove('b2b3');
+    expect(w.session.cursor.currentMove?.san, 'b3');
+    release.complete();
+    await reopening;
+    expect(w.session.orientation, parkedSide);
+
+    await w.saver.flush();
+    expect(w.session.tree!.children.map((move) => move.san), contains('b3'));
+    w.session.keepHeld();
+    await w.saver.flush();
+    expect((w.store.documents[first] as store.Opened).text, contains('b3'));
+  });
+
+  testWidgets('a root note typed during reopen joins the parked variation', (
+    tester,
+  ) async {
+    final file = collectionRef('Notes');
+    w.store.documents[file] = store.Opened(
+      threeGameFile,
+      scriptedRevision(threeGameFile),
+    );
+    await w.pumpShell(tester, openFolders: false);
+    await w.requests.openFile(file);
+    await tester.pumpAndSettle();
+    w.session.playMove('b2b3');
+    w.session.cursor.toStart();
+    await w.requests.newAnalysisBoard();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
+
+    final release = Completer<void>();
+    w.recent.saveGate = release.future;
+    final reopening = w.requests.documents.select(file);
+    await tester.pumpAndSettle();
+    final field = find.descendant(
+      of: find.byType(CommentField),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(field, 'Consider the queenside.');
+    release.complete();
+    await reopening;
+    w.session.cursor.forward();
+    expect(
+      w.session.commentAt(const NodePath.root()),
+      'Consider the queenside.',
+    );
+    expect(w.session.tree!.children.map((move) => move.san), contains('b3'));
+    expect(w.store.requestedSaves, isEmpty);
+    w.session.keepHeld();
+    await w.saver.flush();
+    final written = (w.store.documents[file] as store.Opened).text;
+    expect(written, contains('Consider the queenside.'));
+    expect(written, contains('b3'));
+  });
+
+  final notes = collectionRef('Notes');
+  Future<void> parkNote() async {
+    w.store.documents[notes] = store.Opened(
+      threeGameFile,
+      scriptedRevision(threeGameFile),
+    );
+    await w.requests.openFile(notes);
+    w.session.holdsEdits = true;
+    w.session.setComment(const NodePath.root(), 'Parked note');
+    await w.requests.newAnalysisBoard();
+  }
+
+  for (final reading in [true, false]) {
+    test('undoing a temporary variation during reopen preserves the parked '
+        'note in ${reading ? 'Read' : 'Edit'} mode', () async {
+      await parkNote();
+      w.session.holdsEdits = reading;
+      final release = Completer<void>();
+      w.recent.saveGate = release.future;
+      final reopening = w.requests.documents.select(notes);
+      await pumpEventQueue();
+      expect(w.recent.saved.last.first, notes.path);
+      w.session.playMove('b2b3');
+      expect(w.session.cursor.currentMove?.san, 'b3');
+      await w.saver.flush();
+      await w.session.undo();
+      release.complete();
+      await reopening;
+      expect(w.session.hasHeldEdits, isTrue);
+      expect(w.session.commentAt(const NodePath.root()), 'Parked note');
+      expect(
+        w.session.tree!.children.map((move) => move.san),
+        isNot(contains('b3')),
+      );
+    });
+  }
+
+  test('a game, move and side chosen during reopen stay selected', () async {
+    await parkNote();
+    final release = Completer<void>();
+    w.recent.saveGate = release.future;
+    final reopening = w.requests.documents.select(notes);
+    await pumpEventQueue();
+    expect(w.viewer.file, notes);
+    w.viewer.showGame(1);
+    w.session.cursor.forward();
+    w.session.flip();
+    final side = w.session.orientation;
+    release.complete();
+    await reopening;
+    expect(w.viewer.current, 1);
+    expect(w.session.cursor.currentMove?.san, 'd4');
+    expect(w.session.orientation, side);
+    w.viewer.showGame(0);
+    expect(w.session.commentAt(const NodePath.root()), 'Parked note');
   });
 
   test('a parked draft put away, by keeping or discarding it, does not come '

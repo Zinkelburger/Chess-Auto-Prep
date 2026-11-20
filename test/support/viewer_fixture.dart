@@ -28,6 +28,9 @@ final class ScriptedRecentFiles implements RecentFiles {
   /// Whether the next save lands.
   bool accepting = true;
 
+  /// Holds a recent-files write while the viewer is already showing its file.
+  Future<void>? saveGate;
+
   /// Every list that was saved, in order.
   final saved = <List<String>>[];
 
@@ -37,6 +40,7 @@ final class ScriptedRecentFiles implements RecentFiles {
   @override
   Future<bool> save(List<String> paths) async {
     saved.add(List.of(paths));
+    if (saveGate case final gate?) await gate;
     if (accepting) listing = RecentFilesListed(saved.last);
     return accepting;
   }
