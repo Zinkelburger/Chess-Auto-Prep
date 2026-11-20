@@ -1176,6 +1176,19 @@ class TestArenaGames(unittest.TestCase):
             self.assertEqual(index["source"], "3 engine games (2 of the 3 candidate positions checked)")
             self.assertEqual(index["puzzles"][0]["id"], "eabcdef-1-B-9")
 
+    def test_source_reads_as_a_player_would_say_it(self):
+        from bughouse_db.arena import ArenaGame, source_text
+
+        def game(*names):
+            return ArenaGame(match="m", names=dict(zip(("WhiteA", "BlackA", "WhiteB", "BlackB"), names)))
+
+        own = game("HypeBeast", "HypeBeast", "HypeBeast", "HypeBeast")
+        other = game("HypeBeast", "HiveMind", "HiveMind", "HypeBeast")
+        self.assertEqual(source_text([own] * 1500 + [other]),
+                         "1,501 engine games played by HypeBeast, most of them against other builds of itself")
+        self.assertEqual(source_text([own] * 3), "3 engine games played by HypeBeast, all against other builds of itself")
+        self.assertEqual(source_text([own, other, other]), "3 engine games played by HypeBeast")
+
     def test_one_puzzle_per_line_per_opening_and_none_from_the_fics_set(self):
         import json
         from bughouse_db import arena

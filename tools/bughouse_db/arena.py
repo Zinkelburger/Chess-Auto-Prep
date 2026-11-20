@@ -423,13 +423,14 @@ def dedupe_lines(candidates: list[P.Candidate]) -> list[P.Candidate]:
 
 
 def source_text(games: list[ArenaGame]) -> str:
-    against: Counter[str] = Counter()
-    for g in games:
-        others = set(g.names.values()) - {"HypeBeast"}
-        against[next(iter(others)) if others else "HypeBeast"] += 1
-    parts = [f"{against[name]:,} against {'other builds of itself' if name == 'HypeBeast' else name}"
-             for name in ("HypeBeast", "HiveMind", "Fairy-Stockfish") if against[name]]
-    return f"{len(games):,} engine games played by HypeBeast: " + ", ".join(parts)
+    """The set's source as a player would say it; the counts by opponent belong in the README."""
+    own = sum(1 for g in games if set(g.names.values()) <= {"HypeBeast"})
+    text = f"{len(games):,} engine games played by HypeBeast"
+    if games and own == len(games):
+        return text + ", all against other builds of itself"
+    if own * 2 > len(games):
+        return text + ", most of them against other builds of itself"
+    return text
 
 
 def _sort_key(c: P.Candidate) -> tuple:
