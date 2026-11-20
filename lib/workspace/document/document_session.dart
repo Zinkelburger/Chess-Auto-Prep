@@ -206,8 +206,6 @@ final class DocumentSession extends ChangeNotifier {
   int? get game => _chapter?.game;
   GameTree? get tree => _chapter?.tree;
 
-  /// Asks editors to commit their text before saving or leaving the document,
-  /// while their paths still name the moves the text was typed for.
   /// Captures the document after inline editors submit their current text.
   /// Exporters retain this immutable value across file dialogs and navigation.
   Chapter? snapshot() {
@@ -215,6 +213,8 @@ final class DocumentSession extends ChangeNotifier {
     return _chapter;
   }
 
+  /// Submits all editor text. False means at least one note was refused.
+  bool commitEditors() => _editors.commit();
   Listenable get committingEditors => _editors;
   final _editors = _Editors();
 
@@ -548,15 +548,14 @@ final class DocumentSession extends ChangeNotifier {
     }
   }
 
-  /// Writes [text] as the comment on the move at [at], or as the chapter's
-  /// introduction at the root. The path is the caller's, not the cursor's,
-  /// so words typed under one move cannot land on another. Text that leaves
-  /// the file as it is changes nothing; a game reading could not finish, or
-  /// words a PGN file cannot hold, are refused and [refusedEdit] says so.
-  void setComment(NodePath at, String? text) => _commentEdit(
-    'comment',
-    (chapter) => edits.setComment(chapter, at: at, text: text),
-    quietWhenSame: true,
+  /// Writes the move note at [at], or the introduction at the root.
+  /// Returns false when the session refuses the words (see [refusedEdit]).
+  bool setComment(NodePath at, String? text) => _editors.record(
+    _commentEdit(
+      'comment',
+      (chapter) => edits.setComment(chapter, at: at, text: text),
+      quietWhenSame: true,
+    ),
   );
 
   /// Puts the glyph [nag] on the move at [at] in place of the one it had, or
@@ -579,13 +578,13 @@ final class DocumentSession extends ChangeNotifier {
 
   /// Makes a comment, glyph or marker edit, named [what] in the log. One
   /// that changes nothing is [quietWhenSame] unless it clears a refusal.
-  void _commentEdit(
+  bool _commentEdit(
     String what,
     edits.CommentResult Function(Chapter chapter) edit, {
     bool quietWhenSame = false,
   }) {
     final chapter = _chapter;
-    if (chapter == null || _editBlocked() != null) return;
+    if (chapter == null || _editBlocked() != null) return false;
     final hadRefusal = refusedEdit != null;
     switch (edit(chapter)) {
       case final edits.CommentRefused refusal:
@@ -596,10 +595,12 @@ final class DocumentSession extends ChangeNotifier {
         if (!identical(edited, chapter)) {
           _replace(edited, written);
         } else if (quietWhenSame && !hadRefusal) {
-          return;
+          return true;
         }
     }
+    final accepted = _refused == null;
     notifyListeners();
+    return accepted;
   }
 
   /// Why an edit may not happen now, or null when it may: a read-only

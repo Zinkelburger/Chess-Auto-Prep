@@ -84,10 +84,12 @@ final class ExitGuard {
     this._saveCopy,
     this.wait = const Duration(seconds: 5),
     this.settleFeatures,
+    this.commitEditors,
   });
 
   final DocumentSaver _saver;
   final Future<String?> Function()? settleFeatures;
+  final bool Function()? commitEditors;
   final DraftQuestion _question;
 
   /// Writes the words somewhere else and answers the file it wrote, or null
@@ -125,7 +127,11 @@ final class ExitGuard {
   Future<bool> _featuresSettled() async {
     // Stop the debounce now, but decide about the draft after feature
     // commands settle: a command already running may edit it while closing.
+    final accepted = commitEditors?.call() ?? true;
     unawaited(_saver.flush());
+    if (!accepted && !await _leaveWithPending('A note could not be saved.')) {
+      return false;
+    }
     final settle = settleFeatures;
     if (settle != null) {
       String? problem;

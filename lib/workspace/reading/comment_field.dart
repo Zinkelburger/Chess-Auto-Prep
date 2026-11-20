@@ -145,15 +145,22 @@ class _CommentFieldState extends State<CommentField>
     // left ([DocumentSession.committingEditors]).
     if (at == null || text == _given || _documentOf(session) != _in) return;
     final before = session.commentAt(at);
+    final prose = displayComment(before ?? '');
+    // Keep the field's line breaks when it still represents the current note.
+    final current = displayComment(_given) == prose ? _given : prose;
+    if (text.trim() == current.trim()) {
+      _given = text;
+      return;
+    }
     _committing = true;
     try {
-      session.setComment(at, text);
+      // Words the session refused are still the user's: until it takes them
+      // the field goes on showing them, to be put right, and the strip says
+      // why.
+      if (!session.setComment(at, text)) return;
     } finally {
       _committing = false;
     }
-    // Words the session refused are still the user's: until it takes them
-    // the field goes on showing them, to be put right, and the strip says
-    // why.
     final after = session.commentAt(at);
     final shown = displayComment(after ?? '');
     if (shown == displayComment(text)) {

@@ -7,7 +7,9 @@ import 'package:chess_auto_prep/app/exit_guard.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/net/lichess_login.dart';
 import 'package:chess_auto_prep/storage/lichess_token.dart';
+import 'package:chess_auto_prep/workspace/reading/comment_field.dart';
 import 'package:fake_async/fake_async.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -51,6 +53,72 @@ void main() {
 
   void edit(String words) =>
       fixture.session.setComment(NodePath.of([0]), words);
+
+  testWidgets('closing keeps a refused move note available to correct', (
+    tester,
+  ) async {
+    final window = WindowFixture();
+    addTearDown(window.dispose);
+    window.question.answer = DraftChoice.keepWaiting;
+    await window.session.open(kidMain);
+    window.session.cursor.goTo(NodePath.of([0]));
+    final exit = AppExit(
+      guard: window.parts.exit,
+      navigatorKey: window.navigator,
+      prepare: window.parts.prepareToClose,
+      onCancelled: window.parts.resumeAfterClose,
+      stopEngines: window.parts.env.stopEngines,
+      closeLog: () async {},
+    );
+    addTearDown(exit.closing.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: window.navigator,
+        home: Scaffold(body: CommentField(session: window.session)),
+      ),
+    );
+    expect(find.text('The Sicilian'), findsOneWidget);
+    const note = 'Keep this analysis } after reviewing';
+    await tester.enterText(find.byType(TextField), note);
+
+    final closing = exit.leave();
+    await tester.pumpAndSettle();
+    expect(await closing, AppExitResponse.cancel);
+    expect(find.text(note), findsOneWidget);
+  });
+
+  testWidgets('closing ignores only outer whitespace on a partial game note', (
+    tester,
+  ) async {
+    const pgn =
+        '[Event "Partial"]\n\n1. e4 {My note [%clk 0:01:00]} e5 2. Ke3 Nf6 *\n';
+    fixture.externalEdit(pgn);
+    await fixture.session.open(fixture.ref, game: 0);
+    expect(fixture.session.chapter!.lines.single.isWhole, isFalse);
+    fixture.session.cursor.goTo(NodePath.of([0]));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: CommentField(session: fixture.session)),
+      ),
+    );
+    expect(find.text('My note'), findsOneWidget);
+    final guard = ExitGuard(
+      saver: fixture.saver,
+      question: question,
+      commitEditors: fixture.session.commitEditors,
+    );
+
+    await tester.enterText(find.byType(TextField), ' My note ');
+    expect(await guard.mayClose(), isTrue);
+    expect(question.asked, isEmpty);
+    expect(fixture.session.refusedEdit, isNull);
+
+    await tester.enterText(find.byType(TextField), 'My  note');
+    expect(await guard.mayClose(), isFalse);
+    expect(question.asked.single, contains('A note could not be saved.'));
+    expect(find.text('My  note'), findsOneWidget);
+    expect(fixture.onDisk, pgn);
+  });
 
   test('exit honors logout while token revocation is pending', () {
     fakeAsync((time) {

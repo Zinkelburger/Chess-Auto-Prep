@@ -113,6 +113,7 @@ final class AppParts {
     saveCopy: _copied,
     wait: env.exitWait,
     settleFeatures: _settleWrites,
+    commitEditors: session.commitEditors,
   );
 
   /// What has to reach the disk before the window closes: the writes the
