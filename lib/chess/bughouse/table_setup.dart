@@ -1,8 +1,5 @@
 /// Setting a table up by hand: a FEN per board and each player's reserve
 /// written as pieces (`2N Q P`), checked before they become a position.
-///
-/// Bughouse keeps every piece — all 64 are on a board or in a reserve — so
-/// the boxes also say what is still to be placed, live as they are typed.
 library;
 
 import 'package:dartchess/dartchess.dart';
@@ -332,53 +329,6 @@ ReserveRead parseReserve(String text) {
     return const ReserveWrong('That is more pieces than a reserve can hold.');
   }
   return ReservePieces(pieces);
-}
-
-/// Every piece of a bughouse set, per colour.
-const _fullSet = {'P': 16, 'N': 4, 'B': 4, 'R': 4, 'Q': 2, 'K': 2};
-
-/// The pieces the boxes leave unplaced and any extras, in words:
-/// `Pieces outstanding: White: 1P · Black: 2N`, or empty while a FEN cannot
-/// be read yet. A promoted piece (`Q~`) counts as the pawn it was.
-String outstanding(BoardBoxes one, BoardBoxes two) {
-  final have = <String, int>{};
-  void add(String letter) => have[letter] = (have[letter] ?? 0) + 1;
-  for (final boxes in [one, two]) {
-    final shape = checkFen(boxes.fen);
-    if (shape is! FenShape) return '';
-    final cells = shape.placement;
-    for (var i = 0; i < cells.length; i++) {
-      final c = cells[i];
-      if (!_pieceLetter.hasMatch(c)) continue;
-      final promoted = i + 1 < cells.length && cells[i + 1] == '~';
-      add(promoted ? (_isUpper(c) ? 'P' : 'p') : c);
-    }
-    shape.pocket.split('').where((l) => l.isNotEmpty).forEach(add);
-    for (final (text, upper) in [(boxes.white, true), (boxes.black, false)]) {
-      if (parseReserve(text) case ReservePieces(:final letters)) {
-        (upper ? letters : letters.toLowerCase()).split('').forEach(add);
-      }
-    }
-  }
-  String side(bool upper, int sign) => [
-    for (final MapEntry(key: piece, value: full) in _fullSet.entries)
-      if (sign * (full - (have[upper ? piece : piece.toLowerCase()] ?? 0))
-          case final n when n > 0)
-        '$n$piece',
-  ].join(' ');
-  String listed(String label, int sign) {
-    final sides = [
-      if (side(true, sign) case final w when w.isNotEmpty) 'White: $w',
-      if (side(false, sign) case final b when b.isNotEmpty) 'Black: $b',
-    ];
-    return sides.isEmpty ? '' : '$label ${sides.join(' · ')}';
-  }
-
-  final parts = [
-    listed('Pieces outstanding:', 1),
-    listed('Too many:', -1),
-  ].where((p) => p.isNotEmpty);
-  return parts.isEmpty ? 'Pieces outstanding: none' : parts.join('   ');
 }
 
 bool _isUpper(String letter) => letter == letter.toUpperCase();
