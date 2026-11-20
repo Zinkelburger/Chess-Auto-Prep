@@ -59,13 +59,12 @@ enum ClockCase {
 
 /// A board the searched team may not sit on: the engine's `RequireMoveOn`.
 enum MustMove {
-  either('Either', 'none'),
-  one('Board 1', 'A'),
-  two('Board 2', 'B');
+  either('none'),
+  one('A'),
+  two('B');
 
-  const MustMove(this.label, this.engineValue);
+  const MustMove(this.engineValue);
 
-  final String label;
   final String engineValue;
 }
 
@@ -144,20 +143,6 @@ double qOf(num cp) => math.atan(cp / _tangentScale) / _tangentRate;
 double scoreOf(double q) =>
     _tangentScale * math.tan(_tangentRate * q.clamp(-0.9, 0.9)) / 100;
 
-/// Where the zero of a score came from.
-enum ZeroSource {
-  /// Both teams were searched here, so the offset cancels exactly.
-  measured('Zero is measured here, from both teams’ searches.'),
-
-  /// The other team was not searched — it had no move, or the search was
-  /// stopped first — so the level table's offset stands in.
-  assumed('Zero is assumed: the other team was not searched here.');
-
-  const ZeroSource(this.note);
-
-  final String note;
-}
-
 /// A score for A + B on the re-centred scale, or a mate, + for A + B.
 final class TableScore {
   const TableScore({this.score, this.mate});
@@ -173,16 +158,6 @@ final class TableScore {
 
   final double? score;
   final int? mate;
-
-  bool get isEmpty => score == null && mate == null;
-
-  /// The same score from [team]'s side.
-  TableScore forTeam(Team team) => team == Team.ab
-      ? this
-      : TableScore(
-          score: score == null ? null : -score!,
-          mate: mate == null ? null : -mate!,
-        );
 
   /// For sorting a table, higher better for A + B: any mate for beats any
   /// score, the quicker the better.
@@ -266,90 +241,6 @@ double shiftFrom(JointLine best, JointLine line) {
   return ((value(best) - value(line)) / 2).clamp(0.0, 1.0);
 }
 
-/// Which team answers a move on [board] of [position]: the other seat of
-/// that board.
-Team answering(TablePosition position, BoardNumber board) =>
-    position.mover(board).team.other;
-
 /// [team] as the engine's `Team` option: its colour on board 1.
 String engineTeam(Team team) =>
     team.onBoardOne == Side.white ? 'white' : 'black';
-
-/// [team]'s part of [joint] on each board where that team is on move:
-/// `A Nf3`, or `B sits` for a deliberate wait. A board the other team is on
-/// move on has nothing to decide there and is left out.
-Map<BoardNumber, String> teamHalves(
-  TablePosition position,
-  JointMove joint,
-  Team team,
-) => {
-  for (final board in BoardNumber.values)
-    if (position.mover(board).team == team)
-      board: _half(position, board, joint.on(board)),
-};
-
-String _half(TablePosition position, BoardNumber board, String? uci) {
-  final seat = position.mover(board).letter;
-  if (uci == null) return '$seat sits';
-  final played = position.play(board, uci);
-  return '$seat ${played?.move.san ?? uci}';
-}
-
-/// A principal variation from [position] as seat-lettered SAN, a `·`
-/// between joint actions — `A e4 · C e5 B d5` — as the book stores one. A
-/// joint action where nothing moves is `sit`; the reading stops at the first
-/// move that does not play, which is what a line from another position
-/// looks like.
-String readablePv(TablePosition position, List<JointMove> pv, {int limit = 6}) {
-  final steps = <String>[];
-  var table = position;
-  for (final joint in pv.take(limit)) {
-    final halves = <String>[];
-    for (final board in BoardNumber.values) {
-      final uci = joint.on(board);
-      if (uci == null) continue;
-      final seat = table.mover(board).letter;
-      final played = table.play(board, uci);
-      if (played == null) return steps.join(' · ');
-      halves.add('$seat ${played.move.san}');
-      table = played.after;
-    }
-    steps.add(halves.isEmpty ? 'sit' : halves.join(' '));
-  }
-  return steps.join(' · ');
-}
-
-/// [board]'s moves along [pv] from [position], numbered as that board
-/// counts them — `12. Nf3 Nc6 13. d4`, or `12... Nc6` when Black starts —
-/// the other board's moves played but not written. Stops at [limit] moves
-/// or the first that does not play.
-String boardPv(
-  TablePosition position,
-  List<JointMove> pv,
-  BoardNumber board, {
-  int limit = 8,
-}) {
-  final words = <String>[];
-  var table = position;
-  var written = 0;
-  for (final joint in pv) {
-    for (final on in BoardNumber.values) {
-      final uci = joint.on(on);
-      if (uci == null) continue;
-      final before = table.board(on);
-      final played = table.play(on, uci);
-      if (played == null) return words.join(' ');
-      if (on == board) {
-        if (before.turn == Side.white) {
-          words.add('${before.fullmoves}.');
-        } else if (written == 0) {
-          words.add('${before.fullmoves}...');
-        }
-        words.add(played.move.san);
-        if (++written >= limit) return words.join(' ');
-      }
-      table = played.after;
-    }
-  }
-  return words.join(' ');
-}
