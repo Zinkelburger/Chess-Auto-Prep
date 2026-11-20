@@ -106,9 +106,7 @@ void main() {
     );
   });
 
-  testWidgets('a chapter facing White offers only Face Black', (
-    tester,
-  ) async {
+  testWidgets('a chapter facing White offers only Face Black', (tester) async {
     await pump(tester, chapters: _chapters(3));
     await rowAction(tester, 0, 'Face White');
     expect(asked, isEmpty);
@@ -118,9 +116,7 @@ void main() {
     expect(asked, ['face black 0']);
   });
 
-  testWidgets('a chapter facing Black offers only Face White', (
-    tester,
-  ) async {
+  testWidgets('a chapter facing Black offers only Face White', (tester) async {
     await pump(tester, chapters: _chapters(3));
     await rowAction(tester, 1, 'Face Black');
     expect(asked, isEmpty);
@@ -179,7 +175,7 @@ void main() {
     testWidgets('the board moving to a chapter out of view scrolls to it', (
       tester,
     ) async {
-      await pump(tester, active: 0);
+      await pump(tester);
       expect(position(tester).pixels, 0);
       await pump(tester, active: 30);
       expect(position(tester).pixels, 30 * listRowHeight);
@@ -226,7 +222,7 @@ void main() {
 
     testWidgets('the board moving while a search shows leaves the found '
         'rows where they are', (tester) async {
-      await pump(tester, active: 0);
+      await pump(tester);
       await tester.enterText(find.byType(TextField), 'chapter');
       await tester.pumpAndSettle();
       await pump(tester, active: 30);

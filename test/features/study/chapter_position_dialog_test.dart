@@ -3,7 +3,6 @@
 import 'package:chess_auto_prep/features/study/study_panel.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/status_host.dart';
@@ -38,10 +37,9 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.tap(find.text('Move'));
     await tester.pumpAndSettle();
-    expect([for (final c in study.studies.chapters) c.name], [
-      'Gamma',
-      'Alpha',
-      'Beta',
-    ]);
+    expect(
+      [for (final c in study.studies.chapters) c.name],
+      ['Gamma', 'Alpha', 'Beta'],
+    );
   });
 }

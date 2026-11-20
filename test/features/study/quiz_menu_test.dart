@@ -31,23 +31,38 @@ void main() {
     expect(labels(), ['Start quiz from this move', 'End quiz after this move']);
   });
 
-  test('starting a quiz marks the move, and the entry then takes it off', () async {
-    await press('Start quiz from this move');
-    expect(study.onDisk, contains('1. e4 {[%tstart]} e5'));
-    expect(labels(), ['Do not start a quiz here', 'End quiz after this move']);
+  test(
+    'starting a quiz marks the move, and the entry then takes it off',
+    () async {
+      await press('Start quiz from this move');
+      expect(study.onDisk, contains('1. e4 {[%tstart]} e5'));
+      expect(labels(), [
+        'Do not start a quiz here',
+        'End quiz after this move',
+      ]);
 
-    await press('Do not start a quiz here');
-    expect(study.onDisk, isNot(contains('[%tstart]')));
-    expect(labels(), ['Start quiz from this move', 'End quiz after this move']);
-  });
+      await press('Do not start a quiz here');
+      expect(study.onDisk, isNot(contains('[%tstart]')));
+      expect(labels(), [
+        'Start quiz from this move',
+        'End quiz after this move',
+      ]);
+    },
+  );
 
-  test('ending a quiz marks the move, and the entry then takes it off', () async {
-    await press('End quiz after this move');
-    expect(study.onDisk, contains('1. e4 {[%tend]} e5'));
-    expect(labels(), ['Start quiz from this move', 'Do not end a quiz here']);
+  test(
+    'ending a quiz marks the move, and the entry then takes it off',
+    () async {
+      await press('End quiz after this move');
+      expect(study.onDisk, contains('1. e4 {[%tend]} e5'));
+      expect(labels(), ['Start quiz from this move', 'Do not end a quiz here']);
 
-    await press('Do not end a quiz here');
-    expect(study.onDisk, isNot(contains('[%tend]')));
-    expect(labels(), ['Start quiz from this move', 'End quiz after this move']);
-  });
+      await press('Do not end a quiz here');
+      expect(study.onDisk, isNot(contains('[%tend]')));
+      expect(labels(), [
+        'Start quiz from this move',
+        'End quiz after this move',
+      ]);
+    },
+  );
 }

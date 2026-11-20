@@ -100,7 +100,10 @@ void main() {
 
       final result =
           await study.studies.restore(_deletedAt(elsewhere)) as StudyProblem;
-      expect(result.sentence, 'That deleted study is outside the studies folder.');
+      expect(
+        result.sentence,
+        'That deleted study is outside the studies folder.',
+      );
       expect(study.store.documents, contains(ChapterRef.at(elsewhere)));
       expect(study.store.documents.containsKey(studyRef('Old')), isFalse);
     });
@@ -121,8 +124,7 @@ void main() {
       expect(study.studies.canRetryRestore, isTrue);
 
       final other =
-          await study.studies.restore(deleted, name: 'Renamed')
-              as StudyProblem;
+          await study.studies.restore(deleted, name: 'Renamed') as StudyProblem;
       expect(other.sentence, 'Retry the pending study save first.');
       expect(study.store.documents.containsKey(studyRef('Renamed')), isFalse);
 

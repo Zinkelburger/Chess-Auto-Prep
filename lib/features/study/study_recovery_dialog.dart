@@ -80,9 +80,7 @@ class _RecoveryState extends State<_Recovery> with Attempting<_Recovery> {
         'Could not read the deleted studies.',
         inset: 0,
         action: OutlinedButton(
-          onPressed: busy
-              ? null
-              : _readAgain,
+          onPressed: busy ? null : _readAgain,
           child: const Text('Try again'),
         ),
       );
@@ -173,9 +171,7 @@ class _RecoveryState extends State<_Recovery> with Attempting<_Recovery> {
           child: const Text('Close'),
         ),
         TextButton(
-          onPressed: busy
-              ? null
-              : _readAgain,
+          onPressed: busy ? null : _readAgain,
           child: const Text('Refresh'),
         ),
       ],

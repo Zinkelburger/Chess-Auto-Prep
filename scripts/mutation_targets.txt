@@ -489,6 +489,31 @@
 #     would go; the 101st mirrors that retention constant), and its look.
 #   lib/features/library/library_messages.dart: no mutant compiles (each
 #     `&&` -> `||` breaks the null promotion the next line needs).
+# lib/features/study, with equivalent mutants a --max 30 sample can draw:
+#   lib/features/study/studies_state.dart: no mutants (values only).
+#   lib/features/study/study_file_changes.dart:134 which study a retried
+#     rename holds still: while a rename is unconfirmed the saver's barrier
+#     takes no words, so the hold has nothing to flush or wait for, and
+#     holding another open study still changes nothing.
+#   lib/features/study/chapter_position_dialog.dart:23 the first position
+#     (initState sets it before anything reads it).
+#   lib/features/study/study_import_dialog.dart:16, :41, :45 `append` (its one
+#     caller passes `studies.open != null`, the same as `into != null`), :86
+#     `||` -> `&&` (importPreview answers every failure as a result, so the
+#     attempt never answers null, and a busy dialog cannot close).
+#   lib/features/study/study_send_dialog.dart:56 the first destination
+#     (initState sets it), :102 `&&` -> `||` (a declined login retries a send
+#     that fails the same sign-in check), :153 the progress bar's share.
+#   lib/features/study/study_chapter_list.dart:178 `?? 0` -> `?? 1` (no
+#     active chapter means nothing open, the list at its top and row 1 in
+#     view either way), :180 `<` -> `<=` (it jumps to where the list is).
+#   Only a widget's look survives in lib/features/study/chapter_dialogs.dart
+#     (:62, :82), new_chapter_dialog.dart (:160-161, the editor beside the
+#     form or under it), study_chapter_list.dart (:54, :61, :206, :222, :242
+#     the default drag handles), study_import_dialog.dart (:118, :119, :176),
+#     study_recovery_dialog.dart (:81, :92, :95, :117, :152) and
+#     study_send_dialog.dart (:156, :209): padding, line counts, a flex, a
+#     held problem line, a live region.
 lib/chess/pgn/game_review.dart|test/workspace/game_review_test.dart|test/chess/pgn/edit_laws_test.dart test/app
 lib/chess/pgn/line_edits.dart|test/chess/pgn/line_edits_test.dart|test/chess/pgn test/workspace
 lib/chess/pgn/chapter_edits.dart|test/chess/pgn/chapter_edits_test.dart|test/chess/pgn test/workspace
@@ -818,3 +843,8 @@ lib/features/tactics/source_games.dart|test/features/tactics/source_games_test.d
 lib/features/library/new_chapter_dialog.dart|test/features/library/new_chapter_dialog_test.dart|test/features/outline_panel_test.dart test/features/library_panel_test.dart
 lib/features/library/file_edits.dart|test/features/file_edits_test.dart test/features/library_lines_test.dart test/features/library_test.dart|test/features/line_transfers_test.dart test/features/library_changes_test.dart test/features/course_chapters_test.dart test/features/compound_rename_test.dart test/features/closed_rename_navigation_test.dart test/features/library_holds_test.dart test/features/library_open_course_test.dart test/features/library_on_disk_test.dart test/features/outline_panel_test.dart test/features/outline_panel_more_test.dart
 lib/features/library/library_actions.dart|test/features/library_panel_test.dart test/features/outline_panel_test.dart|test/app/board_doors_test.dart test/app/shell_doors_test.dart test/features/library_panel_more_test.dart test/features/outline_panel_more_test.dart
+# lib/features/study
+lib/features/study/study_commands.dart|test/features/study/study_chapters_test.dart|test/app/read_edit_test.dart test/app/native_training_test.dart
+lib/features/study/quiz_menu.dart|test/features/study/quiz_menu_test.dart|
+lib/features/study/study_import_source.dart|test/features/study/study_import_source_test.dart test/features/study/study_import_preview_test.dart|test/features/study/studies_test.dart test/features/study/study_panel_test.dart
+lib/features/study/study_actions.dart|test/features/study/study_actions_test.dart test/features/study/study_panel_test.dart test/features/study/study_panel_menus_test.dart|test/app/study_lichess_send_test.dart test/app/document_views_test.dart

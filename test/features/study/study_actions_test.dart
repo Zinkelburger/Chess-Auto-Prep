@@ -56,7 +56,11 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> answerName(WidgetTester tester, String name, String confirm) async {
+  Future<void> answerName(
+    WidgetTester tester,
+    String name,
+    String confirm,
+  ) async {
     await tester.enterText(find.byType(TextField).last, name);
     await tester.tap(find.widgetWithText(FilledButton, confirm));
     await tester.pumpAndSettle();
@@ -73,7 +77,10 @@ void main() {
     await pump(tester);
     await studyAction(tester, 'Rename study…');
     await answerName(tester, 'Rook and pawn', 'Rename');
-    expect(study.store.documents.containsKey(studyRef('Rook and pawn')), isTrue);
+    expect(
+      study.store.documents.containsKey(studyRef('Rook and pawn')),
+      isTrue,
+    );
     expect(study.store.documents.containsKey(study.ref), isFalse);
     expect(study.session.source, studyRef('Rook and pawn'));
   });

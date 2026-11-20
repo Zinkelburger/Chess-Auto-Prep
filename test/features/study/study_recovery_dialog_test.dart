@@ -7,6 +7,7 @@ import 'package:chess_auto_prep/storage/deleted_chapters.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/scripted_store.dart';
@@ -154,6 +155,27 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Could not read the deleted studies.'), findsNothing);
     expect(find.text('Restore as…'), findsOneWidget);
+  });
+
+  testWidgets('while a restore is on its way the dialog claims nothing and '
+      'stays open; once it is done Escape closes it', (tester) async {
+    await openRecovery(tester);
+    study.store.hold = true;
+    await tester.tap(find.text('Restore'));
+    await tester.pump();
+    expect(find.text('Study restored.'), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(find.text('Deleted studies'), findsNWidgets(2));
+
+    study.store
+      ..hold = false
+      ..releaseAll();
+    await tester.pumpAndSettle();
+    expect(find.text('Study restored.'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
   });
 
   testWidgets('Refresh reads the list again and Close shuts the dialog', (

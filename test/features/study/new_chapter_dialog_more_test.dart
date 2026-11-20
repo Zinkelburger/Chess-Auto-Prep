@@ -46,10 +46,7 @@ void main() {
     expect(find.text('Please enter a name.'), findsOneWidget);
     expect(answered, isNull);
 
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Chapter name'),
-      'Q',
-    );
+    await tester.enterText(find.widgetWithText(TextField, 'Chapter name'), 'Q');
     await tester.pump();
     expect(find.text('Please enter a name.'), findsNothing);
   });

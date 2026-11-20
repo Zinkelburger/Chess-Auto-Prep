@@ -43,14 +43,17 @@ void main() {
     );
   });
 
-  test('pasted PGN with one whole game among broken ones is previewed', () async {
-    const source = StudyImportSource(lichess: _NoLichess());
-    final read = await source.pgn(
-      '[Event "Valid"]\n\n1. e4 *\n\n[Event "Broken"]\n\n1. d4 e9 *\n',
-    );
-    expect(read, isA<StudyImportData>());
-    expect((read as StudyImportData).complete, isFalse);
-  });
+  test(
+    'pasted PGN with one whole game among broken ones is previewed',
+    () async {
+      const source = StudyImportSource(lichess: _NoLichess());
+      final read = await source.pgn(
+        '[Event "Valid"]\n\n1. e4 *\n\n[Event "Broken"]\n\n1. d4 e9 *\n',
+      );
+      expect(read, isA<StudyImportData>());
+      expect((read as StudyImportData).complete, isFalse);
+    },
+  );
 }
 
 /// Nothing in these tests reaches Lichess.
