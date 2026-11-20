@@ -92,6 +92,47 @@ void main() {
     expect(find.text('Look'), findsNothing);
   });
 
+  Future<void> checkTrainerAnalysis(
+    WidgetTester tester,
+    Future<void> Function() openAnalysis,
+  ) async {
+    await w.pumpShell(tester);
+    await w.requests.open(kidMain);
+    final original = (w.store.documents[kidMain] as Opened).text;
+    w.requests.switchTo(Mode.trainer);
+    await tester.pumpAndSettle();
+
+    await openAnalysis();
+    await tester.pumpAndSettle();
+    expect(find.text('Analysis'), findsWidgets);
+
+    tester.semantics.tap(find.semantics.byLabel('e7, Black pawn'));
+    await tester.pump();
+    tester.semantics.tap(find.semantics.byLabel('e5, empty'));
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel('e5, Black pawn'), findsOneWidget);
+    await w.saver.flush();
+    expect((w.store.documents[kidMain] as Opened).text, original);
+  }
+
+  testWidgets(
+    'new analysis in the trainer keeps moves out of the repertoire',
+    (tester) => checkTrainerAnalysis(tester, () async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    }),
+  );
+
+  testWidgets(
+    'Analysis from the trainer pane menu keeps moves out of the repertoire',
+    (tester) => checkTrainerAnalysis(tester, () async {
+      await tester.tap(find.byTooltip('Open tools and arrange panes').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(MenuItemButton, 'Analysis'));
+    }),
+  );
+
   testWidgets('no pane splits while the Analysis tab holds its own board', (
     tester,
   ) async {
