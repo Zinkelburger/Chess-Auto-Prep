@@ -331,6 +331,14 @@
 #   lib/features/players/group_dialog.dart:32 the rounds' start (initState
 #     sets it), :100-101 the stepper's bounds, :74 autofocus (the look).
 #   lib/features/players/player_lookup.dart:72 one line: the look.
+#   lib/features/players/player_dialogs.dart:182, :371 the boxes' line
+#     counts and :362 `canFail`: the look.
+#   lib/features/players/person_row.dart:54 the wide layout at exactly the
+#     break, :89, :122 the line counts: the look.
+#   lib/features/players/player_book.dart:27 `busy`'s start (reading the
+#     player's games, which a check needs, resets it), :56 `busy` while a
+#     check runs (the progress shown; a second check overtakes the first
+#     and comes to the same gaps).
 #   lib/features/settings/lichess_account.dart:179 `Connecting`'s
 #     `browserOpened` default (shown only until the login says whether the
 #     browser took the page).
