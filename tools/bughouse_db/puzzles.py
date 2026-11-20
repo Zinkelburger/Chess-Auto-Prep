@@ -58,7 +58,8 @@ one is solved with deep searches (`VERIFY_NODES`, two principal variations):
 Mate in one. Lila keeps mate-in-one only from its best games. Here a
 mate-in-one is kept only when the player missed it in the game, or when the
 mating move is a drop and the position has at least 20 legal moves
-(`keep_mate_in_one`).
+(`keep_mate_in_one`). A one-move tactic is not kept when the solver starts in
+check (`keep_one_move_tactic`): taking the checking piece is not a puzzle.
 
 Themes come from `themes.py`. Difficulty is a static proxy (`rate_difficulty`),
 since FICS games carry no puzzle ratings: points = solver moves, plus one each
@@ -604,6 +605,12 @@ def keep_mate_in_one(found: bool, drop: bool, legal: int) -> bool:
     return not found or (drop and legal >= 20)
 
 
+def keep_one_move_tactic(in_check: bool) -> bool:
+    """A one-move tactic stays only if the solver is not in check: answering a check by
+    taking the checker (often one of two legal moves) is not a puzzle."""
+    return not in_check
+
+
 def rate_difficulty(kind: str, moves: int, themes: list[str], found: bool,
                     start: CrazyhouseBoard, first: str) -> int:
     """1 Easy, 2 Medium, 3 Hard; see the module docstring."""
@@ -652,6 +659,8 @@ def web_puzzle(c: Candidate) -> dict | None:
     accepted = {first} | ({_strip(_san(start, m)) for m in c.mates} if len(c.line) == 1 else set())
     found = c.played is not None and _strip(c.played) in accepted
     if mate and moves == 1 and not keep_mate_in_one(found, "@" in c.line[0], len(legal[0].split())):
+        return None
+    if not mate and moves == 1 and not keep_one_move_tactic(start.is_check()):
         return None
     themes = tag_themes(c.fen, c.line, c.cp)
     return {

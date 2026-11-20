@@ -619,6 +619,20 @@ class TestPuzzleExport(unittest.TestCase):
         self.assertFalse(web_puzzle(self.candidate(kind="advantage", line=["c5d7"], mates=[], cp=700,
                                                    played="Nb3"))["found"])
 
+    def test_a_one_move_tactic_out_of_check_is_not_kept(self):
+        from bughouse_db.puzzles import web_puzzle
+
+        # White is in check from the knight on c2 and takes it: not a puzzle.
+        checked = "4k3/8/8/8/8/8/2n5/K2B4[] w - - 0 30"
+        self.assertIsNone(web_puzzle(self.candidate(fen=checked, kind="advantage", line=["d1c2"], mates=[],
+                                                    cp=700, played="Bxc2", prev=None)))
+        # The same capture without the check is kept, and a longer line from check is too.
+        quiet = "4k3/8/8/8/8/8/2n5/3B3K[] w - - 0 30"
+        self.assertIsNotNone(web_puzzle(self.candidate(fen=quiet, kind="advantage", line=["d1c2"], mates=[],
+                                                       cp=700, played="Bxc2", prev=None)))
+        self.assertIsNotNone(web_puzzle(self.candidate(fen=checked, kind="advantage", line=["d1c2", "e8d7", "c2b3"],
+                                                       mates=[], cp=700, played="Bxc2", prev=None)))
+
     def test_advantage_record_has_no_mate_and_keeps_cp(self):
         from bughouse_db.puzzles import web_puzzle
 

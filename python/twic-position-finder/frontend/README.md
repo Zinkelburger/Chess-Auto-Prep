@@ -277,10 +277,10 @@ Fairy-Stockfish binary:
   so: 8,287 games (8,266 HypeBeast self-play, 17 against HiveMind, 4 against
   Fairy-Stockfish) gave 109,540 distinct candidate positions, of which the
   first 50,336 were checked (pre-check or full verify) before the run was
-  stopped. 816 were sound; 706 are published (542 mates, 164 tactics) after
-  the mate-in-one rule (the engine found 108 of them) and the FICS and
-  repeated-line deduplication (2). Of the 1,177 pre-check rejects verified in
-  full anyway, none was sound.
+  stopped. 816 were sound; 611 are published (542 mates, 69 tactics) after
+  the mate-in-one rule (the engine found 108 of them), the one-move-tactic
+  rule below (95) and the FICS and repeated-line deduplication (2). Of the
+  1,177 pre-check rejects verified in full anyway, none was sound.
 
 Each puzzle is one board of a real game with the reserves frozen: captures go
 to the partner and nothing arrives. The engine plays that rule through
@@ -305,6 +305,14 @@ material and keeps the initiative:
   recapture or a piece taken straight back wins nothing;
 - the solver is still at least 2 pawns ahead when the defender is handed a
   pawn, then a knight (`--sit`), as a partner might.
+
+Two export rules decide what is published, for both sets. A mate in one is
+kept only when the player missed it, or when it is a drop in a position with
+at least 20 legal moves. A one-move tactic is not kept when the solver starts
+in check: taking the checking piece is not a puzzle. A one-move tactic the
+player played counts as found (the published FICS set marks 67 of them missed,
+which also adds a difficulty point). The FICS set was exported before the
+check rule and that `found` fix; both apply at its next re-export.
 
 `--candidates-out` keeps a scan and `--from-candidates` verifies it again under
 other rules; every run prints why candidates were turned down. Themes use
