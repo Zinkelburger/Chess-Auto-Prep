@@ -560,6 +560,23 @@
 #     study_recovery_dialog.dart (:81, :92, :95, :117, :152) and
 #     study_send_dialog.dart (:156, :209): padding, line counts, a flex, a
 #     held problem line, a live region.
+# lib/features/tactics, with equivalent mutants a --max 30 sample can draw:
+#   lib/features/tactics/tactics_set.dart:86 the seed's start (the
+#     constructor draws one), :151 the queue memo's seed (it changes only
+#     with the filter, which already misses the memo), :177 `||` -> `&&`
+#     before the parse (the same check after it drops an overtaken read,
+#     and being overtaken never clears), :180, :221 which game the chapter
+#     shows (the set reads every line), :276 `==` -> `!=` (a new seed on
+#     leaving Random instead of on picking it: each Random still gets its
+#     own order).
+#   lib/features/tactics/puzzle_filters.dart:169 `?? false` -> true (a
+#     two-state box never answers null).
+#   Only a widget's look survives in lib/features/tactics/puzzle_filters.dart
+#     (:32, :192), puzzle_pane.dart (:95, :253), tactics_actions.dart (:75
+#     the icon), tactics_panel.dart (:147, :331) and my_games_block.dart
+#     (:22 filled or outlined by default, :39, :73, :101, :129, :235 the
+#     icon, :309, :311 which field takes focus): padding, line counts, a
+#     divider.
 lib/chess/pgn/game_review.dart|test/workspace/game_review_test.dart|test/chess/pgn/edit_laws_test.dart test/app
 lib/chess/pgn/line_edits.dart|test/chess/pgn/line_edits_test.dart|test/chess/pgn test/workspace
 lib/chess/pgn/chapter_edits.dart|test/chess/pgn/chapter_edits_test.dart|test/chess/pgn test/workspace
@@ -894,3 +911,5 @@ lib/features/study/study_commands.dart|test/features/study/study_chapters_test.d
 lib/features/study/quiz_menu.dart|test/features/study/quiz_menu_test.dart|
 lib/features/study/study_import_source.dart|test/features/study/study_import_source_test.dart test/features/study/study_import_preview_test.dart|test/features/study/studies_test.dart test/features/study/study_panel_test.dart
 lib/features/study/study_actions.dart|test/features/study/study_actions_test.dart test/features/study/study_panel_test.dart test/features/study/study_panel_menus_test.dart|test/app/study_lichess_send_test.dart test/app/document_views_test.dart
+# lib/features/tactics
+lib/features/tactics/my_games_words.dart|test/features/tactics/my_games_words_test.dart|test/features/tactics/my_games_test.dart
