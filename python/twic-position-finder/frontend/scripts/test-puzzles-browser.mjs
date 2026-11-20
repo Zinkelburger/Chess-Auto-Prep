@@ -85,7 +85,14 @@ try {
   const FROZEN = 'Reserves are frozen: no new pieces arrive for either side.';
   assert.equal(await text(page, '.bp-frozen'), FROZEN);
   assert.equal(await page.$$eval('.bp-side', (s) => s[0].textContent.split('Reserves are frozen').length - 1), 1, 'said once on the solving screen');
-  assert.ok((await text(page, '.bp-source')).startsWith(FROZEN));
+  assert.match(await text(page, '#bp-source'), /^\d+ puzzles from .+\. Your results are kept in this browser only\.$/, 'Settings keeps only the note on the set');
+  // The line sits right under the buttons, the after-solve block under it.
+  const order = await page.evaluate(() => {
+    const b = (s) => document.querySelector(s).getBoundingClientRect();
+    return { buttons: b('.bp-controls').bottom, frozenTop: b('.bp-frozen').top, frozenBottom: b('.bp-frozen').bottom, after: b('#bp-after').top, gap: parseFloat(getComputedStyle(document.querySelector('.bp-side')).rowGap) };
+  });
+  assert.ok(Math.abs(order.frozenTop - order.buttons - order.gap) <= 1, `the frozen-reserve line is one panel gap under the buttons (${order.frozenTop - order.buttons}px)`);
+  assert.ok(order.after >= order.frozenBottom, 'the after-solve block is under it');
   assert.match(await page.$eval('meta[name="description"]', (m) => m.content), /Reserves are frozen: no new pieces arrive for either side\.$/);
   assert.equal(await text(page, '.bp-counter'), `1 / ${humanCount}`);
 
@@ -292,6 +299,7 @@ try {
     const readyBoxes = await boxes(pg);
     sameBoxes(loading, readyBoxes, `${w}x${h} skeleton → ready`);
     const readyHeight = await pg.evaluate(() => document.documentElement.scrollHeight);
+    await new Promise((r) => setTimeout(r, 400)); // the opponent's move finishes arriving
     await pg.screenshot({ path: path.join(output, `puzzles-ready-${w}x${h}.png`) });
     const bottom = bottomOf(mate5);
     await play(pg, wrongMove, bottom);
@@ -335,6 +343,14 @@ try {
     await pg.click('#bp-settings-open');
     await pg.waitForFunction(() => document.querySelector('#bp-settings').open && !document.querySelector('#bp-settings').getAnimations().length);
     await pg.evaluate(() => document.querySelector('.bp-keys').scrollIntoView({ block: 'center' }));
+    const sheet = await pg.$eval('#bp-settings', (d) => { const r = d.getBoundingClientRect(); return { left: r.left, width: r.width, inner: innerWidth }; });
+    if (w === 390) assert.deepEqual([sheet.left, sheet.width], [0, sheet.inner], 'on a phone the sheet is the full width');
+    else assert.equal(Math.round(sheet.width), 440, 'elsewhere the sheet is 440px');
+    // The arrow keys are drawn, one stroke weight, and named for screen readers.
+    const arrows = await pg.$$eval('.bp-keys .arrow-key', (ks) => ks.map((k) => [getComputedStyle(k.querySelector('svg')).strokeWidth, k.textContent]));
+    assert.equal(arrows.length, 8);
+    assert.ok(arrows.every(([stroke, name]) => stroke === '2px' && /^(Left|Right|Up|Down) arrow$/.test(name)), 'each arrow key is drawn at one weight and has its name');
+    assert.ok(!/[←↑→↓]/.test(await pg.$eval('.bp-keys dl', (d) => d.textContent)), 'no arrow characters in the Keys list');
     await pg.screenshot({ path: path.join(output, `puzzles-keys-${w}x${h}.png`) });
     await pg.close();
   }

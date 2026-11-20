@@ -1,5 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
+import ArrowKey from '../components/ArrowKey.astro';
 import '../styles/trainer.css';
 import '../styles/bughouse-board.css';
 import '../styles/bughouse-puzzles.css';
@@ -76,12 +77,12 @@ const gear = 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.
           </button>
         </div>
 
+        <p class="dim bp-frozen">Reserves are frozen: no new pieces arrive for either side.</p>
         <div class="bp-after" id="bp-after">
           <p id="bp-game"></p>
           <p id="bp-found"></p>
           <a id="bp-analysis-link" class="link-ext bp-lab-link" href="/bughouse">Analyse this board ↗</a>
         </div>
-        <p class="dim bp-frozen">Reserves are frozen: no new pieces arrive for either side.</p>
       </aside>
     </div>
 
@@ -124,22 +125,19 @@ const gear = 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.
         <div class="bp-setting bp-keys">
           <span class="bp-label" id="bp-keys-title">Keys</span>
           <dl aria-labelledby="bp-keys-title">
-            <dt><kbd>S</kbd> or <kbd>↓</kbd></dt><dd>Next puzzle</dd>
-            <dt><kbd>P</kbd> or <kbd>↑</kbd></dt><dd>Previous puzzle</dd>
+            <dt><kbd>S</kbd> or <ArrowKey dir="down" /></dt><dd>Next puzzle</dd>
+            <dt><kbd>P</kbd> or <ArrowKey dir="up" /></dt><dd>Previous puzzle</dd>
             <dt><kbd>R</kbd></dt><dd>Retry</dd>
             <dt><kbd>Space</kbd></dt><dd>Show the solution</dd>
-            <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Back and forward through the moves</dd>
+            <dt><ArrowKey dir="left" /> <ArrowKey dir="right" /></dt><dd>Back and forward through the moves</dd>
             <dt><kbd>Home</kbd> <kbd>End</kbd></dt><dd>First and last move</dd>
-            <dt><kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd></dt><dd>On the board: move from square to square</dd>
+            <dt><ArrowKey dir="left" /> <ArrowKey dir="up" /> <ArrowKey dir="right" /> <ArrowKey dir="down" /></dt><dd>On the board: move from square to square</dd>
             <dt><kbd>Enter</kbd> or <kbd>Space</kbd></dt><dd>On the board: pick up a piece, put it down; once solved, the next puzzle</dd>
             <dt><kbd>Esc</kbd></dt><dd>Put the piece back</dd>
           </dl>
         </div>
 
-        <p class="dim bp-source">
-          Reserves are frozen: no new pieces arrive for either side.
-          <span id="bp-source"></span>
-        </p>
+        <p class="dim bp-source" id="bp-source"></p>
       </div>
     </dialog>
   </div>

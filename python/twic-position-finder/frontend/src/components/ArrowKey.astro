@@ -1,0 +1,15 @@
+---
+/**
+ * An arrow key drawn as a key cap: one stroked arrow in the page's chevron
+ * style (2px round strokes, currentColor), named for screen readers.
+ */
+interface Props { dir: 'left' | 'right' | 'up' | 'down' }
+const PATHS = {
+  left: ['M19 12H5M11 18l-6-6 6-6', 'Left arrow'],
+  right: ['M5 12h14M13 6l6 6-6 6', 'Right arrow'],
+  up: ['M12 19V5M6 11l6-6 6 6', 'Up arrow'],
+  down: ['M12 5v14M18 13l-6 6-6-6', 'Down arrow'],
+} as const;
+const [d, name] = PATHS[Astro.props.dir];
+---
+<kbd class="arrow-key"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={d}/></svg><span class="visually-hidden">{name}</span></kbd>
