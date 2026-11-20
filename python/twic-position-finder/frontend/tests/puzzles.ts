@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { Attempt, analysisLink, applyMove, inCheck, startPosition, type Puzzle } from '../src/bughouse-puzzles/puzzle';
-import { DEFAULT_FILTER, PuzzleStore, SETS, SET_NAMES, applyFilter, facetCounts, initialSet, lengthLabel, normalizeFilter, normalizeSet, parseHash, puzzleHash, setOfId, themeCounts, themeLabel, type IndexEntry, type PuzzleIndex } from '../src/bughouse-puzzles/set';
+import { Attempt, analysisLink, applyMove, inCheck, moveCursor, startPosition, type Puzzle } from '../src/bughouse-puzzles/puzzle';
+import { DEFAULT_FILTER, PuzzleStore, SETS, SET_NAMES, applyFilter, facetCounts, gameLines, initialSet, lengthLabel, normalizeFilter, normalizeSet, parseHash, puzzleHash, setOfId, themeCounts, themeLabel, type IndexEntry, type PuzzleIndex } from '../src/bughouse-puzzles/set';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1';
 
@@ -153,4 +153,31 @@ const engineStore = new PuzzleStore(SETS.engine.base, async (url) => {
 await engineStore.loadIndex();
 assert.equal((await engineStore.get(engineStore.index!.puzzles[0])).id, 'e1a2b3c-1-A-40');
 assert.deepEqual(engineFetched, ['/bughouse-puzzles/engine/index.json', '/bughouse-puzzles/engine/s00-cccccccccc.json']);
+
+// Once a puzzle is over: who played the game, where and when, then what the solver's side did.
+const fics: Puzzle = { ...puzzle, fen: '7r/5kp1/pN1pp1nb/3p2PQ/3Pp2B/2P1Pp1P/PPP3P1/R1KN1q2[NPbb] b - - 1 42', white: 'Plotno', black: 'shadew',
+  welo: 2061, belo: 2047, date: '2017.12.10', played: 'B@e2', found: false };
+assert.deepEqual(gameLines(fics, 'human'), ['Plotno (2061) – shadew (2047) · FICS 2017', 'In the game Black played B@e2.']);
+assert.deepEqual(gameLines({ ...fics, found: true, played: 'Qh2+' }, 'human')[1], 'Black found it in the game.');
+assert.deepEqual(gameLines(puzzle, 'human'), ['W (1853) – B (1666) · FICS 2017', 'White found it in the game.'], 'White to move solves as White');
+assert.equal(gameLines({ ...puzzle, found: false, played: 'Nb7' }, 'human')[1], 'In the game White played Nb7.');
+const engineGame: Puzzle = { ...puzzle, white: 'HypeBeast', black: 'HypeBeast', welo: 0, belo: 0, date: '2026.11.13', played: 'N@h5+', found: true };
+assert.deepEqual(gameLines(engineGame, 'engine'), ['HypeBeast – HypeBeast · engine game 2026', 'White found it in the game.'], 'no ratings when they are 0');
+assert.deepEqual(gameLines({ ...engineGame, fen: fics.fen, found: false, black: 'HiveMind' }, 'engine'),
+  ['HypeBeast – HiveMind · engine game 2026', 'In the game Black played N@h5+.']);
+
+// The keyboard cursor moves as the board is drawn and stops at the edge.
+assert.equal(moveCursor('e4', 'ArrowUp', 'white'), 'e5');
+assert.equal(moveCursor('e4', 'ArrowRight', 'white'), 'f4');
+assert.equal(moveCursor('e4', 'ArrowUp', 'black'), 'e3', 'with Black at the bottom, up is towards rank 1');
+assert.equal(moveCursor('e4', 'ArrowRight', 'black'), 'd4', 'and right is towards the a-file');
+assert.equal(moveCursor('e4', 'ArrowDown', 'black'), 'e5');
+assert.equal(moveCursor('e4', 'ArrowLeft', 'black'), 'f4');
+assert.equal(moveCursor('h8', 'ArrowUp', 'white'), 'h8', 'the cursor stops at the edge');
+assert.equal(moveCursor('h8', 'ArrowRight', 'white'), 'h8');
+assert.equal(moveCursor('a1', 'ArrowDown', 'white'), 'a1');
+assert.equal(moveCursor('a1', 'ArrowUp', 'black'), 'a1');
+assert.equal(moveCursor('a1', 'ArrowRight', 'black'), 'a1');
+assert.equal(moveCursor('h8', 'ArrowLeft', 'black'), 'h8');
+
 console.log('Bughouse puzzles and the puzzle sets passed.');
