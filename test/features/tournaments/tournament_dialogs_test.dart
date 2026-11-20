@@ -61,6 +61,120 @@ void main() {
     expect((await config)!.timeLabel, 'Blitz · 60 s + 0.6 s');
   });
 
+  testWidgets('a seat keeps the selected profile when engine names match', (
+    tester,
+  ) async {
+    final context = await _host(tester);
+    final config = tournamentSetup(
+      context,
+      engines: [
+        for (final skill in [5, 15])
+          TournamentEngine({
+            'id': 'profile-$skill',
+            'name': 'Stockfish 17',
+            'executablePath': '/opt/engines/stockfish',
+            'options': {'Skill Level': '$skill'},
+          }),
+      ],
+      position: Fen.initial,
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Name'),
+      'Skill comparison',
+    );
+    await tester.tap(find.widgetWithText(TextField, 'Engine 1'));
+    await tester.pumpAndSettle();
+    final profiles = find.textContaining('Stockfish 17');
+    expect(profiles, findsNWidgets(2));
+    await tester.tap(profiles.at(1));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Engine 2'),
+      'Stockfish 17',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start new run'));
+    await tester.pumpAndSettle();
+
+    final seats = (await config)!.engines;
+    expect(seats.first.id, 'profile-15');
+    expect(seats.first.options['Skill Level'], '15');
+    expect(seats.last.id, 'profile-5');
+    expect(seats.last.options['Skill Level'], '5');
+  });
+
+  testWidgets('picker suffixes skip saved and registered engine names', (
+    tester,
+  ) async {
+    final context = await _host(tester);
+    final saved = TournamentEngine({'id': 'custom', 'name': 'Stockfish (1)'});
+    final config = tournamentSetup(
+      context,
+      engines: [
+        TournamentEngine({...saved.json, 'name': 'Stockfish'}),
+        TournamentEngine({'id': 'other', 'name': 'Stockfish (2)'}),
+      ],
+      position: Fen.initial,
+      previous: TournamentConfig({
+        'name': 'Earlier run',
+        'engines': [saved.json, TournamentEngine.bundled().json],
+      }),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextField, 'Engine 2'));
+    await tester.pumpAndSettle();
+    expect(find.text('Stockfish (1)'), findsOneWidget);
+    expect(find.text('Stockfish (2)'), findsOneWidget);
+    await tester.tap(find.text('Stockfish (3)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start new run'));
+    await tester.pumpAndSettle();
+
+    final seats = (await config)!.engines;
+    expect(seats.first.json, saved.json);
+    expect(seats.last.id, 'custom');
+    expect(seats.last.name, 'Stockfish');
+  });
+
+  testWidgets('run again distinguishes snapshots with the same name', (
+    tester,
+  ) async {
+    final context = await _host(tester);
+    final profile = TournamentEngine({
+      'id': 'custom',
+      'name': 'Stockfish',
+      'options': {'Skill Level': '15'},
+    });
+    final previous = TournamentConfig({
+      'name': 'Earlier run',
+      'engines': [
+        {
+          ...profile.json,
+          'options': {'Skill Level': '5'},
+        },
+        profile.json,
+      ],
+    });
+    final config = tournamentSetup(
+      context,
+      engines: [profile],
+      position: Fen.initial,
+      previous: previous,
+    );
+    await tester.pumpAndSettle();
+    String seatText(int index) => tester
+        .widget<TextField>(find.widgetWithText(TextField, 'Engine $index'))
+        .controller!
+        .text;
+    expect(seatText(1), 'Stockfish (2)');
+    expect(seatText(2), 'Stockfish (1)');
+    await tester.tap(find.text('Start new run'));
+    await tester.pumpAndSettle();
+
+    expect((await config)!.json['engines'], previous.json['engines']);
+  });
+
   testWidgets('a picked engine file names the engine, and a failed test '
       'shows its sentence and the engine output', (tester) async {
     final store = ScriptedTournaments();

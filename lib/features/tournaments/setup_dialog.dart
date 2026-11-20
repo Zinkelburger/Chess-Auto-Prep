@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:chessground/chessground.dart';
+import 'package:collection/collection.dart' show DeepCollectionEquality;
 import 'package:dartchess/dartchess.dart' show Setup, Side;
 import 'package:flutter/material.dart';
 
@@ -44,6 +45,8 @@ class _SetupState extends State<_Setup> {
     text: widget.previous?.root.value ?? Fen.initial.value,
   );
   late final _seats = [...?widget.previous?.engines];
+  late final _options = {TournamentEngine.bundled(), ...widget.engines};
+  late final _engineLabels = _seatLabels(_options, _seats);
   late final _time = <String, Object?>{...?(widget.previous?.time)};
   late final _rules = <String, Object?>{...?(widget.previous?.adjudication)};
   late final _values = <String, Object?>{...?(widget.previous?.json)};
@@ -92,8 +95,7 @@ class _SetupState extends State<_Setup> {
           Text('Engines', style: Theme.of(context).textTheme.titleMedium),
           for (var i = 0; i < _seats.length; i++) _seat(i),
           TextButton.icon(
-            onPressed: () =>
-                _change(() => _seats.add(TournamentEngine.bundled())),
+            onPressed: () => _change(() => _seats.add(_options.first)),
             icon: const Icon(AppIcons.add, size: IconSize.action),
             label: const Text('Add engine'),
           ),
@@ -189,16 +191,17 @@ class _SetupState extends State<_Setup> {
 
   Widget _seat(int index) {
     final engine = _seats[index];
-    final options = [TournamentEngine.bundled(), ...widget.engines];
     return Row(
       children: [
         Expanded(
           child: ChoiceField(
-            text: engine.name,
+            text: _engineLabels[engine]!,
             hint: 'Engine ${index + 1}',
-            options: options.map((e) => e.name).toList(),
-            onChanged: (name) {
-              final found = options.where((e) => e.name == name).firstOrNull;
+            options: [for (final option in _options) _engineLabels[option]!],
+            onChanged: (label) {
+              final found = _options
+                  .where((option) => _engineLabels[option] == label)
+                  .firstOrNull;
               if (found != null) _change(() => _seats[index] = found);
             },
           ),
@@ -346,4 +349,37 @@ class _SetupState extends State<_Setup> {
     }
     Navigator.pop(context, value);
   }
+}
+
+Map<TournamentEngine, String> _seatLabels(
+  Set<TournamentEngine> options,
+  List<TournamentEngine> seats,
+) {
+  final names = {
+    for (final engine in [...options, ...seats]) engine.name,
+  };
+  final numbers = <String, int>{};
+  String nextLabel(String name) {
+    var number = numbers[name] ?? 0;
+    if (number == 0) {
+      numbers[name] = 1;
+      return name;
+    }
+    while (names.contains('$name ($number)')) {
+      number++;
+    }
+    numbers[name] = number + 1;
+    return '$name ($number)';
+  }
+
+  final labels = {for (final engine in options) engine: nextLabel(engine.name)};
+  // A saved seat can differ from the current profile even with the same ID.
+  const equality = DeepCollectionEquality();
+  for (final seat in seats) {
+    final match = labels.entries
+        .where((e) => equality.equals(e.key.json, seat.json))
+        .firstOrNull;
+    labels[seat] = match?.value ?? nextLabel(seat.name);
+  }
+  return labels;
 }
