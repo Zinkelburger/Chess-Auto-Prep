@@ -137,13 +137,13 @@ final class PgnFileStore implements PgnDocumentStore {
       case FileFound(:final bytes, :final revision):
         switch (await decodedDocument(bytes)) {
           case PlainText(:final text):
-            return Opened(text, revision, readOnly: _outsideRoot(ref));
+            return Opened(text, revision, readOnly: await _outsideRoot(ref));
           case ForeignText(:final text, :final detail):
             log.w('open ${ref.path}', detail);
             return Opened(
               text,
               revision,
-              readOnly: _outsideRoot(ref) ?? detail,
+              readOnly: await _outsideRoot(ref) ?? detail,
             );
           case NotText(:final detail):
             log.w('open ${ref.path}', detail);
@@ -158,22 +158,29 @@ final class PgnFileStore implements PgnDocumentStore {
   /// path inside the documents folder, so a file outside it has nowhere for
   /// its versions to go and no write ever reaches it. It is still read: the
   /// viewer opens whatever the user browses to.
-  String? _outsideRoot(DocumentRef ref) =>
-      documentBackupIdFor(documents, ref) == null
+  Future<String?> _outsideRoot(DocumentRef ref) async =>
+      await _backupId(ref) == null
       ? 'it is outside your Documents folder'
       : null;
+
+  Future<String?> _backupId(DocumentRef ref) async =>
+      documentBackupIdFor(documents, ref) ??
+      (await recovery.containsResolvedDocument(ref.path)
+          ? documentBackupIdFor(recovery.canonicalDocuments, ref)
+          : null);
 
   @override
   Future<CreateResult> create(DocumentRef ref, String text) async {
     // Before anything reaches the disk: a ref outside the root must not make
     // folders outside the root either.
-    if (documentBackupIdFor(documents, ref) == null) {
+    if (await _backupId(ref) == null) {
       return const IoFailure(outsideRoot);
     }
     return _guard(
       // A file here would leave a waiting move nowhere to go.
       Saves([ref.path]),
       () => lockedForRelocation(documents, ref, [folderOf(ref)], () async {
+        if (await _backupId(ref) == null) return const IoFailure(outsideRoot);
         await folderOf(ref).create(recursive: true);
         return _create(ref, text);
       }, IoFailure.new),
@@ -243,14 +250,13 @@ final class PgnFileStore implements PgnDocumentStore {
     DocumentEdit secondary, {
     required String operationId,
   }) async {
-    if ([primary, secondary].any(
-      (edit) =>
-          documentBackupIdFor(documents, edit.ref) == null ||
+    for (final edit in [primary, secondary]) {
+      if (await _backupId(edit.ref) == null ||
           edit.scope.references != null ||
           (edit.scope is RestoredVersion &&
-              (edit.scope as RestoredVersion).inverse != null),
-    )) {
-      return const SaveRefused('The pair must name two managed PGN edits.');
+              (edit.scope as RestoredVersion).inverse != null)) {
+        return const SaveRefused('The pair must name two managed PGN edits.');
+      }
     }
     try {
       return await _guard(
@@ -389,7 +395,7 @@ final class PgnFileStore implements PgnDocumentStore {
       if (input.before == input.edit.text) continue;
       final failed = await keepReplacedVersion(
         backups: _backups,
-        documents: documents,
+        id: await _backupId(input.edit.ref),
         ref: input.edit.ref,
         bytes: input.found.bytes,
         hash: input.found.revision.contentHash,
@@ -548,7 +554,7 @@ final class PgnFileStore implements PgnDocumentStore {
         final unkept = _keepsVersion(ref, scope)
             ? await keepReplacedVersion(
                 backups: _backups,
-                documents: documents,
+                id: await _backupId(ref),
                 ref: ref,
                 bytes: current,
                 hash: revision.contentHash,
@@ -756,7 +762,7 @@ final class PgnFileStore implements PgnDocumentStore {
   /// kept for this document are not a version being put back, whatever the
   /// caller called them.
   Future<SaveResult?> _keptHere(DocumentRef ref, String hash) async {
-    final id = documentBackupIdFor(documents, ref);
+    final id = await _backupId(ref);
     final kept = id == null ? null : await _backups.versionWithHash(id, hash);
     if (kept == null) {
       log.e('restore ${ref.path}', _unkeptVersion);

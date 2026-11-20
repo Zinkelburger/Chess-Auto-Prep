@@ -121,7 +121,10 @@ final class NativePgnFileImport implements PgnFileImport {
   }
 
   Future<ImportResult> _insideDocuments(String path) async {
-    if (p.isWithin(documents, path) || p.equals(documents, path)) {
+    if (p.isWithin(documents, path) ||
+        p.equals(documents, path) ||
+        (await _recovery.containsResolvedDocument(path) &&
+            (await observeFile(path)).status == 0)) {
       return FileToOpen(path, copied: false);
     }
     try {

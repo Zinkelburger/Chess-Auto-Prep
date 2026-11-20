@@ -126,12 +126,11 @@ String? documentBackupIdFor(Directory documents, DocumentRef ref) =>
 /// kept stops the write: [IoFailure] here means the document is untouched.
 Future<IoFailure?> keepReplacedVersion({
   required BackupArchive backups,
-  required Directory documents,
+  required String? id,
   required DocumentRef ref,
   required List<int> bytes,
   required String hash,
 }) async {
-  final id = documentBackupIdFor(documents, ref);
   if (id == null) return const IoFailure(outsideRoot);
   final outcome = await backups.record(
     id: id,

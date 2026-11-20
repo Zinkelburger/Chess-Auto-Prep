@@ -7,7 +7,9 @@ import 'compound_write.dart';
 import 'document_ref.dart';
 import 'file_lock.dart';
 import 'file_relocation.dart';
+import 'moved_path.dart';
 import 'mutation_guards.dart';
+import 'recovery_files.dart';
 import 'recovery_ledger.dart';
 
 /// Why a write an unfinished operation guards is refused; the next write
@@ -108,6 +110,26 @@ final class RecoveryGate {
 
   /// [documents] spelled the way recovery records name it.
   Directory get canonicalDocuments => relocations.documents;
+
+  /// Whether a path spelled under the resolved Documents root can be used
+  /// in place. Only the configured root may be a directory alias.
+  Future<bool> containsResolvedDocument(String path) async {
+    final root = canonicalDocuments;
+    if (!p.isAbsolute(path) ||
+        p.normalize(path) != path ||
+        path.contains('\u0000') ||
+        !p.isWithin(root.path, path)) {
+      return false;
+    }
+    try {
+      await relocationParents(root, path, create: false);
+      return await documents.resolveSymbolicLinks() == root.path;
+    } on FileSystemException {
+      return false;
+    } on RecoveryRequired {
+      return false;
+    }
+  }
 
   /// What this process owes on the profile, shared by all its gates.
   final RecoveryLedger ledger;
