@@ -1,10 +1,13 @@
 import 'dart:convert';
 
+import 'package:chess_auto_prep/features/study/study_sender.dart';
 import 'package:chess_auto_prep/net/lichess_study_writes.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+
+import '../support/study_fixture.dart';
 
 /// The writer with scripted answers, remembering the requests it made.
 ({LichessStudyWriterApi api, List<http.Request> asked}) writer(
@@ -80,6 +83,52 @@ void main() {
       '[White "Morphy, \\"Paul\\""]\n[Result "1-0"]',
     );
   });
+
+  test(
+    'resending an edited chapter preserves computer analysis on the unchanged chapter',
+    () async {
+      const study = 'wxyz9876';
+      final pgns = <String, String>{};
+      final analyzed = <String>{};
+      final w = writer((request) {
+        switch (request.url.pathSegments) {
+          case ['api', 'study']:
+            return http.Response('{"id":"$study"}', 200);
+          case ['api', 'study', study, 'import-pgn']:
+            final id = 'chapter${pgns.length + 1}';
+            pgns[id] = request.bodyFields['pgn']!;
+            return http.Response('{"chapters":[{"id":"$id"}]}', 200);
+          case ['api', 'study', study, final id, 'moves']:
+            pgns[id] = request.bodyFields['pgn']!;
+            // Lichess clears serverEval on every successful move replacement.
+            analyzed.remove(id);
+            return http.Response('', 204);
+          case ['api', 'study', study, _, 'tags']:
+            return http.Response('', 204);
+          default:
+            return http.Response('', 404);
+        }
+      });
+      final fixture = await openStudy(
+        twoChapterStudy.replaceFirst('2. Nf3 *', '2. Nf3 Nc6 3. Bb5 a6 *'),
+        chapter: 1,
+        lichessWriter: w.api,
+      );
+      addTearDown(fixture.dispose);
+      final sender = fixture.studies.sender!;
+      await sender.send();
+      expect(pgns['chapter1'], contains('Bb5 a6'));
+      analyzed.add('chapter1');
+
+      fixture.session.cursor.toEnd();
+      fixture.session.playMove('c2c4');
+      await sender.send(into: study);
+
+      expect(sender.state, isA<SendDone>());
+      expect(pgns['chapter2'], contains('c4'));
+      expect(analyzed, contains('chapter1'));
+    },
+  );
 
   test('without a token nothing is asked', () async {
     final w = writer((_) => http.Response('', 200), token: null);
