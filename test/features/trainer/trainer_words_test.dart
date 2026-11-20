@@ -32,7 +32,7 @@ void main() {
   });
 
   test('a rating button names the rating and the interval it schedules', () {
-    final review = Review(
+    const review = Review(
       key: (source: '/r/Main.pgn', id: 'a'),
       lineName: 'Main line',
       intervalDays: 10,

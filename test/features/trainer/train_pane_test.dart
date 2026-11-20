@@ -156,7 +156,7 @@ void main() {
   testWidgets('an empty book says so under the book trained', (tester) async {
     await pump(
       tester,
-      chapters: ScriptedFiles(listing: const Repertoires([])),
+      chapters: ScriptedFiles(),
       bookChip: const Text('Book in use'),
     );
     await tester.tap(find.text('Book'));

@@ -9,9 +9,12 @@ import 'package:chess_auto_prep/storage/book_file.dart';
 import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/book_snapshot.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/document_repository.dart';
+import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/book/books.dart';
+import 'package:chess_auto_prep/workspace/book/repertoire_catalog.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -165,6 +168,87 @@ void main() {
       });
     },
   );
+
+  test('opening a chapter of another repertoire trains that repertoire', () {
+    fakeAsync((clock) {
+      final benko = ref('benko', 'Other');
+      session.store.documents[benko] = Opened(_text, scriptedRevision(_text));
+      chapters.listing = Repertoires([
+        folder('KID', ['Main', 'Other']),
+        folder('benko', ['Other']),
+      ]);
+      trainer.setScope(TrainScope.repertoire);
+      clock.flushMicrotasks();
+      expect((trainer.state as TrainerReady).chapters, hasLength(2));
+      unawaited(session.session.open(benko));
+      clock.flushMicrotasks();
+      expect((trainer.state as TrainerReady).chapters.map((c) => c.ref), [
+        benko,
+      ]);
+    });
+  });
+
+  test('a change under the repertoire being trained reads it again; one '
+      'elsewhere does not', () {
+    fakeAsync((clock) {
+      final benko = ref('benko', 'Other');
+      session.store.documents[benko] = Opened(_text, scriptedRevision(_text));
+      chapters.listing = Repertoires([
+        folder('KID', ['Main', 'Other']),
+        folder('benko', ['Other']),
+      ]);
+      final repository = DocumentRepository(session.store);
+      addTearDown(repository.dispose);
+      final catalog = RepertoireCatalog(
+        files: chapters,
+        documents: repository,
+        root: '/repertoires',
+      );
+      addTearDown(catalog.dispose);
+      unawaited(catalog.refresh());
+      clock.flushMicrotasks();
+      final watching = Trainer(
+        session: session.session,
+        chapters: ScopeReader(files: chapters, documents: session.store),
+        files: progress,
+        analysis: analysis,
+        catalog: catalog,
+        time: (now: () => DateTime.utc(2026), jitter: () => 0),
+        books: books,
+      );
+      addTearDown(watching.dispose);
+      watching.setScope(TrainScope.repertoire);
+      clock.flushMicrotasks();
+      final reads = progress.reads;
+
+      unawaited(
+        repository.save(
+          benko,
+          '$_text\n',
+          expected: scriptedRevision(_text),
+          scope: const WholeDocument(),
+        ),
+      );
+      clock.flushMicrotasks();
+      expect(progress.reads, reads, reason: 'another repertoire changed');
+
+      const slav = '$_text\n\n[Event "Slav"]\n\n1. d4 d5 2. c4 c6 *\n';
+      unawaited(
+        repository.save(
+          ref('KID', 'Other'),
+          slav,
+          expected: scriptedRevision(_text),
+          scope: const WholeDocument(),
+        ),
+      );
+      clock.flushMicrotasks();
+      expect(progress.reads, reads + 1);
+      expect(
+        (watching.state as TrainerReady).lines.map((l) => l.name),
+        contains('Slav'),
+      );
+    });
+  });
 
   test('a book being trained follows an edit of the book, and only then', () {
     fakeAsync((clock) {
