@@ -148,6 +148,9 @@ edits`; if the file changed since, `… The file has changed since.` with `Save
 them as a copy` (`<file> unsaved edits.pgn` beside it). A checkpoint edited
 past, or that is not a draft at all, is moved to the recovery quarantine; one
 that cannot be read just now stays where it is for the next opening.
+When two windows edit the same file, a window preserves a competing
+checkpoint in recovery quarantine before replacing it. Saving or discarding
+edits removes only the matching checkpoint.
 `Unsaved edits to <file> were not kept.` (with what the disk says) when a
 checkpoint could not be written.
 

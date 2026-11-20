@@ -40,13 +40,14 @@ Future<bool> quarantine(
 
 /// Keeps a copy of [bytes] as [name] in a new quarantine folder under
 /// [support] and logs [reason]; the original stays where it is. A failure to
-/// copy is logged too, and the caller carries on either way.
+/// copy is logged too and propagated when the caller needs the copy to proceed.
 Future<void> quarantineCopy(
   Directory support,
   String name,
   List<int> bytes,
-  Object reason,
-) async {
+  Object reason, {
+  bool requiredForWrite = false,
+}) async {
   final target = File(p.join(_folder(support).path, name));
   try {
     // Claim the name first, so a copy is never written over another.
@@ -55,6 +56,7 @@ Future<void> quarantineCopy(
     log.w('kept a copy of $name at ${target.path}', reason);
   } on Object catch (error) {
     log.e('keep a copy of $name ($reason)', error);
+    if (requiredForWrite) rethrow;
   }
 }
 

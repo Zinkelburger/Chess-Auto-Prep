@@ -71,6 +71,9 @@ final class DraftKeeper {
   /// them instead of setting its own checkpoint aside.
   final _kept = <String, Chapter>{};
 
+  /// The last checkpoint successfully written or explicitly restored.
+  final _written = <String, ViewerDraft>{};
+
   /// The snapshot waiting for its second to pass.
   ({Chapter file, int game, Revision revision, String path})? _waiting;
   Timer? _timer;
@@ -139,7 +142,9 @@ final class DraftKeeper {
     _setAside(to);
     _schedule();
     _flush();
-    _inTurn(() => _drop(from));
+    _inTurn(() async {
+      if (!_unkept.containsKey(to)) await _drop(from);
+    });
   }
 
   /// The edits this visit held are off the board, as the session says: kept
@@ -243,7 +248,7 @@ final class DraftKeeper {
       // A join of each game's own text: cheaper here than copying the
       // parsed games to another isolate would be.
       final text = writeChapter(file);
-      await _drafts.keep(
+      await _write(
         ViewerDraft(
           path: waiting.path,
           game: waiting.game,
@@ -263,10 +268,18 @@ final class DraftKeeper {
     }
   }
 
-  Future<void> _drop(String path) async {
+  Future<void> _write(ViewerDraft draft) async {
+    await _drafts.keep(draft, previous: _written[draft.path]);
+    _written[draft.path] = draft;
+  }
+
+  Future<void> _drop(String path, {ViewerDraft? copied}) async {
     _unkept.remove(path);
+    final written = _written.remove(path);
+    final draft = copied ?? written;
+    if (draft == null) return;
     try {
-      await _drafts.drop(path);
+      await _drafts.drop(draft);
     } on Object catch (error) {
       log.w('forget the unsaved viewer edits for $path', error);
     }
@@ -321,6 +334,7 @@ final class DraftKeeper {
     _withdraw();
     // These edits are the checkpoint: it is theirs to replace.
     _owns = true;
+    _written[draft.path] = draft;
     _session.restoreDraft(
       RetainedDraft(
         shown: (chapter: restored, view: null),
@@ -359,7 +373,7 @@ final class DraftKeeper {
         if (_offered == draft) {
           _offered = null;
           _kept.remove(draft.path);
-          _inTurn(() => _drop(draft.path));
+          _inTurn(() => _drop(draft.path, copied: draft));
         }
         say('Saved the unsaved edits as $name', problem: false);
       case CopyNameTaken():
@@ -373,6 +387,7 @@ final class DraftKeeper {
   /// whole, not written over: it may hold work nothing else has.
   void _setAside(String path) {
     _inTurn(() async {
+      _written.remove(path);
       try {
         await _drafts.setAside(path);
       } on Object catch (error) {
