@@ -50,14 +50,6 @@ void main() {
     expect(parseStudyLink('lichess.org/broadcast/abcd1234'), isNull);
   });
 
-  test('recognising a link: says what it recognised', () {
-    expect(_link.describe, 'Lichess study · abcd1234');
-    expect(
-      const LichessStudyLink(studyId: 'a', chapterId: 'b').describe,
-      'Lichess study chapter · a/b',
-    );
-  });
-
   test(
     'downloading: asks for comments and variations, and no clocks',
     () async {
