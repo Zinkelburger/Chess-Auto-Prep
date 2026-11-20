@@ -2,6 +2,8 @@ import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/features/library/library_panel.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/workspace/analysis/training_analysis_pane.dart';
+import 'package:chess_auto_prep/workspace/board/board_view.dart';
 import 'package:chess_auto_prep/workspace/board/move_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -160,6 +162,54 @@ void main() {
     expect(find.text('That move is not legal here.'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('a new trainer analysis tab keeps moves out of the repertoire', (
+    tester,
+  ) async {
+    await openKid(tester);
+    final original = kidOnDisk();
+    w.requests.switchTo(Mode.trainer);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    final newTab = find.widgetWithText(MenuItemButton, 'New analysis tab');
+    await tester.ensureVisible(newTab);
+    await tester.tap(newTab);
+    await tester.pumpAndSettle();
+
+    await clickField(tester);
+    await tester.enterText(field, 'Nf6');
+    await tester.pumpAndSettle();
+    expect(tester.widget<BoardView>(find.byType(BoardView)).lastMove, 'g8f6');
+    await w.saver.flush();
+    expect(kidOnDisk(), original);
+  });
+
+  testWidgets(
+    'trainer Analysis keeps moves off a repertoire reselected while the pane is open',
+    (tester) async {
+      await openKid(tester);
+      final original = kidOnDisk();
+      w.requests.switchTo(Mode.trainer);
+      await w.requests.newAnalysisBoard();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Open tools and arrange panes').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(MenuItemButton, 'Analysis'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TrainingAnalysisPane), findsOneWidget);
+
+      await w.requests.documents.select(kidMain);
+      await tester.pumpAndSettle();
+      expect(find.byType(TrainingAnalysisPane), findsOneWidget);
+      await clickField(tester);
+      await tester.enterText(field, 'Nf6');
+      await tester.pumpAndSettle();
+      expect(tester.widget<BoardView>(find.byType(BoardView)).lastMove, 'g8f6');
+      await w.saver.flush();
+      expect(kidOnDisk(), original);
+    },
+  );
 
   testWidgets('on the analysis board a typed move is taken back by Ctrl+Z', (
     tester,
