@@ -28,7 +28,7 @@ dependencies:
 
   # File handling and HTTP
   file_picker: ^13.2.0
-  http: ^1.1.2
+  http: ^1.6.0  # AbortableRequest (1.5); the Request.body charset rule (1.6)
   crypto: ^3.0.6  # SHA-256 for Lichess OAuth PKCE
   path_provider: ^2.1.6
   csv: ^8.0.0
