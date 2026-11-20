@@ -93,8 +93,8 @@ In the order the moves were made across both boards.
 - `eval`: the mover's engine score for its own board in centipawns from that
   board's White side (positive is good for that board's White), or null.
   `mate`: moves to a forced mate on that board with the same sign rule, or
-  null. Opening moves that come from the opening book have `book: true` and
-  no eval.
+  null. The starting moves, taken from a human game and not chosen by an
+  engine, have `book: true` and no eval.
 - `waited`: null, or `{"seconds": 6.5, "why": "partner_mate"}` when the seat
   sat (declined to move) before making this move. `why` is one of a short
   list of codes the builder documents; the viewer shows a fixed phrase per
@@ -149,8 +149,11 @@ Moves inside text are in SAN exactly as they appear in the data (`N@f3+`,
   or line is left out with a console warning; a game whose moves break it is
   refused whole (its positions cannot be trusted) and the page says the file
   does not follow the games format.
-- The page shows each game's `title` and `summary` but not the annotation:
-  every move's `note`, `glyph` and `lines` are read and checked, never shown.
+- The page shows each game's `title`, `event` and `date` but not the
+  annotation: the `summary` and every move's `note`, `glyph` and `lines` are
+  read and checked, never shown.
+- Moves with `book: true` are shown as the starting moves from a human game,
+  which is what they are: the engines did not choose them.
 - `view.ts` is where the reader is: a move (-1 is the start).
 - `words.ts` has the phrases. `waited.why` codes with a phrase:
   `partner_mate`, `mated`, `deny_feed`, `wait_delivery` (the builder's four);

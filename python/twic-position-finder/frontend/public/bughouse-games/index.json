@@ -1,7 +1,7 @@
 {
  "version": 1,
  "generated": "2026-11-19",
- "source": "Bughouse games played by HypeBeast 1.1.1, a Fairy-Stockfish fork that plays one board while pricing the other, against HypeBeast 1.1.0 and against itself, at fixed node budgets on a virtual clock. Every variation and score is the engine's own; the notes were written by Claude, an AI model, from the engines' search logs.",
+ "source": "Bughouse games played by HypeBeast 1.1.1, a Fairy-Stockfish fork that plays one board while pricing the other, against HypeBeast 1.1.0 and against itself, at fixed node budgets on a virtual clock. Each game starts from the first 16 moves of a rated game between people (FICS, 2014), and the engines play on from there. The scores are the engines' own.",
  "games": [
   {
    "id": "selfplay-g45",

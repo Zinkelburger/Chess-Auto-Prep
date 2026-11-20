@@ -105,4 +105,10 @@ export function lengthLine(moves: number): string {
   return `${moves} move${moves === 1 ? '' : 's'}`;
 }
 
+/** What the reader is told at the start about the moves the engines did not choose. */
+export function startWords(given: number): string {
+  const one = given === 1;
+  return `The first ${lengthLine(given)} ${one ? 'was' : 'were'} played by people in a rated game and set the position. The engines choose every move after ${one ? 'it' : 'them'}.`;
+}
+
 export function boardTitle(board: BoardName): string { return `Board ${board}`; }

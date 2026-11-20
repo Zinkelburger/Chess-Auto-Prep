@@ -10,7 +10,7 @@ Static Astro site deployed to Cloudflare Pages. Browser preparation tools, one s
 | `/tactics`            | Tactics Trainer — Stockfish in the browser mines puzzles from games  | `src/tactics/*`                        |
 | `/bughouse`           | Bughouse — one board or both, + and − on every piece in both hands, lila's board editor, and what one more piece is worth; HypeBeast in the browser | `src/analysis/*`, `../../../tools/prepare_hypebeast_web.py` |
 | `/bughouse-puzzles`   | Bughouse Puzzles — mates and tactics mined from FICS games and engine games, reserves frozen | `src/bughouse-puzzles/*`, `public/bughouse-puzzles/` |
-| `/bughouse-games`     | Bughouse Games — annotated engine games, both boards, notes and variations | `src/bughouse-games/*`, `public/bughouse-games/` |
+| `/bughouse-games`     | Bughouse Games — engine games on both boards, with clocks, scores and HypeBeast on request | `src/bughouse-games/*`, `public/bughouse-games/` |
 | `/charles-clock`      | Charles Clock — a full-screen phone clock with its own `<html>`      | `src/pages/charles-clock.astro`, `src/lib/charles-clock.ts` |
 | `/meow-chess/`        | Meow Chess — the Meow-Chess tournament director app, a Flutter web build copied in from its own repository | `public/meow-chess/` (built), `functions/meow-chess/fetch.js` |
 
@@ -387,15 +387,16 @@ analysis boards), plus `src/styles/bughouse-puzzles.css`.
 
 ## Bughouse games
 
-`/bughouse-games` lists annotated bughouse games played by engines (HypeBeast
+`/bughouse-games` lists bughouse games played by engines (HypeBeast
 against itself or another engine) and opens one with both boards as partners
 sit, board B turned the other way. The files under `public/bughouse-games/`
 are written by the HypeBeast repo's builder, never by hand; their format, a
 fixed contract with that builder, is
 [src/bughouse-games/README.md](src/bughouse-games/README.md). Every position
 of the game is a FEN from the data. The page shows the moves, clocks, the
-engines' scores and waits; the annotator's notes, lines and glyphs in the
-files are not shown.
+engines' scores and waits; the annotator's summaries, notes, lines and glyphs
+in the files are not shown. The first moves of a game, which come from a
+human game and not from an engine, are labelled as such.
 
 HypeBeast runs on the page itself, off until the reader switches it on (the
 switch above the current move, or L). It then searches the board in focus

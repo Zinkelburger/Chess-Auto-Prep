@@ -19,7 +19,7 @@ import { GameStore, gameHash, isContractError, parseHash, type Game, type IndexE
 import { START, analysisLink, clocksAt, end, evalOn, focusBoard, goTo, home, sameCursor, shown, step, turnOf, type Cursor } from './view';
 import {
   boardTitle, entryResult, formatClock, formatEval, formatGameTime, gameResult, lengthLine, mateWords, moveName, moveNumber,
-  playersLine, seatLabel, sideName, waitPhrase,
+  playersLine, seatLabel, sideName, startWords, waitPhrase,
 } from './words';
 
 type State = 'loading' | 'ready' | 'error' | 'empty';
@@ -219,7 +219,6 @@ export class BughouseGamesApp {
       a.href = gameHash(entry.id, -1);
       a.append(el('span', 'bg-game-title', entry.title));
       li.append(a);
-      li.append(el('p', 'bg-game-summary', entry.summary));
       const facts = el('p', 'bg-game-facts');
       facts.append(el('span', '', playersLine(entry.seats)), el('span', '', entryResult(entry)), el('span', 'num', lengthLine(entry.moves)));
       li.append(facts);
@@ -329,7 +328,7 @@ export class BughouseGamesApp {
     const head = el('div', 'bg-moves-head');
     head.append(el('span', 'bg-moves-time', ''), el('span', '', boardTitle('A')), el('span', '', boardTitle('B')));
     rows.push(head);
-    if (game.moves[0]?.book) rows.push(el('div', 'bg-moves-label', 'Opening book'));
+    if (game.moves[0]?.book) rows.push(el('div', 'bg-moves-label', 'Starting moves, from a human game'));
     let bookEnded = !game.moves[0]?.book;
     for (const m of game.moves) {
       if (!bookEnded && !m.book) {
@@ -352,7 +351,7 @@ export class BughouseGamesApp {
     if (m.waited) cell.append(el('span', 'bg-mv-wait', `sat ${Math.round(m.waited.seconds * 10) / 10}s`));
     const empty = el('span', 'bg-mv-cell');
     if (m.board === 'A') row.append(cell, empty); else row.append(empty, cell);
-    const label = [`Board ${m.board}`, `${sideName(white ? 'white' : 'black')}`, moveName(m), m.book ? 'book move' : ''];
+    const label = [`Board ${m.board}`, `${sideName(white ? 'white' : 'black')}`, moveName(m), m.book ? 'starting move from a human game' : ''];
     row.setAttribute('aria-label', label.filter(Boolean).join(', '));
     return row;
   }
@@ -382,7 +381,9 @@ export class BughouseGamesApp {
     if (!m) {
       const head = el('div', 'bg-note-head');
       head.append(el('b', 'bg-note-move', 'Start of the game'));
-      out.push(head, el('p', 'bg-note-text', game.summary));
+      out.push(head, el('p', 'bg-note-facts', [game.event, game.date].filter(Boolean).join(' · ')));
+      const given = game.moves.filter((x) => x.book).length;
+      if (given) out.push(el('p', 'bg-note-text', startWords(given)));
       box.replaceChildren(...out);
       box.scrollTop = 0;
       return;
@@ -394,7 +395,7 @@ export class BughouseGamesApp {
 
     const facts = [`${sideName(white ? 'white' : 'black')} on board ${m.board}`, game.seats[m.seat]];
     if (m.t !== null) facts.push(`at ${formatGameTime(m.t)}`);
-    if (m.book) facts.push('opening book');
+    if (m.book) facts.push('from a human game, not an engine move');
     if (m.eval !== null || m.mate !== null) facts.push(m.mate !== null ? mateWords(m.mate) : `score ${formatEval(m.eval, null, true)}`);
     out.push(el('p', 'bg-note-facts', facts.join(' · ')));
     if (m.waited) out.push(el('p', 'bg-note-wait', `Before this move, ${seatLabel(m.seat)} ${waitPhrase(m.waited)}.`));

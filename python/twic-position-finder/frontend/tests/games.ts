@@ -6,7 +6,7 @@ import { readBoard } from '../src/bughouse/setup';
 import { GameStore, LINE_KINDS, gameHash, isContractError, parseGame, parseHash, parseIndex, type Game } from '../src/bughouse-games/games';
 import { START, analysisLink, clocksAt, end, evalOn, focusBoard, goTo, lastMoveOn, shown, step } from '../src/bughouse-games/view';
 import {
-  WAIT_CODES, formatClock, formatEval, lengthLine, mateWords, playersLine, resultLine, seatLabel, seconds, waitPhrase,
+  WAIT_CODES, formatClock, formatEval, lengthLine, mateWords, playersLine, resultLine, seatLabel, seconds, startWords, waitPhrase,
 } from '../src/bughouse-games/words';
 
 // ── The served collection follows the contract ─────────────────────────
@@ -217,6 +217,8 @@ assert.equal(playersLine({ Awhite: 'X', Bblack: 'X', Ablack: 'Y', Bwhite: 'Y' })
 assert.equal(playersLine({ Awhite: 'X', Bblack: 'Z', Ablack: 'Y', Bwhite: 'Y' }), 'X and Z against Y');
 assert.equal(lengthLine(57), '57 moves');
 assert.equal(lengthLine(1), '1 move');
+assert.equal(startWords(16), 'The first 16 moves were played by people in a rated game and set the position. The engines choose every move after them.');
+assert.equal(startWords(1), 'The first 1 move was played by people in a rated game and set the position. The engines choose every move after it.');
 
 assert.equal(formatEval(3820, null, true), '>+20', 'a huge score is capped for display');
 assert.equal(formatEval(-13073, null, true), '<−20');
