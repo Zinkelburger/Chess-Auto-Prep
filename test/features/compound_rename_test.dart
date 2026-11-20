@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/games_written.dart';
 import 'package:chess_auto_prep/features/library/library.dart';
 import 'package:chess_auto_prep/features/library/library_state.dart';
@@ -243,6 +244,28 @@ void main() {
         p.join(disk.support.path, 'compound-writes'),
       ).list().toList();
       expect(records, isEmpty);
+    },
+  );
+
+  test(
+    'a course stays editable after a closed rename and book change',
+    () async {
+      session.closed();
+      expect(await library.renameChapter(original, 'B'), isA<LibraryDone>());
+      final b = ChapterRef.at(original.path, section: 'B');
+      books.setChapter(books.active, library.repertoires.single, b, false);
+      await books.settled;
+      expect(books.includes(b), isFalse);
+      final membership = await bookFile.readAsString();
+      expect(await session.open(b), isA<DocumentOpened>());
+      expect(await session.undo(), isA<UndoRefused>());
+      expect(saver.settled, isTrue);
+      session.setComment(const NodePath.root(), 'After the rename');
+      await saver.flush();
+      final text = await File(b.path).readAsString();
+      expect(text, contains('[ChapterName "B"]'));
+      expect(text, contains('After the rename'));
+      expect(await bookFile.readAsString(), membership);
     },
   );
 

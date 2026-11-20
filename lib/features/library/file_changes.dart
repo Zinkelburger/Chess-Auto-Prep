@@ -56,6 +56,7 @@ final class FileChanges {
         );
         switch (moved) {
           case store.Moved(:final training):
+            _saver.moveClosedSaves(ref.path, to.path);
             if (_session.source?.path == ref.path) {
               _session.relocated(ChapterRef.at(to.path));
             }
@@ -90,6 +91,7 @@ final class FileChanges {
         );
         switch (deleted) {
           case store.Deleted(:final training):
+            _saver.moveClosedSaves(ref.path, deleted.recoveredTo);
             if (_session.source?.path == ref.path) _session.closed();
             return LibraryDone(training: training);
           case store.Conflict():
@@ -170,6 +172,7 @@ final class FileChanges {
   /// user may have opened another one while the move was in flight, which is
   /// why the open file is read again rather than remembered.
   void _followedFolder(String from, String to) {
+    _saver.moveClosedSaves(from, to);
     final open = _session.source;
     if (open == null || !p.isWithin(from, open.path)) return;
     _session.relocated(

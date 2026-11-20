@@ -133,7 +133,12 @@ final class FileEdits {
         final text = writeChapter(pinned.chapter);
         Future<store.SaveResult> save() =>
             _store.save(ref, text, expected: read.revision, scope: scope);
-        return _savedResult(await _changes.save(ref, references, save));
+        final result = await _changes.save(ref, references, save);
+        final removedGames = games.order.length < games.before;
+        if (removedGames && references == null && result is store.Saved) {
+          _saver.keepClosedSave(ref, (receipt: result.receipt, scope: scope));
+        }
+        return _savedResult(result);
     }
   }
 

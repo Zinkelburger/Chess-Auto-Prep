@@ -1,6 +1,8 @@
 import 'package:chess_auto_prep/app/document_tabs.dart';
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/features/library/library_state.dart';
+import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart' as store;
 import 'package:chess_auto_prep/storage/saved_place.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -154,6 +156,48 @@ void main() {
     await w.requests.documents.select(kidMain);
     expect(w.session.canUndo, isTrue);
   });
+
+  for (final change in ['section deletion', 'rename round trip']) {
+    test(
+      'a course tab keeps its comment undo after a closed $change',
+      () async {
+        const course =
+            '// Color: White\n\n'
+            '[Event "First"]\n[ChapterName "A"]\n\n1. e4 *\n\n'
+            '[Event "Second"]\n[ChapterName "B"]\n\n1. d4 *\n';
+        final a = ChapterRef.at(kidMain.path, section: 'A');
+        final b = ChapterRef.at(kidMain.path, section: 'B');
+        String text() => (w.store.documents[kidMain] as store.Opened).text;
+        w.store.documents[kidMain] = store.Opened(
+          course,
+          scriptedRevision(course),
+        );
+        await w.requests.open(a);
+        w.session.setComment(const NodePath.root(), 'Saved note');
+        await w.saver.flush();
+        final written = text();
+        expect(written, contains('Saved note'));
+        await w.requests.open(benkoMain);
+        expect(w.session.source, benkoMain);
+
+        if (change == 'section deletion') {
+          expect(await w.library.deleteChapter(b), isA<LibraryDone>());
+          expect(text(), isNot(contains('[ChapterName "B"]')));
+          await w.requests.documents.select(a);
+          await w.session.undo();
+        } else {
+          expect(await w.library.renameChapter(b, 'C'), isA<LibraryDone>());
+          final c = ChapterRef.at(kidMain.path, section: 'C');
+          expect(await w.library.renameChapter(c, 'B'), isA<LibraryDone>());
+          await w.requests.documents.select(a);
+        }
+        expect(w.session.source, a);
+        expect(text(), written);
+        await w.session.undo();
+        expect(text(), course);
+      },
+    );
+  }
 
   test('a parked viewer draft comes back over the saves it was made on, '
       'with their undo', () async {

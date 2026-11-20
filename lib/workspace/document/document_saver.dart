@@ -5,10 +5,12 @@ import 'package:path/path.dart' as p;
 
 import '../../chess/pgn/chapter.dart';
 import '../../diagnostics/log.dart';
+import '../../storage/chapter_files.dart' show sameChapterRevision;
 import '../../storage/document_ref.dart';
 import '../../storage/edit_scope.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/pgn_document_store.dart' as store;
+import '../../storage/training_records.dart' show movedPath;
 import '../../ui/file_names.dart';
 import '../book/books.dart';
 import '../latest.dart';
@@ -82,6 +84,10 @@ final class DocumentSaver extends ChangeNotifier {
   final _pending = SaveQueue();
   bool _writing = false;
   final _undo = UndoHistory();
+  final _closedSaves = <({String path, KeptSave save})>[];
+
+  /// The revision a returning tab's history must end at to precede the deletions.
+  Revision? _closedBase;
   final _opens = Latest();
   bool _disposed = false;
 
@@ -120,6 +126,34 @@ final class DocumentSaver extends ChangeNotifier {
   /// The file being written, for a log line or a sentence about it.
   String? get documentPath => _target?.ref.path;
 
+  /// Keeps a section deletion until its file is opened.
+  void keepClosedSave(DocumentRef ref, KeptSave save) {
+    _closedSaves.add((path: ref.path, save: save));
+    if (_closedSaves.length > UndoHistory.depth) _closedSaves.removeAt(0);
+  }
+
+  void moveClosedSaves(String from, String to) {
+    for (final (i, entry) in _closedSaves.indexed) {
+      final path = movedPath(entry.path, from, to);
+      if (path != null) _closedSaves[i] = (path: path, save: entry.save);
+    }
+  }
+
+  /// Takes the consecutive saves that led to the revision just read.
+  List<KeptSave> _takeClosedSaves(DocumentRef ref, Revision revision) {
+    final saves = <KeptSave>[];
+    var expected = revision;
+    for (final entry in _closedSaves.reversed) {
+      if (entry.path != ref.path) continue;
+      final receipt = entry.save.receipt;
+      if (!sameChapterRevision(receipt.committed, expected)) break;
+      saves.add(entry.save);
+      expected = receipt.beforeRevision;
+    }
+    _closedSaves.removeWhere((entry) => entry.path == ref.path);
+    return saves.reversed.toList();
+  }
+
   /// A document was opened. It is the one this saver writes from now on,
   /// and nothing of the last one is carried over. [readOnly] is why the
   /// file may not be written at all, or null when it may.
@@ -135,7 +169,9 @@ final class DocumentSaver extends ChangeNotifier {
     _trainingSourceRevision = revision;
     _pending.clear();
     _clock.hurry();
-    _undo.clear();
+    final saves = readOnly == null ? _takeClosedSaves(ref, revision) : null;
+    _undo.putBack(saves ?? const []);
+    _closedBase = saves?.firstOrNull?.receipt.beforeRevision;
     _barrier = null;
     _failedUndo = null;
     _set(readOnly == null ? const Saved() : DocumentReadOnly(readOnly));
@@ -156,6 +192,7 @@ final class DocumentSaver extends ChangeNotifier {
         _failedUndo != null) {
       return null;
     }
+    _closedBase = null;
     return (
       path: target.ref.path,
       revision: target.revision,
@@ -164,21 +201,28 @@ final class DocumentSaver extends ChangeNotifier {
   }
 
   /// Gives the document just opened back the history [kept] set aside, when
-  /// it is the same file, read at the revision that history left it at and
-  /// nothing taken back since it opened. A file written by anything else
+  /// it is the same file, read at that revision or with a chain of section
+  /// deletions starting there. A file written by anything else
   /// meanwhile is read as it is now, and the history is dropped. Answers
   /// whether it was given back.
   bool restoreUndo(SetAsideUndo kept) {
     final target = _target;
+    final base = _lastReceipt == null ? _closedBase : null;
+    final joins = base != null && sameChapterRevision(base, kept.revision);
     if (_disposed ||
         target == null ||
         target.ref.path != kept.path ||
-        target.revision != kept.revision ||
-        !_undo.isEmpty ||
+        (!joins && target.revision != kept.revision) ||
+        (!_undo.isEmpty && base == null) ||
         _state is! Saved) {
       return false;
     }
+    _closedBase = null;
+    final later = joins ? _undo.takeAll() : const <KeptSave>[];
     _undo.putBack(kept.saves);
+    for (final save in later) {
+      _undo.keep(save.receipt, save.scope);
+    }
     notifyListeners();
     return true;
   }

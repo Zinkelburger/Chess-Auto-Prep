@@ -11,6 +11,7 @@ import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/recovery_gate.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart'
     as saver;
+import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -229,6 +230,41 @@ void main() {
     expect(text, isNot(contains('Ruy')));
     expect(text, isNot(contains('Italian')));
     expect(text, contains('[Event "Alapin"]\n[ChapterName "Sicilian"]\n'));
+  });
+
+  test('undo restores a section deleted from a closed course', () async {
+    await start();
+    final other = besideTheCourse('Scotch', '[Event "Scotch"]\n\n1. e4 e5 *\n');
+    expect(await fixture.session.open(other), isA<DocumentOpened>());
+
+    expect(await fixture.library.deleteChapter(open), isA<LibraryDone>());
+    expect(sectionsInText(onDisk()), ['Sicilian']);
+
+    expect(await fixture.session.open(sicilian), isA<DocumentOpened>());
+    expect(await fixture.session.undo(), isA<Restored>());
+    expect(onDisk(), _course);
+  });
+
+  test('section deletion undo follows a renamed course folder', () async {
+    await start();
+    expect(await fixture.library.deleteChapter(open), isA<LibraryDone>());
+    final remaining = onDisk();
+    final folder = fixture.library.repertoires.single;
+    expect(
+      await fixture.library.renameRepertoire(folder, 'Renamed'),
+      isA<LibraryDone>(),
+    );
+    final moved = sicilian.inFile('/repertoires/Renamed/Course.pgn');
+    fixture.store.documents[sicilian.wholeFile] = Opened(
+      remaining,
+      scriptedRevision(remaining),
+    );
+    expect(await fixture.session.open(sicilian), isA<DocumentOpened>());
+    expect(fixture.session.canUndo, isFalse);
+    expect(await fixture.session.open(moved), isA<DocumentOpened>());
+    expect(await fixture.session.undo(), isA<Restored>());
+    expect(fixture.textAt(moved.path), _course);
+    expect(onDisk(), remaining);
   });
 
   test('a chapter of a course file does not move without its file', () async {
