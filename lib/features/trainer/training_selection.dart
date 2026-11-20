@@ -24,6 +24,7 @@ final class TrainingSelection extends ChangeNotifier {
   final SettingsStore? settings;
   bool active = false;
   String root = '';
+  bool _awaitingListedPath = false;
   ChapterRef? chapter;
   LineKey? line;
   final Set<LineKey> picked = {};
@@ -39,7 +40,7 @@ final class TrainingSelection extends ChangeNotifier {
   TrainingOptions _options = TrainingOptions.defaults;
   List<RepertoireFolder> get repertoires => catalog?.repertoires ?? const [];
   RepertoireFolder? get repertoire =>
-      repertoires.where((r) => r.path == root).firstOrNull;
+      repertoires.where((r) => p.equals(r.path, root)).firstOrNull;
   String get title =>
       chapter?.name ?? repertoire?.name ?? 'Choose a repertoire';
 
@@ -49,6 +50,7 @@ final class TrainingSelection extends ChangeNotifier {
     root = options.repertoirePath;
     if (root.isEmpty && current != null) {
       root = catalog?.repertoireOf(current.path) ?? '';
+      _useListedPath();
     }
     chapter = null;
     line = null;
@@ -69,8 +71,20 @@ final class TrainingSelection extends ChangeNotifier {
   /// The catalog's [RepertoireCatalog.inputsRevision] last followed.
   int _seen;
 
+  void _useListedPath() {
+    final listed = repertoire;
+    _awaitingListedPath = root.isNotEmpty && listed == null;
+    // Keep a spelling already used as a pause key.
+    if (listed != null && !repertoirePaused) root = listed.path;
+  }
+
   void _catalogChanged() {
     _followMove();
+    if (_awaitingListedPath) {
+      final before = root;
+      _useListedPath();
+      if (root != before) update(options.copyWith(repertoirePath: root));
+    }
     _adoptOnly();
   }
 
@@ -151,6 +165,7 @@ final class TrainingSelection extends ChangeNotifier {
 
   void followDocument() {
     if (!active && !choosing) return;
+    _awaitingListedPath = false;
     active = false;
     chapter = null;
     line = null;
@@ -162,6 +177,7 @@ final class TrainingSelection extends ChangeNotifier {
   }
 
   void choose(RepertoireFolder repertoire) {
+    _awaitingListedPath = false;
     active = true;
     root = repertoire.path;
     chapter = null;

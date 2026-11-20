@@ -46,14 +46,28 @@ void main() {
     },
   );
 
-  test('a PGN beside the repertoires belongs to the root itself', () {
+  test('a root-level PGN is its own repertoire', () {
     final catalog = RepertoireCatalog(
       files: ScriptedFiles(),
       root: '/repertoires',
     );
     addTearDown(catalog.dispose);
-    expect(catalog.repertoireOf('/repertoires/Loose.pgn'), '/repertoires');
+    final loose = p.join(catalog.root, 'Loose.pgn');
+    expect(catalog.repertoireOf(loose), loose);
     expect(catalog.repertoireOf('/repertoires/A/Main.pgn'), '/repertoires/A');
+  });
+
+  test('a file move touches both equivalent spellings of its endpoints', () {
+    final from = p.join('repertoires', 'Course.pgn');
+    final to = p.join('repertoires', 'Renamed.pgn');
+    final move = DocumentChange(
+      from,
+      movedTo: to,
+      kind: DocumentChangeKind.moved,
+    );
+    expect(move.touches(p.join('repertoires', '.', 'Course.pgn')), isTrue);
+    expect(move.touches(p.join('repertoires', '.', 'Renamed.pgn')), isTrue);
+    expect(move.touches(p.join('repertoires', 'Other.pgn')), isFalse);
   });
 
   test('only an explicit refresh is a reload; a change is not', () async {

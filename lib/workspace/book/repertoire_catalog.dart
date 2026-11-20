@@ -52,10 +52,11 @@ final class RepertoireCatalog extends ChangeNotifier {
 
   /// Nested PGNs belong to the top-level repertoire, matching the native
   /// listing's recursive folder inventory even before a refresh completes.
+  /// A PGN directly under [root] is its own repertoire.
   String? repertoireOf(String path) {
     if (!p.isWithin(root, path)) return null;
     final parts = p.split(p.relative(path, from: root));
-    return parts.length > 1 ? p.join(root, parts.first) : root;
+    return p.join(root, parts.first);
   }
 
   void _changed() {

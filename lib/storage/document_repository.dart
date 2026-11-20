@@ -29,11 +29,11 @@ final class DocumentChange {
   final Revision? revision;
 
   bool touches(String root) =>
-      path == root ||
+      p.equals(path, root) ||
       p.isWithin(root, path) ||
       (folder && p.isWithin(path, root)) ||
       (movedTo != null &&
-          (movedTo == root ||
+          (p.equals(movedTo!, root) ||
               p.isWithin(root, movedTo!) ||
               (folder && p.isWithin(movedTo!, root))));
 }

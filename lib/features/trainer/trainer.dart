@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/study.dart';
@@ -713,8 +714,13 @@ class Trainer extends ChangeNotifier {
             revision: _session.trainingSourceRevision,
           )
         : null;
+    // Older settings can select the directory containing all loose PGNs.
+    final catalogRoot = _catalog?.root;
+    final loose = catalogRoot != null && p.equals(root, catalogRoot);
     final chapters = await _chapters.chaptersWhere(
-      (ref) => _catalog?.repertoireOf(ref.path) == root,
+      (folder, ref) => loose
+          ? p.equals(p.dirname(ref.path), root)
+          : p.equals(folder.path, root),
       open,
     );
     if (load.overtaken) return;
@@ -737,7 +743,7 @@ class Trainer extends ChangeNotifier {
           )
         : null;
     final chapters = await _chapters.chaptersWhere(
-      (ref) => _books.contains(book, ref),
+      (_, ref) => _books.contains(book, ref),
       open,
     );
     if (load.overtaken) return;

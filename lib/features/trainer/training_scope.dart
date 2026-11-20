@@ -60,7 +60,7 @@ final class ScopeReader {
   /// Every chapter of every repertoire that [wanted] takes, in the folders'
   /// order, with [open] taken as it is on the board.
   Future<List<ChapterLines>> chaptersWhere(
-    bool Function(ChapterRef ref) wanted,
+    bool Function(RepertoireFolder folder, ChapterRef ref) wanted,
     ChapterLines? open,
   ) async {
     final listing = await _files.list();
@@ -68,7 +68,7 @@ final class ScopeReader {
     return _read([
       for (final folder in listing.folders)
         for (final ref in folder.chapters)
-          if (wanted(ref)) ref,
+          if (wanted(folder, ref)) ref,
     ], open);
   }
 
