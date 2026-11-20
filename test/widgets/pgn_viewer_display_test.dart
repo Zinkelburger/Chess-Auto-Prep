@@ -33,6 +33,7 @@ import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:chess_auto_prep/widgets/slice/header_filters.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_tree_games_list.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -558,4 +559,52 @@ void main() {
       await _settleReader(tester);
     },
   );
+
+  testWidgets('a long collection title fits in the app bar', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    const name = 'Fischer - Petrosian 1962';
+    final app = AppState()..setMode(AppMode.pgnViewer);
+    addTearDown(app.dispose);
+    await pumpRuntimeWidget(
+      tester,
+      _engineFixtureSettings ??= testRuntimeSettings(),
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: PgnViewerCloseHost(
+            lifetime: lifetime,
+            child: PgnViewerScreen(lifetime: lifetime),
+          ),
+        ),
+      ),
+    );
+    await _settleReader(tester);
+    final loaded = lifetime.document.loadPgnContent(
+      '[White "Fischer"]\n[Black "Petrosian"]\n[Result "*"]\n\n1. e4 *',
+      title: name,
+    );
+    await _settleReader(tester);
+    expect(await loaded, isTrue);
+
+    final title = tester.renderObject<RenderParagraph>(
+      find.descendant(of: find.byType(AppBar), matching: find.text(name)),
+    );
+    expect(
+      title.getMaxIntrinsicWidth(double.infinity),
+      lessThanOrEqualTo(title.size.width),
+    );
+    expect(tester.takeException(), isNull);
+    await pumpRuntimeWidget(
+      tester,
+      _engineFixtureSettings!,
+      const SizedBox.shrink(),
+    );
+    await tester.runAsync(lifetime.shutdown);
+    await _settleReader(tester);
+  });
 }

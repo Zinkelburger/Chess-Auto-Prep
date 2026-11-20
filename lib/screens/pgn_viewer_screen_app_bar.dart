@@ -33,42 +33,53 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
   bool _toggleSolitaireMode();
   void _reclaimFocus();
 
+  /// Most of the bar the file name may claim before it ellipsizes.
+  static const double _titleWidthShare = 0.6;
+
   PreferredSizeWidget _buildAppBar(ThemeData theme) {
     final loaded = _document.collection.games.isNotEmpty;
-    final fileName = _document.collectionTitle ?? (loaded ? 'Pasted games' : '');
+    final fileName =
+        _document.collectionTitle ?? (loaded ? 'Pasted games' : '');
     return AppBar(
       titleSpacing: 16,
-      title: Row(
-        children: [
-          Flexible(
-            child: AppBarTitleWithTrail(
-              title: _buildOpenPgnMenuButton(fileName),
-            ),
-          ),
-          if (loaded) ...[
-            const SizedBox(width: 12),
-            Expanded(
-              flex: 2,
-              child: PgnSliceChips(
-                config: _document.filters.selection.config,
-                onRemoveChip: (index) =>
-                    unawaited(_document.removeSliceChip(index)),
-                onOpenSliceDialog: _openSliceDialog,
+      // The file name takes the width it needs, up to most of the bar, so a
+      // name like "Fischer - Petrosian 1962" is not cut off; the filter chips
+      // scroll within whatever remains.
+      title: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          children: [
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: constraints.maxWidth * _titleWidthShare,
+              ),
+              child: AppBarTitleWithTrail(
+                title: _buildOpenPgnMenuButton(fileName),
               ),
             ),
-          ],
-          if (_canReturnToFilters) ...[
-            const SizedBox(width: 12),
-            Flexible(
-              child: TextButton.icon(
-                key: const ValueKey('return-to-filters'),
-                onPressed: _returnToFilters,
-                icon: const Icon(Icons.arrow_back, size: 18),
-                label: const Text('Back to filters'),
+            if (loaded) ...[
+              const SizedBox(width: 12),
+              Expanded(
+                child: PgnSliceChips(
+                  config: _document.filters.selection.config,
+                  onRemoveChip: (index) =>
+                      unawaited(_document.removeSliceChip(index)),
+                  onOpenSliceDialog: _openSliceDialog,
+                ),
               ),
-            ),
+            ],
+            if (_canReturnToFilters) ...[
+              const SizedBox(width: 12),
+              Flexible(
+                child: TextButton.icon(
+                  key: const ValueKey('return-to-filters'),
+                  onPressed: _returnToFilters,
+                  icon: const Icon(Icons.arrow_back, size: 18),
+                  label: const Text('Back to filters'),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
       actions: [
         _buildViewMenu(),
@@ -295,6 +306,8 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
         }
       },
       onCanceled: _reclaimFocus,
+      // Wider than the default 280px cap so recent file names read in full.
+      constraints: const BoxConstraints(minWidth: 280, maxWidth: 520),
       itemBuilder: (_) => [
         for (final path in _document.libraryState.recentFiles)
           PopupMenuItem(
