@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/games_written.dart';
 import 'package:chess_auto_prep/chess/training/records.dart';
+import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/chapter_directory.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/compound_write.dart';
@@ -116,6 +117,76 @@ void main() {
       () => _firstAccess(fixture, firstAccess),
     );
   }
+
+  test('a file named repertoires leaves studies and books readable', () async {
+    final file = await File(
+      p.join(fixture.documents.path, 'repertoires'),
+    ).writeAsString('notes');
+    final root = await Directory(
+      p.join(fixture.documents.path, 'studies'),
+    ).create();
+    final study = await File(
+      p.join(root.path, 'Endgame.pgn'),
+    ).writeAsString(oneGame('1. c4'));
+    const books = BookList(
+      books: [Book(id: 'a', name: 'Match prep')],
+      active: 'a',
+    );
+    await File(
+      p.join(fixture.support.path, 'books.json'),
+    ).writeAsString(books.encode());
+    final store = restarted(fixture);
+    final studies = StudyDirectory(root, recovery: store.recovery);
+    await Future.wait([
+      expectLater(
+        studies.list(),
+        completion(
+          isA<StudiesListed>().having(
+            (listed) => listed.studies.map((ref) => ref.path),
+            'studies',
+            [study.path],
+          ),
+        ),
+      ),
+      expectLater(
+        store.books.snapshot().then((read) => read.value.activeBook?.name),
+        completion('Match prep'),
+      ),
+    ]);
+    final chapters = ChapterDirectory(
+      Directory(file.path),
+      recovery: store.recovery,
+    );
+    expect(await chapters.list(), isA<RepertoiresUnreadable>());
+    expect(await chapters.deleted(), isA<DeletedUnreadable>());
+    expect(await file.readAsString(), 'notes');
+  });
+
+  test(
+    'a disconnected library keeps a landed rename until it can finish',
+    () async {
+      final before = fixture.ref('repertoires/Course/Old.pgn');
+      final after = fixture.ref('repertoires/Course/New.pgn');
+      final revision = await fixture.put(before, oneGame('1. d4'));
+      await fixture.train(before);
+      await _landedMove(fixture, before, after, revision);
+      final root = Directory(p.join(fixture.documents.path, 'repertoires'));
+      final offline = await root.rename(p.join(fixture.root.path, 'offline'));
+      final link = Link(root.path);
+      await link.create(p.join(fixture.root.path, 'drive'));
+      final store = restarted(fixture);
+      final read = await store.open(after);
+      expect(fixture.unfinishedMoves(), hasLength(1));
+      expect(fixture.quarantined(), isEmpty);
+      expect(read, isA<Unreadable>());
+      await link.delete();
+      await offline.rename(root.path);
+      expect(await store.open(after), isA<Opened>());
+      expect(fixture.unfinishedMoves(), isEmpty);
+      await fixture.expectTrained(after);
+    },
+    skip: Platform.isWindows,
+  );
 
   test('a corrupt note blocks no training, listing or import', () async {
     final flat = fixture.ref('repertoires/Flat.pgn');
