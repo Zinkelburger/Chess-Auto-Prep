@@ -117,6 +117,53 @@ void main() {
   );
 
   test(
+    'switching to one board preserves the checked partner board in analysis',
+    () async {
+      lab
+        ..showBoards(LabBoards.two)
+        ..play(BoardNumber.two, 'e2e4')
+        ..play(BoardNumber.two, 'd7d5')
+        ..play(BoardNumber.two, 'f1b5');
+      final partner = lab.position.two;
+      expect(partner.isCheck, isTrue);
+      await on();
+      hivemind.asked.clear();
+
+      lab.showBoards(LabBoards.one);
+      await settle();
+
+      expect(hivemind.asked, isNotEmpty);
+      expect(
+        hivemind.asked.map((q) => q.position.two.fen),
+        everyElement(partner.fen),
+      );
+      expect(hivemind.asked.map((q) => q.team), everyElement(Team.ab));
+    },
+  );
+
+  test(
+    'White may sit on board one without evading check on board two',
+    () async {
+      lab
+        ..showBoards(LabBoards.two)
+        ..play(BoardNumber.two, 'e2e4')
+        ..play(BoardNumber.two, 'd7d5')
+        ..play(BoardNumber.two, 'f1b5')
+        ..showBoards(LabBoards.one)
+        ..setClock(ClockCase.abMaySit);
+      expect(lab.position.two.isCheck, isTrue);
+      await on();
+
+      final own = hivemind.asked.firstWhere((q) => q.team == Team.ab);
+      expect(own.maySit, isTrue);
+      expect(own.mustMove, MustMove.either);
+      // Hivemind allows (pass, pass) only when the team holds one turn.
+      expect(own.position.mover(BoardNumber.one).team, own.team);
+      expect(own.position.mover(BoardNumber.two).team, own.team.other);
+    },
+  );
+
+  test(
     'two boards: each team with a move, sitting as the clock says',
     () async {
       lab.showBoards(LabBoards.two);
