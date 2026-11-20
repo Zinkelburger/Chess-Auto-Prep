@@ -90,6 +90,25 @@ void main() {
     expect(updates.status, isA<UpdateOffered>());
   });
 
+  test('late download headers after Cancel leave a retry intact', () async {
+    final updates = await started();
+    await updates.check();
+    final headers = releases.holdDownload = Completer<void>();
+    final first = updates.install();
+    await _until(() => releases.downloads == 1);
+    updates.cancelDownload();
+    expect(updates.status, isA<UpdateOffered>());
+    expect(updates.installWhenReady, isFalse);
+
+    releases.holdDownload = null;
+    await updates.download();
+    final retried = updates.status;
+    expect(retried, isA<UpdateDownloaded>());
+    headers.complete();
+    await first;
+    expect(updates.status, same(retried));
+  });
+
   test('the daily check offers what it finds', () async {
     final updates = await started(
       automatic: true,

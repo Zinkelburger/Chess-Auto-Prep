@@ -74,6 +74,36 @@ void main() {
     expect(lichess.gamesAsked, isEmpty);
   });
 
+  test('a reused TWIC id never opens the wrong saved game', () async {
+    const listed = ExplorerGame(
+      id: '1',
+      white: 'Alice',
+      black: 'Bob',
+      year: 2024,
+      result: '*',
+    );
+    const tags = '[White "Alice"]\n[Black "Bob"]\n[Date "2024.01.01"]\n\n';
+    const first = '${tags}1. e4 e5 *\n';
+    const replacement = '${tags}1. d4 d5 *\n';
+    book.pgn = first;
+    final saved =
+        await games.keep(listed, source: ExplorerSource.twic, ply: 0)
+            as GameKept;
+
+    final rebuilt = ScriptedBook(present: true)..pgn = replacement;
+    final reopened = gamesOver(store, book: rebuilt);
+    addTearDown(reopened.dispose);
+    final result = await reopened.keep(
+      listed,
+      source: ExplorerSource.twic,
+      ply: 0,
+    );
+    expect((store.documents[saved.ref] as Opened).text, first);
+    if (result case GameKept(:final ref)) {
+      expect((store.documents[ref] as Opened).text, replacement);
+    }
+  });
+
   test('long names preserve distinct game identities', () async {
     ExplorerGame longGame(String id) =>
         ExplorerGame(id: id, white: 'A' * 80, black: 'B' * 80, result: '*');

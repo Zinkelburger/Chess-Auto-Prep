@@ -29,6 +29,7 @@ import 'package:chess_auto_prep/storage/book_file.dart';
 import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/lichess_token.dart';
+import 'package:chess_auto_prep/storage/master_book.dart';
 import 'package:chess_auto_prep/storage/my_games_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/player_files.dart';
@@ -71,9 +72,9 @@ final benkoMain = ref('benko', 'Main');
 
 /// The app as [AppParts] puts it together, over a scripted environment:
 /// a store holding [kidMain], [benkoMain] and the tactics set, and fakes for
-/// every file dialog, site and engine. Nothing reaches a real file, an
-/// engine or the network; the leave question and the dialogs answer what
-/// the test sets. The wiring is the app's own, so a window test checks how
+/// every file dialog, site and engine. Storage is scripted by default.
+/// The leave question and the dialogs answer what the test sets.
+/// The wiring is the app's own, so a window test checks how
 /// the app is put together, not a copy of it.
 final class WindowFixture {
   /// [_input] is the window the requests read from; by default the real
@@ -91,6 +92,7 @@ final class WindowFixture {
     this.tournaments,
     this.viewerPlaces,
     this.viewerDrafts,
+    this.masterGames,
     this.updates,
     this.exportText,
     this.settingRows,
@@ -128,6 +130,9 @@ final class WindowFixture {
 
   /// Where held viewer edits are checkpointed; none by default.
   final ViewerDrafts? viewerDrafts;
+
+  /// A disposable SQLite database shared by Databases and Explorer.
+  final String? masterGames;
 
   /// The app's own updates; none unless the test gives them.
   final UpdateOutside? updates;
@@ -226,7 +231,11 @@ final class WindowFixture {
         return true;
       },
       lichessExplorer: lichess,
-      masterBook: ScriptedBook(),
+      masterGames: masterGames,
+      masterBook: switch (masterGames) {
+        final path? => SqliteMasterBook(path),
+        null => ScriptedBook(),
+      },
       gameSites: const [],
       // The usernames, in memory: none until a test sets them.
       accounts: MemoryAccounts(),
