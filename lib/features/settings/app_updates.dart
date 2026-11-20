@@ -53,10 +53,9 @@ final class UpdateDownloaded extends UpdateStatus {
 
 /// The helper is being started.
 final class UpdateArming extends UpdateStatus {
-  const UpdateArming(this.offer, this.payload);
+  const UpdateArming(this.offer);
 
   final UpdateOffer offer;
-  final VerifiedPayload payload;
 }
 
 /// The helper waits for the app to close, then installs.
@@ -370,7 +369,7 @@ final class AppUpdates extends ChangeNotifier {
     switch (_status) {
       case UpdateDownloaded(:final offer, :final payload):
         _installWhenReady = false;
-        _set(UpdateArming(offer, payload));
+        _set(UpdateArming(offer));
         final started = await _outside.installer.schedule(payload, _kind);
         if (_disposed) return;
         _set(switch (started) {

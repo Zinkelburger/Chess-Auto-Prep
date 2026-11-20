@@ -29,11 +29,7 @@ final class LibraryLoaded extends LibraryState {
 }
 
 final class LibraryLoadFailed extends LibraryState {
-  const LibraryLoadFailed(this.detail);
-
-  /// The operating system's words, for the log; the widget writes the
-  /// sentence.
-  final String detail;
+  const LibraryLoadFailed();
 }
 
 /// What became of a change to the catalog. Every command answers one of

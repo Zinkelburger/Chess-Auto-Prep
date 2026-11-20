@@ -413,27 +413,26 @@ final class LabEngine extends ChangeNotifier {
         ),
   ];
 
-  /// The search of [question] at [nodes] on engine [seat], from memory when
+  /// The search of [question] at [nodes] on the first engine, from memory when
   /// it was made before; null when it is no longer [wanted] or could not be
   /// made, the trouble shown.
   Future<HivemindSearched?> _ask(
     _Question question,
     int nodes,
-    bool Function() wanted, {
-    int seat = 0,
-  }) async {
+    bool Function() wanted,
+  ) async {
     final key = _key(question, nodes);
     if (_searches[key] case final known?) return known;
-    final engine = await _acquire(seat);
+    final engine = await _acquire(0);
     if (!wanted()) return null;
     if (engine == null) {
       _stopped(_startFailure ?? 'The bughouse engine did not start.');
       return null;
     }
-    await _busy[seat];
+    await _busy[0];
     if (!wanted()) return null;
     final searching = engine.search(_toAsk(question, nodes));
-    _busy[seat] = searching.then((_) {}, onError: (Object _) {});
+    _busy[0] = searching.then((_) {}, onError: (Object _) {});
     final answer = await searching;
     if (!wanted()) return null;
     switch (answer) {
