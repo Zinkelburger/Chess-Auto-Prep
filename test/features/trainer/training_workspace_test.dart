@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:chess_auto_prep/chess/training/training_options.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/features/trainer/trainer.dart';
@@ -10,6 +12,7 @@ import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/book/repertoire_catalog.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 import '../../support/books_fixture.dart';
 import '../../support/scripted_files.dart';
@@ -77,6 +80,60 @@ void main() {
     expect(trainer.lesson!.line.name, 'First');
     expect(trainer.lesson!.left, 1);
   });
+
+  Future<ChapterRef> listSingleCourse() async {
+    final course = ChapterRef.at(p.join(catalog.root, 'Course.pgn'));
+    session.store.documents[course] = Opened(_main, scriptedRevision(_main));
+    files.listing = Repertoires([
+      RepertoireFolder(
+        name: course.name,
+        path: course.path,
+        modified: DateTime.utc(2026),
+        chapters: [course],
+      ),
+    ]);
+    await catalog.refresh();
+    return course;
+  }
+
+  test('a saved directory selection loads its single paused course', () async {
+    final course = await listSingleCourse();
+    trainer.selection.followDocument();
+    await settings.update(
+      settings.value.copyWith(
+        training: TrainingOptions(
+          repertoirePath: catalog.root,
+          pausedScopes: {catalog.root},
+        ),
+      ),
+    );
+    trainer.selection.enter(session.session.source);
+    await trainer.reload();
+
+    expect(trainer.scopeLines.map((line) => line.key.source), [course.path]);
+    expect(trainer.selection.repertoirePaused, isTrue);
+    expect(trainer.learnCount, 0);
+  });
+
+  test(
+    'a course opened with different casing loads its listed lines on Windows',
+    () async {
+      final course = await listSingleCourse();
+      trainer.selection.followDocument();
+      await settings.update(
+        settings.value.copyWith(training: TrainingOptions.defaults),
+      );
+      final opened = ChapterRef.at(p.join(catalog.root, 'course.pgn'));
+      session.store.documents[opened] = Opened(_main, scriptedRevision(_main));
+      await session.session.open(opened);
+      expect(session.session.source, opened);
+      trainer.selection.enter(session.session.source);
+      await trainer.reload();
+
+      expect(trainer.scopeLines.map((line) => line.key.source), [course.path]);
+    },
+    skip: !Platform.isWindows,
+  );
 
   test(
     'completed lines stay learned after settings reload and browsing elsewhere',
