@@ -119,6 +119,7 @@ and [Backups](ARCHITECTURE.md#backups).
 | `.<name>.v2-tmp` | Beside the target | A staged write; replaced or removed by the next write there |
 | `.import-*` | `repertoires/` | Import staging; removed by the first listing once nothing is owed |
 | `.trash/` | `engine_tournaments/` | Deleted tournaments |
+| `.removed/` | `opponents/` | Removed player groups (`<group>-<id>.json`) |
 | `.v2-pending.json` | A tournament's folder | A results save in flight |
 
 ## Writes and locks

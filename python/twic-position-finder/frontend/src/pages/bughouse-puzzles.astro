@@ -10,7 +10,7 @@ const gear = 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.
 ---
 <Base
   title="Bughouse Puzzles"
-  description="Mates and tactics from real FICS bughouse games. Your reserve is frozen: captures go to your partner and nothing new arrives."
+  description="Mates and tactics from real bughouse games, played by people on FICS or by engines. Your reserve is frozen: captures go to your partner and nothing new arrives."
   wide
 >
   <div class="bp" id="bp" data-state="loading">
@@ -76,6 +76,10 @@ const gear = 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.
       </div>
 
       <div class="bp-sheet-body">
+        <div class="bp-setting">
+          <span class="bp-label">From</span>
+          <div class="bp-facet" id="bp-set" role="radiogroup" aria-label="From"></div>
+        </div>
         <div class="bp-setting">
           <span class="bp-label">Puzzles</span>
           <div class="bp-facet" id="bp-kind" role="radiogroup" aria-label="Kind"></div>

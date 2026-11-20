@@ -71,8 +71,6 @@ enum Seat {
 
   BoardNumber get board =>
       this == a || this == c ? BoardNumber.one : BoardNumber.two;
-
-  Side get side => this == a || this == d ? Side.white : Side.black;
 }
 
 /// Most of one piece a hand may hold, as on the website.
@@ -216,50 +214,6 @@ final class TablePosition {
     }
     return null;
   }
-
-  /// The FICS and Hivemind books' key for this table: 64-bit FNV-1a over
-  /// [keyText], the sum `tools/bughouse_db/poskey.py` takes, so a position
-  /// the Python tools stored is found by any route that reaches it.
-  int get bookKey {
-    final text = keyText;
-    var hash = _fnvOffset;
-    for (var i = 0; i < text.length; i++) {
-      hash ^= text.codeUnitAt(i);
-      hash *= _fnvPrime;
-    }
-    return hash;
-  }
-
-  /// Each board's FEN cut to the four fields that are the position (the
-  /// move counters are the road there), joined by ` | `, with each reserve
-  /// in python-chess's letter order. dartchess writes a reserve pawn first
-  /// and python-chess writes it last, and one byte of difference is a book
-  /// that never answers: `[PPpq]` here is `[PPqp]` there.
-  String get keyText => '${_keyFen(one)} | ${_keyFen(two)}';
-}
-
-const _fnvOffset = -3750763034362895579; // 0xcbf29ce484222325 as signed
-const _fnvPrime = 1099511628211;
-
-/// python-chess's reserve order.
-const _pocketOrder = 'KQRBNP';
-
-String _keyFen(Crazyhouse position) {
-  final fields = position.fen.split(' ').take(4).toList();
-  final placement = fields.first;
-  final open = placement.indexOf('[');
-  if (open >= 0) {
-    final pocket = placement.substring(open + 1, placement.length - 1);
-    int rank(String letter) => _pocketOrder.indexOf(letter.toUpperCase());
-    final letters = pocket.split('');
-    final white = letters.where((l) => l == l.toUpperCase()).toList()
-      ..sort((x, y) => rank(x).compareTo(rank(y)));
-    final black = letters.where((l) => l != l.toUpperCase()).toList()
-      ..sort((x, y) => rank(x).compareTo(rank(y)));
-    fields[0] =
-        '${placement.substring(0, open)}[${white.join()}${black.join()}]';
-  }
-  return fields.join(' ');
 }
 
 /// [fen] with its hand written as Lichess writes one: a ninth rank after the

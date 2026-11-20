@@ -12,6 +12,10 @@ import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../support/faulty_disk/fault_plan.dart';
+import '../support/faulty_disk/faulty_disk.dart';
+import '../support/faulty_disk/io_trace.dart';
+
 void main() {
   late Directory support;
 
@@ -139,6 +143,35 @@ void main() {
       expect(await quarantine().exists(), isTrue);
     });
   }
+
+  test('settings the disk will not read stay where they are, and a change '
+      'is not written over them', () async {
+    const written = '{"engineCores": 2, "futureKey": {"a": 1}}';
+    await file().writeAsString(written);
+    final run = await FaultyDisk(support).run(
+      lastingFault(
+        (op) => op.kind == IoKind.read && op.key.path == 'settings.json',
+        IoError.eio,
+      ),
+      () async {
+        final store = SettingsStore(support: support);
+        await store.load();
+        await store.update(store.value.copyWith(engineLines: 5));
+        final shown = (store.value.engineLines, store.problem);
+        store.dispose();
+        return shown;
+      },
+    );
+    final (lines, problem) = (run.end as Returned<(int, String?)>).value;
+    expect(lines, 5, reason: 'the choice stays on screen');
+    expect(problem, contains('could not be read'));
+    expect(await file().readAsString(), written);
+    expect(await quarantine().exists(), isFalse, reason: 'nothing set aside');
+    final next = SettingsStore(support: support);
+    addTearDown(next.dispose);
+    await next.load();
+    expect(next.value.engineCores, 2, reason: 'the next start reads them');
+  });
 
   test('a directory at the settings path is moved aside too', () async {
     await Directory(file().path).create();

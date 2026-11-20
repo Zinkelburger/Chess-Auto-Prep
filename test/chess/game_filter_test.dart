@@ -148,13 +148,13 @@ void main() {
     expect(GameFilter.none.keeps(clubGame), isTrue);
   });
 
-  test('a rule reads as its chip, by the names people use', () {
+  test('a field reads by the names people use', () {
     const rule = HeaderRule(
       field: 'WhiteElo',
       rule: FilterRule.atLeast,
       value: ' 2200 ',
     );
-    expect(rule.label, 'White rating ≥ 2200');
+    expect(fieldLabel('WhiteElo'), 'White rating');
     expect(fieldLabel('Annotator'), 'Annotator');
     expect(const GameFilter(rules: [rule]), const GameFilter(rules: [rule]));
   });

@@ -497,8 +497,7 @@ engine without `ReportIntervalMs` is asked in passes of 800, 4,000 and
 
 Two different databases, confusingly both called "the bughouse DB". They
 share one thing: the position key, FNV-1a over the canonical dual FEN
-truncated to four FEN fields per board (`tools/bughouse_db/poskey.py`,
-mirrored in `TablePosition.bookKey`, `lib/chess/bughouse/table.dart`).
+truncated to four FEN fields per board (`tools/bughouse_db/poskey.py`).
 
 **The FICS book** — statistics from real games. `tools/bughouse_db/fetch.py`
 scrapes `bughouse-db.org/dl/export<year>.bpgn.bz2` (2005→present, ~2.1 GB,

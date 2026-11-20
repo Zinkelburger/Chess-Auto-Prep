@@ -169,7 +169,7 @@ final class LichessLoginApi implements LichessLogin {
     }
     final verifier = _randomToken(64);
     final state = _randomToken(24);
-    final flow = _Flow(server, verifier: verifier, state: state);
+    final flow = _Flow(server, state: state);
     _flow = flow;
     final redirect = 'http://127.0.0.1:${server.port}/callback';
     server.listen((request) => unawaited(_answer(request, flow)));
@@ -408,10 +408,9 @@ final class LichessLoginApi implements LichessLogin {
 /// A running browser flow: the server the browser comes back to, what it
 /// must bring, and the code it brought (null when cancelled in the app).
 final class _Flow {
-  _Flow(this.server, {required this.verifier, required this.state});
+  _Flow(this.server, {required this.state});
 
   final HttpServer server;
-  final String verifier;
   final String state;
   final code = Completer<Object?>();
 }

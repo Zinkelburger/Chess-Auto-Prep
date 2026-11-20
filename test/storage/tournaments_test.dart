@@ -4,11 +4,15 @@ import 'dart:isolate' show ReceivePort;
 
 import 'package:chess_auto_prep/chess/tournament/config.dart';
 import 'package:chess_auto_prep/chess/tournament/result.dart';
+import 'package:chess_auto_prep/storage/pgn_file_store.dart';
 import 'package:chess_auto_prep/storage/tournaments.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../support/faulty_disk/fault_plan.dart';
+import '../support/faulty_disk/faulty_disk.dart';
+import '../support/faulty_disk/io_trace.dart';
 import 'store_fixture.dart';
 
 void main() {
@@ -405,6 +409,90 @@ void main() {
     );
     expect(registry.existsSync(), isFalse);
     expect(await store.saveEngines([], [engine]), isA<TournamentSaved<void>>());
+  });
+
+  group('a create killed half way through putting a new file in place', () {
+    // On POSIX the new name is linked to the staged copy before the staged
+    // name goes; a kill between the two leaves a file with two names.
+    FaultPlan midway(String name) => FaultPlan.where(
+      (op) => op.kind == IoKind.publishNew && p.basename(op.to!) == name,
+      const CrashMidway(),
+    );
+
+    /// The store as the next start makes it.
+    FileTournaments restarted() => FileTournaments(
+      root: root,
+      support: files.support,
+      documents: PgnFileStore(
+        documents: files.documents,
+        support: files.support,
+      ),
+    );
+
+    test('a results record is finished by the next list', () async {
+      final before = initial();
+      await store.create(before);
+      final after = before.changed({'status': 'completed'});
+      final run = await FaultyDisk(files.root).run(
+        midway('.v2-pending.json'),
+        () => store.save(before, after, pgn, expectedPgn: null),
+      );
+      expect(run.end, isA<Crashed<Object?>>());
+      final listed =
+          await restarted().list() as TournamentSaved<List<Tournament>>;
+      expect(listed.warnings, isEmpty);
+      expect(listed.value.single.status, 'completed');
+      expect(
+        File(p.join(root.path, 'test', '.v2-pending.json')).existsSync(),
+        isFalse,
+      );
+    });
+
+    test(
+      'a new tournament is listed, and creating it again succeeds',
+      () async {
+        final run = await FaultyDisk(
+          files.root,
+        ).run(midway('tournament.json'), () => store.create(initial()));
+        expect(run.end, isA<Crashed<Object?>>());
+        final again = restarted();
+        expect(
+          await again.create(initial()),
+          isA<TournamentSaved<Tournament>>(),
+        );
+        final listed = await again.list() as TournamentSaved<List<Tournament>>;
+        expect(listed.warnings, isEmpty);
+        expect(listed.value.single.id, 'test');
+      },
+    );
+
+    test('a new engine registry is read, not set aside', () async {
+      final engine = TournamentEngine.bundled();
+      final run = await FaultyDisk(
+        files.root,
+      ).run(midway('engines.json'), () => store.saveEngines([], [engine]));
+      expect(run.end, isA<Crashed<Object?>>());
+      final read =
+          await restarted().engines()
+              as TournamentSaved<List<TournamentEngine>>;
+      expect(read.warnings, isEmpty);
+      expect(read.value, hasLength(1));
+      expect(
+        Directory(
+          p.join(files.support.path, 'recovery-quarantine'),
+        ).existsSync(),
+        isFalse,
+      );
+    });
+  });
+
+  test('the games file is named without touching the disk, so a screen '
+      'building on a failing disk does not throw', () async {
+    final run = await FaultyDisk(files.root).run(
+      lastingFault((op) => op.kind == IoKind.stat, IoError.eio),
+      () async => store.games('test').path,
+    );
+    expect(run.end, isA<Returned<String>>());
   });
 
   test('a tournament id that is a path is refused', () {

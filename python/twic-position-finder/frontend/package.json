@@ -16,6 +16,7 @@
     "test:puzzles": "node scripts/test-puzzles.mjs",
     "test:games": "node scripts/test-games.mjs",
     "test:games:browser": "node scripts/test-games-browser.mjs",
+    "test:puzzles:browser": "node scripts/test-puzzles-browser.mjs",
     "test:prep": "node scripts/test-prep.mjs",
     "test:prep:browser": "node scripts/test-prep-browser.mjs",
     "test:analysis": "node scripts/test-analysis.mjs",

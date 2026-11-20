@@ -109,18 +109,6 @@ final class BackupArchive {
     documentPath: documentPath,
   );
 
-  /// Carries the history along and says whether it moved; never fails the
-  /// move ([BackupRelocation]).
-  Future<bool> applyMove(
-    BackupMove move, {
-    required Directory documents,
-    DateTime? retryUntil,
-    bool merge = false,
-  }) => BackupRelocation(
-    root,
-    documents: documents,
-  ).applyMove(move, retryUntil: retryUntil, merge: merge);
-
   /// Puts the versions kept under [fromId] beside the newer ones [toId]
   /// already holds for the same document, and lists both there.
   ///

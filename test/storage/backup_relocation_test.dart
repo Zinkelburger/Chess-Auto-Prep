@@ -56,7 +56,7 @@ void main() {
   );
 
   Future<void> apply(BackupMove plan) =>
-      archive.applyMove(plan, documents: documents);
+      BackupRelocation(archive.root, documents: documents).applyMove(plan);
 
   Future<Map<String, Object?>> readIndex(String id) async =>
       jsonDecode(
@@ -278,7 +278,10 @@ void main() {
     await keep(from, 'two');
     await keep(to, 'three');
     expect(
-      await archive.applyMove(planned(), documents: documents, merge: true),
+      await BackupRelocation(
+        archive.root,
+        documents: documents,
+      ).applyMove(planned(), merge: true),
       isTrue,
     );
     expect(archive.folderFor(from).existsSync(), isFalse);
@@ -308,7 +311,10 @@ void main() {
     );
     expect(await stopped.applyMove(planned(), merge: true), isFalse);
     expect(
-      await archive.applyMove(planned(), documents: documents, merge: true),
+      await BackupRelocation(
+        archive.root,
+        documents: documents,
+      ).applyMove(planned(), merge: true),
       isTrue,
     );
     expect(archive.folderFor(from).existsSync(), isFalse);

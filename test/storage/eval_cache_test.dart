@@ -11,11 +11,15 @@ void main() {
   test('a verdict is kept and read back at any depth up to its own', () {
     final cache = EvalCache.inMemory();
     addTearDown(cache.close);
-    expect(cache.read(fen4, minDepth: 1), isNull);
+    expect(cache.readVerdict(fen4, minDepth: 1)?.cpWhite, isNull);
     cache.write(fen4, cpWhite: 35, depth: 14);
-    expect(cache.read(fen4, minDepth: 14), 35);
-    expect(cache.read(fen4, minDepth: 10), 35);
-    expect(cache.read(fen4, minDepth: 20), isNull, reason: 'not that deep');
+    expect(cache.readVerdict(fen4, minDepth: 14)?.cpWhite, 35);
+    expect(cache.readVerdict(fen4, minDepth: 10)?.cpWhite, 35);
+    expect(
+      cache.readVerdict(fen4, minDepth: 20)?.cpWhite,
+      isNull,
+      reason: 'not that deep',
+    );
   });
 
   test('the deeper verdict wins whichever order they arrive in', () {
@@ -23,9 +27,9 @@ void main() {
     addTearDown(cache.close);
     cache.write(fen4, cpWhite: 35, depth: 14);
     cache.write(fen4, cpWhite: 10, depth: 8);
-    expect(cache.read(fen4, minDepth: 8), 35);
+    expect(cache.readVerdict(fen4, minDepth: 8)?.cpWhite, 35);
     cache.write(fen4, cpWhite: 50, depth: 20);
-    expect(cache.read(fen4, minDepth: 8), 50);
+    expect(cache.readVerdict(fen4, minDepth: 8)?.cpWhite, 50);
   });
 
   test('opened on demand: closing one never asked for leaves no file', () {
@@ -87,7 +91,7 @@ void main() {
     final cache = EvalCache.open(dir);
     addTearDown(cache.close);
     expect(cache.available, isTrue);
-    expect(cache.read(fen4, minDepth: 14), 35);
+    expect(cache.readVerdict(fen4, minDepth: 14)?.cpWhite, 35);
   });
 
   test('a file that will not open leaves a cache that answers nothing', () {
@@ -99,6 +103,6 @@ void main() {
     addTearDown(cache.close);
     expect(cache.available, isFalse);
     cache.write(fen4, cpWhite: 35, depth: 14);
-    expect(cache.read(fen4, minDepth: 1), isNull);
+    expect(cache.readVerdict(fen4, minDepth: 1)?.cpWhite, isNull);
   });
 }

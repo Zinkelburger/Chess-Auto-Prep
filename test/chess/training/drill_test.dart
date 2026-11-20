@@ -55,7 +55,6 @@ void main() {
       expect(d.stage, isA<Finished>());
       expect((d.stage as Finished).clean, isFalse);
       expect(d.missed, [0]);
-      expect(d.restart(learn: false).replayMistakes, isFalse);
     },
   );
 

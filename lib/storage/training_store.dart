@@ -71,47 +71,39 @@ final class _Accepted {
 }
 
 /// The changes one pass over the queue holds back, and why: the chapters
-/// they name, as their rows spell them, and their operations.
+/// they name, as their rows spell them.
 final class _Held {
   final _chapters = <String, String>{};
-  final _operations = <String, String>{};
 
   /// Why [change] must wait, or null when nothing it depends on waits.
   String? waitingFor(_Accepted change) {
-    if (_operations.isEmpty) return null;
+    if (_chapters.isEmpty) return null;
     for (final path in change.chapters) {
       if (_chapters[path] case final why?) return why;
     }
-    return _operations[change.operation.predecessorId];
+    return null;
   }
 
   void add(_Accepted change, String why) {
     for (final path in change.chapters) {
       _chapters.putIfAbsent(path, () => why);
     }
-    _operations[change.operation.id] = why;
   }
 }
 
 /// Stable identity and source proofs captured before a change is accepted.
 /// Retrying with the same operation never writes the change twice.
 final class ProgressOperation {
-  ProgressOperation({
-    String? id,
-    this.predecessorId,
-    Map<String, Revision> sources = const {},
-  }) : id = id ?? newOperationId(),
-       sources = Map.unmodifiable(sources),
-       _moveMark = FileRelocations.moveMark;
+  ProgressOperation({String? id, Map<String, Revision> sources = const {}})
+    : id = id ?? newOperationId(),
+      sources = Map.unmodifiable(sources),
+      _moveMark = FileRelocations.moveMark;
 
   /// Chapter moves made before the sources were read; a later move of one
   /// of them means its path names something else now.
   final int _moveMark;
 
   final String id;
-
-  /// An earlier accepted command this projected row baseline depends on.
-  final String? predecessorId;
 
   /// The PGNs that supplied this command, captured before it was queued.
   final Map<String, Revision> sources;
@@ -708,7 +700,7 @@ final class TrainingStore implements ProgressFiles {
   /// A row that is not one is passed over, logged once; a write naming its
   /// line refuses it ([TrainingPayload]). Bytes that are not text, or a
   /// quote nobody closed, leave no rows to tell apart: the file is unreadable.
-  List<T> _rows<T, K>(_Codec<T, K> codec, Uint8List? bytes) {
+  List<T> _rows<T>(_Codec<T> codec, Uint8List? bytes) {
     final name = codec.file;
     final text = _decodeText(name, bytes);
     final records = text == null || text.trim().isEmpty
@@ -747,35 +739,24 @@ final class TrainingStore implements ProgressFiles {
   }
 }
 
-/// How the rows of one CSV are read, told apart and written.
-final class _Codec<T, K> {
-  const _Codec(this.file, this.decode, this.encode, this.key);
+/// How the rows of one CSV are read and written.
+final class _Codec<T> {
+  const _Codec(this.file, this.decode, this.encode);
 
   final String file;
   final T? Function(List<String>) decode;
   final List<String> Function(T) encode;
-  final K Function(T) key;
 
   String row(T value) => encodeCsvRecord(encode(value));
 }
 
-const _reviewCodec = _Codec<Review, LineKey>(
-  reviewsFile,
-  decodeReview,
-  encodeReview,
-  _reviewKey,
-);
+const _reviewCodec = _Codec<Review>(reviewsFile, decodeReview, encodeReview);
 
-const _streakCodec = _Codec<MoveStreak, StreakKey>(
+const _streakCodec = _Codec<MoveStreak>(
   streaksFile,
   decodeStreak,
   encodeStreak,
-  _streakKey,
 );
-
-LineKey _reviewKey(Review review) => review.key;
-
-StreakKey _streakKey(MoveStreak streak) => (line: streak.key, ply: streak.ply);
 
 final class _Unreadable implements Exception {
   _Unreadable(this.file, this.line);

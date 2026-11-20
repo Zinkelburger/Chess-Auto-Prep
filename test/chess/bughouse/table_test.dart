@@ -3,11 +3,12 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/chess/bughouse/table_setup.dart';
+import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:dartchess/dartchess.dart' hide File;
 import 'package:flutter_test/flutter_test.dart';
 
 /// Lines the Python tools played (`tools/mcp/bughouse/board.py`), with the
-/// dual FEN, every ply's SAN and UCI, and the book key they reached:
+/// dual FEN, every ply's SAN and UCI, and the position they reached:
 /// written by `test/fixtures/bughouse/generate_python_positions.py`.
 final _python =
     (jsonDecode(
@@ -17,6 +18,17 @@ final _python =
             )
             as Map<String, Object?>)['cases']!
         as List<Object?>;
+
+/// [board]'s FEN cut to the four fields that are the position, its hand
+/// in [_sortedHands] order.
+String _position(Crazyhouse board) => _sortedHands(Fen(board.fen).position);
+
+/// [fen] (or a dual FEN) with each hand's letters sorted: python-chess and
+/// dartchess write a reserve in different orders.
+String _sortedHands(String fen) => fen.replaceAllMapped(
+  RegExp(r'\[([^\]]*)\]'),
+  (m) => '[${(m[1]!.split('')..sort()).join()}]',
+);
 
 /// [line] (`A:e4 B:d4`, SAN) played from [root].
 TablePosition played(TablePosition root, String line) {
@@ -57,8 +69,10 @@ void main() {
           expect(move.move.uci, ply['uci']);
           table = move.after;
         }
-        expect(table.keyText, c['key_fen']);
-        expect(table.bookKey, c['key']);
+        expect(
+          '${_position(table.one)} | ${_position(table.two)}',
+          _sortedHands(c['key_fen'] as String),
+        );
       });
     }
   });
