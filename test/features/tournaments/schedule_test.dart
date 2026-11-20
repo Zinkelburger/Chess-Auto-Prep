@@ -34,9 +34,7 @@ final class _SlowWhite implements PlayingEngine {
     ]).play(root, history, budget);
     return PlayingSearch(
       search.analysis,
-      history.isEmpty
-          ? gate.then((_) => search.bestMove)
-          : search.bestMove,
+      history.isEmpty ? gate.then((_) => search.bestMove) : search.bestMove,
     );
   }
 }
@@ -51,7 +49,10 @@ void main() {
     final schedule = TournamentSchedule(
       cfg,
       (engine, _) async => Started(
-        _SlowWhite(engine.name, engine.name == 'A' ? gate.future : Future.value()),
+        _SlowWhite(
+          engine.name,
+          engine.name == 'A' ? gate.future : Future.value(),
+        ),
       ),
     );
     final ended = <int>[];

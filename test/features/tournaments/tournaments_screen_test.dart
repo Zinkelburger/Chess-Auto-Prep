@@ -258,6 +258,24 @@ void main() {
     expect(find.text('Stop'), findsNothing);
   });
 
+  testWidgets('New tournament… starts the run the setup describes', (
+    tester,
+  ) async {
+    await show(tester);
+    await tester.tap(find.text('New tournament…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), 'Club');
+    await tester.tap(find.text('Start new run'));
+    await tester.pumpAndSettle();
+    // The page starts the run itself, so it runs on the test's clock.
+    for (var i = 0; i < 100 && run.live == null; i++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+    expect(run.running, isTrue);
+    expect(run.selected!.config.name, 'Club');
+    expect(find.text('Game 1 · 1 ply · e4'), findsOneWidget);
+  });
+
   testWidgets('a run whose first save failed offers Retry save and nothing '
       'new until it lands', (tester) async {
     store.failCreate = 'Disk full.';

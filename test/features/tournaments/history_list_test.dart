@@ -27,7 +27,9 @@ Tournament _run(
     'name': id,
     'openingLabel': ?opening,
     'gamesPerPairing': 2,
-    'engines': [for (final name in engines) TournamentEngine.bundled(name).json],
+    'engines': [
+      for (final name in engines) TournamentEngine.bundled(name).json,
+    ],
   },
   'games': [
     for (var i = 0; i < played; i++)
@@ -70,19 +72,30 @@ void main() {
   }
 
   testWidgets('runs are grouped under the day or month they were made, '
-      'each heading once, with their status, count and scores', (
-    tester,
-  ) async {
+      'each heading once, with their status, count and scores', (tester) async {
     final now = DateTime.now();
     run.history = [
       _run('Today one', created: now),
       _run('Today two', created: now),
-      _run('Yesterday one', created: DateTime(now.year, now.month, now.day - 1, 12)),
+      _run(
+        'Yesterday one',
+        created: DateTime(now.year, now.month, now.day - 1, 12),
+      ),
       _run('Old one', created: DateTime(2025, 3, 5, 12)),
       _run('Undated', created: null, status: 'running', played: 1),
     ];
+    run.selected = run.history[2];
     await show(tester);
-    for (final heading in ['Today', 'Yesterday', 'March 2025', 'Unknown date']) {
+    bool lit(String name) =>
+        tester.widget<ListTile>(find.widgetWithText(ListTile, name)).selected;
+    expect(lit('Yesterday one'), isTrue);
+    expect(lit('Today one'), isFalse);
+    for (final heading in [
+      'Today',
+      'Yesterday',
+      'March 2025',
+      'Unknown date',
+    ]) {
       expect(find.text(heading), findsOneWidget, reason: heading);
     }
     expect(

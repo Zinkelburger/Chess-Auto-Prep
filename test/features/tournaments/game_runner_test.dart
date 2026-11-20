@@ -382,7 +382,10 @@ void main() {
           },
           rules: {'maxMoves': 3},
         ),
-        [white, ScriptEngine([...blackPawns])],
+        [
+          white,
+          ScriptEngine([...blackPawns]),
+        ],
       );
       expect(result.record.termination, 'maxMoves');
       expect(white.budgets.map((b) => b.movesToGo), [2, 1, 2]);
@@ -408,7 +411,10 @@ void main() {
           },
           rules: {'maxMoves': 2},
         ),
-        [white, ScriptEngine([...blackPawns])],
+        [
+          white,
+          ScriptEngine([...blackPawns]),
+        ],
       );
       expect(white.budgets.map((b) => b.movesToGo), [1, 1]);
       expect(white.budgets.last.whiteTime, inInclusiveRange(118000, 120000));
@@ -428,7 +434,10 @@ void main() {
           },
           rules: {'maxMoves': 2},
         ),
-        [white, ScriptEngine([...blackPawns])],
+        [
+          white,
+          ScriptEngine([...blackPawns]),
+        ],
       );
       expect(result.record.termination, 'maxMoves');
       expect(white.budgets.map((b) => b.movesToGo), [null, null]);
@@ -446,10 +455,9 @@ void main() {
           },
         ),
         [
-          ScriptEngine(
-            [...whitePawns],
-            delay: const Duration(milliseconds: 120),
-          ),
+          ScriptEngine([
+            ...whitePawns,
+          ], delay: const Duration(milliseconds: 120)),
           ScriptEngine([...blackPawns]),
         ],
       );
@@ -473,10 +481,7 @@ void main() {
         (await first({'kind': 'movetime', 'movetimeMs': 1500})).milliseconds,
         1500,
       );
-      expect(
-        (await first({'kind': 'fixedNodes', 'nodes': 5000})).nodes,
-        5000,
-      );
+      expect((await first({'kind': 'fixedNodes', 'nodes': 5000})).nodes, 5000);
       expect((await first({'kind': 'fixedDepth', 'depth': 7})).depth, 7);
     });
   });

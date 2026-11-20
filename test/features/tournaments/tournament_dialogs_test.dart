@@ -9,6 +9,7 @@ import 'package:chess_auto_prep/features/tournaments/engine_manager.dart';
 import 'package:chess_auto_prep/features/tournaments/setup_dialog.dart';
 import 'package:chess_auto_prep/features/tournaments/tournament_run.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
+import 'package:chess_auto_prep/ui/form_dialog.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/ui/toggle_chip.dart';
 import 'package:flutter/material.dart';
@@ -192,11 +193,15 @@ void main() {
         final saved = store.registry.single;
         expect(saved.arguments, ['new']);
         expect(saved.name, engine.name);
+        // The editor itself says why, not only the list behind it.
         expect(
-          find.textContaining(
-            RegExp('changed|conflict|stale', caseSensitive: false),
+          find.descendant(
+            of: find.byType(FormDialog),
+            matching: find.textContaining(
+              RegExp('changed|conflict|stale', caseSensitive: false),
+            ),
           ),
-          findsWidgets,
+          findsOneWidget,
         );
         await tester.tap(find.text('Cancel'));
         await tester.pumpAndSettle();
@@ -271,6 +276,115 @@ void main() {
     await tester.tap(find.text('Close'));
     await closed;
   });
+
+  testWidgets('while a tournament runs no engine is added, edited or '
+      'removed', (tester) async {
+    final store = ScriptedTournaments()
+      ..registry = [
+        TournamentEngine({'id': 'a', 'name': 'Club engine'}),
+      ];
+    addTearDown(store.dispose);
+    final run = await _passing(store);
+    await tester.runAsync(run.refresh);
+    run.running = true;
+    final context = await _host(tester);
+    unawaited(manageTournamentEngines(context, run));
+    await tester.pumpAndSettle();
+    for (final tip in ['Edit Club engine…', 'Remove Club engine…']) {
+      expect(
+        tester
+            .widget<IconButton>(
+              find.ancestor(
+                of: find.byTooltip(tip),
+                matching: find.byType(IconButton),
+              ),
+            )
+            .onPressed,
+        isNull,
+        reason: tip,
+      );
+    }
+    expect(
+      tester
+          .widget<ButtonStyleButton>(
+            find.ancestor(
+              of: find.text('Add UCI engine…'),
+              matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+            ),
+          )
+          .enabled,
+      isFalse,
+    );
+    run.running = false;
+  });
+
+  testWidgets('UCI options are written name=value, one per line', (
+    tester,
+  ) async {
+    final store = ScriptedTournaments();
+    addTearDown(store.dispose);
+    final run = await _passing(store);
+    final context = await _host(tester);
+    unawaited(manageTournamentEngines(context, run));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add UCI engine…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), 'Club');
+    final options = find.widgetWithText(
+      TextField,
+      'UCI options (name=value, one per line)',
+    );
+    await tester.enterText(options, '=5');
+    await tester.tap(find.text('Test and save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Write each UCI option as name=value.'), findsOneWidget);
+    expect(store.registry, isEmpty);
+
+    await tester.enterText(options, 'X=1\nSyzygyPath = /tb\n\n');
+    await tester.tap(find.text('Test and save'));
+    await tester.pumpAndSettle();
+    expect(store.registry.single.name, 'Club');
+    expect(store.registry.single.json['options'], {
+      'X': '1',
+      'SyzygyPath': '/tb',
+    });
+  });
+
+  testWidgets('a name the player typed is kept over the engine\'s own', (
+    tester,
+  ) async {
+    final store = ScriptedTournaments();
+    addTearDown(store.dispose);
+    final run = await _passing(store);
+    final context = await _host(tester);
+    unawaited(manageTournamentEngines(context, run));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add UCI engine…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose file…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'berserk-13'),
+      'My Berserk',
+    );
+    await tester.tap(find.text('Test and save'));
+    await tester.pumpAndSettle();
+    expect(store.registry.single.name, 'My Berserk');
+    expect(store.registry.single.executable, '/opt/engines/berserk-13');
+  });
+}
+
+/// A run over [store] whose engines all pass their test as `Opening 1.0`.
+Future<TournamentRun> _passing(ScriptedTournaments store) async {
+  final run = TournamentRun(
+    store: store,
+    pending: PendingWrites(),
+    jobs: await engineJobsFixture(),
+    pickExecutable: () async => '/opt/engines/berserk-13',
+    launch: (_, _) async => Started(_OpeningEngine()),
+  );
+  addTearDown(run.dispose);
+  return run;
 }
 
 /// Answers the test with 1.e4 under the name `Opening 1.0`.
