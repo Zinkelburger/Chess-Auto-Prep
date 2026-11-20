@@ -73,6 +73,8 @@ final class PlayerAnalysis extends ChangeNotifier {
   List<String> warnings = const [];
   final _selections = Latest();
   bool _disposed = false;
+  // The directory can update player before its games are reloaded.
+  Player? _corpusPlayer;
   final Map<DocumentRef, Revision> _revisions = {};
   final Map<String, int> evals = {};
 
@@ -198,7 +200,6 @@ final class PlayerAnalysis extends ChangeNotifier {
         fen: at.fen,
         side: at.side,
         line: at.line,
-        game: included.first,
         ply: at.ply,
         start: at.start,
       );
@@ -245,6 +246,7 @@ final class PlayerAnalysis extends ChangeNotifier {
     warnings = const [];
     if (!same) {
       corpus = null;
+      _corpusPlayer = null;
       query = '';
       evals.clear();
       _revisions.clear();
@@ -271,6 +273,7 @@ final class PlayerAnalysis extends ChangeNotifier {
         throw StateError('Games changed while being read. Reload this player.');
       }
       corpus = result;
+      _corpusPlayer = next;
       evals.clear();
       _revisions
         ..clear()
@@ -440,8 +443,8 @@ final class PlayerAnalysis extends ChangeNotifier {
       .convert(
         utf8.encode(
           jsonEncode([
-            player?.id,
-            player?.names,
+            _corpusPlayer?.id,
+            _corpusPlayer?.names,
             for (final entry in _revisions.entries)
               [entry.key.path, entry.value.contentHash],
           ]),

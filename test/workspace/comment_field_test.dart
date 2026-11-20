@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:chess_auto_prep/workspace/reading/comment_field.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';
@@ -59,6 +60,31 @@ void main() {
     await blur(tester);
     await tester.pumpAndSettle();
     expect(fixture.onDisk, contains('{Our Sicilian [%eval 0.30]}'));
+  });
+
+  testWidgets('clearing a shared move note preserves the other game’s note', (
+    tester,
+  ) async {
+    fixture.dispose();
+    fixture = await openSession(
+      '[Event "A"]\n[Result "*"]\n\n1. d4 d5 {first} 2. c4 *\n\n'
+      '[Event "B"]\n[Result "*"]\n\n1. d4 d5 {second} 2. Nf3 *\n',
+    );
+    final d5 = NodePath.of([0, 0]);
+    fixture.session.cursor.goTo(d5);
+    await pump(tester);
+    expect(find.text('first'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).first, '');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    expect(fixture.session.commentAt(d5), 'second');
+
+    await blur(tester);
+    await tester.pumpAndSettle();
+    expect(fixture.onDisk, isNot(contains('{first}')));
+    expect(fixture.onDisk, contains('d5 {second} 2. Nf3'));
   });
 
   testWidgets('words typed are written when the panel goes away', (

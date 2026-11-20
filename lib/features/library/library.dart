@@ -392,16 +392,33 @@ final class Library extends ChangeNotifier {
     required RepertoireFolder into,
     required String name,
   }) => _run('move ${games.length} lines to a new chapter $name', () async {
-    final chapter = _session.chapter;
-    final from = _session.source;
+    var chapter = _session.chapter;
+    var from = _session.source;
     if (chapter == null || from == null) return _nothingOpen;
+    final arrangement = _session.arrangement;
     final (folder, failed) = await _folderOf(into);
     if (failed != null) return failed;
+    // Moving a root PGN into its own folder rewraps the same lines under
+    // the new path. The selected indexes still belong to that chapter.
+    if (from.path == into.path) {
+      from = from.inFile(p.join(folder, p.basename(from.path)));
+      final relocated = _session.chapter;
+      if (_session.source != from ||
+          _session.arrangement != arrangement ||
+          relocated == null ||
+          !identical(relocated.lines, chapter.lines) ||
+          relocated.side != chapter.side) {
+        return _sourceChanged;
+      }
+      chapter = relocated;
+    }
     final ref = ChapterRef.at(p.join(folder, '$name.pgn'));
     final written = await _write(DocumentRef(ref.path), name, chapter.side);
     if (written is! store.Created) return _createResult(written);
     final moved =
-        identical(_session.chapter, chapter) && _session.source == from
+        identical(_session.chapter, chapter) &&
+            _session.source == from &&
+            _session.arrangement == arrangement
         ? await _edits.moveLines(chapter, from, games: games, to: ref)
         : _sourceChanged;
     // A move waiting for a retry, or recorded for recovery to finish, will
@@ -537,7 +554,7 @@ final class Library extends ChangeNotifier {
 
   LibraryLoadFailed _loadFailed(String detail) {
     log.w('list the repertoires under $_root', detail);
-    return LibraryLoadFailed(detail);
+    return const LibraryLoadFailed();
   }
 
   void _set(LibraryState state) {

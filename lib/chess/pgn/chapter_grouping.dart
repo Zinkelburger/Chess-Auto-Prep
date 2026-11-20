@@ -38,8 +38,21 @@ final class ChapterGrouping {
 }
 
 /// How the games whose headers are [headers] fall into chapters.
-ChapterGrouping groupChapters(List<List<PgnHeader>> headers) {
-  final games = [for (final header in headers) _Game(header)];
+///
+/// [isComplete] says whether the game at an index is finished; without it a
+/// game is finished when its `Result` header says so. A caller that has read
+/// the moves passes it, so a result written only after the moves counts too.
+ChapterGrouping groupChapters(
+  List<List<PgnHeader>> headers, {
+  bool Function(int index)? isComplete,
+}) {
+  final games = [
+    for (final (index, header) in headers.indexed)
+      _Game(
+        header,
+        isComplete?.call(index) ?? isFinishedResult(tagValue(header, 'Result')),
+      ),
+  ];
   if (games.any((game) => (game.tag('ChapterName') ?? '').trim().isNotEmpty)) {
     return ChapterGrouping(
       titles: _grouped(games, (game) => game.tag('ChapterName')?.trim()),
@@ -63,7 +76,7 @@ ChapterGrouping groupChapters(List<List<PgnHeader>> headers) {
 }
 
 final class _Game {
-  const _Game(this.header);
+  const _Game(this.header, this.isComplete);
 
   final List<PgnHeader> header;
 
@@ -71,10 +84,7 @@ final class _Game {
 
   /// A game with a result is somebody's finished game, never a course's
   /// titled line.
-  bool get isComplete {
-    final result = (tag('Result') ?? '*').trim();
-    return result.isNotEmpty && result != '*';
-  }
+  final bool isComplete;
 }
 
 /// Each game's title; a game with no title goes with the chapter made last,

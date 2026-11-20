@@ -159,6 +159,21 @@ export function themeLabel(theme: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+/**
+ * The two lines shown once a puzzle is over: who played the game, where and
+ * when ("Plotno (2061) – shadew (2047) · FICS 2017", no rating when it is 0),
+ * then what the solver's side did there.
+ */
+export function gameLines(puzzle: Puzzle, set: SetName): [string, string] {
+  const player = (name: string, elo: number) => (elo ? `${name} (${elo})` : name);
+  const year = puzzle.date.slice(0, 4);
+  const where = set === 'engine' ? `engine game ${year}` : `FICS ${year}`;
+  const side = puzzle.fen.split(' ')[1] === 'b' ? 'Black' : 'White';
+  const what = puzzle.found ? `${side} found it in the game.`
+    : puzzle.played ? `In the game ${side} played ${puzzle.played}.` : `${side} missed it in the game.`;
+  return [`${player(puzzle.white, puzzle.welo)} – ${player(puzzle.black, puzzle.belo)} · ${where}`, what];
+}
+
 const ID = /^[A-Za-z0-9][\w-]{0,63}$/;
 
 /** `#3675501-B-113` → the puzzle id; null for anything else. */

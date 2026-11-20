@@ -1,7 +1,10 @@
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/chess/bughouse/table_line.dart';
-import 'package:dartchess/dartchess.dart' show Role, Side;
+import 'package:dartchess/dartchess.dart' show Crazyhouse, Role, Side;
 import 'package:flutter_test/flutter_test.dart';
+
+/// Stands in for a root board in a history that must not be replayed.
+class _UnreadBoard extends Fake implements Crazyhouse {}
 
 /// [moves] (`1e2e4 2d2d4`, board digit then UCI) played in order.
 TableLine playedLine(String moves, [TableLine? from]) {
@@ -9,7 +12,7 @@ TableLine playedLine(String moves, [TableLine? from]) {
   for (final token in moves.split(' ').where((t) => t.isNotEmpty)) {
     final board = token[0] == '1' ? BoardNumber.one : BoardNumber.two;
     final position = (line.replay() as LineReplayed).position;
-    line = line.played(lineMove(position, board, token.substring(1))!.move);
+    line = line.played(lineMove(position, board, token.substring(1))!);
   }
   return line;
 }
@@ -121,6 +124,43 @@ void main() {
     final again = playedLine('1e7e5', back);
     expect(again.moves.length, 2);
     expect(again.upto(BoardNumber.one), 2);
+  });
+
+  test('reusing a quiet move across a partner variation skips replay', () {
+    const start = TablePosition.initial;
+    final nf3 = lineMove(start, BoardNumber.one, 'g1f3')!;
+    final d4 = lineMove(start, BoardNumber.two, 'd2d4')!;
+    final e4 = lineMove(start, BoardNumber.two, 'e2e4')!;
+    final main = TableLine(
+      TablePosition(start.one, _UnreadBoard()),
+    ).played(nf3).atStart.played(d4);
+    final variation = main.atStart.played(e4);
+    final again = variation.played(
+      lineMove(e4.after, BoardNumber.one, 'g1f3')!,
+    );
+
+    expect(again.nodes, same(variation.nodes));
+    expect(again.at(BoardNumber.one), main.mainChild(BoardNumber.one, null));
+    expect(again.at(BoardNumber.two), variation.at(BoardNumber.two));
+  });
+
+  test('a repeated capture after a full hand edit keeps the extra pawn', () {
+    final game = playedLine('1e2e4 1d7d5 1e4d5');
+    final back = stepped(game, BoardNumber.one, 2);
+    final edited = back.edited(
+      BoardNumber.two,
+      Side.black,
+      Role.pawn,
+      handLimit,
+    );
+    final again = playedLine('1e4d5', edited);
+
+    // In the old order the edit caps the hand after the capture.
+    expect(again.nodes.last.partner, edited.at(BoardNumber.two));
+    expect(
+      positionOf(again).two.pockets!.of(Side.black, Role.pawn),
+      handLimit + 1,
+    );
   });
 
   test('a different move is a variation; the main line stays first', () {

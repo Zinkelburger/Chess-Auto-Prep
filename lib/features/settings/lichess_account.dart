@@ -51,15 +51,17 @@ final class LichessAccountState extends ChangeNotifier {
 
   /// Runs the browser flow. Refused while one is already waiting.
   Future<void> logIn() => _once(() async {
+    final before = _status;
     _set(const Connecting(), problem: null);
     final outcome = await _login.logIn(
       waiting: (page, {required opened}) =>
           _set(Connecting(page: page, browserOpened: opened)),
     );
-    await _took(outcome);
+    await _took(outcome, cancelledTo: before);
   }, otherwise: null);
 
-  /// Ends a waiting browser flow; the row goes back to signed out.
+  /// Ends a waiting browser flow; the row goes back to the account it
+  /// showed before, or to signed out.
   Future<void> cancel() => _login.cancel();
 
   /// Signs in with a personal access token typed into the row. Answers
@@ -76,9 +78,11 @@ final class LichessAccountState extends ChangeNotifier {
     final signedIn = _status;
     if (signedIn is! SignedIn) return Future.value();
     return _once(() async {
+      // Register the local removal with shutdown before waiting on Lichess.
+      final removal = _save(_write(null));
       _set(const SigningOut());
       await _login.revoke(signedIn.account.token);
-      if (await _save(null)) {
+      if (await removal) {
         _set(const SignedOut(), problem: null);
       } else {
         _set(
@@ -101,7 +105,12 @@ final class LichessAccountState extends ChangeNotifier {
     }
   }
 
-  Future<bool> _took(LoginOutcome outcome) async {
+  /// [cancelledTo] is what a cancelled browser flow goes back to: logging
+  /// in again and cancelling leaves the saved account signed in.
+  Future<bool> _took(
+    LoginOutcome outcome, {
+    AccountStatus cancelledTo = const SignedOut(),
+  }) async {
     switch (outcome) {
       case LoggedIn(account: final grant):
         final account = LichessAccount(
@@ -110,7 +119,7 @@ final class LichessAccountState extends ChangeNotifier {
           until: grant.until,
           personal: grant.personal,
         );
-        if (!await _save(account)) {
+        if (!await _save(_write(account))) {
           _set(
             const SignedOut(),
             problem:
@@ -122,7 +131,7 @@ final class LichessAccountState extends ChangeNotifier {
         _set(SignedIn(account), problem: null);
         return true;
       case LoginCancelled():
-        _set(const SignedOut(), problem: null);
+        _set(cancelledTo, problem: null);
         return false;
       case LoginFailed(:final problem):
         _set(const SignedOut(), problem: problem.sentence);
@@ -130,8 +139,8 @@ final class LichessAccountState extends ChangeNotifier {
     }
   }
 
-  Future<bool> _save(LichessAccount? account) async {
-    final saving = _write(account).catchError((Object _) {
+  Future<bool> _save(Future<bool> write) async {
+    final saving = write.catchError((Object _) {
       // The credential must never become part of an exception message.
       log.w('save the Lichess account', 'the preferences write failed');
       return false;

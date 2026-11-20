@@ -156,11 +156,14 @@ export class Attempt {
   readonly solver: Colour;
   /** SAN of what was actually played, which differs from `san` only for another mate at the end. */
   readonly played: string[] = [];
+  /** The board after each number of moves played, from the puzzle's start, for stepping back through the line. */
+  readonly history: { pos: Position; last: string[] }[];
 
   constructor(readonly puzzle: Puzzle) {
     this.pos = startPosition(puzzle.fen);
     this.solver = this.pos.turn;
     this.last = puzzle.last ? squaresOf(puzzle.last) : [];
+    this.history = [{ pos: this.pos, last: this.last }];
   }
 
   get done(): boolean { return this.ply >= this.puzzle.line.length; }
@@ -223,6 +226,7 @@ export class Attempt {
     this.last = squaresOf(uci);
     this.played.push(san);
     this.ply += 1;
+    this.history.push({ pos: this.pos, last: this.last });
   }
 }
 
@@ -233,6 +237,21 @@ function squaresOf(uci: string): string[] {
 /** A mate other than the line's: its SAN is not in the data, so spell it simply. */
 function altSan(uci: string): string {
   return uci[1] === '@' ? `${uci[0].toUpperCase()}@${uci.slice(2, 4)}#` : `${uci.slice(0, 2)}-${uci.slice(2, 4)}#`;
+}
+
+export type CursorKey = 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight';
+
+/**
+ * The keyboard cursor one square on in the direction pressed, as the board is
+ * drawn with `bottom` at the bottom (with Black there, ↑ goes towards rank 1).
+ * It stops at the edge.
+ */
+export function moveCursor(square: string, key: CursorKey, bottom: Colour): string {
+  const flip = bottom === 'black' ? -1 : 1;
+  const [df, dr] = { ArrowUp: [0, 1], ArrowDown: [0, -1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[key];
+  const f = Math.min(7, Math.max(0, FILES.indexOf(square[0]) + df * flip));
+  const r = Math.min(8, Math.max(1, Number(square[1]) + dr * flip));
+  return FILES[f] + r;
 }
 
 /** The puzzle's board, solver to move, on the bughouse analysis board. */

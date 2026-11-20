@@ -40,8 +40,9 @@ final class DeletedChapter {
   String get repertoire => p.basename(folder);
 
   /// Where restoring it as [as] puts it: back in its folder, under its old
-  /// name unless the user chose another.
-  String restoredAs([String? as]) => p.join(folder, '${as ?? name}.pgn');
+  /// name and extension (`.PGN` stays `.PGN`) unless the user chose another.
+  String restoredAs([String? as]) =>
+      p.join(folder, as == null ? '$name${p.extension(path)}' : '$as.pgn');
 }
 
 sealed class DeletedListing {
@@ -63,7 +64,7 @@ final class DeletedUnreadable extends DeletedListing {
   final String detail;
 }
 
-/// The chapters in the recovery folder of every repertoire under [root].
+/// The deleted chapters in the recovery folders at and below [root].
 ///
 /// Only chapter files are listed: the recovery folder also holds the old
 /// app's kept versions (`<digest>.bytes`) and whatever else a lock left
@@ -72,7 +73,7 @@ final class DeletedUnreadable extends DeletedListing {
 /// that cannot be listed makes the whole listing unreadable.
 Future<DeletedListing> listDeleted(Directory root) async {
   if (!await root.exists()) return const DeletedChapters([]);
-  final found = <DeletedChapter>[];
+  final found = await _deletedIn(root.path);
   try {
     await for (final entry in directoryEntries(root, followLinks: false)) {
       if (entry is! Directory || p.basename(entry.path).startsWith('.')) {

@@ -53,10 +53,9 @@ final class UpdateDownloaded extends UpdateStatus {
 
 /// The helper is being started.
 final class UpdateArming extends UpdateStatus {
-  const UpdateArming(this.offer, this.payload);
+  const UpdateArming(this.offer);
 
   final UpdateOffer offer;
-  final VerifiedPayload payload;
 }
 
 /// The helper waits for the app to close, then installs.
@@ -93,10 +92,17 @@ enum UpdateProblem {
   helperBusy,
 }
 
+enum UpdateRetry { check, download, install }
+
 final class UpdateFailed extends UpdateStatus {
-  const UpdateFailed(this.problem, {this.offer});
+  const UpdateFailed(
+    this.problem, {
+    this.offer,
+    this.retry = UpdateRetry.check,
+  });
 
   final UpdateProblem problem;
+  final UpdateRetry retry;
 
   /// The release it failed on, when it got that far; Try again goes on
   /// from there.
@@ -363,7 +369,7 @@ final class AppUpdates extends ChangeNotifier {
     switch (_status) {
       case UpdateDownloaded(:final offer, :final payload):
         _installWhenReady = false;
-        _set(UpdateArming(offer, payload));
+        _set(UpdateArming(offer));
         final started = await _outside.installer.schedule(payload, _kind);
         if (_disposed) return;
         _set(switch (started) {
@@ -371,8 +377,13 @@ final class AppUpdates extends ChangeNotifier {
           HelperNotStarted() => UpdateFailed(
             UpdateProblem.helperNotStarted,
             offer: offer,
+            retry: UpdateRetry.install,
           ),
-          HelperBusy() => UpdateFailed(UpdateProblem.helperBusy, offer: offer),
+          HelperBusy() => UpdateFailed(
+            UpdateProblem.helperBusy,
+            offer: offer,
+            retry: UpdateRetry.install,
+          ),
         });
       case UpdateDownloading():
         _installWhenReady = true;
@@ -477,8 +488,22 @@ final class AppUpdates extends ChangeNotifier {
   };
 
   void _fail(UpdateProblem problem, UpdateOffer offer) {
+    final retry = _installWhenReady
+        ? UpdateRetry.install
+        : UpdateRetry.download;
     _installWhenReady = false;
-    _set(UpdateFailed(problem, offer: offer));
+    _set(UpdateFailed(problem, offer: offer, retry: retry));
+  }
+
+  /// Repeats the failed operation with the original installation choice.
+  Future<void> retry() async {
+    final failed = _status;
+    if (failed is! UpdateFailed) return;
+    return switch (failed.retry) {
+      UpdateRetry.check => check(),
+      UpdateRetry.download => download(),
+      UpdateRetry.install => install(),
+    };
   }
 
   void _set(UpdateStatus next) {

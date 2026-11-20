@@ -1,6 +1,6 @@
-/* Bughouse Games: a list of annotated engine games, and one game with both
+/* Bughouse Games: a list of engine games, and one game with both
    boards as partners sit (board B turned the other way), each with its
-   pockets, engines and clocks, beside the current move's note, its lines and
+   pockets, engines and clocks, beside the current move, the engine and
    the moves of both boards in one list. The board and pocket come from
    bughouse-board.css, the skeleton from bughouse-puzzles.css. */
 
@@ -75,35 +75,16 @@
 .bg-var-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 6px 6px 12px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--accent-bg); font-size: 0.85rem; }
 .bg-var-bar .btn { flex: none; }
 
-/* The note: the one thing most readers come for. */
-.bg-note { flex: 1.6 1 0; min-height: 0; overflow-y: auto; padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
+/* The current move: who, when, the score, a wait; at the start, the game's summary. */
+.bg-note { flex: none; max-height: 30vh; overflow-y: auto; padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
 .bg-note-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
 .bg-note-board { display: inline-grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--border-strong); border-radius: 4px; font-size: 0.75rem; font-weight: 700; color: var(--text-dim); align-self: center; }
 .bg-note-move { font-family: var(--mono); font-size: 1rem; }
-.bg-note-glyph-name { color: var(--text-dim); font-size: 0.8rem; }
-.bg-note-count { margin-left: auto; color: var(--text-faint); font-size: 0.75rem; }
 .bg-note-facts { margin-top: 2px; color: var(--text-dim); font-size: 0.8rem; }
 .bg-note-wait { margin-top: 6px; font-size: 0.85rem; color: var(--text); }
 .bg-note-wait::before { content: '⏸ '; color: var(--text-dim); }
-.bg-note-text { margin-top: 8px; font-size: 1rem; line-height: 1.55; max-width: 640px; white-space: pre-line; }
+.bg-note-text { margin-top: 8px; font-size: 0.95rem; line-height: 1.55; max-width: 640px; white-space: pre-line; }
 .bg-note-result { margin-top: 8px; font-weight: 600; }
-.bg-note-first { margin-top: 12px; }
-
-.bg-lines { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
-.bg-line { padding: 8px 10px; border: 1px solid var(--border); border-left-width: 3px; border-radius: 6px; background: var(--bg); }
-.bg-line.active { border-color: var(--accent); }
-.bg-line-head { display: flex; align-items: baseline; gap: 8px; }
-.bg-line-kind { font-size: 0.88rem; }
-.bg-line-eval { margin-left: auto; flex: none; font-family: var(--mono); font-size: 0.85rem; font-weight: 600; color: var(--text-dim); }
-.bg-line-eval.mate { font-family: var(--sans); color: var(--text); }
-.bg-line-context { color: var(--text-dim); font-size: 0.8rem; line-height: 1.4; }
-.bg-line-assume { margin-top: 2px; color: var(--pick); font-size: 0.82rem; }
-.bg-line-moves { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 2px; margin-top: 4px; }
-.bg-line-num { color: var(--text-faint); font-family: var(--mono); font-size: 0.8rem; padding-left: 2px; }
-.bg-line-move { padding: 1px 5px; border: 0; border-radius: 4px; background: none; color: var(--text); font-family: var(--mono); font-size: 0.9rem; font-weight: 600; cursor: pointer; }
-.bg-line-move:hover { background: var(--bg-raised); }
-.bg-line-move.active { background: var(--accent-bg); color: var(--accent); }
-.bg-line-note { margin-top: 4px; font-size: 0.9rem; line-height: 1.5; }
 
 /* The moves of both boards, one row each in the order played: board A in the left lane, B in the right. */
 .bg-moves { flex: 1 1 0; min-height: 222px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
@@ -123,22 +104,18 @@
 .bg-mv-num { color: var(--text-faint); font-family: var(--mono); font-size: 0.78rem; }
 .bg-mv-san { font-family: var(--mono); font-size: 0.92rem; font-weight: 600; }
 .bg-mv.book .bg-mv-san { font-weight: 400; color: var(--text-dim); }
-.bg-mv-note { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 .bg-mv-wait { flex: none; padding: 0 5px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--text-dim); font-size: 0.75rem; line-height: 1.4; }
 
-/* The game's own glyphs, in lila's colours (as on the PGN page). */
-.bg-glyph { font-weight: 700; }
-.bg-glyph-good { color: #22ac38; }
-.bg-glyph-brilliant { color: #168226; }
-.bg-glyph-interesting { color: #ea45d8; }
-.bg-glyph-inaccuracy { color: #56b4e9; }
-.bg-glyph-mistake { color: #e69f00; }
-.bg-glyph-blunder { color: #df5353; }
-.bg-note-head .bg-glyph { font-size: 1rem; }
+/* The engine on request: the analysis board's panel (analysis.css), off until switched on. */
+.bg-engine { position: relative; flex: none; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
+.bg-engine .ch-ceval { min-height: 44px; }
+.bg-engine .ch-ceval:last-child, .bg-engine .ch-ceval:has(+ .ch-pvs:empty) { border-bottom: 0; }
+.bg-engine .ch-pvs { border-bottom: 0; }
+.bg-engine .ch-pearl { font-size: 1.3rem; }
+.bg-engine .ch-ceval.off .ch-pearl { display: none; }
 
 .bg-controls { display: flex; align-items: center; gap: 2px; flex: none; }
 .bg-controls-gap { flex: 1; }
-.bg-controls .btn-text { padding: 6px 8px; }
 .bg-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px; flex: none; }
 .bg-foot-note { color: var(--text-faint); font-size: 0.75rem; }
 

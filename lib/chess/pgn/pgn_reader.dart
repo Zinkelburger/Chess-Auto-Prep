@@ -112,6 +112,15 @@ PgnHeader _header(PgnToken token) => switch (token) {
   _ => throw StateError('not a header token'),
 };
 
+/// How the game [text], whose header block is [tags], ended, for a list
+/// that shows it before its moves are read: its `Result` header, else the
+/// marker the reader will find after its moves ([GameRead.terminator]).
+String? readListingResult(String text, List<PgnHeader> tags) {
+  final result = tagValue(tags, 'Result');
+  if (result != null || _rootPosition(tags) == null) return result;
+  return mainlineTermination(text);
+}
+
 /// The position the game starts from, or null when the `[FEN]` header names
 /// none. A game with no `[FEN]` starts from the initial position.
 Position? _rootPosition(List<PgnHeader> tags) {

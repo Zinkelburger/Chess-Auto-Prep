@@ -108,9 +108,11 @@ panel on the right: 440–640 px beside board 1 alone, 440–480 px beside both.
 ## Actions
 
 **Play a move or drop** — on a board, or by clicking an engine row → it
-follows the move the board is at: the continuation already there when it is
-the same move, otherwise a new one, a variation when the board already went
-on from there. A capture goes to the partner's hand. A pawn reaching the last rank waits for the piece it becomes, on either
+follows the move the board is at. An existing continuation is reused when
+it is the same move and replaying it in its recorded order reaches the
+same position as playing it now. Otherwise the move starts a variation if
+the board already went on from there. A capture goes to the partner's hand.
+A pawn reaching the last rank waits for the piece it becomes, on either
 board, with the workspace board's chooser (queen, knight, rook, bishop down
 the file); clicking away plays nothing. Underpromotions keep their piece in
 copied and pasted moves and in engine moves; an engine move without a piece is
@@ -172,9 +174,10 @@ in the workspace: `Promote variation` (the variation it is in one place up),
 is; `Delete from here` (it and everything after it on that board, variations
 too; the other board keeps its moves); `Copy line PGN` (the line up to it as
 the boards stood when it was played, in the order played), `Copy FEN` (that
-board's crazyhouse FEN just after it) and, with two boards, `Copy dual FEN`. A delete that would take a capture the other board
-dropped is refused: `Can't delete: P@d5 on board 2 would have no piece to
-drop.` With one board the line PGN is crazyhouse, from the line's start:
+board's crazyhouse FEN just after it) and, with two boards, `Copy dual FEN`. A
+delete is refused if a surviving partner-board drop needs that capture, even
+beyond the cursor or in a variation: `Can't delete: P@d5 on board 2 would
+have no piece to drop.` With one board the line PGN is crazyhouse, from the line's start:
 `[Variant "Crazyhouse"]`, `[SetUp "1"]` and `[FEN …]` with the hands when the
 start is not the usual one, then SAN with drops as `N@f3` and `P@e5`, and each
 hand edit a comment where it was made, `{ +P +B }`. Lichess imports it by

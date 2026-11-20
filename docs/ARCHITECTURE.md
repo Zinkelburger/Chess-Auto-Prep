@@ -434,7 +434,8 @@ The user never asks for a backup and never names one.
 - **Identity, not path.** Versions follow the document through rename and
   move; a history that cannot move at once is noted under `backup-moves/` and
   moved by the next recovery pass.
-- Unchanged content records nothing. Saves do not prune: the builder's
+- Content equal to the newest kept version records nothing while that copy
+  is still there; a copy moved away is written again. Saves do not prune: the builder's
   `Version history` previews each version (checksum-verified), restores one as
   a separate repertoire, and offers explicit cleanup keeping the newest 100
   versions and everything from the last 90 days.
@@ -521,9 +522,11 @@ note keeps it. Arrows and circles follow the same rule.
 - One writer, `SettingsStore` (`storage/settings_store.dart`), for
   `settings.json` in Support, saved whole on every change. Top-level keys this
   build does not know are written back unchanged.
-- Preferences never block startup: an unreadable file is moved into
-  `recovery-quarantine/`, logged, and the app starts on defaults. A symlinked
-  `settings.json` is followed.
+- Preferences never block startup: a file that cannot be understood is moved
+  into `recovery-quarantine/`, logged, and the app starts on defaults. One the
+  disk will not read stays where it is: the app starts on defaults, says so,
+  and saves no change over it that session. A symlinked `settings.json` is
+  followed.
 - A failed save keeps the choice on screen with one line saying so; the next
   change writes again. Jobs capture their configuration when they start.
 - Lichess and account credentials live in SharedPreferences

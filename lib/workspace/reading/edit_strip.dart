@@ -7,11 +7,11 @@ import '../../chess/pgn/study.dart';
 import '../../storage/disk_problems.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/app_keys.dart';
-import '../../ui/confirm_dialog.dart';
 import '../../ui/listening_state.dart';
 import '../../ui/theme.dart';
 import '../../ui/toggle_chip.dart';
 import '../../ui/tool_button.dart';
+import '../document/document_actions.dart';
 import '../document/document_saver.dart';
 import '../document/document_session.dart';
 import '../document/save_copy.dart';
@@ -92,26 +92,7 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
     });
   }
 
-  Future<void> _discard() async {
-    final session = widget.session;
-    final chapter = session.chapter;
-    if (!session.hasHeldEdits) return;
-    final yes = await confirmAction(
-      context,
-      title: switch (chapter?.name) {
-        final name? => 'Discard unsaved changes to “$name”?',
-        null => 'Discard unsaved changes?',
-      },
-      message: 'The file goes back to its last save. This cannot be undone.',
-      confirm: 'Discard changes',
-    );
-    if (yes &&
-        mounted &&
-        identical(widget.session, session) &&
-        identical(session.chapter, chapter)) {
-      session.discardHeld();
-    }
-  }
+  Future<void> _discard() => confirmDiscardHeld(context, () => widget.session);
 
   Future<void> _undo() async {
     final result = await widget.session.undo();

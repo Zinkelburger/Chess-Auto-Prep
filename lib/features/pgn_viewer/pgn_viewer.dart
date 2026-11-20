@@ -179,9 +179,16 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
     ];
   }
 
-  Future<PgnExportResult> export(String name, String text) =>
-      exporter?.save(name, text) ??
-      Future.value(const PgnExportFailed('File export is unavailable.'));
+  /// Writes [text] to a new file; closing the app waits for it, as it does
+  /// for a study's export.
+  Future<PgnExportResult> export(String name, String text) {
+    final saving = exporter?.save(name, text);
+    if (saving == null) {
+      return Future.value(const PgnExportFailed('File export is unavailable.'));
+    }
+    pendingWrites.watch(this, saving);
+    return saving;
+  }
 
   int _filterSeen = -1;
   ({List<(int, GameSummary)> games, List<ViewerChapter> chapters})? _selection;
@@ -328,26 +335,27 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
 
   /// [ref] is now the viewer's file: it goes to the top of the recent list,
   /// which is then kept. Called once the workspace has it open, so a file
-  /// that could not be read is not remembered as one that was.
+  /// that could not be read is not remembered as one that was. With
+  /// [keepQuery], coming back to the viewer's own file keeps its search.
   Future<void> opened(
     ChapterRef ref, {
     ReadingPlace? place,
+    bool keepQuery = false,
     bool Function()? currentRequest,
   }) async {
+    if (!keepQuery || _file != ref) _query = '';
     _file = ref;
     _sort = GameOrder.fileOrder;
     _perspective = place?.perspective ?? const FollowCollectionPlayer();
     _orientedFor = null;
     _orient();
-    _query = '';
     _selection = null;
     _order = null;
     _ordinals = null;
-    await _reading.restore(place, currentRequest ?? () => true);
+    // Queue the prepend in open order, before a bookmark lookup can yield.
     final intent = Object();
     _unsavedRecent[intent] = ref.path;
     _recent = _first(ref.path, _recent);
-    notifyListeners();
     final accepted = pendingWrites.accept<String?>(
       resource: _recentFiles,
       label: 'Recent files',
@@ -355,7 +363,12 @@ final class PgnViewer extends ChangeNotifier implements GameOrdering {
       problem: (detail) => detail,
       blocked: () => _recentProblem ?? 'An earlier recent file was not saved.',
     );
-    return accepted.run().then<void>((_) {});
+    final opening = Future.wait<void>([
+      accepted.run().then<void>((_) {}),
+      _reading.restore(place, currentRequest ?? () => true),
+    ]);
+    notifyListeners();
+    await opening;
   }
 
   /// Applies the accepted prepend to the latest persisted list. Disposal only
@@ -612,7 +625,10 @@ final class _Listing {
 
   factory _Listing.of(List<ChapterLine> lines) {
     final tags = [for (final line in lines) line.tags];
-    final grouping = groupChapters(tags);
+    final grouping = groupChapters(
+      tags,
+      isComplete: (index) => isFinishedResult(lines[index].result),
+    );
     final chapterOf = grouping.hasChapters ? grouping.titles : null;
     final sizes = <String, int>{};
     for (final title in chapterOf ?? const <String>[]) {

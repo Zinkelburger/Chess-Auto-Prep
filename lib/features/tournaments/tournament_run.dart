@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:collection/collection.dart' show DeepCollectionEquality;
 import 'package:flutter/foundation.dart';
 
 import '../../chess/tournament/config.dart';
@@ -371,6 +372,44 @@ final class TournamentRun extends ChangeNotifier {
     };
     _notify();
     return check;
+  }
+
+  /// Applies an editor's change to the latest list: [original] replaced by
+  /// [replacement], removed when that is null, or [replacement] added when
+  /// [original] is null. A refresh can replace every object, so [original]
+  /// is found by its settings; refused when they changed since the editor
+  /// opened, so newer settings are not written over.
+  Future<void> changeEngine(
+    TournamentEngine? original,
+    TournamentEngine? replacement,
+  ) async {
+    final current = engines;
+    final matches = original == null
+        ? const <TournamentEngine>[]
+        : current
+              .where(
+                (e) => const DeepCollectionEquality().equals(
+                  e.json,
+                  original.json,
+                ),
+              )
+              .toList();
+    final target =
+        matches.where((e) => identical(e, original)).firstOrNull ??
+        matches.singleOrNull;
+    if ((original != null && target == null) ||
+        (original == null && current.any((e) => e.id == replacement?.id))) {
+      engineReport =
+          'The engine registry changed. Reopen the editor before saving.';
+      log.w('change tournament engine', engineReport);
+      _notify();
+      return;
+    }
+    await keepEngines([
+      for (final e in current)
+        if (!identical(e, target)) e else ?replacement,
+      if (original == null) ?replacement,
+    ]);
   }
 
   Future<void> keepEngines(List<TournamentEngine> values) async {

@@ -547,6 +547,22 @@ void main() {
       expect(w.store.creates, isEmpty);
     });
 
+    test('a new empty tab preserves a pasted position with no moves', () async {
+      const position = Fen('7k/8/8/8/8/8/8/K7 w - - 0 1');
+      input.clipboardText = position.value;
+      expect(await w.requests.pasteFen(), isA<RequestDone>());
+      expect(w.session.cursor.fen, position);
+      final tabs = w.requests.documents.tabs;
+      final original = tabs.selected;
+
+      expect(await w.requests.newEmptyAnalysis(), isA<RequestDone>());
+      expect(w.session.cursor.fen, Fen.initial);
+      expect(tabs.selected, isNot(same(original)));
+      expect(tabs.open, contains(original));
+      await w.requests.documents.select(original);
+      expect(w.session.cursor.fen, position);
+    });
+
     test('a paste with no game says why and changes nothing', () async {
       input.clipboardText = 'no moves here';
       final result = await w.requests.paste();

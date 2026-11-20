@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
@@ -335,6 +337,51 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pumpAndSettle();
       expect(w.lab.line.applied.map((m) => m.san), ['e4', 'd4']);
+    });
+
+    testWidgets('keeps moves played in a new game while a file is opening', (
+      tester,
+    ) async {
+      await toBughouse(tester);
+      const path = '/games/earlier.bpgn';
+      final read = Completer<PickedRead>();
+      files().picked[path] = read.future;
+      await open(tester, path);
+      expect(files().reads, [path]);
+
+      await chooseAction(tester, 'New game');
+      await tester.tapAt(squareCenter(tester, BoardNumber.one, Square.e2));
+      await tester.pump();
+      await tester.tapAt(squareCenter(tester, BoardNumber.one, Square.e4));
+      await tester.pumpAndSettle();
+      expect(w.lab.line.applied.single.san, 'e4');
+
+      read.complete(const PickedText('1A. d4 *'));
+      await tester.pumpAndSettle();
+      expect(w.lab.line.of(BoardNumber.one).single.san, 'e4');
+      expect(w.lab.position.one.board.pieceAt(Square.e4)?.role, Role.pawn);
+    });
+
+    testWidgets('Home at the start keeps a pending file open', (tester) async {
+      await toBughouse(tester);
+      w.lab.pasteMoves('1A. e4 1B. c4 *', file: 'first.bpgn');
+      await tester.pumpAndSettle();
+      const path = '/games/next.bpgn';
+      final read = Completer<PickedRead>();
+      files().picked[path] = read.future;
+      await open(tester, path);
+      expect(files().reads, [path]);
+      expect(w.lab.line.applied, isEmpty);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.home);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(w.lab.line.applied.single.san, 'e4');
+
+      read.complete(const PickedText('1A. d4 *'));
+      await tester.pumpAndSettle();
+      expect(w.lab.line.of(BoardNumber.one).single.san, 'd4');
+      expect(w.lab.line.applied, isEmpty);
     });
 
     testWidgets('↓ and ↑ walk the games of a file', (tester) async {

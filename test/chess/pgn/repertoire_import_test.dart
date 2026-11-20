@@ -1,11 +1,14 @@
 import 'dart:io';
 
+import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_sections.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/line_id_pins.dart';
 import 'package:chess_auto_prep/chess/pgn/pgn_reader.dart';
 import 'package:chess_auto_prep/chess/pgn/repertoire_import.dart';
+import 'package:chess_auto_prep/chess/training/sitting.dart';
+import 'package:chess_auto_prep/chess/training/training_line.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -108,6 +111,82 @@ void main() {
     expect(read.chapters.single.text, contains('(1... c5)'));
   });
 
+  test('finished games with the same moves are each kept', () {
+    String game(String white) =>
+        '[Event "Club"]\n[White "$white"]\n[Black "Sam"]\n[Result "1-0"]\n\n'
+        '1. e4 1-0';
+    final read = imported(
+      '${game('Alice')}\n\n${game('Bob')}\n\n${game('Bob')}',
+    );
+    expect(chapterOf(read.chapters.single).lines.map((l) => l.text), [
+      game('Alice'),
+      game('Bob'),
+    ]);
+  });
+
+  test(
+    'identical moves from different starting positions both survive import',
+    () {
+      const other = Fen('7k/8/8/8/8/8/4P3/K7 w - - 0 1');
+      final read = imported(
+        '[Event "Practice"]\n\n1. e4 *\n\n'
+        '[Event "Practice"]\n[SetUp "1"]\n[FEN "${other.value}"]\n\n1. e4 *',
+      );
+      final chapter = chapterOf(read.chapters.single);
+      expect(chapter.lines.map((line) => line.tree!.rootFen), [
+        Fen.initial,
+        other,
+      ]);
+      expect(chapter.lines.map((line) => line.tree!.children.single.san), [
+        'e4',
+        'e4',
+      ]);
+    },
+  );
+
+  test('drills differing only in the halfmove clock keep the first PGN', () {
+    const position =
+        'rnbqkb1r/ppp1pppp/5n2/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq -';
+    String drill(int clock) =>
+        '[Event "Practice"]\n[SetUp "1"]\n'
+        '[FEN "$position $clock 3"]\n\n3. c4 *';
+
+    final first = drill(2);
+    final read = imported('$first\n\n${drill(0)}');
+    expect(read.lines, 1);
+    expect(chapterOf(read.chapters.single).lines.single.text, first);
+  });
+
+  test('a movetext result keeps an annotated game whole and out of Learn', () {
+    final read = imported('[Event "Practice"]\n\n1. e4 (1. d4) e5 1-0');
+    final chapter = chapterOf(read.chapters.single);
+    expect(chapter.lines, hasLength(1));
+    final game = chapter.lines.single;
+    expect(game.terminator, '1-0');
+    final moves = game.tree!.children;
+    expect(moves.map((m) => m.san), ['e4', 'd4']);
+    expect(moves.first.children.single.san, 'e5');
+    final lines = trainingLines(chapter, source: 'Practice.pgn');
+    expect(lines.single.modelGame, isTrue);
+    expect(toLearn(lines, const {}, created), isEmpty);
+  });
+
+  test('movetext results keep player names out of chapter titles', () {
+    final read = imported(
+      [
+        for (final (name, move) in [
+          ('Alice', 'e4'),
+          ('Alice', 'd4'),
+          ('Bob', 'c4'),
+          ('Bob', 'e4'),
+        ])
+          '[Event "Club"]\n[White "$name"]\n[Black "Sam"]\n\n1. $move 1-0',
+      ].join('\n\n'),
+    );
+    expect(read.chapters.map((chapter) => chapter.title), ['Main']);
+    expect(read.lines, 4);
+  });
+
   test('a Lichess study export is one chapter per ChapterName', () {
     final read = imported(fixture('lichess_study.pgn'));
     expect(read.chapters.map((c) => c.title), ['6.Bg5 e6', '6.Bg5 Nbd7']);
@@ -203,6 +282,19 @@ void main() {
       expect(read.chapters[1].lines, 2);
     },
   );
+
+  test('spaced Black tags still distinguish lines with the same moves', () {
+    final read = imported(
+      '[Event "?"]\n[ChapterName "Main"]\n[Black "Line A" ]\n\n1. e4 *\n\n'
+      '[Event "?"]\n[ChapterName "Main"]\n[Black "Line B" ]\n\n1. e4 *\n\n'
+      '[Event "?"]\n[ChapterName "Main"]\n[Black "Line A"]\n\n1. e4 *',
+    );
+    final lines = chapterOf(read.chapters.single).lines;
+    expect(lines.map((line) => line.text), [
+      contains('[Black "Line A" ]'),
+      contains('[Black "Line B" ]'),
+    ]);
+  });
 
   test('a file the app wrote keeps the side it states', () {
     final read = imported('// Color: Black\n\n[Event "x"]\n\n1. e4 c5 *\n');

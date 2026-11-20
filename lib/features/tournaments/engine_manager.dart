@@ -95,7 +95,7 @@ Future<void> _remove(
     message: 'Saved runs keep their engine settings.',
     confirm: 'Remove',
   )) {
-    await run.keepEngines(run.engines.where((e) => e.id != engine.id).toList());
+    await run.changeEngine(engine, null);
   }
 }
 
@@ -295,11 +295,7 @@ class _EditorState extends State<_Editor> with Attempting<_Editor> {
       engine = TournamentEngine({...tested.json, 'name': name});
       _name.text = name;
     }
-    await widget.run.keepEngines([
-      for (final e in widget.run.engines)
-        if (e.id != engine.id) e,
-      engine,
-    ]);
+    await widget.run.changeEngine(widget.engine, engine);
     final kept = widget.run.engines.any((e) => identical(e, engine));
     if (!kept && mounted) setState(() => problem = widget.run.engineReport);
     return kept;

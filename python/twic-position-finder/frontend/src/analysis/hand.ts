@@ -7,6 +7,7 @@
 import type { Color, Role } from 'chessops/types';
 import { HAND_ROLES, MAX_IN_HAND } from './tree';
 import { pieceSrc } from './board';
+import { bindSlot } from '../bughouse/pocket';
 
 const NAMES: Record<Role, string> = { pawn: 'pawn', knight: 'knight', bishop: 'bishop', rook: 'rook', queen: 'queen', king: 'king' };
 
@@ -55,16 +56,8 @@ export function renderHand(box: HTMLElement, view: HandView, hooks: HandHooks) {
     slot.setAttribute('aria-label', `${side}: ${count} ${NAMES[role]}${count === 1 ? '' : 's'} in hand`);
     slot.setAttribute('aria-pressed', String(view.picked === role));
     slot.disabled = !count || !view.usable(role);
-    if (!slot.disabled) {
-      const pickUp = (e: MouseEvent | TouchEvent) => {
-        if (e instanceof MouseEvent && e.button !== 0) return;
-        e.preventDefault();
-        hooks.drag(view.color, role, e);
-      };
-      slot.addEventListener('mousedown', pickUp);
-      slot.addEventListener('touchstart', pickUp, { passive: false });
-      slot.onclick = () => hooks.pick(role);
-    }
+    // Press and drag carries the piece on; a click or a tap picks it (the puzzles' pocket does the same).
+    if (!slot.disabled) bindSlot(slot, (e) => hooks.drag(view.color, role, e), () => hooks.pick(role));
     well.append(slot);
     more.append(stepButton(role, 1, `One more ${NAMES[role]} for ${side.toLowerCase()}`, count >= MAX_IN_HAND || !view.roomForMore, () => hooks.adjust(view.color, role, 1)));
     fewer.append(stepButton(role, -1, `One ${NAMES[role]} fewer for ${side.toLowerCase()}`, count <= 0, () => hooks.adjust(view.color, role, -1)));

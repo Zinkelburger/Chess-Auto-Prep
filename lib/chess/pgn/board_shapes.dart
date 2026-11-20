@@ -71,6 +71,33 @@ List<BoardShape> shapesIn(String? comment) {
   ];
 }
 
+/// Adds arrows and circles from [arriving], keeping their PGN spelling and
+/// the host's colour on squares it already annotates with the same shape.
+String withMissingShapes(String host, String arriving) {
+  if (!arriving.contains('[%c')) return host;
+  Object key(String entry, BoardShape? shape) =>
+      shape == null ? entry : (shape.from, shape.to);
+
+  var joined = host;
+  for (final (pattern, name, circle) in [
+    (_circles, 'csl', true),
+    (_arrows, 'cal', false),
+  ]) {
+    final incoming = _written(pattern, arriving, circle: circle);
+    if (incoming.isEmpty) continue;
+    final seen = {
+      for (final (entry, shape) in _written(pattern, host, circle: circle))
+        key(entry, shape),
+    };
+    final added = [
+      for (final (entry, shape) in incoming)
+        if (seen.add(key(entry, shape))) entry,
+    ];
+    if (added.isNotEmpty) joined = '$joined [%$name ${added.join(',')}]';
+  }
+  return joined;
+}
+
 /// [comment] with its shape tokens saying exactly [shapes], its words and
 /// other tokens left as they were.
 ///

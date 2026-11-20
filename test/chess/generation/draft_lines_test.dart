@@ -2,6 +2,7 @@ import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/generation/draft_chapter.dart';
 import 'package:chess_auto_prep/chess/generation/draft_lines.dart';
 import 'package:chess_auto_prep/chess/generation/eval.dart';
+import 'package:chess_auto_prep/chess/generation/legal_moves.dart';
 import 'package:chess_auto_prep/chess/generation/search_config.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/chess/openings.dart';
@@ -418,6 +419,24 @@ void main() {
   });
 
   group('reading a chapter', () {
+    test('a castle with its rook on f1 covers the search decision', () {
+      const root = Fen('4k3/8/8/8/8/8/8/4KR2 w F - 0 1');
+      final chapter = parseChapter(
+        name: 'Castle',
+        text: '[Event "Castle"]\n[FEN "${root.value}"]\n\n1. O-O *',
+      );
+      final raw = chapter.tree.children.single.uci;
+      expect(raw, 'e1f1');
+      final named = legalMovesOf(
+        positionOf(root.value),
+      ).singleWhere((m) => m.move.uci == raw);
+      expect(named.uci, 'e1g1');
+      expect(
+        chapterDecisions(chapter),
+        contains('${chapter.tree.rootFen.position}|${named.uci}'),
+      );
+    });
+
     test('a chapter\'s decisions are read off its tree, castling in '
         'both spellings', () async {
       final chapter = await readChapter(

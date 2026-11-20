@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
@@ -41,6 +42,37 @@ void main() {
       expect(await fixture.pending.settle(), isNull);
     },
   );
+
+  test('either username failing to save is a failed save', () async {
+    for (final site in GameSite.values) {
+      fixture.accounts.rejectSite = site;
+      expect(
+        await fixture.games.saveUsernames(lichess: 'First', chesscom: 'Second'),
+        isFalse,
+        reason: '${site.label} was not kept',
+      );
+      expect(
+        fixture.games.accountProblem,
+        'Your account names could not be saved.',
+      );
+    }
+    fixture.accounts.rejectSite = null;
+    expect(
+      await fixture.games.saveUsernames(lichess: 'First', chesscom: 'Second'),
+      isTrue,
+    );
+    expect(fixture.games.accountProblem, isNull);
+  });
+
+  test('a store that throws on a username is a failed save', () async {
+    fixture.accounts.throwing = true;
+    expect(await fixture.games.saveUsernames(lichess: 'First'), isFalse);
+    expect(
+      fixture.games.accountProblem,
+      'Your account names could not be saved.',
+    );
+    expect(fixture.games.accounts[GameSite.lichess]?.username, 'First');
+  });
 
   test('a failed username save does not hold review back', () async {
     fixture.accounts.reject = true;
@@ -128,6 +160,12 @@ final class _Fixture {
 final class _Accounts implements AccountStore {
   final saved = MemoryAccounts();
   bool reject = false;
+
+  /// Whether a username write throws instead of answering.
+  bool throwing = false;
+
+  /// The one site whose username is refused, or null.
+  GameSite? rejectSite;
   Completer<void>? held;
   final requested = <(GameSite, String?)>[];
 
@@ -150,6 +188,9 @@ final class _Accounts implements AccountStore {
   Future<bool> setUsername(GameSite site, String? username) async {
     requested.add((site, username));
     await held?.future;
-    return reject ? false : saved.setUsername(site, username);
+    if (throwing) throw const FileSystemException('locked');
+    return reject || site == rejectSite
+        ? false
+        : saved.setUsername(site, username);
   }
 }

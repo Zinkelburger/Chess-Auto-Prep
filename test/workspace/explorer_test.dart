@@ -11,6 +11,8 @@ import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/workspace/explorer/explorer.dart';
 import 'package:chess_auto_prep/workspace/explorer/local_games.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 import '../support/scripted_explorer.dart';
 import '../support/session_fixture.dart';
@@ -248,6 +250,39 @@ void main() {
     );
     expect(explorer.sources, contains(ExplorerSource.twic));
   });
+
+  test(
+    'an error object on refresh preserves rows until a valid empty answer',
+    () async {
+      var body = '{"moves":[{"uci":"e2e4","san":"e4","white":3}]}';
+      final api = LichessExplorerApi(
+        MockClient((_) async => http.Response(body, 200)),
+        token: () async => null,
+        wait: (_) async {},
+      );
+      explorer = explorerOver(fixture.session, settings: settings, lichess: api)
+        ..addListener(_shown);
+      await pumpEventQueue();
+      expect(shown().rows.single.uci, 'e2e4');
+      for (final malformed in [
+        '{"error":"temporarily unavailable"}',
+        '{"moves":[null]}',
+        '{"moves":[{}]}',
+        '{"moves":[{"uci":"e2e4","san":"e4","white":"bad"}]}',
+      ]) {
+        body = malformed;
+        await explorer.retry();
+        expect(explorer.state, isA<ExplorerShown>());
+        expect(shown().rows.single.uci, 'e2e4');
+        expect(explorer.notice, isNotNull);
+      }
+
+      body = '{"white":0,"draws":0,"black":0,"moves":[]}';
+      await explorer.retry();
+      expect(explorer.state, isA<ExplorerNothing>());
+      expect(explorer.notice, isNull);
+    },
+  );
 
   test('a forced refresh that fails keeps the rows on the screen, with one '
       'line saying why; the next answer clears it', () async {

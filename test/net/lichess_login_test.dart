@@ -2,11 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:chess_auto_prep/diagnostics/log.dart';
+import 'package:chess_auto_prep/features/settings/lichess_account.dart';
 import 'package:chess_auto_prep/net/lichess_http.dart';
 import 'package:chess_auto_prep/net/lichess_login.dart';
 import 'package:crypto/crypto.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -111,6 +114,185 @@ void main() {
       expect(lines.join(), isNot(contains(secret)));
     },
   );
+
+  test('cancelling during bind prevents the browser from opening', () {
+    fakeAsync((time) {
+      final bind = Completer<ServerSocket>();
+      final listener = _CallbackListener();
+      var binding = false;
+      var opens = 0;
+      final login = LichessLoginApi(
+        lichess(),
+        openBrowser: (_) async {
+          opens++;
+          return true;
+        },
+      );
+      LoginOutcome? result;
+      IOOverrides.runZoned(
+        () {
+          unawaited(
+            login
+                .logIn(waiting: (_, {required opened}) {})
+                .then((value) => result = value),
+          );
+        },
+        serverSocketBind:
+            (_, _, {backlog = 0, v6Only = false, shared = false}) {
+              binding = true;
+              return bind.future;
+            },
+      );
+      time.flushMicrotasks();
+      expect(binding, isTrue);
+      unawaited(login.cancel());
+      time.flushMicrotasks();
+      bind.complete(listener);
+      time.elapse(login.wait);
+      expect(opens, 0);
+      expect(result, isA<LoginCancelled>());
+      expect(listener.closed, isTrue);
+    });
+  });
+
+  test('cancelling during the token exchange discards and revokes the '
+      'grant', () async {
+    final listener = _CallbackListener();
+    final page = Completer<Uri>();
+    final exchanging = Completer<void>();
+    final token = Completer<http.Response>();
+    final revoked = Completer<String?>();
+    final client = MockClient((request) async {
+      if (request.url.path == '/api/token' && request.method == 'DELETE') {
+        revoked.complete(request.headers['Authorization']);
+        return http.Response('', 204);
+      }
+      if (request.url.path == '/api/token') {
+        exchanging.complete();
+        return token.future;
+      }
+      return http.Response('{"username":"Player"}', 200);
+    });
+    final login = LichessLoginApi(
+      client,
+      openBrowser: (uri) async {
+        page.complete(uri);
+        return true;
+      },
+    );
+    var writes = 0;
+    final owner = LichessAccountState(
+      login: login,
+      read: () async => null,
+      write: (_) async {
+        writes++;
+        return true;
+      },
+    );
+    addTearDown(owner.dispose);
+    final loggingIn = IOOverrides.runZoned(
+      owner.logIn,
+      serverSocketBind:
+          (_, _, {backlog = 0, v6Only = false, shared = false}) async =>
+              listener,
+    );
+    final uri = await page.future;
+    listener.callback(uri.queryParameters['state']!);
+    await exchanging.future;
+    final cancelling = owner.cancel();
+    token.complete(http.Response('{"access_token":"lip_grant"}', 200));
+    await cancelling;
+    await loggingIn;
+    expect(writes, 0);
+    expect(owner.status, isA<SignedOut>());
+    // Lichess issued a token nobody here keeps; it must not stay valid.
+    expect(
+      await revoked.future.timeout(const Duration(seconds: 5)),
+      'Bearer lip_grant',
+    );
+  });
+
+  test('a stalled browser launcher times out and frees the account', () {
+    fakeAsync((time) {
+      final listener = _CallbackListener();
+      final launcher = Completer<bool>();
+      var launching = false;
+      final login = LichessLoginApi(
+        lichess(),
+        openBrowser: (_) {
+          launching = true;
+          return launcher.future;
+        },
+        wait: const Duration(seconds: 5),
+      );
+      final owner = LichessAccountState(
+        login: login,
+        read: () async => null,
+        write: (_) async => true,
+      );
+      try {
+        var settled = false;
+        IOOverrides.runZoned(
+          () {
+            unawaited(owner.logIn().then((_) => settled = true));
+          },
+          serverSocketBind:
+              (_, _, {backlog = 0, v6Only = false, shared = false}) async =>
+                  listener,
+        );
+        time.flushMicrotasks();
+        expect(launching, isTrue);
+        time.elapse(login.wait);
+
+        expect(settled, isTrue);
+        expect(owner.problem, LoginProblem.timedOut.sentence);
+        expect(listener.closed, isTrue);
+        bool? accepted;
+        unawaited(owner.useToken('lip_next').then((value) => accepted = value));
+        time.flushMicrotasks();
+        expect(accepted, isTrue);
+        launcher.complete(false);
+        time.flushMicrotasks();
+        expect(owner.status, isA<SignedIn>());
+      } finally {
+        owner.dispose();
+        time.flushMicrotasks();
+      }
+    });
+  });
+
+  test('Copy link gives the player a full callback window', () {
+    fakeAsync((time) {
+      final listener = _CallbackListener();
+      final launcher = Completer<bool>();
+      final login = LichessLoginApi(
+        lichess(),
+        openBrowser: (_) => launcher.future,
+      );
+      final (outcome, page) = IOOverrides.runZoned(
+        () => start(login, opens: false),
+        serverSocketBind:
+            (_, _, {backlog = 0, v6Only = false, shared = false}) async =>
+                listener,
+      );
+      var linkShown = false;
+      LoginOutcome? result;
+      unawaited(page.then((_) => linkShown = true));
+      unawaited(outcome.then((value) => result = value));
+
+      time.elapse(const Duration(minutes: 1));
+      launcher.complete(false);
+      time.flushMicrotasks();
+      expect(linkShown, isTrue);
+      time.elapse(login.wait - const Duration(seconds: 1));
+      expect(listener.closed, isFalse);
+      expect(result, isNull);
+
+      time.elapse(const Duration(seconds: 1));
+      expect((result as LoginFailed).problem, LoginProblem.timedOut);
+      expect(listener.closed, isTrue);
+    });
+  });
 
   test('the page asks Lichess with S256 and a loopback redirect', () async {
     final login = api();
@@ -356,4 +538,74 @@ void main() {
       expect(await outcome, isA<LoginCancelled>());
     }
   });
+}
+
+final class _CallbackListener extends StreamView<Socket>
+    implements ServerSocket {
+  _CallbackListener() : this._(StreamController<Socket>.broadcast());
+  _CallbackListener._(this._connections) : super(_connections.stream);
+
+  final StreamController<Socket> _connections;
+
+  bool get closed => _connections.isClosed;
+
+  @override
+  int get port => lichessCallbackPort;
+
+  @override
+  InternetAddress get address => InternetAddress.loopbackIPv4;
+
+  void callback(String state) {
+    final bytes = ascii.encode(
+      'GET /callback?code=c0de&state=$state HTTP/1.1\r\n'
+      'Host: localhost\r\nConnection: close\r\n\r\n',
+    );
+    _connections.add(_CallbackSocket(bytes));
+  }
+
+  @override
+  Future<ServerSocket> close() async {
+    await _connections.close();
+    return this;
+  }
+}
+
+/// The browser sends one GET and consumes the entire response.
+final class _CallbackSocket extends Fake implements Socket {
+  _CallbackSocket(List<int> request) {
+    _input.add(Uint8List.fromList(request));
+  }
+
+  final _input = StreamController<Uint8List>();
+
+  @override
+  StreamSubscription<Uint8List> listen(
+    void Function(Uint8List)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) => _input.stream.listen(
+    onData,
+    onError: onError,
+    onDone: onDone,
+    cancelOnError: cancelOnError,
+  );
+
+  @override
+  InternetAddress get address => InternetAddress.loopbackIPv4;
+
+  @override
+  bool setOption(SocketOption option, bool enabled) => true;
+
+  @override
+  void add(List<int> bytes) {}
+
+  @override
+  Future<void> addStream(Stream<List<int>> stream) => stream.drain<void>();
+
+  @override
+  Future<void> flush() async {}
+
+  @override
+  void destroy() => unawaited(_input.close());
 }

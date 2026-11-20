@@ -29,6 +29,18 @@ void main() {
     expect(line.score, const MateIn(2));
   });
 
+  test('score and move text inside a UCI diagnostic stays diagnostic', () {
+    expect(
+      parseInfoLine('info string previous depth 22 score cp 900 pv e2e4'),
+      isNull,
+    );
+    final line = parseInfoLine(
+      'info depth 8 score cp 20 pv d2d4 string previous score cp 900 pv e2e4',
+    )!;
+    expect(line.score, const Centipawns(20));
+    expect(line.pv, ['d2d4']);
+  });
+
   test('ignores lines with nothing to show', () {
     expect(
       parseInfoLine('info string NNUE evaluation using nn-abc.nnue'),

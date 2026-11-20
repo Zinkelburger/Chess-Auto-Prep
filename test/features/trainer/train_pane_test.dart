@@ -10,7 +10,9 @@ import 'package:chess_auto_prep/features/trainer/train_pane.dart';
 import 'package:chess_auto_prep/features/trainer/trainer.dart';
 import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/features/trainer/training_scope.dart';
+import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/storage/training_progress.dart';
@@ -25,6 +27,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/books_fixture.dart';
 import '../../support/scripted_files.dart';
 import '../../support/scripted_progress.dart';
+import '../../support/scripted_store.dart';
 import '../../support/session_fixture.dart';
 
 const _chapter = '''
@@ -68,6 +71,9 @@ void main() {
     WidgetTester tester, {
     bool rateReviews = false,
     bool reviewAll = false,
+    ScriptedFiles? chapters,
+    VoidCallback? onImport,
+    Widget? bookChip,
   }) async {
     reads = [];
     final settings = SettingsStore(
@@ -82,7 +88,10 @@ void main() {
     trainer = Trainer(
       session: fixture.session,
       settings: settings,
-      chapters: ScopeReader(files: ScriptedFiles(), documents: fixture.store),
+      chapters: ScopeReader(
+        files: chapters ?? ScriptedFiles(),
+        documents: fixture.store,
+      ),
       files: files,
       analysis: analysis,
       time: (now: DateTime.now, jitter: () => 0),
@@ -93,7 +102,13 @@ void main() {
       MaterialApp(
         theme: darkTheme(),
         home: Scaffold(
-          body: TrainPane(trainer: trainer, moves: moves, onRead: reads.add),
+          body: TrainPane(
+            trainer: trainer,
+            moves: moves,
+            onRead: reads.add,
+            onImport: onImport,
+            bookChip: bookChip,
+          ),
         ),
       ),
     );
@@ -104,6 +119,68 @@ void main() {
     await tester.sendKeyEvent(key);
     await tester.pumpAndSettle();
   }
+
+  testWidgets('a failed book read still offers the open chapter', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      chapters: ScriptedFiles(
+        listing: const RepertoiresUnreadable('disk denied'),
+      ),
+    );
+    await tester.tap(find.text('Book'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('disk denied'), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
+    await tester.tap(find.text('Chapter'));
+    await tester.pumpAndSettle();
+    expect(trainer.scope, TrainScope.chapter);
+    expect(find.text('Learn 2'), findsOneWidget);
+  });
+
+  testWidgets('with no chapter open, a course can be imported', (tester) async {
+    fixture.session.closed();
+    var imports = 0;
+    await pump(
+      tester,
+      onImport: () => imports++,
+      bookChip: const Text('Book in use'),
+    );
+    expect(find.text('Open a repertoire chapter to train it.'), findsOneWidget);
+    expect(find.text('Book in use'), findsNothing, reason: 'not the book');
+    await tester.tap(find.text('Import course PGN…'));
+    expect(imports, 1);
+  });
+
+  testWidgets('an empty book says so under the book trained', (tester) async {
+    await pump(
+      tester,
+      chapters: ScriptedFiles(),
+      bookChip: const Text('Book in use'),
+    );
+    await tester.tap(find.text('Book'));
+    await tester.pumpAndSettle();
+    expect(find.text('Your book has no chapters yet.'), findsOneWidget);
+    expect(find.text('Book in use'), findsOneWidget);
+    expect(find.text('Import course PGN…'), findsNothing);
+  });
+
+  testWidgets('the trainer mode with no repertoire chosen asks for one', (
+    tester,
+  ) async {
+    var imports = 0;
+    await pump(tester, onImport: () => imports++);
+    trainer.selection.enter(null);
+    await tester.pumpAndSettle();
+    expect(find.text('Choose your repertoire'), findsOneWidget);
+    await tester.tap(find.text('Import course PGN…'));
+    expect(imports, 1);
+
+    trainer.selection.choose(folder('Empty', []));
+    await tester.pumpAndSettle();
+    expect(find.text('No training lines available'), findsOneWidget);
+  });
 
   testWidgets('a rating that did not save does not stop the next sitting', (
     tester,
@@ -162,6 +239,103 @@ void main() {
       reason: 'from where it branches',
     );
     expect(find.text('Untrained'), findsNWidgets(2));
+    expect(find.text('1.e4 e5 2.Nf3 Nc6 3.Bb5'), findsOneWidget);
+  });
+
+  testWidgets('the repertoire\'s rows name their chapter; a line the one '
+      'above plays all of shows whole', (tester) async {
+    const short = '''
+// Color: White
+
+[Event "Long"]
+
+1. d4 d5 2. c4 *
+
+[Event "Short"]
+
+1. d4 d5 *
+''';
+    fixture.store.documents[ref('KID', 'Short')] = Opened(
+      short,
+      scriptedRevision(short),
+    );
+    await pump(
+      tester,
+      chapters: ScriptedFiles(
+        listing: Repertoires([
+          folder('KID', ['Main', 'Short']),
+        ]),
+      ),
+    );
+    await tester.tap(find.text('Repertoire'));
+    await tester.pumpAndSettle();
+    expect(find.text('Main · 1.e4 e5 2.Nf3 Nc6 3.Bb5'), findsOneWidget);
+    expect(find.text('Short · 1.d4 d5 2.c4'), findsOneWidget);
+    expect(find.text('Short · 1.d4 d5'), findsOneWidget);
+  });
+
+  testWidgets('a line\'s menu marks it known, forgets it, and leaves an '
+      'excluded line untrainable', (tester) async {
+    await pump(tester);
+    Future<void> menu(Finder actions) async {
+      await tester.tap(actions);
+      await tester.pumpAndSettle();
+    }
+
+    await menu(find.byTooltip('Actions').first);
+    expect(find.text('Train this line'), findsOneWidget);
+    expect(find.text('Forget this line'), findsNothing);
+    await tester.tap(find.text('I know this line'));
+    await tester.pumpAndSettle();
+    expect(find.text('1 learned · 0 due · 1 untrained'), findsOneWidget);
+
+    // A learned line sorts after the untrained one.
+    await menu(find.byTooltip('Actions').last);
+    expect(find.text('I know this line'), findsNothing);
+    await tester.tap(find.text('Forget this line'));
+    await tester.pumpAndSettle();
+    expect(find.text('0 learned · 0 due · 2 untrained'), findsOneWidget);
+
+    await menu(find.byTooltip('Actions').first);
+    await tester.tap(find.text('Exclude from training'));
+    await tester.pumpAndSettle();
+    await menu(find.byTooltip('Actions').last);
+    expect(find.text('Train this line'), findsNothing);
+    expect(find.text('Include in training'), findsOneWidget);
+  });
+
+  testWidgets('every line marked known leaves nothing due; a mark that did '
+      'not save is said', (tester) async {
+    await pump(tester);
+    await tester.tap(find.byTooltip('Training actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mark every line known'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 learned · 0 due · 0 untrained'), findsOneWidget);
+    expect(
+      find.text('Nothing due. Choose a line below to practice.'),
+      findsOneWidget,
+    );
+
+    files.nextWrite = const ProgressFailed('disk full');
+    await tester.tap(find.byTooltip('Training actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mark every line untrained'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Could not save training progress: disk full'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('searching the lines keeps the ones that play the move', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.enterText(find.byType(TextField).first, 'bc4');
+    await tester.pumpAndSettle();
+    expect(find.text('Ruy'), findsNothing);
+    expect(find.text('Italian'), findsOneWidget);
   });
 
   testWidgets('learning shows a move, Space asks for it, Escape leaves', (
@@ -302,6 +476,69 @@ void main() {
     expect(find.textContaining('Good ·'), findsNothing);
     expect(files.reviews[italian]!.lastRating, 'good');
     expect(find.text('Review session done.'), findsOneWidget);
+  });
+
+  testWidgets('1 rates a reviewed line Again, and it comes round once more', (
+    tester,
+  ) async {
+    final italian = (
+      source: fixture.ref.path,
+      id: 'line_ZTQgZTUgTmYzIE5jNiBCYz',
+    );
+    files.reviews[italian] = dueItalian(italian);
+    await pump(tester, rateReviews: true);
+    await tester.tap(find.text('Review 1'));
+    await tester.pumpAndSettle();
+    for (final uci in ['e2e4', 'g1f3', 'f1c4']) {
+      await play(tester, uci);
+    }
+    await key(tester, LogicalKeyboardKey.digit1);
+    expect(files.reviews[italian]!.lastRating, 'again');
+    expect(find.text('Your move'), findsOneWidget);
+  });
+
+  testWidgets('the recap offers to learn the one line left, and no empty '
+      'review', (tester) async {
+    final italian = (
+      source: fixture.ref.path,
+      id: 'line_ZTQgZTUgTmYzIE5jNiBCYz',
+    );
+    files.reviews[italian] = dueItalian(italian);
+    await pump(tester);
+    await tester.tap(find.text('Review 1'));
+    await tester.pumpAndSettle();
+    for (final uci in ['e2e4', 'g1f3', 'f1c4']) {
+      await play(tester, uci);
+    }
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(find.text('Review session done.'), findsOneWidget);
+    expect(find.textContaining('Review 0'), findsNothing);
+    await tester.tap(find.text('Learn more · 1 left'));
+    await tester.pumpAndSettle();
+    expect(trainer.lesson!.line.name, 'Ruy');
+  });
+
+  testWidgets('a move\'s letters typed in a lesson go to the move field; a '
+      'shortcut\'s do not', (tester) async {
+    await pump(tester);
+    await tester.tap(find.text('Learn 2'));
+    await tester.pumpAndSettle();
+    await key(tester, LogicalKeyboardKey.space);
+    expect(find.text('Your move'), findsOneWidget);
+
+    for (final modifier in [
+      LogicalKeyboardKey.controlLeft,
+      LogicalKeyboardKey.altLeft,
+    ]) {
+      await tester.sendKeyDownEvent(modifier);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+      await tester.sendKeyUpEvent(modifier);
+      await tester.pumpAndSettle();
+    }
+    expect(moves.words.text, isEmpty);
+    await key(tester, LogicalKeyboardKey.keyE);
+    expect(moves.words.text, 'e');
   });
 
   testWidgets('the recap offers the review the button starts: all learned '

@@ -104,7 +104,8 @@ follows) → `A repertoire named "X" already exists.` /
 `.pgn` dropped anywhere on the window → a new repertoire named after the file
 (illegal characters become `_`, trimmed, then ` (2)`, ` (3)`… until free;
 `Imported repertoire` when the name is unusable), opened on its first chapter.
-Variations become separate lines (whole games stay whole); a file with two or
+Variations become separate lines (a finished game — a result in its `Result`
+tag, or after its moves when it has none — stays whole); a file with two or
 more chapters (Lichess `ChapterName`, Chessable player headers) becomes one
 course file. It is written in a hidden staging folder and moved into place →
 `That PGN has no moves to train.`, `Could not read that file.`,
@@ -212,7 +213,9 @@ time.
   (path, section).
 - `[LineID]` is a line's training identity. A game without one is trained under an id derived from
   its moves and place, so any edit that rewrites, moves or re-places it pins
-  `[LineID]` first. Losing it orphans the line's training history.
+  `[LineID]` first. Losing it orphans the line's training history. Two games
+  sharing a `[LineID]` train the first under it; when an edit takes that one's
+  moves or place, the other is pinned to the id it trained under too.
 - A move played where no line goes on is written as a new game at the end
   of the file: `[Event "<the line it left> — 1.d4"]`, `Me` / `Training` as
   the players (by the side), `*`, and a `[LineID]`.

@@ -43,12 +43,13 @@ final class BoardDoors {
       await (positionOnly ? requests.pasteFen() : requests.paste());
       return;
     }
-    final source = workspace.session.source;
-    final game = workspace.session.game;
+    final session = workspace.session;
+    final source = session.source ?? session.analysisPage;
+    final game = session.game;
     final text = await requests.input.clipboard() ?? '';
     if (!inspecting() ||
-        source != workspace.session.source ||
-        game != workspace.session.game) {
+        source != (session.source ?? session.analysisPage) ||
+        game != session.game) {
       return;
     }
     requests.say(await inspection.paste(text, positionOnly: positionOnly));
@@ -177,7 +178,7 @@ List<AppAction> boardActions(
     if (scratch && requests.mode == Mode.repertoires)
       AppAction(
         'Save to repertoire…',
-        () => unawaited(_toRepertoire(context, requests, library)),
+        () => unawaited(_toRepertoire(context, doors, library)),
         group: 'Document',
       ),
     if (scratch && requests.mode == Mode.study)
@@ -191,9 +192,12 @@ List<AppAction> boardActions(
 
 Future<void> _toRepertoire(
   BuildContext context,
-  WorkspaceRequests requests,
+  BoardDoors doors,
   Library library,
 ) async {
+  final session = doors.workspace.session;
+  if (!session.isScratch) return;
+  final board = session.snapshot();
   final into = await showChoiceDialog<_SaveInto>(
     context,
     title: 'Save to repertoire',
@@ -210,19 +214,25 @@ Future<void> _toRepertoire(
     empty: 'No repertoire by that name',
   );
   if (into == null || !context.mounted) return;
+  final name = await switch (into) {
+    _NewRepertoire() => showNameDialog(
+      context,
+      title: 'Create repertoire',
+      label: 'Repertoire name',
+      confirm: 'Create',
+    ),
+    _Existing(:final folder) => _chapterName(context, folder.name),
+  };
+  if (name == null || !context.mounted) return;
+  final requests = doors.requests;
+  if (!session.isScratch || !identical(board, session.chapter)) {
+    requests.say('Could not save to repertoire because the board changed.');
+    return;
+  }
   switch (into) {
     case _NewRepertoire():
-      final name = await showNameDialog(
-        context,
-        title: 'Create repertoire',
-        label: 'Repertoire name',
-        confirm: 'Create',
-      );
-      if (name == null) return;
       await requests.saveBoardAsRepertoire(name);
     case _Existing(:final folder):
-      final name = await _chapterName(context, folder.name);
-      if (name == null) return;
       await requests.saveBoardToRepertoire(folder, name);
   }
 }

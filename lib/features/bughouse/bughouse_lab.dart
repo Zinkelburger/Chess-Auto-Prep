@@ -11,14 +11,7 @@ import '../../chess/bughouse/table_setup.dart';
 
 /// How many boards the Bughouse mode shows: board 1 alone, its partner
 /// board held still behind it, or the whole table.
-enum LabBoards {
-  one('1 board'),
-  two('2 boards');
-
-  const LabBoards(this.label);
-
-  final String label;
-}
+enum LabBoards { one, two }
 
 /// The Bughouse mode's table: the two boards, the line played on them with
 /// a cursor per board, how many boards are shown, the clock case the engine
@@ -29,6 +22,7 @@ enum LabBoards {
 /// for when the user comes back; quitting the app loses it.
 final class BughouseLab extends ChangeNotifier {
   TableLine _line = const TableLine(TablePosition.initial);
+  int _gameRevision = 0;
   TablePosition _position = TablePosition.initial;
   BoardNumber _focus = BoardNumber.one;
   LabBoards _boards = LabBoards.one;
@@ -51,6 +45,9 @@ final class BughouseLab extends ChangeNotifier {
 
   TableLine get line => _line;
   TablePosition get position => _position;
+
+  /// Changes when the game is replaced or edited, including its variations.
+  int get gameRevision => _gameRevision;
 
   /// The board the arrow keys and the step buttons act on: the one last
   /// moved or stepped on.
@@ -91,15 +88,14 @@ final class BughouseLab extends ChangeNotifier {
       _refuse(_illegal(board, uci));
       return;
     }
-    _line = _line.played(played.move);
-    _show(played.after, focus: board);
+    _showPlayed(_line.played(played), played.after, board);
   }
 
   /// [line] on the boards, every move of it played; a line that does not
   /// replay is not shown.
   void showLine(TableLine line) {
     if (line.replay() case LineReplayed(:final position)) {
-      _line = line;
+      _replaceLine(line);
       _show(position, focus: _focus);
     }
   }
@@ -116,12 +112,18 @@ final class BughouseLab extends ChangeNotifier {
         _refuse(const LineMisfits());
         return;
       }
-      line = line.played(played.move);
+      line = line.played(played);
       position = played.after;
     }
     if (moves.isEmpty) return;
+    _showPlayed(line, position, _focus);
+  }
+
+  void _showPlayed(TableLine line, TablePosition position, BoardNumber focus) {
+    // Playing an existing continuation only moves the cursor.
+    if (!identical(_line.nodes, line.nodes)) _gameRevision++;
     _line = line;
-    _show(position, focus: _focus);
+    _show(position, focus: focus);
   }
 
   /// [board] at [node] of its lines (null for its start), with the other
@@ -170,10 +172,15 @@ final class BughouseLab extends ChangeNotifier {
   /// dropped a piece a move taken out had captured.
   void deleteFrom(int node) {
     final board = _line.nodes[node].board;
+    if (_line.dropBrokenByRemoving(node) case final broken?) {
+      _focus = board;
+      _refuse(DeleteRefused(broken));
+      return;
+    }
     final next = _line.without(node);
     switch (next.replay()) {
       case LineReplayed(:final position):
-        _line = next;
+        _replaceLine(next);
         _show(position, focus: board);
       case LineBroken(move: final broken):
         _focus = board;
@@ -235,7 +242,7 @@ final class BughouseLab extends ChangeNotifier {
   void makeMainLine(int node) => _arrange(_line.mainLineThrough(node));
 
   void _arrange(TableLine line) {
-    _line = line;
+    if (!identical(line, _line)) _replaceLine(line);
     notifyListeners();
   }
 
@@ -251,7 +258,7 @@ final class BughouseLab extends ChangeNotifier {
     if (count < 0 || count > handLimit) return;
     final edited = _line.edited(board, side, role, delta);
     if (edited.replay() case LineReplayed(:final position)) {
-      _line = edited;
+      _replaceLine(edited);
       _show(position, focus: board);
     }
   }
@@ -342,7 +349,7 @@ final class BughouseLab extends ChangeNotifier {
     for (final (board, uci) in moves) {
       final played = lineMove(position, board, uci);
       if (played == null) break;
-      line = line.played(played.move);
+      line = line.played(played);
       position = played.after;
     }
     return single
@@ -413,7 +420,7 @@ final class BughouseLab extends ChangeNotifier {
       case PastedMovesRefused(:final token, :final game, :final start):
         _game = game;
         _asPlayed = null;
-        _line = TableLine(start);
+        _replaceLine(TableLine(start));
         _position = start;
         preview.value = null;
         _refuse(MovesRefused(token, file: _file));
@@ -451,8 +458,13 @@ final class BughouseLab extends ChangeNotifier {
     _games = null;
     _gameAt = 0;
     _file = null;
-    _line = TableLine(position);
+    _replaceLine(TableLine(position));
     _show(position, focus: focus);
+  }
+
+  void _replaceLine(TableLine line) {
+    _gameRevision++;
+    _line = line;
   }
 
   void _show(TablePosition position, {required BoardNumber focus}) {

@@ -124,6 +124,66 @@ void main() {
     expect(book.status, '1 games against your white book · 0 reach a gap');
   });
 
+  testWidgets('editing prep notes preserves imported file and alias metadata', (
+    tester,
+  ) async {
+    final directory = w.parts.players.directory;
+    final imported = readPlayerList(
+      '[{"name":"Bob","pgn_files":["/collections/player.pgn",'
+      '{"path":"/collections/more.pgn"}],"aliases":["B.",{"name":"Robert"}]}]',
+    ).single;
+    expect(await directory.import([imported]), isTrue);
+    await w.pumpShell(tester);
+    w.requests.switchTo(Mode.players);
+    directory.search('Bob');
+    await tester.pumpAndSettle();
+    await openPlayerMenu(tester);
+    await tester.tap(find.text('Edit player…'));
+    await tester.pumpAndSettle();
+    final notes = find.widgetWithText(TextFormField, 'Prep notes');
+    await tester.ensureVisible(notes);
+    await tester.enterText(notes, 'Plays the French');
+    await tester.tap(find.text('Save player'));
+    await tester.pumpAndSettle();
+    final row = (await players.read()).players.singleWhere(
+      (p) => p.id == imported.id,
+    );
+    expect(row.text('notes'), 'Plays the French');
+    for (final key in ['pgn_files', 'aliases']) {
+      expect(row.fields[key], imported.fields[key], reason: key);
+    }
+  });
+
+  testWidgets('a legacy alias stays scalar until the player replaces it', (
+    tester,
+  ) async {
+    final directory = w.parts.players.directory;
+    await directory.save(player.edited({'aliases': 'Robin'}), expected: player);
+    await w.pumpShell(tester);
+    w.requests.switchTo(Mode.players);
+    await tester.pumpAndSettle();
+    final aliases = find.widgetWithText(
+      TextFormField,
+      'Names used in PGN files',
+    );
+    for (final replace in [false, true]) {
+      await openPlayerMenu(tester);
+      await tester.tap(find.text('Edit player…'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextFormField>(aliases).controller!.text, 'Robin');
+      final field = replace
+          ? aliases
+          : find.widgetWithText(TextFormField, 'Prep notes');
+      await tester.ensureVisible(field);
+      await tester.enterText(field, replace ? 'Beth' : 'Checked');
+      await tester.tap(find.text('Save player'));
+      await tester.pumpAndSettle();
+      final saved = (await players.read()).players.single;
+      expect(saved.fields['aliases'], replace ? ['Beth'] : 'Robin');
+      expect(saved.names, isNot(contains('Robin')));
+    }
+  });
+
   testWidgets('a pasted table it cannot read says why in plain words', (
     tester,
   ) async {

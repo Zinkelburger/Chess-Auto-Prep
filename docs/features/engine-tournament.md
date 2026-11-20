@@ -148,7 +148,9 @@ called "<id>" under Documents/engine_tournaments.`
 - `engines.json` — the registry, a JSON list of engine objects (`id`, `name`,
   `executablePath` or none for bundled Stockfish, `arguments`, `options`,
   `threads`, `hashMb`, `ponder` false). Saves refuse if the file changed since
-  it was read. A registry that cannot be read is moved to
+  it was read. An open editor or removal confirmation applies its change to
+  the latest list, and refuses when that engine's settings changed since it
+  opened. A registry that cannot be read is moved to
   `recovery-quarantine` under Support and read as empty, with a warning.
 - `open_request.json` — `{tournamentId, requestedAt}` from the MCP tools; moved
   to a private name before reading, deleted after, ignored after 24 hours.

@@ -278,15 +278,26 @@ final class TableLine {
     return last == null ? null : goTo(nodes[last].board, nodes[last].parent);
   }
 
-  /// [move] played at its board's cursor: the continuation already there
-  /// when it is the same move, or a new one, which is a variation when the
-  /// board already goes on from there. The other board stays where it is.
-  TableLine played(LineMove move) {
+  /// Plays the result of [lineMove] at its board's cursor, reusing a matching
+  /// continuation when it replays to the same table as playing the move now.
+  /// The other board stays where it is.
+  TableLine played(({TablePosition after, LineMove move}) result) {
+    final (:after, :move) = result;
     final board = move.board;
     final from = at(board);
     for (final next in children(board, from)) {
       if (nodes[next].entry case LineMove(:final uci) when uci == move.uci) {
-        return goTo(board, next);
+        final continuation = goTo(board, next);
+        // Only drops and captures can interact with later partner steps.
+        if (next > (at(board.other) ?? -1) ||
+            (!move.uci.contains('@') && !move.san.contains('x'))) {
+          return continuation;
+        }
+        if (continuation.replay() case LineReplayed(
+          :final position,
+        ) when position.one == after.one && position.two == after.two) {
+          return continuation;
+        }
       }
     }
     return _added(move);
@@ -359,6 +370,77 @@ final class TableLine {
       {...one, ...two},
       (one.isEmpty ? null : one.last, two.isEmpty ? null : two.last),
     );
+  }
+
+  /// A partner drop that loses its piece if [node]'s branch goes. Check
+  /// each surviving history whose partner was removed. A reused drop may
+  /// rely on a different capture in the history of a later ordinary move.
+  LineMove? dropBrokenByRemoving(int node) {
+    // A removed path changes the partner's hand only after a capture on
+    // that path. SAN includes the capture marker for en passant too.
+    bool captures(LineEntry entry) =>
+        entry is LineMove && entry.san.contains('x');
+    final removed = {node};
+    final supplied = {if (captures(nodes[node].entry)) node};
+    final board = nodes[node].board;
+    bool drops(LineEntry entry) => entry is LineMove && entry.uci.contains('@');
+    final hasDrop = <int>{};
+    final replays = <(int?, int?), LineReplay>{
+      (null, null): LineReplayed(root),
+    };
+    for (var i = 0; i < nodes.length; i++) {
+      final step = nodes[i];
+      if (step.board != board &&
+          (hasDrop.contains(step.parent) || drops(step.entry))) {
+        hasDrop.add(i);
+      }
+      if (i <= node) continue;
+      if (step.board == board && removed.contains(step.parent)) {
+        removed.add(i);
+        if (supplied.contains(step.parent) || captures(step.entry)) {
+          supplied.add(i);
+        }
+      } else if (hasDrop.contains(i) && supplied.contains(step.partner)) {
+        final before = asAt(i);
+        final after = before
+            .goTo(board, nodes[node].parent)
+            ._replayCached(replays);
+        if (after is LineBroken &&
+            before._replayCached(replays) is LineReplayed) {
+          return after.move;
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Histories share the replay up to the same pair of cursors. Walk back
+  /// in play order to a known prefix, then apply only the remaining steps.
+  LineReplay _replayCached(Map<(int?, int?), LineReplay> cache) {
+    var at = _at;
+    final missing = <((int?, int?), int)>[];
+    while (!cache.containsKey(at)) {
+      final (one, two) = at;
+      if (one != null && (two == null || one > two)) {
+        missing.add((at, one));
+        at = (nodes[one].parent, two);
+      } else {
+        missing.add((at, two!));
+        at = (one, nodes[two].parent);
+      }
+    }
+    var replay = cache[at]!;
+    for (final (cursors, node) in missing.reversed) {
+      if (replay case LineReplayed(:final position)) {
+        final entry = nodes[node].entry;
+        final after = _apply(position, entry);
+        replay = after == null
+            ? LineBroken(entry as LineMove)
+            : LineReplayed(after);
+      }
+      cache[cursors] = replay;
+    }
+    return replay;
   }
 
   /// [node] and everything after it on its board taken out; a cursor in

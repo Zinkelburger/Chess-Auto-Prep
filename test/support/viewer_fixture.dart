@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/features/pgn_viewer/pgn_viewer.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
@@ -37,6 +39,7 @@ final class ScriptedRecentFiles implements RecentFiles {
   @override
   Future<bool> save(List<String> paths) async {
     saved.add(List.of(paths));
+    if (accepting) listing = RecentFilesListed(saved.last);
     return accepting;
   }
 }
@@ -51,7 +54,7 @@ final class ScriptedImport implements PgnFileImport {
   final asked = <String>[];
 
   /// What [read] answers, by path; a path not here cannot be read.
-  final picked = <String, PickedRead>{};
+  final picked = <String, FutureOr<PickedRead>>{};
 
   /// Every path read, in order.
   final reads = <String>[];
@@ -127,6 +130,21 @@ const threeGameFile = '''
 [Result "*"]
 
 1. c4 *
+''';
+
+/// A game with no id of its own, spelled as a file may spell it and as
+/// the app does not: `0-0`, a disambiguation it does not need, a promotion with
+/// no `=` and checks with no `+`.
+const oddlySpelledGame = '''
+[Event "Casual"]
+[Date "2024.02.01"]
+[White "White"]
+[Black "Black"]
+[Result "*"]
+[SetUp "1"]
+[FEN "8/4P3/2k5/8/8/8/8/RN2K2R w KQ - 0 1"]
+
+1. 0-0 Kd5 2. Nbd2 Kc6 3. e8Q Kb6 4. Qb8 Kc5 *
 ''';
 
 /// Everything a viewer test needs: a scripted store holding [text] under

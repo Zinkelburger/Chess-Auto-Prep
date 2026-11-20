@@ -3,6 +3,8 @@
 // that lands after the user went somewhere else. Whatever order the answers
 // come back in, the words reach the file they were typed into, and the
 // screen shows what that file holds.
+import 'dart:async';
+
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart'
@@ -36,6 +38,27 @@ void main() {
   }
 
   group('words typed while another document is read', () {
+    test('a Save pressed during the read goes out though the first write '
+        'failed', () async {
+      final fixture = await slowSession();
+      final session = fixture.session;
+      session.setComment(sicilian, 'Autosave');
+      session.holdsEdits = true;
+      session.setComment(sicilian, 'Explicit save');
+      fixture.store.saves.add(const IoFailure('disk full'));
+      final gate = fixture.store.readEarly = Completer<void>();
+      final opening = session.open(other);
+      await pumpEventQueue();
+      expect(fixture.store.readEarly, isNull);
+      expect(fixture.onDisk, isNot(contains('Autosave')));
+      expect(session.keepHeld(), isTrue);
+      gate.complete();
+
+      expect(await opening, isA<DocumentOpened>());
+      expect(fixture.onDisk, contains('Explicit save'));
+      expect(session.source, other);
+    });
+
     test('reach the file they were typed into', () async {
       final fixture = await slowSession();
       fixture.store.hold = true;
@@ -108,6 +131,34 @@ void main() {
       expect(await fixture.session.showAnalysisBoard(), isTrue);
       expect(fixture.session.isScratch, isTrue);
     });
+
+    test(
+      'opening a section uses the revision already saved by its sibling',
+      () async {
+        final fixture = await openSession(courseFile);
+        addTearDown(fixture.dispose);
+        final path = fixture.ref.path;
+        final session = fixture.session;
+        await session.open(ChapterRef.at(path, section: 'Open games'));
+        final gate = fixture.store.readEarly = Completer<void>();
+        final opening = session.open(ChapterRef.at(path, section: 'Sicilian'));
+        await pumpEventQueue();
+        expect(fixture.store.readEarly, isNull, reason: 'the read captured R0');
+
+        session.setComment(sicilian, 'Saved in Open games');
+        await fixture.saver.flush();
+        expect(fixture.onDisk, contains('Saved in Open games'));
+        gate.complete();
+        expect(await opening, isA<DocumentOpened>());
+
+        session.cursor.toEnd();
+        session.playMove('d7d5');
+        await fixture.saver.flush();
+        expect(fixture.saver.state, isA<Saved>());
+        expect(fixture.onDisk, contains('Saved in Open games'));
+        expect(fixture.onDisk, contains('1. e4 c5 2. c3 d5 *'));
+      },
+    );
 
     test('into the file being opened are in what it shows', () async {
       const path = '/repertoires/Course/Course.pgn';

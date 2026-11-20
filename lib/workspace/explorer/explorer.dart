@@ -351,7 +351,14 @@ final class Explorer extends ChangeNotifier {
       TreeFailed(:final sentence) => sentence,
       _ => null,
     };
-    if (games.answerAt(fen) case final answer?) {
+    final answer = games.answerAt(fen);
+    // No rows to put it beside: the part that could not be read is the
+    // answer, with Try again, not "no games".
+    if (_notice case final problem? when answer?.isEmpty ?? true) {
+      _show(ExplorerFailed(problem));
+      return;
+    }
+    if (answer != null) {
       _show(_shown(fen, answer));
       return;
     }

@@ -15,7 +15,9 @@ import 'package:chess_auto_prep/workspace/document/chapter_commands.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document/document_session.dart';
 import 'package:chess_auto_prep/workspace/review/game_review.dart';
+import 'package:chess_auto_prep/workspace/review/game_review_pane.dart';
 import 'package:dartchess/dartchess.dart' show Move;
+import 'package:flutter/material.dart' show Checkbox, MaterialApp, Scaffold;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_engine.dart';
@@ -295,6 +297,24 @@ void main() {
     expect(tree.nodeAt(NodePath.of([1, 0, 0]))?.san, 'c4');
   });
 
+  test("removing a review keeps the player's replacement reply", () async {
+    final session = fixture.session;
+    await session.open(fixture.ref, game: 0);
+    expect(session.apply((chapter) => annotateGame(chapter, reviewed)), isNull);
+    final d4 = NodePath.of([1]);
+    final reply = d4.mainChild;
+    expect(session.tree!.nodeAt(reply)?.san, 'd5');
+    expect(deleteFrom(session, reply), isNull);
+    session.cursor.goTo(d4);
+    session.playMove('g8f6');
+    expect(session.tree!.nodeAt(reply)?.san, 'Nf6');
+
+    review.setAnnotate(false);
+    final tree = session.tree!;
+    expect(tree.lineTo(reply).map((node) => node.san), ['d4', 'Nf6']);
+    expect(hasReview(tree), isFalse);
+  });
+
   test("a note on the review line's first move survives removal", () {
     final marked =
         annotateGame(fixture.session.chapter!, reviewed) as ChapterEdited;
@@ -426,6 +446,38 @@ void main() {
   });
 
   test(
+    'Analyze again writes fresh evaluations when Annotate PGN is checked',
+    () async {
+      fixture.session.holdsEdits = false;
+      review.setAnnotate(false);
+      expect(review.annotate, isFalse);
+
+      const saved =
+          '[Event "Reviewed"]\n[Result "*"]\n\n'
+          '{[%eval +0.10] [%cap_review_eval]} '
+          '1. d4 {[%eval +0.15] [%cap_review_eval]} *';
+      final ref = chapterRef('KID', 'Reviewed');
+      fixture.store.documents[ref] = Opened(saved, scriptedRevision(saved));
+      await fixture.session.open(ref);
+      expect(review.annotate, isTrue);
+
+      final running = review.start();
+      for (final move in ['d2d4', 'd7d5']) {
+        await pumpEventQueue();
+        engine.current.emit(
+          line(depth: 14, score: const Centipawns(35), pv: [move]),
+        );
+        engine.current.end();
+      }
+      await running;
+      expect(review.problem, isNull);
+      await fixture.saver.flush();
+      final pgn = (fixture.store.documents[ref] as Opened).text;
+      expect(pgn, contains('[%eval -0.35]'));
+    },
+  );
+
+  test(
     'turning the switch on for a game that has the review keeps it',
     () async {
       final running = review.start();
@@ -439,6 +491,50 @@ void main() {
       review.setAnnotate(true);
       expect(review.annotated, isTrue);
       expect(review.problem, isNull);
+    },
+  );
+
+  testWidgets(
+    'Analyze again saves the new review when Annotate PGN is checked',
+    (tester) async {
+      final marked =
+          annotateGame(fixture.session.chapter!, reviewed) as ChapterEdited;
+      fixture.externalEdit(
+        '[Event "First"]\n[Result "*"]\n\n1. d4 *\n\n'
+        '${writeChapter(marked.chapter)}',
+      );
+      final session = fixture.session;
+      session.holdsEdits = false;
+      await session.open(fixture.ref, game: 0);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: GameReviewPane(review: review)),
+        ),
+      );
+      final checkbox = find.byType(Checkbox);
+      await tester.tap(find.text('Annotate PGN'));
+      await tester.pump();
+      expect(tester.widget<Checkbox>(checkbox).value, isFalse);
+
+      session.showGame(1);
+      await tester.pump();
+      expect(tester.widget<Checkbox>(checkbox).value, isTrue);
+      await tester.tap(find.text('Analyze again'));
+      for (final (cp, move) in [(45, 'g1f3'), (250, 'c7c5'), (-250, 'g1f3')]) {
+        await tester.pump();
+        engine.current.emit(line(depth: 14, score: Centipawns(cp), pv: [move]));
+        engine.current.end();
+      }
+      await tester.pump();
+      expect(review.running, isFalse);
+      expect(review.problem, isNull);
+      await fixture.saver.flush();
+
+      final saved = parseChapter(name: 'Games', text: fixture.onDisk);
+      final tree = saved.lines[1].tree!;
+      expect(storedReviewValue(tree.rootComment)?.cp, 45);
+      expect(writtenReviewMark(tree.children.first), ReviewMark.blunder);
+      expect(tree.children.map((move) => move.san), ['e4', 'Nf3']);
     },
   );
 
@@ -492,6 +588,28 @@ void main() {
     final last = tree.nodeAt(NodePath.of([0, 0]))!;
     expect(last.comment ?? '', isNot(contains('[%eval')));
     expect(last.nags.where((n) => n == 2 || n == 4 || n == 6), isEmpty);
+  });
+
+  test('opening another file ends the review of every game, even if the '
+      'file comes back before the position is finished', () async {
+    const placement = '7k/8/8/8/8/8/R7/6K1 w - -';
+    const twins =
+        '[Event "A"]\n[SetUp "1"]\n[FEN "$placement 0 1"]\n\n1. Ra3 *\n\n'
+        '[Event "B"]\n[SetUp "1"]\n[FEN "$placement 0 1"]\n\n1. Ra3 *\n';
+    final ref = chapterRef('Study', 'Endings');
+    fixture.store.documents[ref] = Opened(twins, scriptedRevision(twins));
+    final session = fixture.session;
+    await session.open(ref, game: 0);
+    final running = review.startAll();
+    await pumpEventQueue();
+    await session.open(fixture.ref);
+    await session.open(ref, game: 0);
+    final stopped = engine.current.stopped;
+    engine.current.end();
+    await running;
+    expect(stopped, isTrue);
+    expect(review.unreviewedGames, [0, 1]);
+    expect(engine.searches, hasLength(1));
   });
 
   test('every game is reviewed in turn, each written into its own game, '

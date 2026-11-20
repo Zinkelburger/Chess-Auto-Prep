@@ -14,7 +14,7 @@ sealed class HivemindBudget {
   String get go;
 
   /// How long the engine may say nothing before it is taken for wedged:
-  /// every `info` line it prints starts the wait again.
+  /// an increase in reported nodes starts the wait again.
   Duration get patience;
 }
 
@@ -221,7 +221,9 @@ final class HivemindProcess implements Hivemind, EngineProcess {
     HivemindQuestion question,
     HivemindLines? onLines,
   ) async {
-    if (_exited.isCompleted) return const HivemindFailed(_gone);
+    if (_exited.isCompleted || _unresponsive) {
+      return const HivemindFailed(_gone);
+    }
     _searching = true;
     _cut = false;
     try {
@@ -229,11 +231,11 @@ final class HivemindProcess implements Hivemind, EngineProcess {
       _send('position fen ${question.position.dualFen}');
       final collecting = _collecting = _Collecting(
         wanted: question.lines,
-        patience: question.budget.patience,
+        budget: question.budget,
         onLines: onLines,
       );
       _send(question.budget.go);
-      if (_cut) _send('stop');
+      if (_cut) _stopCollecting(collecting);
       final answer = await collecting.done.future;
       _send('stop');
       return answer;
@@ -275,9 +277,14 @@ final class HivemindProcess implements Hivemind, EngineProcess {
 
   @override
   void stop() {
-    if (!_searching) return;
+    if (!_searching || _cut) return;
     _cut = true;
-    if (_collecting != null) _send('stop');
+    if (_collecting case final collecting?) _stopCollecting(collecting);
+  }
+
+  void _stopCollecting(_Collecting collecting) {
+    collecting.stop();
+    _send('stop');
   }
 
   @override
@@ -346,22 +353,43 @@ const _gone = 'The bughouse engine stopped.';
 /// starts. The answer holds the last block, which the engine prints just
 /// before `bestmove`.
 final class _Collecting {
-  _Collecting({required this.wanted, required this.patience, this.onLines}) {
-    _watch();
+  _Collecting({required this.wanted, required this.budget, this.onLines}) {
+    _watch(budget.patience);
+    if (budget is TimeBudget) _deadline = Timer(budget.patience, _timedOut);
   }
 
   final int wanted;
 
-  /// How long the engine may print nothing before it is taken for wedged.
-  final Duration patience;
+  /// The search limit and how long it may make no progress before it is wedged.
+  final HivemindBudget budget;
+  Timer? _deadline;
   final HivemindLines? onLines;
   final done = Completer<HivemindAnswer>();
   var _block = <int, JointLine>{};
   bool _handed = false;
   Timer? _watchdog;
 
+  int _nodes = -1;
+  bool _stopped = false;
+
+  /// How long a stopped search may take to print `bestmove`. The engine
+  /// first finishes the batch it is evaluating, which takes seconds on a
+  /// busy or slow CPU; only a wedged one runs past this.
+  static const stopGrace = Duration(seconds: 30);
+
+  void stop() {
+    _stopped = true;
+    _watch(stopGrace);
+  }
+
   void add(JointLine line) {
-    _watch();
+    if (!_stopped && line.nodes > _nodes) {
+      _nodes = line.nodes;
+      _watch(budget.patience);
+      if (budget case NodeBudget(:final nodes) when _nodes >= nodes) {
+        _deadline ??= Timer(const Duration(minutes: 1), _timedOut);
+      }
+    }
     if (line.rank == 1) {
       _hand();
       _block = {};
@@ -377,11 +405,13 @@ final class _Collecting {
     onLines?.call(rankedLines(_block.values));
   }
 
-  void _watch() {
+  void _watch(Duration limit) {
     _watchdog?.cancel();
-    _watchdog = Timer(patience, () {
-      if (!done.isCompleted) done.completeError(TimeoutException(null));
-    });
+    _watchdog = Timer(limit, _timedOut);
+  }
+
+  void _timedOut() {
+    if (!done.isCompleted) done.completeError(TimeoutException(null));
   }
 
   void finish(String bestmove) {
@@ -398,7 +428,10 @@ final class _Collecting {
     if (!done.isCompleted) done.completeError(failure);
   }
 
-  void dispose() => _watchdog?.cancel();
+  void dispose() {
+    _watchdog?.cancel();
+    _deadline?.cancel();
+  }
 }
 
 /// `bestmove (d2d4,pass) ponder (d7d5,d2d4)` → the chosen action; null for

@@ -26,6 +26,15 @@ void main() {
     expect(names, isNot(contains('e1a1')));
   });
 
+  test('a king castling off the e-file keeps the king-to-rook name', () {
+    // Rights a pasted FEN can carry; the king lands where an ordinary king
+    // move would, or off the board when counted two files along.
+    expect(namesOf('1k6/8/8/8/8/8/8/RK6 w Q - 0 1'), contains('b1a1'));
+    final kingside = namesOf('k7/8/8/8/8/8/8/6KR w K - 0 1');
+    expect(kingside, contains('g1h1'));
+    expect(kingside, isNot(contains('g1a2')));
+  });
+
   test('a king taking the opponent\'s rook is a capture, not castling', () {
     final names = namesOf('4k3/8/8/8/8/8/5r2/4K3 w - - 0 1');
     expect(names, contains('e1f2'));

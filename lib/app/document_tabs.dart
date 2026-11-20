@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:dartchess/dartchess.dart' show Side;
 
-import '../chess/fen.dart';
+import '../chess/pgn/analysis_board.dart';
 import '../chess/pgn/game_tree.dart';
 import '../storage/chapter_files.dart';
 import '../ui/pane_tabs.dart';
@@ -167,10 +167,7 @@ final class DocumentTabs {
 
   /// Whether the board up is an analysis board nothing was done on.
   bool get _blankNow =>
-      session.isScratch &&
-      !session.canUndo &&
-      session.tree!.children.isEmpty &&
-      session.tree!.rootFen == Fen.initial;
+      session.isScratch && !session.canUndo && isBlankBoard(session.chapter!);
 
   Future<void> select(Object id) async {
     if (_disposed) return;
@@ -189,9 +186,19 @@ final class DocumentTabs {
     _selecting = id;
     try {
       if (page.source case final source?) {
-        final result = page.viewedFile
-            ? await requests.openFile(source, game: page.game, keepPlace: true)
-            : await requests.open(source, game: page.game);
+        final result = switch (mode) {
+          _ when page.viewedFile => await requests.openFile(
+            source,
+            game: page.game,
+            keepPlace: true,
+          ),
+          // Handed to the viewer, it comes back among its games, as then.
+          Mode.pgnViewer when page.game != null => await requests.readInViewer(
+            source,
+            game: page.game,
+          ),
+          _ => await requests.open(source, game: page.game),
+        };
         if (_disposed || result is! RequestDone || session.source != source) {
           return;
         }
@@ -206,6 +213,15 @@ final class DocumentTabs {
     requests.switchTo(mode, from: from);
     session.cursor.goTo(cursor);
     if (session.orientation != side) session.flip();
+  }
+
+  /// Puts back the edits the tab of [source] parked, once Back or Forward
+  /// has read its file again, as picking the tab would.
+  Future<void> restoreParked(ChapterRef source) async {
+    final page = _pages[source];
+    final draft = page?.draft;
+    if (_disposed || page == null || draft == null) return;
+    if (session.source == source) await _restore(page, source, draft);
   }
 
   /// Puts the edits [page] parked back on the file just read, and answers
@@ -306,10 +322,7 @@ final class _DocumentPage {
   /// on: it is no mode's in particular.
   bool get isBlank {
     final kept = board;
-    return kept != null &&
-        !kept.canUndo &&
-        kept.chapter.tree.children.isEmpty &&
-        kept.chapter.tree.rootFen == Fen.initial;
+    return kept != null && !kept.canUndo && isBlankBoard(kept.chapter);
   }
 
   void remember(DocumentSession session) {

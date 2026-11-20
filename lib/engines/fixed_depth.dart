@@ -18,10 +18,10 @@ import 'engine_line.dart';
 /// which is what stops the search rather than scoring the position level or
 /// letting the cache keep a depth-5 guess labelled depth 14.
 ///
-/// Two shallow lines are verdicts all the same: a mate score, which is
-/// proven by the moves after it and is where an engine may stop iterating
-/// early, and a line with no moves, which is a game already over (Stockfish
-/// answers checkmate or stalemate at depth 0).
+/// Two shallow lines are verdicts all the same: a mate score, which an
+/// engine may report with or without the moves proving it when it stops
+/// iterating early, and a line without moves when the game is already over
+/// (Stockfish answers checkmate or stalemate at depth 0).
 final class FixedDepthEvaluator implements PositionEvaluator {
   const FixedDepthEvaluator(this.engine, {required this.depth});
 
@@ -39,7 +39,9 @@ final class FixedDepthEvaluator implements PositionEvaluator {
       return EvaluationUnavailable('${engine.name} gave no evaluation');
     }
     final settled =
-        verdict.depth >= depth || verdict.score is MateIn || verdict.pv.isEmpty;
+        verdict.depth >= depth ||
+        verdict.score is MateIn ||
+        (verdict.pv.isEmpty && position.isGameOver);
     if (!settled) {
       return EvaluationUnavailable(
         '${engine.name} stopped at depth ${verdict.depth} of $depth',

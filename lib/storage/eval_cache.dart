@@ -63,12 +63,9 @@ final class EvalCache {
   /// nothing.
   bool get available => _db != null;
 
-  /// The score from White's side kept for [fen4], the four-field FEN, when
-  /// it was scored at least [minDepth] deep; null otherwise.
-  int? read(String fen4, {required int minDepth}) =>
-      readVerdict(fen4, minDepth: minDepth)?.cpWhite;
-
-  /// Keep the stored depth alongside the score for result inspection.
+  /// The score from White's side kept for [fen4], the four-field FEN, and
+  /// the depth it was scored at, when that is at least [minDepth]; null
+  /// otherwise.
   ({int cpWhite, int depth})? readVerdict(
     String fen4, {
     required int minDepth,

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:chess_auto_prep/chess/training/schedule.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/features/trainer/trainer.dart';
 import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
@@ -8,9 +9,12 @@ import 'package:chess_auto_prep/storage/book_file.dart';
 import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/book_snapshot.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
+import 'package:chess_auto_prep/storage/document_repository.dart';
+import 'package:chess_auto_prep/storage/edit_scope.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/book/books.dart';
+import 'package:chess_auto_prep/workspace/book/repertoire_catalog.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -66,6 +70,68 @@ void main() {
     session.dispose();
   });
 
+  test(
+    'a line sent to train skips model games, excluded lines and other starts',
+    () async {
+      const text = '''
+// Color: White
+
+[Event "Playable"]
+[LineID "play"]
+
+1. e4 e5 2. Nf3 *
+
+[Event "Model"]
+[ModelGameResult "1-0"]
+
+1. e4 *
+
+[Event "Excluded"]
+[LineID "excluded"]
+
+1. e4 c5 *
+
+[Event "Different start"]
+[SetUp "1"]
+[FEN "rnbqkbnr/1ppppppp/p7/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 2"]
+
+2. e4 *
+''';
+      session.externalEdit(text);
+      await session.session.reloadFromDisk();
+      final key = (source: session.ref.path, id: 'excluded');
+      progress.reviews[key] = Review(
+        key: key,
+        lineName: 'Excluded',
+        excluded: true,
+      );
+      expect(await trainer.trainLineThrough(['e4']), isTrue);
+      expect(trainer.lesson!.line.key.id, 'play');
+    },
+  );
+
+  test('a late prefix request cannot replace the newer lesson', () async {
+    const text =
+        '$_text\n\n[Event "Queen pawn"]\n[LineID "queen"]\n\n1. d4 d5 *';
+    session.externalEdit(text);
+    await session.session.reloadFromDisk();
+    trainer.setScope(TrainScope.repertoire);
+    await trainer.reload();
+    chapters.hold = true;
+    final older = trainer.trainLineThrough(['e4']);
+    await pumpEventQueue();
+    final newer = trainer.trainLineThrough(['d4']);
+    await pumpEventQueue();
+    expect(chapters.pendingCalls, 2);
+    chapters.releaseLast();
+    expect(await newer, isTrue);
+    final lesson = trainer.lesson;
+    expect(lesson!.line.key.id, 'queen');
+    chapters.releaseNext();
+    expect(await older, isFalse);
+    expect(trainer.lesson, same(lesson));
+  });
+
   test('an unreadable chapter is left out and the rest are trained', () {
     fakeAsync((clock) {
       session.store.documents[ref('KID', 'Other')] = const Unreadable(
@@ -85,6 +151,130 @@ void main() {
       clock.flushMicrotasks();
       final ready = trainer.state as TrainerReady;
       expect(ready.chapters.map((c) => c.ref.name), ['Main']);
+    });
+  });
+
+  test(
+    'reloading a populated training book reports a catalog read failure',
+    () {
+      fakeAsync((clock) {
+        trainer.setScope(TrainScope.book);
+        clock.flushMicrotasks();
+        expect((trainer.state as TrainerReady).chapters, hasLength(2));
+        chapters.listing = const RepertoiresUnreadable('folder denied');
+        unawaited(trainer.reload());
+        clock.flushMicrotasks();
+        expect(trainer.state, isA<TrainerFailed>());
+      });
+    },
+  );
+
+  test('opening a chapter of another repertoire trains that repertoire', () {
+    fakeAsync((clock) {
+      final benko = ref('benko', 'Other');
+      session.store.documents[benko] = Opened(_text, scriptedRevision(_text));
+      chapters.listing = Repertoires([
+        folder('KID', ['Main', 'Other']),
+        folder('benko', ['Other']),
+      ]);
+      trainer.setScope(TrainScope.repertoire);
+      clock.flushMicrotasks();
+      expect((trainer.state as TrainerReady).chapters, hasLength(2));
+      unawaited(session.session.open(benko));
+      clock.flushMicrotasks();
+      expect((trainer.state as TrainerReady).chapters.map((c) => c.ref), [
+        benko,
+      ]);
+    });
+  });
+
+  test('a change under the repertoire being trained reads it again; one '
+      'elsewhere does not', () {
+    fakeAsync((clock) {
+      final benko = ref('benko', 'Other');
+      session.store.documents[benko] = Opened(_text, scriptedRevision(_text));
+      chapters.listing = Repertoires([
+        folder('KID', ['Main', 'Other']),
+        folder('benko', ['Other']),
+      ]);
+      final repository = DocumentRepository(session.store);
+      addTearDown(repository.dispose);
+      final catalog = RepertoireCatalog(
+        files: chapters,
+        documents: repository,
+        root: '/repertoires',
+      );
+      addTearDown(catalog.dispose);
+      unawaited(catalog.refresh());
+      clock.flushMicrotasks();
+      final watching = Trainer(
+        session: session.session,
+        chapters: ScopeReader(files: chapters, documents: session.store),
+        files: progress,
+        analysis: analysis,
+        catalog: catalog,
+        time: (now: () => DateTime.utc(2026), jitter: () => 0),
+        books: books,
+      );
+      addTearDown(watching.dispose);
+      watching.setScope(TrainScope.repertoire);
+      clock.flushMicrotasks();
+      final reads = progress.reads;
+
+      unawaited(
+        repository.save(
+          benko,
+          '$_text\n',
+          expected: scriptedRevision(_text),
+          scope: const WholeDocument(),
+        ),
+      );
+      clock.flushMicrotasks();
+      expect(progress.reads, reads, reason: 'another repertoire changed');
+
+      const slav = '$_text\n\n[Event "Slav"]\n\n1. d4 d5 2. c4 c6 *\n';
+      unawaited(
+        repository.save(
+          ref('KID', 'Other'),
+          slav,
+          expected: scriptedRevision(_text),
+          scope: const WholeDocument(),
+        ),
+      );
+      clock.flushMicrotasks();
+      expect(progress.reads, reads + 1);
+      expect(
+        (watching.state as TrainerReady).lines.map((l) => l.name),
+        contains('Slav'),
+      );
+    });
+  });
+
+  test('a book being trained follows an edit of the book, and only then', () {
+    fakeAsync((clock) {
+      final kid = (chapters.listing as Repertoires).folders.single;
+      trainer.show();
+      clock.flushMicrotasks();
+      final reads = progress.reads;
+      books.setChapter(books.chosen!, kid, ref('KID', 'Other'), false);
+      clock.flushMicrotasks();
+      expect(
+        progress.reads,
+        reads,
+        reason: 'the chapter is trained, not the book',
+      );
+
+      trainer.setScope(TrainScope.book);
+      clock.flushMicrotasks();
+      expect((trainer.state as TrainerReady).chapters.map((c) => c.ref.name), [
+        'Main',
+      ]);
+      books.setChapter(books.chosen!, kid, ref('KID', 'Other'), true);
+      clock.flushMicrotasks();
+      expect((trainer.state as TrainerReady).chapters.map((c) => c.ref.name), [
+        'Main',
+        'Other',
+      ]);
     });
   });
 

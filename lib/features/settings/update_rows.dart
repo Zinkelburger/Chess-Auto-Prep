@@ -6,14 +6,14 @@ import 'update_offer.dart';
 
 /// The App page's update rows: the version with Check now, the two
 /// switches, and a row for the update itself only while there is one.
-List<SettingRow> updateRows(AppUpdates updates, {DateTime? now}) {
+List<SettingRow> updateRows(AppUpdates updates) {
   final choices = updates.choices;
   final manual = updates.kind == InstallKind.manual;
   return [
     SettingRow(
       'Version',
       ActionSetting('Check now', () => updates.check()),
-      hint: _versionHint(updates, now),
+      hint: _versionHint(updates),
     ),
     SettingRow(
       'Check for updates automatically',
@@ -42,14 +42,14 @@ List<SettingRow> updateRows(AppUpdates updates, {DateTime? now}) {
   ];
 }
 
-String _versionHint(AppUpdates updates, DateTime? now) {
+String _versionHint(AppUpdates updates) {
   final installed = updates.version.isEmpty
       ? 'Version unknown'
       : updates.version;
   final checked = updates.choices.lastChecked;
   final when = checked == null
       ? 'not checked yet'
-      : 'checked ${relativeTime(checked, now: now)}';
+      : 'checked ${relativeTime(checked)}';
   return switch (updates.status) {
     CheckingForUpdate() => '$installed · checking…',
     UpToDate() => '$installed · up to date · $when',
@@ -105,12 +105,7 @@ SettingRow? _updateRow(AppUpdates updates) {
     ),
     UpdateFailed(:final problem, :final offer) => SettingRow(
       offer == null ? 'Update' : name(offer),
-      ActionSetting(
-        'Try again',
-        offer != null && offer.installable
-            ? () => updates.install()
-            : () => updates.check(),
-      ),
+      ActionSetting('Try again', updates.retry),
       hint: problemText(problem),
       warn: true,
     ),

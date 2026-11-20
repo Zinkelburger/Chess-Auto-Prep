@@ -41,6 +41,24 @@ void main() {
     expect(done(), isTrue);
   }
 
+  test('correcting a US Chess ID discards the old identity’s rating', () async {
+    final rating = owner.updateRatings();
+    expect(owner.lookupStatus, contains('Looking up A'));
+    final a = named('A');
+    expect(
+      await owner.save(
+        a.edited({'uscf_id': '33333333', 'rating': 1400}),
+        expected: a,
+      ),
+      isTrue,
+    );
+    lookups['11111111']!.complete((name: 'A', rating: 1950));
+    lookups['22222222']!.complete((name: 'B', rating: null));
+    await rating;
+    expect(named('A').text('uscf_id'), '33333333');
+    expect(named('A').text('rating'), '1400');
+  });
+
   test('an edit made while ratings are looked up is kept and the next '
       'rating is saved over it', () async {
     final running = owner.updateRatings();
@@ -57,9 +75,56 @@ void main() {
     expect(named('B').text('notes'), 'x');
     expect(named('B').text('rating'), '1700');
     expect(named('A').text('rating'), '1500');
+    expect(owner.lookupStatus, '2 ratings updated · 0 unavailable');
     final a = named('A');
     expect(await owner.save(a.edited({'notes': 'y'}), expected: a), isTrue);
     expect(await pending.settle(), isNull);
+  });
+
+  test('a rating that comes back after Stop is not saved, and nobody after '
+      'it is looked up', () async {
+    final running = owner.updateRatings();
+    expect(owner.lookupStatus, contains('Looking up A'));
+    owner.stopLookup();
+    lookups['11111111']!.complete((name: 'A', rating: 1500));
+    await running;
+    expect(named('A').text('rating'), isEmpty);
+    expect(owner.lookupStatus, '0 ratings updated · 0 unavailable');
+    expect(owner.lookingUp, isFalse);
+  });
+
+  test('a directory not read yet says so, and is read once loaded', () async {
+    final fresh = Players(files, pending);
+    addTearDown(fresh.dispose);
+    expect(fresh.loaded, isFalse);
+    await fresh.load();
+    expect(fresh.loaded, isTrue);
+    expect(fresh.players, hasLength(2));
+  });
+
+  test('taking the directory down while it is read is safe', () async {
+    final gate = Completer<void>();
+    final slow = Players(_Gated(files, gate.future), pending);
+    final loading = slow.load();
+    slow.dispose();
+    gate.complete();
+    await expectLater(loading, completes);
+    expect(slow.players, isEmpty);
+  });
+
+  test('players pasted into a group join that group', () async {
+    final club = PlayerGroup.create('Club');
+    final other = PlayerGroup.create('Other');
+    await files.saveGroup(other);
+    await files.saveGroup(club);
+    await owner.load();
+    owner.showGroup(club.id);
+    expect(await owner.import([Player.create('Dana')]), isTrue);
+    final dana = named('Dana');
+    final groups = {for (final g in owner.groups) g.name: g};
+    expect(groups['Club']!.contains(dana.id), isTrue);
+    expect(groups['Other']!.contains(dana.id), isFalse);
+    expect(owner.visible.map((p) => p.name), ['Dana']);
   });
 
   test('a save over a row another window changed is refused, reloads the '
@@ -163,6 +228,30 @@ void main() {
     expect(carla.fields['pgn_files'], ['/home/u/opp.pgn']);
     expect(carla.fields['aliases'], ['Carla', 7, 'C. Diaz']);
   });
+}
+
+/// [PlayerFiles] whose reads wait for [gate].
+final class _Gated implements PlayerStore {
+  _Gated(this.files, this.gate);
+  final PlayerFiles files;
+  final Future<void> gate;
+
+  @override
+  Future<PlayerDirectory> read() async {
+    await gate;
+    return files.read();
+  }
+
+  @override
+  Future<void> savePlayer(Player player, {Player? expected}) =>
+      files.savePlayer(player, expected: expected);
+  @override
+  Future<void> saveGroup(PlayerGroup group, {PlayerGroup? expected}) =>
+      files.saveGroup(group, expected: expected);
+  @override
+  Future<void> removePlayer(Player player) => files.removePlayer(player);
+  @override
+  Future<void> removeGroup(PlayerGroup group) => files.removeGroup(group);
 }
 
 /// [PlayerFiles] whose next player save fails like a disk error.

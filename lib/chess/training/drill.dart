@@ -188,10 +188,6 @@ final class Drill {
     _ => this,
   };
 
-  /// The line again from the start, in the pass it began with.
-  Drill restart({required bool learn}) =>
-      Drill.start(line, learn: learn, replayMistakes: replayMistakes);
-
   AttemptPhase get _phase => switch (pass) {
     Pass.walkthrough => AttemptPhase.learning,
     Pass.quiz => AttemptPhase.drilling,

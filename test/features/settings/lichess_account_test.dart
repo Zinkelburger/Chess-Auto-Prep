@@ -5,6 +5,8 @@ import 'package:chess_auto_prep/net/lichess_login.dart';
 import 'package:chess_auto_prep/storage/lichess_token.dart';
 import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 import '../../support/scripted_login.dart';
 
@@ -15,9 +17,9 @@ void main() {
   var notified = 0;
   late PendingWrites pending;
 
-  LichessAccountState owner() {
+  LichessAccountState owner([LichessLogin? client]) {
     final state = LichessAccountState(
-      login: login,
+      login: client ?? login,
       pendingWrites: pending,
       read: () async => saved,
       write: (account) async {
@@ -79,6 +81,20 @@ void main() {
     await done;
     expect((state.status as SignedIn).account.token, 'lip_secret');
     expect(saved?.username, 'DrNykterstein');
+    expect(state.problem, isNull);
+  });
+
+  test('logging in again and cancelling keeps the saved account', () async {
+    final before = saved = someone(name: 'Previous');
+    final state = owner();
+    await state.load();
+    final done = state.logIn();
+    await Future<void>.delayed(Duration.zero);
+    expect(state.status, isA<Connecting>());
+    await state.cancel();
+    await done;
+    expect((state.status as SignedIn).account, same(before));
+    expect(saved, same(before));
     expect(state.problem, isNull);
   });
 
@@ -198,6 +214,36 @@ void main() {
     expect(state.status, isA<SignedIn>());
     expect(await pending.settle(), isNull);
   });
+
+  for (final status in [204, 503]) {
+    test(
+      'shutdown sees the local credential removed after revoke HTTP $status',
+      () async {
+        final requested = Completer<void>();
+        final reply = Completer<http.Response>();
+        final client = MockClient((request) {
+          expect(request.method, 'DELETE');
+          requested.complete();
+          return reply.future;
+        });
+        addTearDown(client.close);
+        final state = owner(
+          LichessLoginApi(client, openBrowser: (_) async => false),
+        );
+        saved = someone(personal: true);
+        await state.load();
+        final logout = state.logOut();
+        await requested.future;
+        await state.cancel();
+        final credentialAtClose = pending.settle().then((_) => saved);
+        await pumpEventQueue();
+        reply.complete(http.Response('', status));
+        await logout;
+        expect(await credentialAtClose, isNull);
+        expect(saved, isNull);
+      },
+    );
+  }
 
   test('logging out revokes the token and forgets the account', () async {
     saved = someone();

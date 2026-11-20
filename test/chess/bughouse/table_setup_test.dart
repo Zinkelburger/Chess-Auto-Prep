@@ -151,29 +151,4 @@ void main() {
       );
     });
   });
-
-  group('pieces outstanding', () {
-    test('none at the start', () {
-      expect(
-        outstanding(boxes(start), boxes(start)),
-        'Pieces outstanding: none',
-      );
-    });
-
-    test('counts what is missing and what is extra, promoted as pawns', () {
-      final text = outstanding(
-        boxes('4k3/8/8/8/8/8/8/Q~3K3 w - - 0 1'),
-        boxes(start, white: '3Q'),
-      );
-      expect(
-        text,
-        'Pieces outstanding: White: 7P 2N 2B 2R · Black: 8P 2N 2B 2R 1Q'
-        '   Too many: White: 2Q',
-      );
-    });
-
-    test('says nothing while a FEN cannot be read', () {
-      expect(outstanding(boxes('nonsense'), boxes(start)), '');
-    });
-  });
 }

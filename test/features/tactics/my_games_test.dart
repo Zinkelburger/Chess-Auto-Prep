@@ -166,6 +166,79 @@ void main() {
     },
   );
 
+  test('stalemating with mate in one saves a blunder and its puzzle', () async {
+    const fen = '7k/5K2/8/6Q1/8/8/8/8 w - - 0 1';
+    const game =
+        '''
+[Event "Casual blitz game"]
+[Site "https://lichess.org/Draw0001"]
+[White "Me"]
+[Black "Rival"]
+[Result "1/2-1/2"]
+[Variant "From Position"]
+[SetUp "1"]
+[FEN "$fen"]
+
+1. Qg6 1/2-1/2''';
+    r = _Review(
+      accounts: {GameSite.lichess: const Account('Me')},
+      lichess: const GamesFetched([game]),
+      lines: {
+        const Fen(fen).position: const EngineLine(
+          multiPv: 1,
+          depth: reviewDepth,
+          score: MateIn(1),
+          pv: ['g5g7'],
+        ),
+      },
+    );
+    await r.start();
+
+    const id = 'lichess_Draw0001';
+    expect(analyzedIn(r.setText), contains(id));
+    expect(mistakesIn(r.setText)[id], const MistakeCounts(blunders: 1));
+    final puzzle = r.puzzlesOnDisk.singleWhere((puzzle) => puzzle.gameId == id);
+    expect(puzzle.answer, ['Qg7#']);
+  });
+
+  test('stalemating instead of mating records one blunder', () async {
+    const fen = 'k7/2Q5/2K5/8/8/8/8/8 w - - 0 1';
+    const game =
+        '''
+[Event "Rated blitz game"]
+[GameId "lichess_stalemate"]
+[White "Me"]
+[Black "Rival"]
+[Result "1/2-1/2"]
+[SetUp "1"]
+[FEN "$fen"]
+
+1. Qb6 1/2-1/2''';
+    r = _Review(
+      accounts: {GameSite.lichess: const Account('Me')},
+      lichess: const GamesFetched([game]),
+      lines: {
+        const Fen(fen).position: const EngineLine(
+          multiPv: 1,
+          depth: reviewDepth,
+          score: MateIn(1),
+          pv: ['c7b7'],
+        ),
+      },
+    );
+    await r.start();
+    expect(analyzedIn(r.setText), contains('lichess_stalemate'));
+    final counts = mistakesIn(
+      parseChapter(name: 'Default', text: r.setText).preamble,
+    );
+    final recorded = counts['lichess_stalemate'];
+    expect(recorded, const MistakeCounts(blunders: 1), reason: recorded?.words);
+    final puzzle = r.puzzlesOnDisk.singleWhere((p) => p.fen == const Fen(fen));
+    expect(puzzle.gameId, 'lichess_stalemate');
+    expect(puzzle.answer, ['Qb7#']);
+    expect(r.engine.asked, [const Fen(fen)]);
+  });
+
   test('only games of the chosen time controls are reviewed', () async {
     const bullet = '[TimeControl "60+0"]\n';
     r = _Review(
@@ -211,6 +284,51 @@ void main() {
     expect(
       analyzedIn(r.setText),
       containsAll(['lichess_XyZw9876', 'lichess_AbCd1234']),
+    );
+  });
+
+  test(
+    'a saved game not yet reviewed is reviewed with a new download',
+    () async {
+      final newer = scholarsMate.replaceAll('AbCd1234', 'XyZw9876');
+      r = _Review(
+        accounts: {GameSite.lichess: const Account('Me')},
+        lichess: GamesFetched([newer]),
+      );
+      await r.cache.keep(GameSite.lichess, 'Me', [
+        scholarsMate,
+      ], DateTime(2026));
+      await r.start();
+      expect(await r.cache.all(GameSite.lichess, 'Me'), hasLength(2));
+      expect(
+        analyzedIn(r.setText),
+        containsAll(['lichess_XyZw9876', 'lichess_AbCd1234']),
+        reason: 'the saved file is what is reviewed',
+      );
+    },
+  );
+
+  test('a download that cannot be saved fills the review with distinct '
+      'games: those it shares with the saved ones count once', () async {
+    String game(String prefix, int i) =>
+        scholarsMate.replaceAll('AbCd1234', '$prefix${'$i'.padLeft(6, '0')}');
+    final fresh = [for (var i = 0; i < 5; i++) game('Nw', i)];
+    final shared = [for (var i = 0; i < 10; i++) game('Sh', i)];
+    final older = [for (var i = 0; i < 10; i++) game('Ol', i)];
+    r = _Review(
+      accounts: {GameSite.lichess: const Account('Me')},
+      lichess: GamesFetched([...fresh, ...shared]),
+    );
+    await r.cache.keep(GameSite.lichess, 'Me', [
+      ...shared,
+      ...older,
+    ], DateTime(2026));
+    r.store.saves.add(const IoFailure('disk full'));
+    await r.start();
+    expect(
+      analyzedIn(r.setText).where((id) => id != 'lichess_abc'),
+      hasLength(reviewWindow),
+      reason: 'the 15 fetched and 5 of the older saved ones',
     );
   });
 

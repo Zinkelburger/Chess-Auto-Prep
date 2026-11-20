@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/tactics/puzzle_queue.dart';
 import 'package:chess_auto_prep/chess/tactics/puzzle_run.dart';
 import 'package:chess_auto_prep/features/tactics/puzzle_state.dart';
 import 'package:chess_auto_prep/features/tactics/puzzle_trainer.dart';
 import 'package:chess_auto_prep/features/tactics/tactics_set.dart';
+import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -73,6 +75,34 @@ void main() {
   );
 
   test(
+    'Continue returns to the revisited puzzle after document replacement',
+    () => sitting((async) {
+      unawaited(w.requests.open(kidMain));
+      async.flushMicrotasks();
+      w.requests.switchTo(Mode.tactics);
+      async.flushMicrotasks();
+      begin(async);
+      final first = w.trainer.up!.puzzle.fen;
+      unawaited(w.trainer.next());
+      async.flushMicrotasks();
+      expect(w.trainer.up!.puzzle.fen, isNot(first));
+      unawaited(w.trainer.previous());
+      async.flushMicrotasks();
+      expect(w.trainer.up!.puzzle.fen, first);
+      w.requests.switchTo(Mode.repertoires);
+      async.flushMicrotasks();
+      expect(w.session.source, kidMain);
+      w.trainer.putDown();
+      w.requests.switchTo(Mode.tactics);
+      async.flushMicrotasks();
+      expect(w.trainer.up, isNull);
+      unawaited(w.trainer.continueSession());
+      async.flushMicrotasks();
+      expect(w.trainer.up!.puzzle.fen, first);
+    }),
+  );
+
+  test(
     'play puts the first of the queue on the board with its answer '
     'hidden',
     () => sitting((async) {
@@ -127,6 +157,59 @@ void main() {
       expect(gameOnDisk(1), contains('[ReviewCount "1"]\n[SuccessCount "0"]'));
     }),
   );
+
+  test(
+    'the pending reply is played after an earlier puzzle is deleted',
+    () => sitting((async) {
+      begin(async);
+      final playing = w.trainer.up!.puzzle;
+      expect(playing.index, 1);
+      w.trainer.play('e7e5');
+      expect(w.trainer.up!.waiting, isTrue);
+
+      unawaited(w.tactics.delete(w.tactics.at(0)!));
+      async.flushMicrotasks();
+      expect(w.trainer.up!.puzzle.index, 0);
+      expect(w.trainer.up!.puzzle.fen, playing.fen);
+      async.elapse(replyDelay);
+      expect(w.session.cursor.value, NodePath.of([0, 0]));
+      expect(w.trainer.up!.waiting, isFalse);
+      w.trainer.play('b8c6');
+      expect(w.trainer.up!.decided, Outcome.solved);
+    }),
+  );
+
+  test('a replacement at the same FEN does not inherit a pending reply', () {
+    const fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+    const set =
+        '''
+[Event "Default #1"]
+[SetUp "1"]
+[FEN "$fen"]
+
+1... e5 2. Nf3 *
+
+[Event "Default #2"]
+[SetUp "1"]
+[FEN "$fen"]
+
+1... c5 2. Nf3 *
+''';
+    sitting((async) {
+      begin(async);
+      w.trainer.play('e7e5');
+      expect(w.trainer.up!.waiting, isTrue);
+      unawaited(w.tactics.delete(w.tactics.at(0)!));
+      async.flushMicrotasks();
+      expect(w.trainer.up!.puzzle.answer, ['c5', 'Nf3']);
+      expect(w.trainer.up!.waiting, isFalse);
+      async.elapse(replyDelay);
+      expect(w.session.shownTo, const NodePath.root());
+      expect(w.trainer.up!.found, 0);
+      expect(w.trainer.run!.outcomes, isEmpty);
+      expect(setText(), isNot(contains('ReviewCount')));
+    }, set: set);
+  });
 
   test(
     'a clean solve is written as a success, and auto-advance brings the '
@@ -527,6 +610,58 @@ void main() {
       w.trainer.suspend();
       w.trainer.showSolution();
       expect(w.trainer.up?.feedback, isNot(isA<Revealed>()));
+    }),
+  );
+
+  test(
+    'while the sitting is put aside nothing starts a new one or ends it',
+    () => sitting((async) {
+      begin(async);
+      final run = w.trainer.run;
+      w.trainer.putDown();
+      // Every puzzle of the sitting goes: continuing would end it.
+      for (var i = 0; i < 10 && w.tactics.puzzles.isNotEmpty; i++) {
+        unawaited(w.tactics.delete(w.tactics.puzzles.first));
+        async.elapse(const Duration(milliseconds: 100));
+      }
+      expect(w.tactics.puzzles, isEmpty);
+      w.trainer.suspend();
+      unawaited(w.trainer.start());
+      async.flushMicrotasks();
+      expect(w.trainer.run, same(run), reason: 'no new sitting');
+      unawaited(w.trainer.continueSession());
+      async.flushMicrotasks();
+      expect(w.trainer.run, same(run), reason: 'not ended either');
+    }),
+  );
+
+  test(
+    'the answer shown while the reply is on its way can be walked',
+    () => sitting((async) {
+      begin(async);
+      w.trainer.play('e7e5');
+      expect(w.trainer.up!.waiting, isTrue);
+      w.trainer.showSolution();
+      expect(w.trainer.up!.waiting, isFalse);
+      expect(w.session.cursor.currentMove!.san, 'Nf3');
+      w.trainer.play('b8c6');
+      expect(w.session.cursor.currentMove!.san, 'Nc6');
+    }),
+  );
+
+  test(
+    'a sitting started with another file of games open opens the set',
+    () => sitting((async) {
+      final games = ChapterRef.at('/collections/Games.pgn');
+      const text = '[Event "One"]\n\n1. e4 *\n\n[Event "Two"]\n\n1. d4 *\n';
+      w.store.documents[games] = Opened(text, scriptedRevision(text));
+      unawaited(w.requests.open(games, game: 1));
+      async.flushMicrotasks();
+      expect(w.session.source, games);
+      expect(w.session.game, 1);
+      begin(async);
+      expect(w.session.source, tacticsRef);
+      expect(w.session.game, w.trainer.up!.puzzle.index);
     }),
   );
 }

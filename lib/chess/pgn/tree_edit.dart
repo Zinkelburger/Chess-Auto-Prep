@@ -2,6 +2,7 @@ import 'package:dartchess/dartchess.dart';
 
 import '../fen.dart';
 import '../position_setup.dart';
+import 'comment_text.dart';
 import 'game_tree.dart';
 
 /// Pure edits over a [GameTree]: every one returns a new tree.
@@ -40,7 +41,7 @@ Position? positionOf(Fen fen) {
 /// back, so a castle kept as `e1g1` would be refused as another move.
 MoveNode? moveNode(Fen fen, Move move) {
   final position = positionOf(fen);
-  if (position == null || !position.isLegal(move)) return null;
+  if (position == null || !isLegalMove(position, move)) return null;
   final played = move is NormalMove ? position.normalizeMove(move) : move;
   final (next, san) = position.makeSan(played);
   return MoveNode(san: san, uci: played.uci, fen: Fen(next.fen));
@@ -161,20 +162,44 @@ GameTree lineTree(Fen rootFen, List<String> sans) {
 /// hand-edited `// Root:` heading can hold any of them.
 (MoveNode, Position)? replayed(Position position, String san) {
   if (san == nullMoveSan) return nullMovePlayed(position, spelling: san);
-  final Move? move;
-  try {
-    move = position.parseSan(san);
-  } on Object {
-    return null;
-  }
+  final move = parseLegalSan(position, san);
   if (move == null) return null;
   final (next, spelled) = position.makeSanUnchecked(move);
   return (MoveNode(san: spelled, uci: move.uci, fen: fenOf(next)), next);
 }
 
+/// The legal move [san] names in [position], or null when it names none.
+///
+/// dartchess answers an unplayable move with null for most spellings and
+/// with a `RangeError` for a few — it reads the first character of a SAN it
+/// has already cut annotations off, so a token like `xe4` leaves it with
+/// nothing to read. It also takes a pawn reaching the last rank without a
+/// promotion piece, which no game can play. A move nobody can play is a move
+/// nobody can play; the caller reports it either way.
+Move? parseLegalSan(Position position, String san) {
+  try {
+    final move = position.parseSan(san);
+    return move == null || _missingPromotion(position, move) ? null : move;
+  } on Object {
+    return null;
+  }
+}
+
+/// Whether [move] — an engine's, the board's, a stored line's — can be
+/// played in [position]. dartchess says yes to a pawn reaching the last rank
+/// with no promotion piece; that move is not legal here.
+bool isLegalMove(Position position, Move move) =>
+    !_missingPromotion(position, move) && position.isLegal(move);
+
+bool _missingPromotion(Position position, Move move) =>
+    move is NormalMove &&
+    move.promotion == null &&
+    SquareSet.backranks.has(move.to) &&
+    position.board.pawns.has(move.from);
+
 /// [tree] with [node] appended to the children of the node at [at].
 GameTree withChildAdded(GameTree tree, NodePath at, MoveNode node) =>
-    _rebuilt(tree, at.indexes, (children) => [...children, node]);
+    _withMoveEdit(tree, at, (children) => [...children, node]);
 
 /// [tree] with the child at [index] of the node at [parent] first among its
 /// siblings, the others keeping their order. That is what promoting a
@@ -192,7 +217,7 @@ GameTree withChildFirst(GameTree tree, NodePath parent, int index) =>
 /// [tree] without the child at [index] of the node at [parent], and without
 /// everything under it.
 GameTree withChildRemoved(GameTree tree, NodePath parent, int index) =>
-    _rebuilt(tree, parent.indexes, (children) {
+    _withMoveEdit(tree, parent, (children) {
       if (index < 0 || index >= children.length) return children;
       return [...children]..removeAt(index);
     });
@@ -271,6 +296,24 @@ MoveNode withNodeComment(MoveNode node, String? comment) => MoveNode(
 );
 
 typedef _ChildEdit = List<MoveNode> Function(List<MoveNode> children);
+
+GameTree _withMoveEdit(GameTree tree, NodePath at, _ChildEdit edit) {
+  final line = tree.lineTo(at);
+  if (!at.isRoot && line.isEmpty) return tree;
+  final children = line.lastOrNull?.children ?? tree.children;
+  final next = edit(children);
+  if (identical(next, children)) return tree;
+
+  // A changed variation belongs to the player, even if later edits bring
+  // it back to the number of plies the review wrote.
+  for (final (index, node) in line.indexed) {
+    final comment = node.comment;
+    if (comment == null || !reviewLineMarker.hasMatch(comment)) continue;
+    final head = NodePath.of(at.indexes.take(index + 1));
+    tree = withComment(tree, head, withoutReviewLineMarker(comment));
+  }
+  return _rebuilt(tree, at.indexes, (_) => next);
+}
 
 GameTree _rebuilt(GameTree tree, List<int> indexes, _ChildEdit edit) =>
     GameTree(

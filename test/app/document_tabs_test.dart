@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/app/document_tabs.dart';
 import 'package:chess_auto_prep/app/mode.dart';
+import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart' as store;
 import 'package:chess_auto_prep/storage/saved_place.dart';
@@ -211,6 +212,25 @@ void main() {
     expect(w.session.commentAt(cursor), isNot(contains('Unsaved viewer note')));
   });
 
+  test('a viewer draft comes back when Back returns to its file', () async {
+    w.requests.switchTo(Mode.pgnViewer);
+    await w.requests.open(kidMain);
+    w.session.holdsEdits = true;
+    w.session.cursor.forward();
+    final cursor = w.session.cursor.value;
+    w.session.setComment(cursor, 'Unsaved viewer note');
+    w.requests.switchTo(Mode.repertoires);
+    await pumpEventQueue();
+    expect(w.session.source, isNot(kidMain));
+
+    await w.requests.back();
+    expect(w.requests.mode, Mode.pgnViewer);
+    expect(w.session.source, kidMain);
+    expect(w.session.hasHeldEdits, isTrue);
+    expect(w.session.commentAt(cursor), contains('Unsaved viewer note'));
+    expect(w.store.requestedSaves, isEmpty);
+  });
+
   test('a parked draft put away, by keeping or discarding it, does not come '
       'back with its tab', () async {
     for (final keep in [false, true]) {
@@ -232,6 +252,21 @@ void main() {
       await w.requests.documents.select(kidMain);
       expect(w.session.hasHeldEdits, isFalse, reason: 'keep: $keep');
     }
+  });
+
+  test('Builder keeps a manually set position after visiting Study', () async {
+    const position = Fen('8/5k2/8/3K4/3P4/8/8/8 w - - 0 1');
+    await w.requests.openPosition(position, side: w.session.orientation);
+    expect(w.session.tree!.rootFen, position);
+
+    w.requests.switchTo(Mode.study);
+    await pumpEventQueue();
+    expect(w.session.tree!.rootFen, Fen.initial);
+    expect(w.session.tree!.children, isEmpty);
+
+    w.requests.switchTo(Mode.repertoires);
+    await pumpEventQueue();
+    expect(w.session.tree!.rootFen, position);
   });
 
   test('a mode with no tab of its own gets an empty board, not an analysis '

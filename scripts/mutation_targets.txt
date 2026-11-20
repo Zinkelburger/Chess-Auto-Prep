@@ -15,15 +15,14 @@
 # them; none does yet):
 #   lib/app/board_doors.dart:49; lib/app/player_views.dart:87-88 (a race);
 #   lib/app/workspace_wiring.dart:234 (the evaluator choice);
-#   lib/features/tactics/my_games.dart:255 (one of two username writes
-#     failing), :294/:303 (the queue-retry path), :449;
-#   lib/features/tactics/puzzle_trainer.dart:325, :634 (cancelling an
-#     alternative-answer check in flight).
+#   lib/features/tactics/source_game_pane.dart:138 (the Game tab's move
+#     list brought to a new game's move when the list itself stays: each
+#     puzzle tried so far builds the list afresh).
 # Swept and not listed for other reasons: lib/app/app.dart and lib/main.dart
 # (native startup, integration only) and lib/features/library/
 # library_messages.dart (no mutants). Every other lib/ file not named in this
-# list has not been swept: lib/features is part done (tactics_set.dart was
-# being triaged), and both new_chapter_dialog.dart files and
+# list has not been swept: lib/features is part done, and both
+# new_chapter_dialog.dart files and
 # lib/features/databases/database_library.dart are still to run.
 #
 # Not listed: files whose only survivors are equivalent mutants, which no
@@ -316,6 +315,52 @@
 #     `baseline + .05` (a float the estimate does not land on exactly).
 #   lib/features/players/saved_games.dart:281 the disposed flag (taking it
 #     down closes its refreshes first).
+# lib/features/players, swept Nov 20 2026: files whose only survivors are
+# equivalent, a widget's look or a default constant:
+#   lib/features/players/players.dart:20 `_stopLookup`'s start (a lookup
+#     clears it before reading it), :131 `busy` during a retry (a save is
+#     refused while one waits to be retried anyway, and a second retry
+#     joins the running one), :182 the `false` answered for a group gone
+#     (the one caller ignores the answer).
+#   lib/features/players/player_games.dart:126 the off-thread size: the
+#     same corpus either side of it.
+#   lib/features/players/download_dialog.dart:29, :30 the fields' starts
+#     (initState sets each), :61 `canFail` (the look), :125-126, :135-136
+#     the steppers' bounds (a kept range is clamped to them when read).
+#   lib/features/players/group_dialog.dart:32 the rounds' start (initState
+#     sets it), :100-101 the stepper's bounds, :74 autofocus (the look).
+#   lib/features/players/player_lookup.dart:72 one line: the look.
+#   lib/features/players/player_dialogs.dart:182, :371 the boxes' line
+#     counts and :362 `canFail`: the look.
+#   lib/features/players/person_row.dart:54 the wide layout at exactly the
+#     break, :89, :122 the line counts: the look.
+#   lib/features/players/player_book.dart:27 `busy`'s start (reading the
+#     player's games, which a check needs, resets it), :56 `busy` while a
+#     check runs (the progress shown; a second check overtakes the first
+#     and comes to the same gaps).
+#   lib/features/players/player_picker.dart:77 the search's padding, :138,
+#     :144 the row's line counts: the look.
+#   lib/features/players/players_screen.dart:198, :424, :430 the line
+#     counts, :321, :360 the rules' height: the look.
+#   lib/features/players/analysis_panel.dart:603 the list switch's rebuild
+#     test past its list (the app has one theme, so the colour never
+#     changes; `==` on it only rebuilds more often), :264 the 100 positions
+#     listed (a default), :202, :400 paddings, :375, :411 the header's and
+#     status's type and lines: the look.
+#   lib/features/players/analysis_rows.dart:117-118, :193, :203, :236, :256
+#     line counts and wrapping: the look.
+#   lib/features/players/analysis_filters.dart:105, :116 the steppers'
+#     upper bounds (defaults), :52 the padding: the look.
+#   lib/features/players/findings_view.dart:180-181, :191-192, :222-223,
+#     :233-234 the steppers' bounds (defaults), :67 the bar's fraction (the
+#     progress shown), :102, :147, :286, :317 line counts and :134, :272
+#     paddings: the look.
+#   lib/features/players/player_book_pane.dart:35, :57 paddings, :76, :128,
+#     :137 line counts: the look.
+#   lib/features/players/player_tree_pane.dart:183 the share of no games
+#     (a row is drawn only for a move some game played, so the total is
+#     never 0), :61, :66, :139 the heading's padding, lines and height: the
+#     look.
 #   lib/features/settings/lichess_account.dart:179 `Connecting`'s
 #     `browserOpened` default (shown only until the login says whether the
 #     browser took the page).
@@ -460,6 +505,122 @@
 #     six fields (a FEN tag is read whole).
 #   lib/engines/maia/maia_model.dart:152 `.first` -> `.last`: the move head
 #     is asked about one position, so its `[1, 4352]` answer has one row.
+# lib/features/library, with equivalent mutants a --max 30 sample can draw:
+#   lib/features/library/library_state.dart:138 the folded count's start,
+#     :149 `rows == 0` -> `!= 0` or `== 1`: only `libraryMessage` reads the
+#     fold, and it says nothing for a count or for none.
+#   lib/features/library/library_imports.dart:40, :51 the hundred names an
+#     import tries, :82 the off-thread size: a limit and where the text is
+#     read, not what is imported.
+#   lib/features/library/file_changes.dart:138 `folders: false` -> true on a
+#     save (nothing lies under a file's path), :203 the follow's answer when
+#     it throws (the store answers failures as typed results), :265, :266 a
+#     follow overtaken by another open (the saver drops an answer about a
+#     document it is no longer on, and a stale owed change is refused by
+#     the next follow because the open file is not under it), :270 the
+#     on-its-way answer (while the gate is still carrying the change out it
+#     guards the file, so no save that finds the file gone reaches it).
+#   lib/features/library/line_transfers.dart:31 discard's answer when
+#     nothing is pending or a retry runs (only a listener notification reads
+#     it; the Discard button ignores it), :177 the place that seeds a fresh
+#     id for an arriving line whose own is taken (any free id serves, and
+#     the training rows follow whichever it gets).
+#   lib/features/library/deleted_chapters_view.dart,
+#     lib/features/library/outline_rows.dart and
+#     lib/features/library/repertoire_tile.dart: only a widget's look
+#     survives (line counts, a radius, padding, the drop target's tint).
+#   lib/features/library/backup_history_dialog.dart:138 the prune limit at
+#     100 versions (the archive keeps the newest 100, so at 100 nothing
+#     would go; the 101st mirrors that retention constant), and its look.
+#   lib/features/library/library_messages.dart: no mutant compiles (each
+#     `&&` -> `||` breaks the null promotion the next line needs).
+# lib/features/study, with equivalent mutants a --max 30 sample can draw:
+#   lib/features/study/studies_state.dart: no mutants (values only).
+#   lib/features/study/study_file_changes.dart:134 which study a retried
+#     rename holds still: while a rename is unconfirmed the saver's barrier
+#     takes no words, so the hold has nothing to flush or wait for, and
+#     holding another open study still changes nothing.
+#   lib/features/study/chapter_position_dialog.dart:23 the first position
+#     (initState sets it before anything reads it).
+#   lib/features/study/study_import_dialog.dart:16, :41, :45 `append` (its one
+#     caller passes `studies.open != null`, the same as `into != null`), :86
+#     `||` -> `&&` (importPreview answers every failure as a result, so the
+#     attempt never answers null, and a busy dialog cannot close).
+#   lib/features/study/study_send_dialog.dart:56 the first destination
+#     (initState sets it), :102 `&&` -> `||` (a declined login retries a send
+#     that fails the same sign-in check), :153 the progress bar's share.
+#   lib/features/study/study_chapter_list.dart:178 `?? 0` -> `?? 1` (no
+#     active chapter means nothing open, the list at its top and row 1 in
+#     view either way), :180 `<` -> `<=` (it jumps to where the list is).
+#   Only a widget's look survives in lib/features/study/chapter_dialogs.dart
+#     (:62, :82), new_chapter_dialog.dart (:160-161, the editor beside the
+#     form or under it), study_chapter_list.dart (:54, :61, :206, :222, :242
+#     the default drag handles), study_import_dialog.dart (:118, :119, :176),
+#     study_recovery_dialog.dart (:81, :92, :95, :117, :152) and
+#     study_send_dialog.dart (:156, :209): padding, line counts, a flex, a
+#     held problem line, a live region.
+# lib/features/tactics, with equivalent mutants a --max 30 sample can draw:
+#   lib/features/tactics/tactics_set.dart:86 the seed's start (the
+#     constructor draws one), :151 the queue memo's seed (it changes only
+#     with the filter, which already misses the memo), :177 `||` -> `&&`
+#     before the parse (the same check after it drops an overtaken read,
+#     and being overtaken never clears), :180, :221 which game the chapter
+#     shows (the set reads every line), :276 `==` -> `!=` (a new seed on
+#     leaving Random instead of on picking it: each Random still gets its
+#     own order).
+#   lib/features/tactics/puzzle_filters.dart:169 `?? false` -> true (a
+#     two-state box never answers null).
+#   lib/features/tactics/my_games.dart:180 the `0` new puzzles outside a
+#     review (read only while one runs, whose status carries the count),
+#     :294 the `0` added of a start from any other status (games are left
+#     queued only by a pause or a failure, matched above), :303 and the
+#     `reviewed` count (no app code reads it), :358 `_pausing`'s `false`
+#     default (a review starts only from Downloading or Reviewing), :414
+#     the kept flag's start (a failed download leaves nothing to compare),
+#     :418 the log of an incomplete download, :512 `<` -> `<=` at exactly
+#     200 saved games (the download asks for 200, not 20; the extra games
+#     are saved already and dropped), :537 the first progress count.
+#   lib/features/tactics/puzzle_state.dart:103 `found + 1` -> `+ 2` (it
+#     is read just after the solver's own move, when `found` is odd).
+#   lib/features/tactics/puzzle_trainer.dart:33 the advance delay, :522
+#     `||` -> `&&` in `_bringUp` (every caller makes the same check just
+#     before, with no wait between), :646-648 the advance timer's checks
+#     as it fires (disposing, suspending and turning auto-advance off each
+#     cancel it, and each change of the puzzle up cancels it or moves its
+#     target along).
+#   Only a widget's look survives in
+#     lib/features/tactics/puzzle_filters.dart (:32, :192),
+#     lib/features/tactics/puzzle_pane.dart (:95, :253),
+#     lib/features/tactics/tactics_actions.dart (:75 the icon),
+#     lib/features/tactics/tactics_panel.dart (:147, :331) and
+#     lib/features/tactics/my_games_block.dart (:22 filled or outlined by
+#     default, :39, :73, :101, :129, :235 the icon, :309, :311 which field
+#     takes focus): padding, line counts, a divider.
+# lib/features/trainer, with equivalent mutants a --max 30 sample can draw:
+#   lib/features/trainer/trainer_state.dart: no mutant compiles (the
+#     unused `study = false` default was made required: every caller names it).
+#   lib/features/trainer/lesson.dart:20-21 the rewind and replay delays
+#     (timing only), :125 `||` -> `&&` in suspend (the trainer suspends only a
+#     lesson that is not suspended; again sets the same flag), :194 `&&` ->
+#     `||` (Drill.next answers itself for a stage that is not Showing, and a
+#     finished drill never is).
+#   lib/features/trainer/trainer.dart:498 `_retained`'s start (`_sit` calls
+#     leave(), which clears it, before the first lesson; without a lesson its
+#     one reader compares `_read` with the session, which every follow keeps
+#     equal outside a sitting).
+#   lib/features/trainer/training_outline.dart:110 the loading message while
+#     a chosen repertoire is read (a progress line), :268 `on ?? false` (the
+#     box has no third state); the rest is the look.
+#   lib/features/trainer/train_pane.dart: only the look survives (:170 a
+#     message's inset).
+#   lib/features/trainer/line_list.dart:131 `>` -> `>=` on the orders offered
+#     (training and course order are always both offered), :157 the search
+#     field's hint, :647 `>=` -> `>` (a card exactly the shortest height lays
+#     out the same scrolled or not); the rest is the look.
+#   lib/features/trainer/lesson_view.dart: only the look survives (:198 the
+#     prompt's error colour, :200 the study button's tooltip, :224 the short
+#     pane's equal case, :309/:312 the moves' intrinsic widths, :363 where
+#     the moves scroll from, :410 the bold move in the peek).
 lib/chess/pgn/game_review.dart|test/workspace/game_review_test.dart|test/chess/pgn/edit_laws_test.dart test/app
 lib/chess/pgn/line_edits.dart|test/chess/pgn/line_edits_test.dart|test/chess/pgn test/workspace
 lib/chess/pgn/chapter_edits.dart|test/chess/pgn/chapter_edits_test.dart|test/chess/pgn test/workspace
@@ -785,3 +946,21 @@ lib/features/study/study_panel.dart|test/features/study/study_panel_menus_test.d
 lib/features/study/study_sender.dart|test/features/study/study_sender_more_test.dart test/features/study/study_sender_test.dart|
 lib/features/tactics/set_additions.dart|test/features/tactics/set_additions_test.dart test/features/tactics/my_games_test.dart test/features/tactics/mining_native_checkpoint_test.dart test/features/tactics/account_persistence_test.dart|
 lib/features/tactics/source_games.dart|test/features/tactics/source_games_test.dart|
+# lib/features/library
+lib/features/library/new_chapter_dialog.dart|test/features/library/new_chapter_dialog_test.dart|test/features/outline_panel_test.dart test/features/library_panel_test.dart
+lib/features/library/file_edits.dart|test/features/file_edits_test.dart test/features/library_lines_test.dart test/features/library_test.dart|test/features/line_transfers_test.dart test/features/library_changes_test.dart test/features/course_chapters_test.dart test/features/compound_rename_test.dart test/features/closed_rename_navigation_test.dart test/features/library_holds_test.dart test/features/library_open_course_test.dart test/features/library_on_disk_test.dart test/features/outline_panel_test.dart test/features/outline_panel_more_test.dart
+lib/features/library/library_actions.dart|test/features/library_panel_test.dart test/features/outline_panel_test.dart|test/app/board_doors_test.dart test/app/shell_doors_test.dart test/features/library_panel_more_test.dart test/features/outline_panel_more_test.dart
+# lib/features/study
+lib/features/study/study_commands.dart|test/features/study/study_chapters_test.dart|test/app/read_edit_test.dart test/app/native_training_test.dart
+lib/features/study/quiz_menu.dart|test/features/study/quiz_menu_test.dart|
+lib/features/study/study_import_source.dart|test/features/study/study_import_source_test.dart test/features/study/study_import_preview_test.dart|test/features/study/studies_test.dart test/features/study/study_panel_test.dart
+lib/features/study/study_actions.dart|test/features/study/study_actions_test.dart test/features/study/study_panel_test.dart test/features/study/study_panel_menus_test.dart|test/app/study_lichess_send_test.dart test/app/document_views_test.dart
+# lib/features/tactics
+lib/features/tactics/my_games_words.dart|test/features/tactics/my_games_words_test.dart|test/features/tactics/my_games_test.dart
+# lib/features/trainer
+lib/features/trainer/trainer_words.dart|test/features/trainer/trainer_words_test.dart test/storage/training_rows_test.dart|test/features/trainer/train_pane_test.dart test/features/trainer/trainer_test.dart
+lib/features/trainer/training_scope.dart|test/features/trainer/training_scope_test.dart test/features/trainer/trainer_scope_test.dart|test/features/trainer/trainer_test.dart test/features/trainer/training_workspace_test.dart test/features/trainer/lesson_fit_test.dart test/features/trainer/train_pane_test.dart
+lib/features/trainer/training_selection.dart|test/features/trainer/training_selection_test.dart|test/features/trainer/trainer_test.dart test/features/trainer/training_workspace_test.dart test/app/training_workspace_test.dart test/app/shell_trainer_navigation_test.dart test/features/trainer/train_pane_test.dart
+lib/features/trainer/progress.dart|test/features/trainer/progress_test.dart test/features/trainer/trainer_test.dart|test/features/trainer/lesson_test.dart test/storage/training_retry_test.dart test/storage/persistence_lifecycle_test.dart test/storage/line_progress_test.dart test/features/trainer/trainer_scope_test.dart test/features/trainer/train_pane_test.dart
+lib/features/trainer/training_home.dart|test/features/trainer/training_desk_test.dart|test/app/training_workspace_test.dart test/features/trainer/training_workspace_test.dart test/app/shell_trainer_navigation_test.dart
+lib/features/trainer/study_training_controls.dart|test/app/study_training_workflow_test.dart|

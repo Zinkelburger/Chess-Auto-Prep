@@ -363,37 +363,66 @@ final class _LineBuilder {
       quizEnds: hasToken(node.comment, quizEndMarker),
       onTap: () =>
           preview == null ? session.cursor.goTo(path) : preview!.onRead(path),
-      actions: () => preview != null
-          ? const []
-          : [
-              AppAction(
-                'Promote variation',
-                () => promoteVariation(session, path),
-                icon: AppIcons.promote,
-              ),
-              AppAction(
-                'Make main line',
-                () => makeMainLine(session, path),
-                icon: AppIcons.mainLine,
-              ),
-              AppAction(
-                'Delete from here',
-                () => onDeleteFrom(path),
-                icon: AppIcons.delete,
-              ),
-              AppAction(
-                'Copy line PGN',
-                () => _copy(writeLineTo(session.tree!, path)),
-                icon: AppIcons.copy,
-              ),
-              AppAction(
-                'Copy FEN',
-                () => _copy(node.fen.value),
-                icon: AppIcons.copy,
-              ),
-              ...moveMenu(path),
-            ],
+      actions: () {
+        final tree = session.tree;
+        if (preview != null || tree == null) return const [];
+        final still = _stillAt(path);
+        return [
+          AppAction(
+            'Promote variation',
+            still(() => promoteVariation(session, path)),
+            icon: AppIcons.promote,
+          ),
+          AppAction(
+            'Make main line',
+            still(() => makeMainLine(session, path)),
+            icon: AppIcons.mainLine,
+          ),
+          AppAction(
+            'Delete from here',
+            still(() => onDeleteFrom(path)),
+            icon: AppIcons.delete,
+          ),
+          AppAction(
+            'Copy line PGN',
+            () => _copy(writeLineTo(tree, path)),
+            icon: AppIcons.copy,
+          ),
+          AppAction(
+            'Copy FEN',
+            () => _copy(node.fen.value),
+            icon: AppIcons.copy,
+          ),
+          for (final action in moveMenu(path))
+            AppAction(action.label, still(action.run), icon: action.icon),
+        ];
+      },
     );
+  }
+
+  /// The menu stays open while the board changes under it: another file
+  /// opens, a line is promoted. What it does to the move happens only while
+  /// [path] names the same moves of the same document as when it opened;
+  /// a note or a glyph added meanwhile does not matter.
+  VoidCallback? Function(VoidCallback?) _stillAt(NodePath path) {
+    Object place() {
+      final tree = session.tree;
+      final line = tree?.lineTo(path) ?? const <MoveNode>[];
+      return (
+        session.source,
+        session.game,
+        session.isScratch ? session.analysisPage : null,
+        tree?.rootFen,
+        [for (final move in line) move.uci].join(' '),
+      );
+    }
+
+    final opened = place();
+    return (run) => run == null
+        ? null
+        : () {
+            if (place() == opened) run();
+          };
   }
 }
 

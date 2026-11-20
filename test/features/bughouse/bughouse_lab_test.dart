@@ -45,6 +45,42 @@ void main() {
     expect(lab.focus, BoardNumber.two);
   });
 
+  test('a new game and a new move each advance the game revision', () {
+    final initial = lab.gameRevision;
+    lab.newGame();
+    final fresh = lab.gameRevision;
+    expect(fresh, greaterThan(initial));
+
+    lab.play(BoardNumber.one, 'e2e4');
+    final edited = lab.gameRevision;
+    expect(edited, greaterThan(fresh));
+
+    lab.toStart();
+    lab.play(BoardNumber.one, 'e2e4');
+    expect(lab.line.applied.single.san, 'e4');
+    expect(lab.gameRevision, edited);
+  });
+
+  test('a repeated drop replays after the variation supplies its pawn', () {
+    lab.showBoards(LabBoards.two);
+    lab.play(BoardNumber.two, 'e2e4');
+    capture();
+    lab.play(BoardNumber.two, 'P@d6');
+    expect(lab.problem, isNull);
+
+    go(BoardNumber.two, 1);
+    lab.play(BoardNumber.one, 'd2d4');
+    lab.play(BoardNumber.one, 'e7e5');
+    lab.play(BoardNumber.one, 'd4e5');
+    expect(lab.position.two.pockets!.of(Side.black, Role.pawn), 1);
+    lab.play(BoardNumber.two, 'P@d6');
+    expect(lab.problem, isNull);
+
+    final replay = lab.line.replay();
+    expect(replay, isA<LineReplayed>());
+    expect((replay as LineReplayed).position.dualFen, lab.position.dualFen);
+  });
+
   test('an illegal drop, or a move out of turn, is refused in words', () {
     lab.play(BoardNumber.two, 'N@e5');
     expect(lab.problem, isA<DropRefused>());
@@ -83,7 +119,13 @@ void main() {
     lab.play(BoardNumber.two, 'e2e4');
     lab.play(BoardNumber.two, 'P@d5');
     go(BoardNumber.two, 0);
+    // Supply a line already missing the capture. The delete command itself
+    // refuses to make such a line, even while the drop is beyond the cursor.
     // Board 1's capture taken out of the line: nothing gives the pawn now.
+    final broken = lab.line.without(lab.line.at(BoardNumber.one)!);
+    lab.showLine(broken);
+    expect(lab.line, same(broken));
+    // Removing the preceding non-capture cannot cost the drop its pawn.
     lab.deleteFrom(lab.line.at(BoardNumber.one)!);
     expect(lab.problem, isNull);
     lab.goTo(BoardNumber.two, lab.line.lineOf(BoardNumber.two).last);
@@ -617,6 +659,103 @@ void main() {
     final before = lab.line;
     lab.deleteFrom(lab.line.lineOf(BoardNumber.one)[2]);
     expect((lab.problem as DeleteRefused).move.san, 'P@d5');
+    expect(lab.line, same(before));
+  });
+
+  test('a quiet branch can go while the partner keeps its whole line', () {
+    const one = BoardNumber.one, two = BoardNumber.two;
+    lab.play(one, 'e2e4');
+    final quiet = lab.line.at(one)!;
+    for (final move in ['g1f3', 'g8f6', 'f3g1', 'f6g8']) {
+      lab.play(two, move);
+    }
+    lab.deleteFrom(quiet);
+    expect(lab.problem, isNull);
+    expect(lab.line.of(one), isEmpty);
+    expect(lab.line.of(two).map((m) => m.uci), [
+      'g1f3',
+      'g8f6',
+      'f3g1',
+      'f6g8',
+    ]);
+  });
+
+  for (final earlierDrop in [false, true]) {
+    test(
+      'deleting a capture preserves a long partner line, earlier drop: $earlierDrop',
+      () {
+        const one = BoardNumber.one, two = BoardNumber.two;
+        if (earlierDrop) {
+          lab.adjustHand(two, Side.white, Role.pawn, 1);
+          lab.play(two, 'P@d4');
+          lab.play(two, 'a7a6');
+        }
+        capture();
+        final taking = lab.line.at(one)!;
+        const cycle = ['g1f3', 'g8f6', 'f3g1', 'f6g8'];
+        for (var i = 0; i < 64; i++) {
+          for (final move in cycle) {
+            lab.play(two, move);
+          }
+        }
+        final moves = lab.line.of(two);
+        expect(moves.length, 256 + (earlierDrop ? 2 : 0));
+        lab.deleteFrom(taking);
+        expect(lab.problem, isNull);
+        expect(lab.line.of(two), moves);
+        expect(lab.line.of(one).map((m) => m.uci), ['e2e4', 'd7d5']);
+      },
+    );
+  }
+
+  test('a quiet branch with a later capture keeps its dependent drop', () {
+    capture();
+    final quiet = lab.line.lineOf(BoardNumber.one).first;
+    lab.play(BoardNumber.two, 'e2e4');
+    lab.play(BoardNumber.two, 'P@d5');
+    lab.showLine(lab.line.atStart);
+    final before = lab.line;
+    lab.deleteFrom(quiet);
+    expect(lab.problem, isA<DeleteRefused>());
+    expect(lab.line, same(before));
+  });
+
+  test('a future partner drop keeps its supporting capture', () {
+    lab.showBoards(LabBoards.two);
+    capture();
+    lab.play(BoardNumber.two, 'e2e4');
+    lab.play(BoardNumber.two, 'P@d5');
+    lab.stepOn(BoardNumber.two, -1);
+    expect(lab.line.upto(BoardNumber.two), 1);
+    expect(lab.line.of(BoardNumber.two).last.san, 'P@d5');
+    final before = lab.line;
+    lab.deleteFrom(before.lineOf(BoardNumber.one).last);
+    expect(lab.problem, isA<DeleteRefused>());
+    expect(lab.line, same(before));
+  });
+
+  test('an ordinary move after a reused drop keeps its historical capture', () {
+    const one = BoardNumber.one, two = BoardNumber.two;
+    capture();
+    final first = lab.line.at(one)!;
+    go(one, 0);
+    lab.play(one, 'd2d4');
+    lab.play(one, 'e7e5');
+    lab.play(one, 'd4e5');
+    final second = lab.line.at(one)!;
+    for (final supporting in [first, second]) {
+      lab.goTo(one, supporting);
+      lab.play(two, 'e2e4');
+      lab.play(two, 'P@d5');
+      expect(lab.problem, isNull);
+    }
+    lab.play(two, 'g1f3');
+    expect(lab.problem, isNull);
+    expect(lab.line.nodes[lab.line.at(two)!].partner, second);
+    lab.showLine(lab.line.atStart);
+    final before = lab.line;
+    lab.deleteFrom(second);
+    expect(lab.problem, isA<DeleteRefused>());
     expect(lab.line, same(before));
   });
 

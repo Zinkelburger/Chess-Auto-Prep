@@ -160,6 +160,51 @@ void main() {
     },
   );
 
+  test('Save while a rename is going keeps the move held until it can '
+      'be written', () async {
+    final study = await openStudy(twoChapterStudy);
+    addTearDown(study.dispose);
+    study.session
+      ..holdsEdits = true
+      ..cursor.toEnd()
+      ..playMove('b8c6');
+    expect(study.session.hasHeldEdits, isTrue);
+    study.store.hold = true;
+    final rename = study.studies.rename(study.ref, 'Renamed');
+    await pumpEventQueue();
+    expect(study.store.waiting, 1);
+    expect(study.session.keepHeld(), isFalse);
+    expect(study.session.hasHeldEdits, isTrue);
+    study.store.hold = false;
+    study.store.releaseNext();
+
+    expect(await rename, isA<StudyDone>());
+    final renamed = studyRef('Renamed');
+    expect(study.session.source, renamed);
+    expect(study.session.hasHeldEdits, isTrue);
+    expect(study.session.keepHeld(), isTrue);
+    await study.saver.flush();
+    expect((study.store.documents[renamed] as Opened).text, contains('Nc6'));
+  });
+
+  for (final action in ['rename', 'delete']) {
+    test(
+      'a player’s linked study stays readable after a refused $action',
+      () async {
+        final path = studyRef('Endgames').path;
+        final people = MemoryPlayers();
+        await people.savePlayer(Player.create('Opponent').withStudy(path));
+        final study = await openStudy(twoChapterStudy, linkedPlayers: people);
+        addTearDown(study.dispose);
+        final result = action == 'rename'
+            ? await study.studies.rename(study.ref, 'Moved')
+            : await study.studies.delete(study.ref);
+        expect(result, isA<StudyProblem>());
+        expect(study.onDisk, twoChapterStudy);
+      },
+    );
+  }
+
   test('rename keeps the selected chapter and PGN bytes', () async {
     final study = await openStudy(twoChapterStudy, chapter: 1);
     addTearDown(study.dispose);

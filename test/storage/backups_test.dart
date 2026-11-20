@@ -37,6 +37,56 @@ void main() {
     expect(fixture.keptVersions(ref).first, isNot(endsWith('.pgn.gz')));
   });
 
+  test(
+    'a save keeps the replaced text when its listed copy was moved away',
+    () async {
+      final ref = fixture.ref('KID/Main.pgn');
+      final revision = await fixture.put(ref, a);
+      expect(await fixture.edit(ref, b, revision), isA<Saved>());
+      // Restore the kept PGN with a file manager's move. The original
+      // bytes are back at the live path and the genuine index is untouched.
+      final archive = fixture.backupFolder(ref);
+      final payload = File(
+        p.join(archive.path, fixture.keptVersions(ref).single),
+      );
+      await payload.rename(ref.path);
+      final baseline = await fixture.revisionOf(ref);
+      final save = await fixture.edit(ref, c, baseline);
+      expect(save, isA<Saved>());
+      expect(await File(ref.path).readAsString(), c);
+      expect(await payload.readAsString(), a);
+      expect(fixture.keptTexts(ref), contains(a));
+    },
+  );
+
+  test(
+    'a re-kept version must reach the disk before a retry replaces the PGN',
+    () async {
+      final ref = fixture.ref('KID/Main.pgn');
+      final revision = await fixture.put(ref, a);
+      expect(await fixture.edit(ref, b, revision), isA<Saved>());
+      final archive = fixture.backupFolder(ref);
+      final payload = File(
+        p.join(archive.path, fixture.keptVersions(ref).single),
+      );
+      await payload.rename(ref.path);
+      final baseline = await fixture.revisionOf(ref);
+      await withFolderFlushFailing(archive.path, 5, () async {
+        expect(await fixture.edit(ref, c, baseline), isA<IoFailure>());
+        expect(
+          await payload.readAsString(),
+          a,
+          reason: 'the name was installed',
+        );
+        expect(await fixture.edit(ref, c, baseline), isA<IoFailure>());
+        expect(await File(ref.path).readAsString(), a);
+      });
+      expect(await fixture.edit(ref, c, baseline), isA<Saved>());
+      expect(await payload.readAsString(), a);
+    },
+    skip: Platform.isWindows ? 'Windows has no directory flush' : false,
+  );
+
   test('a save that replaces nothing keeps nothing', () async {
     final ref = fixture.ref('KID/Main.pgn');
     final revision = await fixture.put(ref, a);

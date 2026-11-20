@@ -72,6 +72,80 @@ void main() {
     expect(releases.downloads, 1, reason: 'the verified file is reused');
   });
 
+  test('Try again after Later retries only the automatic download', () async {
+    final helper = StandInHelper();
+    final updates = await started(
+      installer: portableInstaller(root, helper: helper),
+    );
+    final listening = Completer<void>();
+    final transfer = StreamController<List<int>>(onListen: listening.complete);
+    releases.held = transfer.stream;
+    final checking = updates.check(automatic: true);
+    await listening.future;
+    expect(updates.prompt, isNotNull);
+    updates.later();
+    transfer.addError(const SocketException('Connection reset'));
+    await transfer.close();
+    await checking;
+    expect((updates.status as UpdateFailed).problem, UpdateProblem.transfer);
+
+    releases.held = null;
+    final settled = Completer<void>();
+    void onUpdate() {
+      final status = updates.status;
+      // An install also passes through UpdateDownloaded on its way to arming.
+      if (status is UpdateArmed ||
+          status is UpdateFailed ||
+          (status is UpdateDownloaded && !updates.installWhenReady)) {
+        settled.complete();
+      }
+    }
+
+    updates.addListener(onUpdate);
+    actionOf(updates, 'Try again').run!();
+    await settled.future;
+    updates.removeListener(onUpdate);
+
+    expect(releases.downloads, 2);
+    expect(updates.status, isA<UpdateDownloaded>());
+    expect(helper.launches, 0);
+  });
+
+  test(
+    'Try again after Later retries only the failed automatic download',
+    () async {
+      final helper = StandInHelper();
+      final updates = await started(
+        installer: portableInstaller(root, helper: helper),
+      );
+      releases.held = Stream.error(const SocketException('Connection lost'));
+      await updates.check(automatic: true);
+      expect((updates.status as UpdateFailed).problem, UpdateProblem.transfer);
+      expect(updates.prompt, isNotNull);
+      updates.later();
+
+      releases.held = null;
+      final settled = Completer<void>();
+      void onUpdate() {
+        final status = updates.status;
+        if ((status is UpdateDownloaded && !updates.installWhenReady) ||
+            status is UpdateArmed ||
+            status is UpdateFailed) {
+          if (!settled.isCompleted) settled.complete();
+        }
+      }
+
+      updates.addListener(onUpdate);
+      actionOf(updates, 'Try again').run!();
+      await settled.future;
+      updates.removeListener(onUpdate);
+
+      expect(releases.downloads, 2);
+      expect(updates.status, isA<UpdateDownloaded>());
+      expect(helper.launches, 0);
+    },
+  );
+
   test(
     'a download that fails verification is refused and nothing is kept',
     () async {

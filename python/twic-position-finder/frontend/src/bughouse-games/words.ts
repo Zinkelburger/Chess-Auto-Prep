@@ -1,14 +1,9 @@
 /**
- * What the page says about the data: line kinds, waits, scores, clocks,
- * seats and results in plain words. Pure, so tests/games.ts covers it.
+ * What the page says about the data: waits, scores, clocks, seats and
+ * results in plain words. Pure, so tests/games.ts covers it.
  */
 import type { BoardName } from '../bughouse/types';
-import type { Game, IndexEntry, Line, Move, Seat, Waited } from './games';
-
-const PIECE: Record<string, [string, string]> = {
-  p: ['a pawn', 'pawns'], n: ['a knight', 'knights'], b: ['a bishop', 'bishops'], r: ['a rook', 'rooks'], q: ['a queen', 'queens'],
-};
-const COUNT = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
+import type { Game, IndexEntry, Move, Seat, Waited } from './games';
 
 export function seatLabel(seat: Seat): string {
   return `${seat[0]}-${seat.slice(1, 2).toUpperCase()}${seat.slice(2)}`;
@@ -22,53 +17,6 @@ export function moveNumber(num: number, white: boolean): string { return white ?
 /** `B 14. h3+`: how a game move is named in sentences. */
 export function moveName(move: Move): string {
   return `${moveNumber(move.num, move.seat.endsWith('white'))} ${move.san}`;
-}
-
-/** "a rook", "two knights and a pawn": pieces as words, from FEN letters of one colour. */
-function piecesInWords(letters: string): string {
-  const counts = new Map<string, number>();
-  for (const c of letters.toLowerCase()) counts.set(c, (counts.get(c) ?? 0) + 1);
-  const parts = ['q', 'r', 'b', 'n', 'p'].filter((p) => counts.has(p)).map((p) => {
-    const n = counts.get(p)!;
-    return n === 1 ? PIECE[p][0] : `${COUNT[n] ?? n} ${PIECE[p][1]}`;
-  });
-  return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0] ?? '';
-}
-
-/**
- * What a line supposes the partner delivers, in a sentence:
- * `R` → "Supposes White's partner first delivers a rook." Empty for none.
- */
-export function assumePhrase(assume: string): string {
-  if (!assume) return '';
-  const white = [...assume].filter((c) => c === c.toUpperCase()).join('');
-  const black = [...assume].filter((c) => c !== c.toUpperCase()).join('');
-  if (white && black) return `Supposes White first receives ${piecesInWords(white)} and Black ${piecesInWords(black)} from their partners.`;
-  return `Supposes ${white ? 'White' : 'Black'}’s partner first delivers ${piecesInWords(white || black)}.`;
-}
-
-/** The heading of a line: its kind in plain words. */
-export function kindTitle(line: Line, move: Move): string {
-  switch (line.kind) {
-    case 'played': return 'Expected continuation';
-    case 'instead': return `Instead of ${move.san}`;
-    case 'threat': return 'Threat';
-    case 'arrives': return line.assume ? `If ${piecesInWords(line.assume)} arrives` : 'If a piece arrives';
-    default: return 'Line';
-  }
-}
-
-/** Where a line starts and what it shows, in one sentence. */
-export function lineContext(line: Line, move: Move): string {
-  const side = sideName(line.start.split(' ')[1] === 'b' ? 'black' : 'white');
-  const where = `${line.from === 'before' ? 'Before' : 'After'} ${moveName(move)}, on board ${line.board}`;
-  switch (line.kind) {
-    case 'played': return `${where}: what the engine expected to follow.`;
-    case 'instead': return `${where}: another first move, and the engine’s answer to it.`;
-    case 'threat': return `${where}: what ${side} would play with a free move.`;
-    case 'arrives': return `${where}: the engine’s plan if the piece reaches the hand.`;
-    default: return `${where}.`;
-  }
 }
 
 /**
@@ -117,11 +65,6 @@ export function mateWords(mate: number): string {
   return `${mate > 0 ? 'White' : 'Black'} mates in ${n}`;
 }
 
-/** A score for reading: a mate in words, else the capped score. */
-export function scoreWords(cp: number | null, mate: number | null): string {
-  return mate !== null ? mateWords(mate) : formatEval(cp, null, true);
-}
-
 /** A clock as `1:41`; under twenty seconds with tenths, `0:09.4`. */
 export function formatClock(s: number): string {
   const t = Math.max(0, s);
@@ -157,22 +100,9 @@ export function entryResult(entry: IndexEntry): string { return resultLine(entry
 
 export function gameResult(game: Game): string { return game.result.text || resultLine(game.result.winner, game.result.how, game.teams); }
 
-/** "57 moves · 13 notes". */
-export function lengthLine(moves: number, notes: number): string {
-  return `${moves} move${moves === 1 ? '' : 's'} · ${notes ? `${notes} note${notes === 1 ? '' : 's'}` : 'no notes'}`;
+/** "57 moves". */
+export function lengthLine(moves: number): string {
+  return `${moves} move${moves === 1 ? '' : 's'}`;
 }
 
 export function boardTitle(board: BoardName): string { return `Board ${board}`; }
-
-/** Line moves with move numbers, from the line's starting FEN: number before White's moves and before the first. */
-export function lineTokens(line: Line): { ply: number; number: string; san: string }[] {
-  const parts = line.start.split(' ');
-  let white = parts[1] !== 'b';
-  let num = Number(parts[5]) || 1;
-  return line.moves.map((m, ply) => {
-    const number = white ? `${num}.` : ply === 0 ? `${num}…` : '';
-    if (!white) num += 1;
-    white = !white;
-    return { ply, number, san: m.san };
-  });
-}

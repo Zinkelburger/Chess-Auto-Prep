@@ -48,6 +48,7 @@ class ExplorerPane extends StatefulWidget {
     required this.tree,
     required this.books,
     required this.openings,
+    this.onMove,
     this.onOpenGame,
     this.onLogIn,
     this.onDownloadTwic,
@@ -75,6 +76,7 @@ class ExplorerPane extends StatefulWidget {
 
   final DocumentSession session;
   final Explorer explorer;
+  final ValueChanged<String>? onMove;
 
   /// The game being fetched, whose row says so while the others wait.
   final GameFetcher games;
@@ -122,7 +124,8 @@ class _ExplorerPaneState extends State<ExplorerPane>
 
   void _play(ExplorerRow row) {
     _leave();
-    if (widget.explorer.canPlay(row)) widget.session.playMove(row.uci);
+    if (!widget.explorer.canPlay(row)) return;
+    (widget.onMove ?? widget.session.playMove)(row.uci);
   }
 
   @override
