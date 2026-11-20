@@ -5,19 +5,32 @@
    the pocket from bughouse-board.css. */
 
 /* ── Layout: the board as large as the window allows ──────────── */
-/* The column is the board plus two pockets, each an eighth of the board. */
-.bp { --bp-board: clamp(300px, calc((100dvh - var(--nav-h) - 128px) / 1.25), 720px); }
+/* The column is the board plus two pockets, each an eighth of the board.
+   Beside the panel the board is also capped by the width the panel leaves
+   (its 280px minimum and the 32px gap), so it is never cut off; 100cqi is
+   the page's content width. */
+.bp { container-type: inline-size; --bp-board: clamp(300px, min(calc((100dvh - var(--nav-h) - 128px) / 1.25), calc(100cqi - 312px)), 720px); }
 .bp-layout { display: grid; grid-template-columns: var(--bp-board) minmax(280px, 380px); gap: 32px; align-items: start; justify-content: center; }
-.bp-board-col { min-width: 0; }
+.bp-board-col { min-width: 0; container-type: inline-size; }
 .bp-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; position: sticky; top: calc(var(--nav-h) + 16px); padding-top: calc(var(--bp-board) / 8 + 6px); }
-@media (max-width: 800px) {
-  .bp { --bp-board: 100%; padding-top: 8px; }
-  .bp-layout { grid-template-columns: 1fr; gap: 16px; }
-  .bp-side { position: static; padding-top: 0; }
+/* Stacked: phones, and tablets held upright. The panel sits under the board,
+   as wide as it and centred with it; from 600px wide the board is sized so
+   the panel's buttons still fit in the window under it. */
+@media (max-width: 800px), (max-width: 1100px) and (orientation: portrait) {
+  .bp { --bp-board: min(100cqi, max(300px, calc((100dvh - var(--nav-h) - 344px) / 1.25))); padding-top: 8px; }
+  .bp-layout { grid-template-columns: var(--bp-board); gap: 12px; }
+  .bp-side { position: static; padding-top: 0; gap: 12px; }
+}
+@media (max-width: 599px) {
+  .bp { --bp-board: 100cqi; padding-top: 0; }
+  .bp-layout, .bp-side { gap: 10px; }
 }
 
 /* ── Pockets: the seat rows hold nothing else ─────────────────── */
-.bp-seat { display: flex; padding: 6px 0; }
+/* A row keeps a pocket's height (an eighth of the board) before its pocket
+   arrives, so the board never drops while the puzzle loads. */
+.bp-seat { display: flex; padding: 6px 0; min-height: calc(12.5cqi + 12px); }
+@media (max-width: 599px) { .bp-seat { padding: 4px 0; min-height: calc(12.5cqi + 8px); } }
 
 /* ── Board with skeleton, error and empty states ───────────────── */
 .bp-board-wrap { background: var(--bg-card); }
@@ -38,6 +51,13 @@
 .bp[data-state="error"] .bp-note-error, .bp[data-state="empty"] .bp-note-empty { display: flex; }
 .bp:not([data-state="ready"]) .bb-board { visibility: hidden; }
 .bp:not([data-state="ready"]) .bp-seat { visibility: hidden; }
+
+/* ── Keyboard cursor: an inset ring on one square ─────────────── */
+/* The accent's hue, dark enough for 3:1 on both square colours; dots and the
+   last-move tint show through. */
+.bp-cursor { position: absolute; width: 12.5%; height: 12.5%; z-index: 3; pointer-events: none; box-shadow: inset 0 0 0 3px #1d4170; }
+.bp-board-wrap:has(> .bb-board:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bp-board-wrap > .bb-board:focus-visible { outline: none; }
 .bp[data-state="loading"] .bp-side > :not(.bp-feedback, .bp-head) { opacity: 0.45; pointer-events: none; }
 
 /* ── Feedback: the one authored motion moment ─────────────────── */
@@ -47,12 +67,17 @@
 .bp-feedback .turn-title { transition: color 0.2s; }
 .bp-feedback.is-fresh .turn-text { animation: bp-rise 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
 @keyframes bp-rise { from { opacity: 0.4; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+/* A miss on the way is recorded, not drawn as a failure. */
+.bp-feedback.turn-fail { background: var(--bg-card); border-color: var(--border); }
+.bp-feedback.turn-fail .turn-title { color: var(--text); }
 .bp-feedback.turn-revealed { background: var(--pick-bg); border-color: var(--pick); }
 .bp-feedback.turn-revealed .turn-title { color: var(--pick); }
 .bp-feedback.turn-error { border-color: var(--warn); }
 .bp-feedback.turn-error .turn-title { color: var(--warn); }
 @media (prefers-reduced-motion: reduce) {
-  .bp-feedback, .bp-feedback .turn-text, .bp-skeleton::after { animation: none; transition: none; }
+  .bp-feedback, .bp-feedback .turn-text, .bp-feedback.is-fresh .turn-text, .bp-feedback .turn-title, .bp-skeleton::after { animation: none; transition: none; }
+  .bp .btn, .bp .san-token, .bp .zh-slot, .bp .choice span, .bp .session-cell { transition: none; }
+  .bp .session-cell:hover { transform: none; }
 }
 
 /* ── Side: title bar, feedback, moves, buttons ────────────────── */
@@ -63,21 +88,30 @@
 .bp-gear svg { width: 18px; height: 18px; }
 .bp-filter-active { color: var(--accent); font-size: 0.8rem; }
 .bp-line-row { display: flex; align-items: flex-start; gap: 8px; }
-.bp-line { flex: 1; min-height: 36px; gap: 2px 4px; margin: 0; padding: 4px 0; align-content: center; }
+/* Exactly two lines of moves; a longer line scrolls inside. */
+.bp-line { --bp-tok: 26px; flex: 1; height: calc(2 * var(--bp-tok) + 2px + 8px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--border) transparent; gap: 2px 4px; margin: 0; padding: 4px 0; align-content: flex-start; }
+.bp-line > * { height: var(--bp-tok); line-height: 20px; }
 .bp-line button.san-token { padding: 3px 4px; }
 .bp-step { display: flex; gap: 2px; padding-top: 2px; }
 .bp-step .btn { padding: 6px; }
 .bp-step svg { width: 18px; height: 18px; }
 .bp-step .btn:disabled { opacity: 0.35; }
-.bp-line .san-num { color: var(--text-faint); font-family: var(--mono); font-size: 0.85rem; padding: 3px 0 3px 2px; align-self: center; }
+.bp-line .san-num { color: var(--text-faint); font-family: var(--mono); font-size: 0.85rem; padding: 3px 0 3px 2px; }
 .bp-line .san-token.wrong { color: var(--danger); text-decoration: line-through; }
-.bp-controls { display: grid; grid-template-columns: auto 1fr 1fr 1.3fr; gap: 8px; }
+.bp-controls { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.3fr); gap: 8px; }
+.bp-controls .btn { padding-left: 10px; padding-right: 10px; }
 .bp-controls .btn { min-height: 44px; justify-content: center; }
 .bp-controls .bp-prev { padding: 0 12px; }
 .bp-controls .btn:focus-visible { outline-offset: 2px; }
+.bp-controls .btn.bp-quiet:focus-visible { outline: none; }
 .bp-controls .btn-outline:active:not(:disabled) { background: var(--bg-raised); }
 .bp-controls .btn-primary:active:not(:disabled) { filter: brightness(0.92); }
-.bp-lab-link { font-size: 0.85rem; align-self: flex-start; }
+/* What appears once the puzzle is over; its room is kept from the start. */
+.bp-after { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; font-size: 0.85rem; color: var(--text-dim); visibility: hidden; }
+.bp-after.is-shown { visibility: visible; }
+.bp-after p { margin: 0; }
+.bp-lab-link { font-size: 0.85rem; margin-top: 4px; }
+.bp-frozen { font-size: 0.82rem; margin: 0; }
 
 /* ── Settings sheet ───────────────────────────────────────────── */
 .bp-sheet { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(440px, 100vw); height: 100dvh; max-height: none; padding: 0; border: 0; border-left: 1px solid var(--border); background: var(--bg-card); color: var(--text); display: none; flex-direction: column; }
@@ -100,4 +134,18 @@
 .bp-progress .session-cell { width: 16px; height: 16px; }
 .bp-progress .session-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; transform: none; }
 .bp-source { font-size: 0.82rem; line-height: 1.5; margin: 0; }
+.bp-keys dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; font-size: 0.85rem; }
+.bp-keys dt { color: var(--text-dim); white-space: nowrap; }
+.bp-keys dd { margin: 0; }
+.bp-keys kbd { display: inline-block; min-width: 1.7em; font-family: var(--sans); font-size: 0.8rem; font-weight: 600; line-height: 1.4; text-align: center; color: var(--text); padding: 0 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-input); }
+
+/* ── Touch: 44px targets, 24px progress cells ─────────────────── */
+@media (pointer: coarse), (max-width: 800px), (max-width: 1100px) and (orientation: portrait) {
+  .bp-gear, .bp-controls .bp-prev, #bp-settings-close, .bp-more-themes, .bp-step .btn { min-width: 44px; min-height: 44px; }
+  .bp-step { padding-top: 0; }
+  .bp-facet .choice { min-height: 44px; min-width: 44px; align-items: center; justify-content: center; }
+  .bp-facet { gap: 0 6px; }
+  .bp-progress .session-cell { width: 24px; height: 24px; }
+  .bp-progress .session-strip { max-height: 168px; }
+}
 @media (prefers-reduced-motion: reduce) { .bp-sheet[open] { animation: none; } }

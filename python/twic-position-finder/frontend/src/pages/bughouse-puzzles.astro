@@ -10,7 +10,7 @@ const gear = 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.
 ---
 <Base
   title="Bughouse Puzzles"
-  description="Mates and tactics from real bughouse games, played by people on FICS or by engines. Your reserve is frozen: captures go to your partner and nothing new arrives."
+  description="Mates and tactics from real bughouse games, played by people on FICS or by engines. Reserves are frozen: no new pieces arrive for either side."
   wide
 >
   <div class="bp" id="bp" data-state="loading">
@@ -18,7 +18,7 @@ const gear = 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.
       <section class="bp-board-col" aria-label="Board">
         <div id="bp-seat-top" class="bp-seat bp-seat-top"></div>
         <div class="trainer-board bp-board-wrap">
-          <div id="bp-board" class="bb-board" role="group" aria-label="Puzzle board"></div>
+          <div id="bp-board" class="bb-board" role="group" tabindex="0" aria-label="Puzzle board. Arrow keys move, Enter picks up and puts down."></div>
           <div class="bp-skeleton" aria-hidden="true"></div>
           <div class="bp-board-note bp-note-error" role="alert">
             <p class="bp-note-title">Could not load the puzzles</p>
@@ -32,6 +32,7 @@ const gear = 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.
           </div>
         </div>
         <div id="bp-seat-bottom" class="bp-seat bp-seat-bottom"></div>
+        <p id="bp-live" class="visually-hidden" aria-live="polite"></p>
       </section>
 
       <aside class="bp-side" aria-label="Puzzle">
@@ -52,30 +53,35 @@ const gear = 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.
         </div>
 
         <div class="bp-line-row">
-          <div class="line-moves bp-line" id="bp-line" aria-label="Moves played"></div>
+          <div class="line-moves bp-line scroll-thin" id="bp-line" aria-label="Moves played"></div>
           <div class="bp-step">
-            <button type="button" class="btn btn-text btn-sm" id="bp-back" title="Back one move (←)" aria-label="Back one move" disabled>
+            <button type="button" class="btn btn-text btn-sm" id="bp-back" title="Back one move (←)" aria-label="Back one move" aria-keyshortcuts="ArrowLeft" disabled>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={chevronLeft}/></svg>
             </button>
-            <button type="button" class="btn btn-text btn-sm" id="bp-forward" title="Forward one move (→)" aria-label="Forward one move" disabled>
+            <button type="button" class="btn btn-text btn-sm" id="bp-forward" title="Forward one move (→)" aria-label="Forward one move" aria-keyshortcuts="ArrowRight" disabled>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={chevronRight}/></svg>
             </button>
           </div>
         </div>
 
         <div class="bp-controls">
-          <button type="button" class="btn btn-outline bp-prev" id="bp-prev" title="Previous puzzle (P or ↑)" aria-label="Previous puzzle" disabled>
+          <button type="button" class="btn btn-outline bp-prev" id="bp-prev" title="Previous puzzle (P or ↑)" aria-label="Previous puzzle" aria-keyshortcuts="P ArrowUp" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={chevronLeft}/></svg>
           </button>
-          <button type="button" class="btn btn-outline" id="bp-solution" title="Show the solution (space)" disabled>Solution</button>
-          <button type="button" class="btn btn-outline" id="bp-retry" title="Start again (R)" disabled>Retry</button>
-          <button type="button" class="btn btn-primary" id="bp-next" title="Next puzzle (S or ↓)" disabled>
+          <button type="button" class="btn btn-outline" id="bp-solution" title="Show the solution (space)" aria-keyshortcuts="Space" disabled>Solution</button>
+          <button type="button" class="btn btn-outline" id="bp-retry" title="Start again (R)" aria-keyshortcuts="R" disabled>Retry</button>
+          <button type="button" class="btn btn-primary" id="bp-next" title="Next puzzle (S or ↓)" aria-keyshortcuts="S ArrowDown" disabled>
             Next
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={chevronRight}/></svg>
           </button>
         </div>
 
-        <a id="bp-analysis-link" class="link-ext bp-lab-link" href="/bughouse" hidden>Analyse this board ↗</a>
+        <div class="bp-after" id="bp-after">
+          <p id="bp-game"></p>
+          <p id="bp-found"></p>
+          <a id="bp-analysis-link" class="link-ext bp-lab-link" href="/bughouse">Analyse this board ↗</a>
+        </div>
+        <p class="dim bp-frozen">Reserves are frozen: no new pieces arrive for either side.</p>
       </aside>
     </div>
 
@@ -115,8 +121,23 @@ const gear = 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.
           <div class="session-strip scroll-thin" id="bp-session" role="list"></div>
         </div>
 
+        <div class="bp-setting bp-keys">
+          <span class="bp-label" id="bp-keys-title">Keys</span>
+          <dl aria-labelledby="bp-keys-title">
+            <dt><kbd>S</kbd> or <kbd>↓</kbd></dt><dd>Next puzzle</dd>
+            <dt><kbd>P</kbd> or <kbd>↑</kbd></dt><dd>Previous puzzle</dd>
+            <dt><kbd>R</kbd></dt><dd>Retry</dd>
+            <dt><kbd>Space</kbd></dt><dd>Show the solution</dd>
+            <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Back and forward through the moves</dd>
+            <dt><kbd>Home</kbd> <kbd>End</kbd></dt><dd>First and last move</dd>
+            <dt><kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd></dt><dd>On the board: move from square to square</dd>
+            <dt><kbd>Enter</kbd> or <kbd>Space</kbd></dt><dd>On the board: pick up a piece, put it down; once solved, the next puzzle</dd>
+            <dt><kbd>Esc</kbd></dt><dd>Put the piece back</dd>
+          </dl>
+        </div>
+
         <p class="dim bp-source">
-          Your reserve is frozen: captures go to your partner and nothing new arrives, so every drop has to count.
+          Reserves are frozen: no new pieces arrive for either side.
           <span id="bp-source"></span>
         </p>
       </div>

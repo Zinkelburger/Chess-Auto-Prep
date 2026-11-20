@@ -275,11 +275,12 @@ Fairy-Stockfish binary:
   and `--export-verified` exports what a stopped run's verify log holds
   (`--from-candidates` names its candidate file for the count).
 
-  The published engine set is such a partial mine, and its source line says
-  so: 8,287 games (8,266 HypeBeast self-play, 17 against HiveMind, 4 against
-  Fairy-Stockfish) gave 109,540 distinct candidate positions, of which the
-  first 50,336 were checked (pre-check or full verify) before the run was
-  stopped. 816 were sound; 611 are published (542 mates, 69 tactics) after
+  The published engine set is such a partial mine. The page says only
+  "8,287 engine games played by HypeBeast, most of them against other builds
+  of itself"; the facts are these: 8,287 games (8,266 HypeBeast self-play, 17
+  against HiveMind, 4 against Fairy-Stockfish) gave 109,540 distinct candidate
+  positions, of which the first 50,336 were checked (pre-check or full verify)
+  before the run was stopped. 816 were sound; 611 are published (542 mates, 69 tactics) after
   the mate-in-one rule (the engine found 108 of them), the one-move-tactic
   rule below (95) and the FICS and repeated-line deduplication (2). Of the
   1,177 pre-check rejects verified in full anyway, none was sound.
@@ -355,12 +356,28 @@ app.ts          page controller: play, reply, Solution, Retry, #<id> deep links 
 ```
 
 Solving shows only the board, its two pockets, one feedback box in lila's
-words ("Black to move", then "Best move!" or "Solved!"; no mate count and no
-icon), the moves and four buttons; who played the game and whether they found
-the move stay out of the way. The moves are clickable: a click, ←/→,
+words ("Black to move", then "Best move!" or "Solved!"; no mate count, no
+goal and no icon), the moves (two lines tall, scrolling inside when longer)
+and four buttons, with one fixed line under them: "Reserves are frozen: no
+new pieces arrive for either side." The moves are clickable: a click, ←/→,
 Home/End or the two small arrows beside them show an earlier board of the
 line, and the board stays locked until play is back on the latest move. Once a
-puzzle is over, **Analyse this board** opens its position on `/bughouse`.
+puzzle is over, a block under the buttons whose room is kept from the start
+says who played the game ("Plotno (2061) – shadew (2047) · FICS 2017") and
+what the solver's side did there, and **Analyse this board** opens its
+position on `/bughouse`. Nothing on the page moves or changes size while
+solving or at the moment of solving. "Solved after a miss" is drawn neutral,
+not as a failure, though the progress grid records it as missed.
+
+Every control works by keyboard, and the Keys section in Settings lists them.
+The board is one Tab stop: the arrows move a square cursor (drawn only after a
+key is pressed on the board), Enter or Space picks up and puts down, Escape
+puts back, and once a puzzle is over Enter goes to the next. Enter or Space on
+a reserve piece picks it and hands the focus to the board. A polite live line
+says where the cursor is, what was picked and the opponent's reply. The
+progress grid is one Tab stop too (arrows, Home/End, Enter). A tap on a
+reserve piece picks it on a touch screen, as a click does (the analysis board
+on `/bughouse` shares this).
 
 Styles: the shared trainer vocabulary (`src/styles/trainer.css`, also used by
 the Tactics Trainer), the board and pocket in `src/styles/bughouse-board.css`
@@ -465,5 +482,10 @@ scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test
   `build/bughouse-web/`.
 - `test:puzzles:browser` drives `/bughouse-puzzles`: the FICS set by default,
   Settings switching to engine games, one engine puzzle solved on the board
-  and stepped back through, results kept per set, and deep links opening the right set; screenshots
-  also go to `build/bughouse-web/`.
+  and stepped back through, results kept per set, and deep links opening the
+  right set; then the layout at twelve window sizes (no clipping, the buttons
+  in the first screen), boxes that do not move from loading to the next
+  puzzle at three sizes, touch taps and drags on the reserve, Space on a
+  focused button, a solve by keyboard alone with a drop, contrast, touch
+  target sizes and reduced motion. Screenshots also go to
+  `build/bughouse-web/`.
