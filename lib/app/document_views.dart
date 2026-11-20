@@ -340,8 +340,11 @@ abstract base class _ReadingView extends _DocumentModeView {
     _hold();
   }
 
-  void _hold() => workspace.session.holdsEdits =
-      !editing.value || workspace.session.readOnly != null;
+  void _hold() {
+    workspace.session.holdsEdits =
+        !editing.value || workspace.session.readOnly != null;
+    workspace.review?.followReadEdit();
+  }
 
   @override
   void space() {
