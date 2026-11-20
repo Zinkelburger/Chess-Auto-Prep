@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/chess/pgn/game_review.dart';
+import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart' show Opened;
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:chess_auto_prep/workspace/reading/move_tree_view.dart';
@@ -6,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/scripted_store.dart';
 import '../support/session_fixture.dart';
 
 /// A chapter whose introduction and whose first move both carry the tokens
@@ -114,6 +118,44 @@ void main() {
     );
   });
 
+  testWidgets('Copy FEN still copies the clicked position after undo', (
+    tester,
+  ) async {
+    final fixture = await openSession(twoLines);
+    addTearDown(fixture.dispose);
+    final session = fixture.session;
+    session.setComment(const NodePath.root(), 'A new introduction.');
+    await fixture.saver.flush();
+    final expected = session.tree!.children.first.children.last.fen.value;
+    final messenger = tester.binding.defaultBinaryMessenger;
+    String? copied;
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied = (call.arguments as Map)['text'] as String;
+      }
+      return null;
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+    await pumpTree(tester, fixture);
+
+    fixture.store.hold = true;
+    final undoing = session.undo();
+    await tester.pump();
+    expect(fixture.store.waiting, 1);
+    await tester.tap(find.textContaining('Nf6'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    fixture.store.hold = false;
+    fixture.store.releaseNext();
+    expect(await undoing, isA<Restored>());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Copy FEN'));
+    await tester.pumpAndSettle();
+
+    expect(copied, expected);
+  });
+
   testWidgets('a move offers what can be done to it, and does it', (
     tester,
   ) async {
@@ -157,6 +199,94 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Promote variation'), findsNothing);
     }
+  });
+
+  testWidgets('a move menu cannot delete from a newly opened file', (
+    tester,
+  ) async {
+    final fixture = await openSession('[Event "A"]\n\n1. e4 e5 2. Nf3 *\n');
+    addTearDown(fixture.dispose);
+    final other = chapterRef('KID', 'B');
+    const text = '[Event "B"]\n\n1. d4 d5 2. c4 *\n';
+    fixture.store.documents[other] = Opened(text, scriptedRevision(text));
+    await pumpTree(tester, fixture);
+
+    fixture.store.hold = true;
+    final opening = fixture.session.open(other);
+    await tester.pump();
+    expect(fixture.store.waiting, 1);
+    await tester.tap(find.textContaining('e5'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    final delete = find.text('Delete from here');
+    expect(delete, findsOneWidget);
+    fixture.store.hold = false;
+    fixture.store.releaseNext();
+    expect(await opening, isA<DocumentOpened>());
+    await tester.pumpAndSettle();
+    if (delete.evaluate().isNotEmpty) {
+      await tester.tap(delete);
+      await tester.pumpAndSettle();
+    }
+
+    await fixture.saver.flush();
+    expect(fixture.session.source, other);
+    expect(fixture.session.tree!.mainLine.map((move) => move.san), [
+      'd4',
+      'd5',
+      'c4',
+    ]);
+    expect((fixture.store.documents[other] as Opened).text, text);
+  });
+
+  testWidgets('an open delete menu preserves a replacement review line', (
+    tester,
+  ) async {
+    final fixture = await openSession(
+      '[Event "Reviewed"]\n\n1. e4 (1. d4 {[%cap_review_line 2]} d5) *\n',
+    );
+    addTearDown(fixture.dispose);
+    await pumpTree(tester, fixture);
+    await tester.tap(find.textContaining('d5'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+
+    expect(
+      fixture.session.apply(
+        (chapter) => annotateGame(chapter, const [
+          ReviewValue(0, '0.00', ['c2c4', 'd7d5']),
+          ReviewValue(-250, '-2.50', []),
+        ]),
+      ),
+      isNull,
+    );
+    await fixture.saver.flush();
+    final reviewed = fixture.onDisk;
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete from here'));
+    await tester.pumpAndSettle();
+    await fixture.saver.flush();
+
+    final replacement = fixture.session.tree!.children[1];
+    expect(replacement.san, 'c4');
+    expect(replacement.children.single.san, 'd5');
+    expect(fixture.onDisk, reviewed);
+  });
+
+  testWidgets('an open delete menu still works after a comment edit', (
+    tester,
+  ) async {
+    final fixture = await openSession(twoLines);
+    addTearDown(fixture.dispose);
+    await pumpTree(tester, fixture);
+    await tester.longPress(find.textContaining('c4'));
+    await tester.pumpAndSettle();
+    fixture.session.setComment(const NodePath.root(), 'New introduction.');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete from here'));
+    await tester.pumpAndSettle();
+    await fixture.saver.flush();
+
+    expect(fixture.onDisk, contains('New introduction.'));
+    expect(fixture.onDisk, contains('1. d4 d5 *'));
   });
 
   testWidgets('deleting from a move takes it off the screen quietly and undo '

@@ -74,7 +74,7 @@ class _MoveTreeViewState extends State<MoveTreeView>
   final _selection = Selection<NodePath>();
 
   /// The lines last built, and the tree and orientation they show.
-  ({GameTree tree, Side side, Widget lines})? _built;
+  ({GameTree tree, Side side, int arrangement, Widget lines})? _built;
 
   @override
   void initState() {
@@ -162,14 +162,21 @@ class _MoveTreeViewState extends State<MoveTreeView>
           return _found(tree, shownTo);
         }
         final side = widget.session.orientation;
+        final arrangement = session.arrangement;
         final built = _built;
         if (built != null &&
             identical(built.tree, tree) &&
-            built.side == side) {
+            built.side == side &&
+            built.arrangement == arrangement) {
           return built.lines;
         }
-        final lines = _lines(tree, side);
-        _built = (tree: tree, side: side, lines: lines);
+        final lines = _lines(tree, side, arrangement);
+        _built = (
+          tree: tree,
+          side: side,
+          arrangement: arrangement,
+          lines: lines,
+        );
         return lines;
       },
     );
@@ -200,15 +207,34 @@ class _MoveTreeViewState extends State<MoveTreeView>
     );
   }
 
-  Widget _lines(GameTree tree, Side side) {
+  Widget _lines(GameTree tree, Side side, int arrangement) {
     _selection.reset();
+    final owner = session;
     final builder = _LineBuilder(
-      widget.session,
+      owner,
       _selection,
       (path) => widget.moveMenu?.call(path) ?? const [],
       _deleteFrom,
       _readComment,
       preview: widget.preview,
+      canRun: (path) {
+        if (!mounted ||
+            session != owner ||
+            owner.arrangement != arrangement ||
+            widget.preview != null ||
+            owner.shownTo != null) {
+          return false;
+        }
+        final live = owner.tree;
+        // A review can replace a variation without moving any game in the file.
+        return identical(live, tree) ||
+            (live != null &&
+                live.rootFen == tree.rootFen &&
+                listEquals(
+                  [for (final move in tree.lineTo(path)) move.san],
+                  [for (final move in live.lineTo(path)) move.san],
+                ));
+      },
     );
     return LinePreviewOverlay(
       preview: preview,
@@ -260,11 +286,13 @@ final class _LineBuilder {
     this.onDeleteFrom,
     this.comment, {
     this.preview,
+    this.canRun,
   });
 
   final DocumentSession session;
   final ({GameTree tree, ValueChanged<NodePath> onRead})? preview;
   final Selection<NodePath> selection;
+  final bool Function(NodePath)? canRun;
 
   /// Asked when a move's menu opens, not when the lines are built, so the
   /// entries are the mode's as they are then.
@@ -354,6 +382,12 @@ final class _LineBuilder {
   }
 
   Widget _token(MoveNode node, NodePath path, {required bool numbered}) {
+    VoidCallback? guarded(VoidCallback? run) => run == null
+        ? null
+        : () {
+            if (canRun?.call(path) == true) run();
+          };
+
     return _MoveToken(
       label: moveNumberLabel(node, startsLine: numbered),
       san: node.san,
@@ -368,22 +402,22 @@ final class _LineBuilder {
           : [
               AppAction(
                 'Promote variation',
-                () => promoteVariation(session, path),
+                guarded(() => promoteVariation(session, path)),
                 icon: AppIcons.promote,
               ),
               AppAction(
                 'Make main line',
-                () => makeMainLine(session, path),
+                guarded(() => makeMainLine(session, path)),
                 icon: AppIcons.mainLine,
               ),
               AppAction(
                 'Delete from here',
-                () => onDeleteFrom(path),
+                guarded(() => onDeleteFrom(path)),
                 icon: AppIcons.delete,
               ),
               AppAction(
                 'Copy line PGN',
-                () => _copy(writeLineTo(session.tree!, path)),
+                guarded(() => _copy(writeLineTo(session.tree!, path))),
                 icon: AppIcons.copy,
               ),
               AppAction(
@@ -391,7 +425,8 @@ final class _LineBuilder {
                 () => _copy(node.fen.value),
                 icon: AppIcons.copy,
               ),
-              ...moveMenu(path),
+              for (final action in moveMenu(path))
+                AppAction(action.label, guarded(action.run), icon: action.icon),
             ],
     );
   }
