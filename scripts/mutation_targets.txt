@@ -580,6 +580,8 @@
 #     :418 the log of an incomplete download, :512 `<` -> `<=` at exactly
 #     200 saved games (the download asks for 200, not 20; the extra games
 #     are saved already and dropped), :537 the first progress count.
+#   lib/features/tactics/puzzle_state.dart:103 `found + 1` -> `+ 2` (it
+#     is read just after the solver's own move, when `found` is odd).
 #   lib/features/tactics/puzzle_trainer.dart:33 the advance delay, :522
 #     `||` -> `&&` in `_bringUp` (every caller makes the same check just
 #     before, with no wait between), :646-648 the advance timer's checks
