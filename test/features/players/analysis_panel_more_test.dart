@@ -160,6 +160,32 @@ void main() {
     expect(field().text, 'All dates');
   });
 
+  testWidgets('the position filters go back to listing every position', (
+    tester,
+  ) async {
+    await choose(
+      tester,
+      Player.create('Alex').edited({
+        'pgn_files': [ref.path],
+      }),
+    );
+    await show(tester);
+    await tester.tap(find.text('Filters'));
+    await tester.pump();
+    for (final label in ['Minimum games', 'From move']) {
+      await tester.tap(find.byTooltip('Increase $label'));
+      await tester.pump();
+    }
+    expect((analysis().minGames, analysis().fromMove), (2, 2));
+    expect(find.text('Filters (2)'), findsOneWidget);
+    for (final label in ['Minimum games', 'From move']) {
+      await tester.tap(find.byTooltip('Decrease $label'));
+      await tester.pump();
+    }
+    expect((analysis().minGames, analysis().fromMove), (1, 1));
+    expect(find.text('Filters'), findsOneWidget);
+  });
+
   testWidgets('once positions have evaluations, the table sorts by them and '
       'shows them', (tester) async {
     await choose(

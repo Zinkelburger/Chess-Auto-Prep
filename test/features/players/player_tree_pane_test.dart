@@ -137,6 +137,11 @@ void main() {
     await tester.tap(find.text('Add line to prep study'));
     expect(saves, 1);
 
+    // Where nothing can take the line, it is not offered.
+    await show(tester);
+    expect(find.text('Go to the first move'), findsOneWidget);
+    expect(find.text('Add line to prep study'), findsNothing);
+
     analysis().search('nobody');
     await tester.pump();
     expect(

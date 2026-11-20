@@ -341,6 +341,15 @@
 #     and comes to the same gaps).
 #   lib/features/players/player_picker.dart:77 the search's padding, :138,
 #     :144 the row's line counts: the look.
+#   lib/features/players/players_screen.dart:198, :424, :430 the line
+#     counts, :321, :360 the rules' height: the look.
+#   lib/features/players/analysis_panel.dart:603 the list switch's rebuild
+#     test past its list (the app has one theme, so the colour never
+#     changes; `==` on it only rebuilds more often), :264 the 100 positions
+#     listed (a default), :202, :400 paddings, :375, :411 the header's and
+#     status's type and lines: the look.
+#   lib/features/players/analysis_rows.dart:117-118, :193, :203, :236, :256
+#     line counts and wrapping: the look.
 #   lib/features/settings/lichess_account.dart:179 `Connecting`'s
 #     `browserOpened` default (shown only until the login says whether the
 #     browser took the page).

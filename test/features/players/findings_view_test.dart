@@ -121,6 +121,19 @@ void main() {
     expect(find.text('25 positions checked · 2 findings'), findsOneWidget);
   });
 
+  testWidgets('a run over one position says so in the singular', (
+    tester,
+  ) async {
+    final hunt = w.parts.players.hunt
+      ..done = 1
+      ..total = 1;
+    await show(tester);
+    expect(find.text('1 position checked · no findings'), findsOneWidget);
+    hunt.findings = [_finding()];
+    await show(tester);
+    expect(find.text('1 position checked · 1 finding'), findsOneWidget);
+  });
+
   testWidgets('the findings put aside are counted and shown on request, and '
       'the list goes back', (tester) async {
     w.parts.players.hunt
