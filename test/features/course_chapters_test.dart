@@ -231,6 +231,21 @@ void main() {
     expect(text, contains('[Event "Alapin"]\n[ChapterName "Sicilian"]\n'));
   });
 
+  test('undo restores a section deleted while its course was closed', () async {
+    await start();
+    final other = besideTheCourse('French', '[Event "French"]\n\n1. e4 e6 *\n');
+    await fixture.session.open(other);
+    expect(fixture.session.source, other);
+
+    expect(await fixture.library.deleteChapter(open), isA<LibraryDone>());
+    expect(sectionsInText(onDisk()), ['Sicilian']);
+
+    await fixture.session.open(sicilian);
+    expect(fixture.session.source, sicilian);
+    await fixture.session.undo();
+    expect(onDisk(), _course);
+  });
+
   test('a chapter of a course file does not move without its file', () async {
     await start();
     final result = await fixture.library.moveChapter(

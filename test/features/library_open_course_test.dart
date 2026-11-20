@@ -5,6 +5,7 @@
 // a moment before.
 import 'dart:io';
 
+import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/features/library/library.dart';
 import 'package:chess_auto_prep/features/library/library_state.dart';
 import 'package:chess_auto_prep/storage/chapter_directory.dart';
@@ -12,6 +13,7 @@ import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_file_store.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document/document_session.dart';
+import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -65,6 +67,50 @@ void main() {
     saver.dispose();
     await documents.delete(recursive: true);
     await support.delete(recursive: true);
+  });
+
+  test('a copy cannot undo the original course deletion', () async {
+    final surviving = chapter('Sicilian');
+    final removed = chapter('Open games');
+    expect(await session.showAnalysisBoard(), isTrue);
+    expect(await library.deleteChapter(removed), isA<LibraryDone>());
+
+    final file = File(surviving.path);
+    final bytes = await file.readAsBytes();
+    final archived = await file.rename('${file.path}.archived');
+    await archived.copy(file.path);
+
+    expect(await session.open(surviving), isA<DocumentOpened>());
+    expect(session.canUndo, isFalse);
+    expect(await session.undo(), isA<UndoRefused>());
+    expect(await file.readAsBytes(), bytes);
+  });
+
+  test('a tab keeps its comment undo across two closed renames', () async {
+    final course = chapter('Sicilian');
+    final file = File(course.path);
+    session.setComment(NodePath.of([0]), 'Remember this line');
+    await saver.flush();
+    final commented = await file.readAsString();
+    expect(commented, contains('Remember this line'));
+    expect(await session.showAnalysisBoard(), isTrue);
+    final kept = session.takeSetAsideUndo()!;
+
+    expect(
+      await library.renameChapter(chapter('Open games'), 'Open'),
+      isA<LibraryDone>(),
+    );
+    expect(
+      await library.renameChapter(chapter('Open'), 'Open games'),
+      isA<LibraryDone>(),
+    );
+    expect(await file.readAsString(), commented);
+    expect(await session.open(course), isA<DocumentOpened>());
+    expect(session.restoreUndo(kept), isTrue);
+    for (var i = 0; i < 3 && session.canUndo; i++) {
+      expect(await session.undo(), isA<Restored>());
+    }
+    expect(await file.readAsString(), _course);
   });
 
   test('a renamed chapter is listed under its new name at once', () async {
