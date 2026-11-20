@@ -1,6 +1,7 @@
 // The player directory written under a fault at every effect: a player's
-// rating edited in people.json, and a group renamed in its own file
-// (`PlayerFiles`, each file replaced whole under the folder lock). After any
+// rating edited in people.json, a group renamed in its own file and a group
+// removed into `.removed` (`PlayerFiles`, each file replaced or moved whole
+// under the folder lock). After any
 // fault each file holds the old rows or the new ones, every other row and
 // unknown field as it was, and the other records read as they did. A save
 // that throws is retried with the same edit, which the store takes as done
@@ -59,6 +60,10 @@ Future<_Answer> _rename(RecordStores s) {
   return _answer(() => s.players.saveGroup(edited, expected: seededGroup));
 }
 
+/// The club's group removed: moved into `.removed`, kept.
+Future<_Answer> _remove(RecordStores s) =>
+    _answer(() => s.players.removeGroup(seededGroup));
+
 Verdict _verdict(_Answer answer) => answer;
 
 Future<String> _players(RecordStores s) => s.playersNow();
@@ -85,7 +90,19 @@ const _group = StorageScenario<RecordStores, _Answer>(
   probes: recordProbes,
 );
 
+const _removal = StorageScenario<RecordStores, _Answer>(
+  name: 'remove a group',
+  seed: seedRecordProfile,
+  open: RecordStores.open,
+  command: _remove,
+  verdict: _verdict,
+  retry: _remove,
+  firstRead: _players,
+  probes: recordProbes,
+);
+
 void main() {
   faultMatrix(_rating);
   faultMatrix(_group);
+  faultMatrix(_removal);
 }

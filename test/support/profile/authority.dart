@@ -136,6 +136,10 @@ Authority? _documents(
   if ({'tournament.json', 'people.json', 'match.json'}.contains(name)) {
     return Authority.authoritative;
   }
+  // Groups removed from the player directory, kept.
+  if (parts.length >= 2 && parts[0] == 'opponents' && parts[1] == '.removed') {
+    return Authority.recovery;
+  }
   // The player directory's groups, and the engine tournaments' registry.
   if (parts.length == 3 &&
       parts[0] == 'opponents' &&
