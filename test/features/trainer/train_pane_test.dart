@@ -12,6 +12,7 @@ import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/features/trainer/training_scope.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/edit_scope.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/settings.dart';
 import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/storage/training_progress.dart';
@@ -26,6 +27,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/books_fixture.dart';
 import '../../support/scripted_files.dart';
 import '../../support/scripted_progress.dart';
+import '../../support/scripted_store.dart';
 import '../../support/session_fixture.dart';
 
 const _chapter = '''
@@ -237,6 +239,103 @@ void main() {
       reason: 'from where it branches',
     );
     expect(find.text('Untrained'), findsNWidgets(2));
+    expect(find.text('1.e4 e5 2.Nf3 Nc6 3.Bb5'), findsOneWidget);
+  });
+
+  testWidgets('the repertoire\'s rows name their chapter; a line the one '
+      'above plays all of shows whole', (tester) async {
+    const short = '''
+// Color: White
+
+[Event "Long"]
+
+1. d4 d5 2. c4 *
+
+[Event "Short"]
+
+1. d4 d5 *
+''';
+    fixture.store.documents[ref('KID', 'Short')] = Opened(
+      short,
+      scriptedRevision(short),
+    );
+    await pump(
+      tester,
+      chapters: ScriptedFiles(
+        listing: Repertoires([
+          folder('KID', ['Main', 'Short']),
+        ]),
+      ),
+    );
+    await tester.tap(find.text('Repertoire'));
+    await tester.pumpAndSettle();
+    expect(find.text('Main · 1.e4 e5 2.Nf3 Nc6 3.Bb5'), findsOneWidget);
+    expect(find.text('Short · 1.d4 d5 2.c4'), findsOneWidget);
+    expect(find.text('Short · 1.d4 d5'), findsOneWidget);
+  });
+
+  testWidgets('a line\'s menu marks it known, forgets it, and leaves an '
+      'excluded line untrainable', (tester) async {
+    await pump(tester);
+    Future<void> menu(Finder actions) async {
+      await tester.tap(actions);
+      await tester.pumpAndSettle();
+    }
+
+    await menu(find.byTooltip('Actions').first);
+    expect(find.text('Train this line'), findsOneWidget);
+    expect(find.text('Forget this line'), findsNothing);
+    await tester.tap(find.text('I know this line'));
+    await tester.pumpAndSettle();
+    expect(find.text('1 learned · 0 due · 1 untrained'), findsOneWidget);
+
+    // A learned line sorts after the untrained one.
+    await menu(find.byTooltip('Actions').last);
+    expect(find.text('I know this line'), findsNothing);
+    await tester.tap(find.text('Forget this line'));
+    await tester.pumpAndSettle();
+    expect(find.text('0 learned · 0 due · 2 untrained'), findsOneWidget);
+
+    await menu(find.byTooltip('Actions').first);
+    await tester.tap(find.text('Exclude from training'));
+    await tester.pumpAndSettle();
+    await menu(find.byTooltip('Actions').last);
+    expect(find.text('Train this line'), findsNothing);
+    expect(find.text('Include in training'), findsOneWidget);
+  });
+
+  testWidgets('every line marked known leaves nothing due; a mark that did '
+      'not save is said', (tester) async {
+    await pump(tester);
+    await tester.tap(find.byTooltip('Training actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mark every line known'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 learned · 0 due · 0 untrained'), findsOneWidget);
+    expect(
+      find.text('Nothing due. Choose a line below to practice.'),
+      findsOneWidget,
+    );
+
+    files.nextWrite = const ProgressFailed('disk full');
+    await tester.tap(find.byTooltip('Training actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mark every line untrained'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Could not save training progress: disk full'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('searching the lines keeps the ones that play the move', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.enterText(find.byType(TextField).first, 'bc4');
+    await tester.pumpAndSettle();
+    expect(find.text('Ruy'), findsNothing);
+    expect(find.text('Italian'), findsOneWidget);
   });
 
   testWidgets('learning shows a move, Space asks for it, Escape leaves', (

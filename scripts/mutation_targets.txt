@@ -531,6 +531,10 @@
 #     box has no third state); the rest is the look.
 #   lib/features/trainer/train_pane.dart: only the look survives (:170 a
 #     message's inset).
+#   lib/features/trainer/line_list.dart:131 `>` -> `>=` on the orders offered
+#     (training and course order are always both offered), :157 the search
+#     field's hint, :647 `>=` -> `>` (a card exactly the shortest height lays
+#     out the same scrolled or not); the rest is the look.
 lib/chess/pgn/game_review.dart|test/workspace/game_review_test.dart|test/chess/pgn/edit_laws_test.dart test/app
 lib/chess/pgn/line_edits.dart|test/chess/pgn/line_edits_test.dart|test/chess/pgn test/workspace
 lib/chess/pgn/chapter_edits.dart|test/chess/pgn/chapter_edits_test.dart|test/chess/pgn test/workspace
