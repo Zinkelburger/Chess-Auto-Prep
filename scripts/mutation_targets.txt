@@ -588,12 +588,14 @@
 #     as it fires (disposing, suspending and turning auto-advance off each
 #     cancel it, and each change of the puzzle up cancels it or moves its
 #     target along).
-#   Only a widget's look survives in lib/features/tactics/puzzle_filters.dart
-#     (:32, :192), puzzle_pane.dart (:95, :253), tactics_actions.dart (:75
-#     the icon), tactics_panel.dart (:147, :331) and my_games_block.dart
-#     (:22 filled or outlined by default, :39, :73, :101, :129, :235 the
-#     icon, :309, :311 which field takes focus): padding, line counts, a
-#     divider.
+#   Only a widget's look survives in
+#     lib/features/tactics/puzzle_filters.dart (:32, :192),
+#     lib/features/tactics/puzzle_pane.dart (:95, :253),
+#     lib/features/tactics/tactics_actions.dart (:75 the icon),
+#     lib/features/tactics/tactics_panel.dart (:147, :331) and
+#     lib/features/tactics/my_games_block.dart (:22 filled or outlined by
+#     default, :39, :73, :101, :129, :235 the icon, :309, :311 which field
+#     takes focus): padding, line counts, a divider.
 lib/chess/pgn/game_review.dart|test/workspace/game_review_test.dart|test/chess/pgn/edit_laws_test.dart test/app
 lib/chess/pgn/line_edits.dart|test/chess/pgn/line_edits_test.dart|test/chess/pgn test/workspace
 lib/chess/pgn/chapter_edits.dart|test/chess/pgn/chapter_edits_test.dart|test/chess/pgn test/workspace
