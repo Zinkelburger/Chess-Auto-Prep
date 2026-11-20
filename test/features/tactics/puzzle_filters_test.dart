@@ -68,9 +68,16 @@ void main() {
     tester,
   ) async {
     await pumpFilters(tester, const PuzzleFilter());
+    bool chosen(String label) => tester
+        .widget<FilterChip>(find.widgetWithText(FilterChip, label))
+        .selected;
+    expect(chosen('Newest first'), isTrue);
+    expect(chosen('Worst success rate'), isFalse);
     await tester.tap(find.text('Worst success rate'));
     await tester.pump();
     expect(kept.last.order, PuzzleOrder.worstSuccess);
+    expect(chosen('Newest first'), isFalse);
+    expect(chosen('Worst success rate'), isTrue);
     await tester.tap(find.text('Group by game'));
     await tester.pump();
     expect(kept.last.groupByGame, isFalse);
@@ -124,6 +131,9 @@ void main() {
     await submit('30');
     expect(kept, hasLength(before), reason: 'the same number is no change');
 
+    await submit('1');
+    expect(kept.last.days, 1, reason: 'today alone is a window');
+
     await tester.enterText(daysBox(), '5');
     await tester.tap(find.byKey(const ValueKey('elsewhere')));
     await tester.pump();
@@ -141,6 +151,17 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('elsewhere')));
     await tester.pump();
     expect(kept.map((f) => f.days), [null]);
+  });
+
+  testWidgets('ticked again after the box was emptied, Last is the '
+      'fortnight it starts with', (tester) async {
+    await pumpFilters(tester, const PuzzleFilter(days: 7));
+    await tester.enterText(daysBox(), '');
+    daysCheck(tester).onChanged!(false);
+    await tester.pump();
+    daysCheck(tester).onChanged!(true);
+    await tester.pump();
+    expect(kept.map((f) => f.days), [null, 14]);
   });
 
   testWidgets('the box follows a filter changed elsewhere and keeps the '

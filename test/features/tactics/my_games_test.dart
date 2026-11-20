@@ -287,6 +287,22 @@ void main() {
     );
   });
 
+  test('a saved game not yet reviewed is reviewed with a new download', () async {
+    final newer = scholarsMate.replaceAll('AbCd1234', 'XyZw9876');
+    r = _Review(
+      accounts: {GameSite.lichess: const Account('Me')},
+      lichess: GamesFetched([newer]),
+    );
+    await r.cache.keep(GameSite.lichess, 'Me', [scholarsMate], DateTime(2026));
+    await r.start();
+    expect(await r.cache.all(GameSite.lichess, 'Me'), hasLength(2));
+    expect(
+      analyzedIn(r.setText),
+      containsAll(['lichess_XyZw9876', 'lichess_AbCd1234']),
+      reason: 'the saved file is what is reviewed',
+    );
+  });
+
   test('one failed save leaves the other site saved and reviewed', () async {
     r = _Review();
     r.store.creates.add(const IoFailure('disk full'));

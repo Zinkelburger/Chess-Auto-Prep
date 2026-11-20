@@ -87,6 +87,7 @@ void main() {
     expect(find.text('0-1 · 2026.09.20'), findsOneWidget);
     expect(find.text('4.Qe2??', findRichText: true), findsOneWidget);
     expect(find.text('Nd4', findRichText: true), findsOneWidget);
+    expect(find.text('e5', findRichText: true), findsOneWidget);
 
     await tester.tap(find.text('Open on analysis board'));
     final (puzzle, game, ply) = analyzed.single;
@@ -131,5 +132,65 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(find.text('1 blunder, 2 inaccuracies'), findsOneWidget);
+  });
+
+  testWidgets('a game that never reaches the puzzle opens at its start', (
+    tester,
+  ) async {
+    saveGame(_savedGame.replaceFirst(RegExp(r'1\. e4.*'), '1. d4 d5 0-1'));
+    await pumpPane(tester);
+    await show(tester, 0);
+    expect(find.text('1.d4', findRichText: true), findsOneWidget);
+    await tester.tap(find.text('Open on analysis board'));
+    expect(analyzed.single.$2.mistake, isNull);
+    expect(analyzed.single.$3, 0);
+  });
+
+  testWidgets('the puzzle\'s move is brought into view, and so is the next '
+      'puzzle\'s in its own game', (tester) async {
+    tester.view.physicalSize = const Size(420, 260);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    // Knights out and back many times, then the game: the puzzle's move is
+    // far down the text.
+    final shuffles = [
+      for (var i = 0; i < 30; i++)
+        '${2 * i + 1}. Nf3 Nf6 ${2 * i + 2}. Ng1 Ng8',
+    ].join(' ');
+    const late = '1. e4 e5 2. Bc4 Nc6 3. Qh5 Nf6 4. Qe2 Nd4 5. Qd1';
+    final lateGame = _savedGame.replaceFirst(
+      late,
+      '$shuffles ${late.replaceAllMapped(RegExp(r'(\d+)\.'), (m) => '${int.parse(m[1]!) + 60}.')}',
+    );
+    // The second puzzle's game: its move, 1... f6, at the top.
+    final earlyGame = [
+      '[Event "Rated blitz game"]',
+      '[White "Other"]',
+      '[Black "Me"]',
+      '[Result "*"]',
+      '[GameId "lichess_def"]',
+      '',
+      '1. e4 f6 $shuffles *',
+    ].join('\n');
+    saveGame('$lateGame\n\n$earlyGame');
+    await pumpPane(tester);
+
+    bool inView(Finder move) {
+      final viewport = tester.getRect(find.byType(SingleChildScrollView));
+      final rect = tester.getRect(move);
+      return rect.top >= viewport.top - 1 && rect.bottom <= viewport.bottom + 1;
+    }
+
+    await show(tester, 0);
+    await tester.pumpAndSettle();
+    final qe2 = find.text('64.Qe2??', findRichText: true);
+    expect(qe2, findsOneWidget);
+    expect(inView(qe2), isTrue, reason: 'scrolled down to it');
+
+    await show(tester, 1);
+    await tester.pumpAndSettle();
+    final f6 = find.text('f6?', findRichText: true);
+    expect(f6, findsOneWidget);
+    expect(inView(f6), isTrue, reason: 'scrolled back up to it');
   });
 }

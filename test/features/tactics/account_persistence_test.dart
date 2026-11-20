@@ -42,6 +42,27 @@ void main() {
     },
   );
 
+  test('either username failing to save is a failed save', () async {
+    for (final site in GameSite.values) {
+      fixture.accounts.rejectSite = site;
+      expect(
+        await fixture.games.saveUsernames(lichess: 'First', chesscom: 'Second'),
+        isFalse,
+        reason: '${site.label} was not kept',
+      );
+      expect(
+        fixture.games.accountProblem,
+        'Your account names could not be saved.',
+      );
+    }
+    fixture.accounts.rejectSite = null;
+    expect(
+      await fixture.games.saveUsernames(lichess: 'First', chesscom: 'Second'),
+      isTrue,
+    );
+    expect(fixture.games.accountProblem, isNull);
+  });
+
   test('a failed username save does not hold review back', () async {
     fixture.accounts.reject = true;
     await fixture.games.saveUsernames(lichess: 'Alice');
@@ -128,6 +149,9 @@ final class _Fixture {
 final class _Accounts implements AccountStore {
   final saved = MemoryAccounts();
   bool reject = false;
+
+  /// The one site whose username is refused, or null.
+  GameSite? rejectSite;
   Completer<void>? held;
   final requested = <(GameSite, String?)>[];
 
@@ -150,6 +174,8 @@ final class _Accounts implements AccountStore {
   Future<bool> setUsername(GameSite site, String? username) async {
     requested.add((site, username));
     await held?.future;
-    return reject ? false : saved.setUsername(site, username);
+    return reject || site == rejectSite
+        ? false
+        : saved.setUsername(site, username);
   }
 }
