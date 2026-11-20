@@ -182,6 +182,42 @@ void main() {
     expect(saver.state, isA<Saved>());
   });
 
+  test('saving after undo keeps the undone comment removed', () async {
+    await session.open(fixture.ref, game: 0);
+    session.cursor.goTo(sicilian);
+    edit('Comment to undo');
+    await saver.flush();
+    expect(fixture.onDisk, contains('Comment to undo'));
+
+    session.holdsEdits = true;
+    fixture.store.hold = true;
+    final undo = session.undo();
+    await pumpEventQueue();
+    expect(fixture.store.waiting, 1);
+    session.playMove('c2c3');
+    expect(session.refusedEdit, isA<EditNotWritten>());
+    expect(session.hasHeldEdits, isFalse);
+    fixture.store.hold = false;
+    fixture.store.releaseNext();
+    expect(await undo, isA<Restored>());
+    expect(session.commentAt(sicilian), 'The Sicilian [%eval 0.30]');
+    expect(fixture.onDisk, isNot(contains('Comment to undo')));
+
+    session.playMove('c2c3');
+    expect(session.cursor.currentMove?.san, 'c3');
+    expect(session.hasHeldEdits, isTrue);
+    session.keepHeld();
+    await saver.flush();
+    expect(fixture.onDisk, isNot(contains('Comment to undo')));
+    final shown = session.tree!
+        .nodeAt(sicilian)!
+        .children
+        .map((m) => m.san)
+        .toList();
+    expect(await session.reloadFromDisk(), isA<DocumentOpened>());
+    expect(session.tree!.nodeAt(sicilian)!.children.map((m) => m.san), shown);
+  });
+
   test('words typed during an undo win, and the undo waits', () async {
     edit('B');
     await pumpEventQueue();

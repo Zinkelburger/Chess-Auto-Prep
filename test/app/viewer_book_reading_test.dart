@@ -1,7 +1,9 @@
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/explorer_choice.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:chess_auto_prep/workspace/explorer/explorer_pane.dart';
+import 'package:chess_auto_prep/workspace/reading/notes_pane.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -73,6 +75,48 @@ void main() {
       reason: 'the other modes keep the database the settings remember',
     );
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Ctrl+S keeps a replacement note typed during undo on Read', (
+    tester,
+  ) async {
+    final app = await openViewer(tester);
+    final session = app.session;
+    session.cursor.forward();
+    final move = session.cursor.value;
+    expect(session.holdsEdits, isTrue);
+    session.setComment(move, 'First note');
+    session.keepHeld();
+    await app.saver.flush();
+
+    await tester.tap(find.byTooltip('Open tools and arrange panes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, 'Notes'));
+    await tester.pumpAndSettle();
+    final field = find.descendant(
+      of: find.byType(NotesPane),
+      matching: find.byType(TextField),
+    );
+    app.store.hold = true;
+    final undo = session.undo();
+    await tester.pump();
+    expect(app.store.waiting, 1);
+    await tester.enterText(field, 'Replacement note');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    app.store.hold = false;
+    app.store.releaseNext();
+    expect(await undo, isA<UndoRefused>());
+    await tester.pumpAndSettle();
+
+    final shown = tester.widget<TextField>(field).controller!.text;
+    expect(shown, 'Replacement note');
+    expect(session.commentAt(move), 'Replacement note');
+    expect(session.hasHeldEdits, isFalse);
+    final saved = app.store.documents[session.source] as Opened;
+    expect(saved.text, contains('{Replacement note}'));
+    expect(saved.text, isNot(contains('First note')));
   });
 
   testWidgets('Solitaire from the Actions opens beside the moves and takes '

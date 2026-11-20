@@ -148,6 +148,9 @@ final class DocumentSession extends ChangeNotifier {
   /// Edits wait while undo reads the version it restored.
   bool _restoring = false;
 
+  /// Held edits bypass the save queue, so they must also wait for undo's write.
+  int? _undoingDocument;
+
   bool _disposed = false;
 
   /// Edits to the open file shown but not written; null when there are none.
@@ -603,9 +606,8 @@ final class DocumentSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Why an edit may not happen now, or null when it may: a read-only
-  /// document not holding edits, or an undo still reading what it restored.
-  String? _editBlocked() {
+  /// Held edits wait for the undo write. All edits wait for the restored tree.
+  String? _editBlocked({bool writes = false}) {
     if (_readOnly case final reason? when !_holdsEdits) {
       // What is left is the standing refusal, which says why.
       _refused = null;
@@ -615,7 +617,8 @@ final class DocumentSession extends ChangeNotifier {
     if (_saver.referencesPending || _saver.state is DocumentFollowing) {
       return _editRefused('the chapter must finish saving or be read again');
     }
-    if (_restoring) {
+    final held = _willHold(writes || _editors.saving);
+    if (_restoring || (_undoingDocument == _document && held)) {
       return _editRefused('an undo is still putting the chapter back');
     }
     return null;
@@ -625,23 +628,26 @@ final class DocumentSession extends ChangeNotifier {
   /// read stays ([refusedEdit]).
   void _clearRefusal() => _refused = null;
 
-  /// Puts the file back as it was before the last edit and shows what came
-  /// back, on the chapter it was on. A refused undo changes nothing and says
-  /// so; one landing after the user left is still what its file holds, and
-  /// the document on screen now is not touched.
+  /// Restores the previous version and shows it if its file is still open.
   Future<UndoResult> undo() async {
     if (isScratch) return _undoOnBoard();
     if (_held != null) return _undoHeld();
     final ref = _source;
-    if (ref == null || _opening != null || _restoring) {
+    if (ref == null || _opening != null || _undoingDocument != null) {
       return const UndoRefused();
     }
     final ticket = _opens.now;
-    final result = await _saver.undo();
-    if (result case Restored(:final text) when _stillOn(ref, ticket)) {
-      await _showRestored(_source!, ticket, text);
+    _undoingDocument = _document;
+    try {
+      final result = await _saver.undo();
+      if (result case Restored(:final text) when _stillOn(ref, ticket)) {
+        await _showRestored(_source!, ticket, text);
+      }
+      return result;
+    } finally {
+      _undoingDocument = null;
+      _restoring = false;
     }
-    return result;
   }
 
   /// Retries a failed publication: an undo that lost its answer restores the
@@ -663,19 +669,11 @@ final class DocumentSession extends ChangeNotifier {
   bool _stillOn(ChapterRef ref, Ticket ticket) =>
       !_disposed && (ticket.current || _source == ref);
 
-  /// Shows [text], the version an undo put back into the file of [ref],
-  /// on the chapter the user was on: the game they were looking at, found
-  /// by its bytes, and a course file's chapter found by its games when the
-  /// undo took back the name they were given.
+  /// Shows the restored game by its bytes, or a renamed section by its games.
   Future<void> _showRestored(ChapterRef ref, Ticket ticket, String text) async {
     final places = _view?.places ?? const <int>[];
     _restoring = true;
-    final ({Chapter file, SectionView? view}) read;
-    try {
-      read = await readShown(ref, text, game: game, parsed: _parsed);
-    } finally {
-      _restoring = false;
-    }
+    final read = await readShown(ref, text, game: game, parsed: _parsed);
     if (!_stillOn(ref, ticket)) return;
     // Renamed while it was read: read again, so it shows its new name.
     if (_source != ref) return _showRestored(_source!, ticket, text);
@@ -717,7 +715,7 @@ final class DocumentSession extends ChangeNotifier {
 
   /// Writes the held edits to the file, as one save; read-only ones stay.
   void keepHeld() {
-    _editors.commit();
+    _editors.commit(saving: true);
     final held = _held;
     if (held == null || _readOnly != null) return;
     _held = null;
@@ -842,7 +840,7 @@ final class DocumentSession extends ChangeNotifier {
     }
     final chapter = _chapter;
     if (chapter == null) return 'there is nothing open to edit';
-    if (_editBlocked() case final reason?) return reason;
+    if (_editBlocked(writes: writes) case final reason?) return reason;
     switch (edit(chapter)) {
       case edits.ChapterUnchanged():
         return null;
@@ -923,6 +921,8 @@ final class DocumentSession extends ChangeNotifier {
     return reason;
   }
 
+  bool _willHold(bool writes) => _holdsEdits && (!writes || _readOnly != null);
+
   /// Writes [landed] and shows what it says to show, following a course
   /// file's chapter to the one shown. Answers why nothing was written, or
   /// null.
@@ -932,7 +932,7 @@ final class DocumentSession extends ChangeNotifier {
     }
     if (_held case final held?) {
       held.add(_shown!, landed);
-    } else if (_holdsEdits && !(writes && _readOnly == null)) {
+    } else if (_willHold(writes)) {
       _held = HeldEdits(_shown!, landed);
     } else {
       _saver.save(landed.text, landed.scope);
