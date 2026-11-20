@@ -12,7 +12,10 @@ void main() {
 
   test('downloading and reviewing say so, and Pausing… once Pause is '
       'pressed', () {
-    expect(myGamesLine(const MyGamesDownloading()), 'Getting your recent games…');
+    expect(
+      myGamesLine(const MyGamesDownloading()),
+      'Getting your recent games…',
+    );
     expect(myGamesLine(const MyGamesDownloading(pausing: true)), 'Pausing…');
     expect(
       myGamesLine(const MyGamesReviewing(done: 0, total: 3, pausing: true)),

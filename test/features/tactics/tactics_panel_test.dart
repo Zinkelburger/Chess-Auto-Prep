@@ -113,16 +113,17 @@ void main() {
     expect(played, [mistake]);
 
     ListRow row(Puzzle puzzle) => tester.widget<ListRow>(
-      find.ancestor(of: find.text(puzzle.label), matching: find.byType(ListRow)),
+      find.ancestor(
+        of: find.text(puzzle.label),
+        matching: find.byType(ListRow),
+      ),
     );
     expect(row(mistake).selected, isFalse);
     await w.trainer.start(first: mistake);
     w.trainer.play('a7a6');
     await tester.pump();
     expect(row(mistake).selected, isTrue, reason: 'the puzzle on the board');
-    final other = w.tactics.queue.firstWhere(
-      (p) => p.index != mistake.index,
-    );
+    final other = w.tactics.queue.firstWhere((p) => p.index != mistake.index);
     expect(row(other).selected, isFalse);
     final failed = tester.widget<Text>(find.text('failed'));
     final context = tester.element(find.byType(TacticsPanel));

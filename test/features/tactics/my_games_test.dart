@@ -287,21 +287,26 @@ void main() {
     );
   });
 
-  test('a saved game not yet reviewed is reviewed with a new download', () async {
-    final newer = scholarsMate.replaceAll('AbCd1234', 'XyZw9876');
-    r = _Review(
-      accounts: {GameSite.lichess: const Account('Me')},
-      lichess: GamesFetched([newer]),
-    );
-    await r.cache.keep(GameSite.lichess, 'Me', [scholarsMate], DateTime(2026));
-    await r.start();
-    expect(await r.cache.all(GameSite.lichess, 'Me'), hasLength(2));
-    expect(
-      analyzedIn(r.setText),
-      containsAll(['lichess_XyZw9876', 'lichess_AbCd1234']),
-      reason: 'the saved file is what is reviewed',
-    );
-  });
+  test(
+    'a saved game not yet reviewed is reviewed with a new download',
+    () async {
+      final newer = scholarsMate.replaceAll('AbCd1234', 'XyZw9876');
+      r = _Review(
+        accounts: {GameSite.lichess: const Account('Me')},
+        lichess: GamesFetched([newer]),
+      );
+      await r.cache.keep(GameSite.lichess, 'Me', [
+        scholarsMate,
+      ], DateTime(2026));
+      await r.start();
+      expect(await r.cache.all(GameSite.lichess, 'Me'), hasLength(2));
+      expect(
+        analyzedIn(r.setText),
+        containsAll(['lichess_XyZw9876', 'lichess_AbCd1234']),
+        reason: 'the saved file is what is reviewed',
+      );
+    },
+  );
 
   test('a download that cannot be saved fills the review with distinct '
       'games: those it shares with the saved ones count once', () async {

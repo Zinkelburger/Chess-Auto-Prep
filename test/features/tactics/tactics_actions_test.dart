@@ -66,9 +66,7 @@ void main() {
           return null;
         });
     addTearDown(
-      () => TestDefaultBinaryMessengerBinding
-          .instance
-          .defaultBinaryMessenger
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(SystemChannels.platform, null),
     );
     named('Copy FEN')!.run!();

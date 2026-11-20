@@ -41,7 +41,10 @@ void main() {
     today = tacticsToday;
     disposed = false;
     store = ScriptedDocumentStore()
-      ..documents[tacticsRef] = Opened(tacticsSet, scriptedRevision(tacticsSet));
+      ..documents[tacticsRef] = Opened(
+        tacticsSet,
+        scriptedRevision(tacticsSet),
+      );
     saver = DocumentSaver(store, delay: Duration.zero);
     session = DocumentSession(store, saver);
     settings = SettingsStore();
@@ -84,11 +87,9 @@ void main() {
     expect(now.length, greaterThan(1));
     today = tacticsToday.add(const Duration(days: 60));
     final later = set.filteredQueue;
-    expect(
-      later.map((puzzle) => puzzle.index),
-      [3],
-      reason: 'only the custom puzzle, which has no date, is still recent',
-    );
+    expect(later.map((puzzle) => puzzle.index), [
+      3,
+    ], reason: 'only the custom puzzle, which has no date, is still recent');
   });
 
   group('random order', () {
@@ -102,7 +103,7 @@ void main() {
         'change keeps it', () async {
       set.dispose();
       build(random: Random(3));
-      final random = PuzzleFilter(
+      const random = PuzzleFilter(
         order: PuzzleOrder.random,
         groupByGame: false,
         hideOneStar: false,

@@ -56,7 +56,10 @@ void main() {
   setUp(() {
     folder = Directory.systemTemp.createTempSync('v2-my-games-block-');
     store = ScriptedDocumentStore()
-      ..documents[tacticsRef] = Opened(tacticsSet, scriptedRevision(tacticsSet));
+      ..documents[tacticsRef] = Opened(
+        tacticsSet,
+        scriptedRevision(tacticsSet),
+      );
     saver = DocumentSaver(store, delay: Duration.zero);
     session = DocumentSession(store, saver);
     settings = SettingsStore();
@@ -141,7 +144,9 @@ void main() {
       );
 
   bool chipOn(WidgetTester tester, String label) =>
-      tester.widget<FilterChip>(find.widgetWithText(FilterChip, label)).onSelected !=
+      tester
+          .widget<FilterChip>(find.widgetWithText(FilterChip, label))
+          .onSelected !=
       null;
 
   testWidgets('with no username it asks for one, in the words of the mode, '
@@ -235,7 +240,10 @@ void main() {
     await settle(tester, () => games.status is MyGamesPaused);
     expect(find.text('Paused — 1 game left'), findsOneWidget);
     expect(find.text('Resume'), findsOneWidget);
-    expect(find.byTooltip('Carry on with the 1 games still to look at'), findsOne);
+    expect(
+      find.byTooltip('Carry on with the 1 games still to look at'),
+      findsOne,
+    );
     expect(button(tester, 'Change').onPressed, isNotNull);
   });
 
