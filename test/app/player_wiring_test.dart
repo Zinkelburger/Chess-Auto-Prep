@@ -4,13 +4,20 @@
 // chapter named; a group study that could not be made is not linked; and
 // a prep sheet is copied, or saved where the export put it, or the reason
 // it was not is said.
+import 'dart:async';
+
 import 'package:chess_auto_prep/chess/players/download_range.dart';
 import 'package:chess_auto_prep/chess/players/player.dart';
+import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
+import 'package:chess_auto_prep/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/features/players/saved_games.dart';
+import 'package:chess_auto_prep/net/recent_games.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/player_files.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/scripted_engine.dart';
 import '../support/scripted_store.dart';
 import '../support/study_fixture.dart';
 import '../support/window_fixture.dart';
@@ -18,6 +25,16 @@ import '../support/window_fixture.dart';
 const _games =
     '[Event "Club"]\n[White "Alex"]\n[Black "Bob"]\n[Date "2026.09.20"]\n'
     '[Result "1-0"]\n\n1. e4 e5 1-0\n';
+
+final class _DelayedSite implements RecentGames {
+  @override
+  GameSite get site => GameSite.lichess;
+  final reply = Completer<GamesFetch>();
+
+  @override
+  Future<GamesFetch> recent(String username, {required int max}) =>
+      reply.future;
+}
 
 /// The directory in memory, whose next player save can be made to fail.
 final class _FlakyPlayers implements PlayerStore {
@@ -46,6 +63,8 @@ final class _FlakyPlayers implements PlayerStore {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late WindowFixture w;
+  late ScriptedEngine engine;
+  late List<RecentGames> sites;
   late _FlakyPlayers store;
   late Player player;
   late String? exported;
@@ -55,8 +74,13 @@ void main() {
     exported = '/Documents/Club.md';
     exportFails = null;
     store = _FlakyPlayers();
+    engine = ScriptedEngine();
+    sites = [];
     w = WindowFixture(
       players: store,
+      gameSites: sites,
+      launchEngine: ({required cores, required memoryMb}) async =>
+          Started(engine),
       exportText: (name, text) async {
         if (exportFails case final thrown?) throw thrown;
         return exported;
@@ -103,6 +127,72 @@ void main() {
       expect(said, contains(startsWith('Downloading')));
     });
 
+    test(
+      'submitted from an open dialog keeps its range during deletion',
+      () async {
+        final players = w.parts.players;
+        final alex = stored();
+        final account = alex.accounts.single;
+        final ref = w.gamesCache.refFor(account.site, account.username);
+        await w.store.create(ref, _games);
+        await players.analysis.select(alex);
+        await players.saved.refresh();
+        final confirmed = (await players.saved.current(alex))!;
+        final gate = w.store.readEarly = Completer<void>();
+        final deleting = players.deleteGames(alex, confirmed);
+        await pumpEventQueue();
+        expect(w.store.readEarly, isNull);
+
+        const range = PlayerDownloadRange(months: 7);
+        final downloading = players.download(range);
+        await pumpEventQueue();
+        expect(stored().fields['download'], range.json);
+
+        gate.complete();
+        expect(await deleting, isTrue);
+        await downloading;
+      },
+    );
+
+    for (final refused in [false, true]) {
+      test(
+        'a reply during deletion is kept only if it fails (refused=$refused)',
+        () async {
+          final players = w.parts.players;
+          final alex = stored();
+          final ref = w.gamesCache.refFor(GameSite.lichess, 'alex');
+          await w.store.create(ref, _games);
+          await players.analysis.select(alex);
+          await players.saved.refresh();
+          final confirmed = (await players.saved.current(alex))!;
+          final site = _DelayedSite();
+          sites.add(site);
+          final download = players.analysis.select(alex, download: true);
+          final gate = w.store.readEarly = Completer<void>();
+          if (refused) w.store.deletes.add(const IoFailure('read-only folder'));
+          final deleting = players.deleteGames(alex, confirmed);
+          await pumpEventQueue();
+          expect(w.store.readEarly, isNull);
+          final fresh = _games.replaceAll('Bob', 'Bea');
+          site.reply.complete(
+            GamesFetched([fresh], unread: const ['earlier games']),
+          );
+          await pumpEventQueue();
+          expect((w.store.documents[ref]! as Opened).text, _games);
+
+          gate.complete();
+          expect(await deleting, !refused);
+          await download;
+          if (refused) {
+            expect((w.store.documents[ref]! as Opened).text, contains('Bea'));
+          } else {
+            expect(w.store.deleted[ref], _games);
+            expect(w.store.documents[ref], isNull);
+          }
+        },
+      );
+    }
+
     test('whose range was not kept does not run', () async {
       final players = w.parts.players;
       await players.analysis.select(stored());
@@ -111,6 +201,69 @@ void main() {
       await players.download(const PlayerDownloadRange(months: 3));
       expect(said, isNot(contains(startsWith('Downloading'))));
     });
+  });
+
+  test(
+    'deleting saved games during analysis leaves no partial report',
+    () async {
+      final players = w.parts.players;
+      final alex = stored();
+      final account = alex.accounts.single;
+      final download = w.gamesCache.refFor(account.site, account.username);
+      await w.store.create(download, _games);
+      await players.analysis.select(alex);
+
+      final hunt = players.hunt;
+      final running = hunt.start();
+      await pumpEventQueue();
+      engine.current
+        ..emit(line(depth: hunt.depth, pv: ['e2e4']))
+        ..end();
+      await pumpEventQueue();
+      expect(hunt.done, 1);
+      expect(hunt.running, isTrue);
+
+      players.showDirectory();
+      await players.saved.refresh();
+      final confirmed = (await players.saved.current(alex))!;
+      expect(confirmed.deletable, 1);
+      expect(await players.deleteGames(alex, confirmed), isTrue);
+      await running;
+      await players.analysis.pending.settle();
+
+      // Restoring the same PGN makes the original report eligible to load again.
+      await w.store.create(download, w.store.deleted[download]!);
+      await players.analysis.select(alex);
+      await pumpEventQueue();
+      expect(hunt.done, 0);
+    },
+  );
+
+  test('a failed discard leaves the running hunt on its position', () async {
+    final players = w.parts.players;
+    final alex = stored();
+    final account = alex.accounts.single;
+    final ref = w.gamesCache.refFor(account.site, account.username);
+    await w.store.create(ref, _games);
+    await players.analysis.select(alex);
+    await players.saved.refresh();
+    final confirmed = (await players.saved.current(alex))!;
+    final running = players.hunt.start();
+    await pumpEventQueue();
+    final search = engine.current;
+    w.store.deletes.add(const IoFailure('read-only folder'));
+
+    expect(await players.deleteGames(alex, confirmed), isFalse);
+    expect(w.store.documents[ref], isA<Opened>());
+    expect(players.hunt.running, isTrue);
+    expect(search.stopped, isFalse);
+    search
+      ..emit(line(depth: players.hunt.depth, pv: ['e2e4']))
+      ..end();
+    await pumpEventQueue();
+    expect(players.hunt.done, 1);
+    players.hunt.stop();
+    await running;
   });
 
   group('a linked study', () {

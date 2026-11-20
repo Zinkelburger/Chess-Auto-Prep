@@ -41,6 +41,12 @@ final class PlayerAnalysis extends ChangeNotifier {
   final GamesCache cache;
   final List<RecentGames> sites;
   final PendingWrites pending;
+  // A network reply waits for the discard and reload. A failed discard leaves
+  // its selection ticket current, so the download can still be saved.
+  final deletions = <String, Future<void>>{};
+  bool get deleting => deletions.containsKey(player?.id);
+  bool get canRetry => !busy && !(_retryDownload && deleting);
+  Ticket get selection => _selections.now;
   Player? player;
   PlayerCorpus? corpus;
   Side side = Side.white;
@@ -65,7 +71,7 @@ final class PlayerAnalysis extends ChangeNotifier {
 
   Future<void> retry() async {
     final current = player;
-    if (current != null && !busy) {
+    if (current != null && canRetry) {
       await select(current, download: _retryDownload);
     }
   }
@@ -345,6 +351,9 @@ final class PlayerAnalysis extends ChangeNotifier {
               },
             )
           : await api.recent(account.username, max: range.max);
+      while (deletions.containsKey(next.id)) {
+        await deletions[next.id];
+      }
       if (ticket.overtaken) return;
       await _keepDownload(account.site, account.username, fetched, notes);
     }
@@ -371,7 +380,7 @@ final class PlayerAnalysis extends ChangeNotifier {
           DateTime.now(),
           complete: complete,
         );
-        pending.watch(this, keeping);
+        pending.watch((this, player?.id), keeping);
         final kept = await keeping;
         if (kept is GamesNotKept) {
           notes.add(

@@ -201,10 +201,11 @@ final class PlayerHunt extends ChangeNotifier {
     final key = _activeReportKey;
     if (key == null) return;
     final writing = reports.keep(key, data);
-    analysis.pending.watch(this, writing);
+    analysis.pending.watch((analysis, analysis.player?.id), writing);
   }
 
   Future<void> start() async {
+    if (analysis.deleting) return;
     if (running || analysis.busy || analysis.corpus == null) return;
     _corpus = analysis.corpus;
     final ticket = _hunts.begin();

@@ -166,7 +166,7 @@ class _AnalysisPanelState extends State<AnalysisPanel>
         rowAction(
           'Get games…',
           () => unawaited(_getGames(player)),
-          busy: owner.busy,
+          busy: owner.busy || owner.deleting,
           icon: AppIcons.download,
         ),
       rowAction(
@@ -194,7 +194,9 @@ class _AnalysisPanelState extends State<AnalysisPanel>
         if (corpus != null && corpus.games.isEmpty)
           _NoGames(
             canDownload: player.accounts.isNotEmpty,
-            onDownload: () => unawaited(_getGames(player)),
+            onDownload: owner.deleting
+                ? null
+                : () => unawaited(_getGames(player)),
             onImport: widget.onImport,
           ),
         if (corpus != null && corpus.games.isNotEmpty) ...[
@@ -427,7 +429,7 @@ class _Status extends StatelessWidget {
               spacing: Space.s,
               children: [
                 OutlinedButton(
-                  onPressed: analysis.busy ? null : analysis.retry,
+                  onPressed: analysis.canRetry ? analysis.retry : null,
                   child: const Text('Try again'),
                 ),
                 if (analysis.errorDetail case final detail?)
@@ -469,7 +471,7 @@ class _NoGames extends StatelessWidget {
 
   /// Whether the player has an account to download from.
   final bool canDownload;
-  final VoidCallback onDownload;
+  final VoidCallback? onDownload;
   final VoidCallback onImport;
 
   @override

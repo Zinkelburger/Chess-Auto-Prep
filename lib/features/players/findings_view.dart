@@ -86,7 +86,9 @@ class _EngineRunState extends State<EngineRun> {
               'strong replies these games never met. Scores are from the '
               'player’s side.',
           child: FilledButton.icon(
-            onPressed: widget.analysis.busy
+            onPressed:
+                widget.analysis.busy ||
+                    (widget.analysis.deleting && !hunt.running)
                 ? null
                 : hunt.running
                 ? hunt.stop

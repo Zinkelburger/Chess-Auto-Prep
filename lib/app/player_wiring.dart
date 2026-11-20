@@ -145,12 +145,14 @@ final class PlayerModes {
   void showDirectory() => requests.switchTo(Mode.players);
   Future<void> download(PlayerDownloadRange range) async {
     final chosen = analysis.player;
-    if (chosen == null || analysis.busy) return;
+    if (chosen == null || (analysis.busy && !analysis.deleting)) return;
+    final selection = analysis.selection;
     final current =
         directory.players.where((p) => p.id == chosen.id).firstOrNull ?? chosen;
     final next = current.edited({'download': range.json});
     if (await directory.save(next, expected: current) &&
         !_disposed &&
+        selection.current &&
         analysis.player?.id == chosen.id) {
       await analysis.select(next, download: true);
     }
@@ -428,8 +430,32 @@ final class PlayerModes {
   /// Deletes [person]'s downloaded games and reports as [confirmed] said,
   /// then shows the rest of their games when they are the player being
   /// analysed. True when they were deleted.
-  Future<bool> deleteGames(Player person, GamesSummary confirmed) async {
-    final result = await saved.delete(person, confirmed: confirmed);
+  Future<bool> deleteGames(Player person, GamesSummary confirmed) {
+    if (analysis.deletions.containsKey(person.id)) {
+      requests.say('Could not delete ${person.name}’s games: busy');
+      return Future.value(false);
+    }
+    final deleting = _discardGames(person, confirmed).whenComplete(() {
+      unawaited(analysis.deletions.remove(person.id));
+      analysis.changed();
+    });
+    analysis.deletions[person.id] = deleting;
+    env.pendingWrites.watch(saved, deleting);
+    analysis.changed();
+    return deleting;
+  }
+
+  Future<bool> _discardGames(Player person, GamesSummary confirmed) async {
+    final writes = (analysis, person.id);
+    await env.pendingWrites.settleFor(writes);
+    final result = await saved.delete(
+      person,
+      confirmed: confirmed,
+      beforeReports: () async {
+        if (analysis.player?.id == person.id) hunt.stop();
+        await env.pendingWrites.settleFor(writes);
+      },
+    );
     if (_disposed) return result is GamesDiscarded;
     switch (result) {
       case GamesDiscarded():
@@ -437,11 +463,8 @@ final class PlayerModes {
           '${person.name}’s downloaded games are in the recovery folder.',
           problem: false,
         );
-        final current = directory.players
-            .where((p) => p.id == person.id)
-            .firstOrNull;
-        if (current != null && analysis.player?.id == person.id) {
-          hunt.stop();
+        final current = analysis.player;
+        if (current != null && current.id == person.id) {
           await analysis.select(current);
         }
       case GamesNotDiscarded(:final detail):

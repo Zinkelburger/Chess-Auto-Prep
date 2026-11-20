@@ -2,6 +2,8 @@
 // player or list in hand; a game opened from the analysis at its start, at
 // the board's position or where it left the book, and nothing for a game
 // that is not there; and a group's prep sheet copied.
+import 'dart:async';
+
 import 'package:chess_auto_prep/app/mode_view.dart';
 import 'package:chess_auto_prep/app/player_views.dart';
 import 'package:chess_auto_prep/chess/book/book_check.dart';
@@ -61,8 +63,7 @@ void main() {
     return view;
   }
 
-  Future<ModeMenu> menu(WidgetTester tester) async {
-    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+  ModeMenu menuAt(BuildContext context) {
     void none() {}
     final ModeMenu menu = (
       editing: ValueNotifier(false),
@@ -76,9 +77,14 @@ void main() {
         newBook: none,
         importCourse: none,
       ),
-      context: tester.element(find.byType(SizedBox)),
+      context: context,
     );
     return menu;
+  }
+
+  Future<ModeMenu> menu(WidgetTester tester) async {
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    return menuAt(tester.element(find.byType(SizedBox)));
   }
 
   AppAction? entry(List<AppAction> actions, String label) =>
@@ -147,6 +153,49 @@ void main() {
       entry(actions, 'Get games')!.run!();
       expect(w.parts.players.analysis.status, startsWith('Downloading'));
       await settle(tester);
+    });
+
+    testWidgets('Get games is disabled everywhere until deletion finishes', (
+      tester,
+    ) async {
+      final players = w.parts.players;
+      final online = player.edited({'lichess': 'alex', 'pgn_files': []});
+      final account = online.accounts.single;
+      final ref = w.gamesCache.refFor(account.site, account.username);
+      await tester.runAsync(() async {
+        await players.directory.save(online, expected: player);
+        await w.store.create(ref, _games.replaceAll('Alex', 'Other'));
+        await players.analysis.select(online);
+        await players.saved.refresh();
+      });
+      final confirmed = players.saved.of(online)!;
+      final view = analysis();
+      await show(tester, view.list(const SizedBox()));
+      final actions = menuAt(tester.element(find.byType(AnalysisPanel)));
+      final button = find.widgetWithText(FilledButton, 'Get games…');
+      expect(tester.widget<FilledButton>(button).onPressed, isNotNull);
+
+      late final Completer<void> gate;
+      late final Future<bool> deleting;
+      await tester.runAsync(() async {
+        gate = w.store.readEarly = Completer<void>();
+        deleting = players.deleteGames(online, confirmed);
+      });
+      await tester.pump();
+      expect(on(view.actions(actions), 'Get games'), isFalse);
+      expect(tester.widget<FilledButton>(button).onPressed, isNull);
+      await tester.tap(find.byTooltip('Player actions'));
+      await tester.pumpAndSettle();
+      final item = find.widgetWithText(MenuItemButton, 'Get games…');
+      expect(tester.widget<MenuItemButton>(item).onPressed, isNull);
+
+      await tester.runAsync(() async {
+        gate.complete();
+        expect(await deleting, isTrue);
+      });
+      await tester.pump();
+      expect(on(view.actions(actions), 'Get games'), isTrue);
+      expect(tester.widget<FilledButton>(button).onPressed, isNotNull);
     });
 
     testWidgets('a game opens at its start, without a word', (tester) async {

@@ -25,6 +25,7 @@ import 'package:chess_auto_prep/features/trainer/trainer.dart';
 import 'package:chess_auto_prep/net/lichess_login.dart';
 import 'package:chess_auto_prep/net/lichess_studies.dart';
 import 'package:chess_auto_prep/net/lichess_study_writes.dart';
+import 'package:chess_auto_prep/net/recent_games.dart';
 import 'package:chess_auto_prep/storage/book_file.dart';
 import 'package:chess_auto_prep/storage/book_list.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
@@ -97,6 +98,7 @@ final class WindowFixture {
     this.now,
     this.launchTournament,
     this._players,
+    this.gameSites = const [],
     this.exitWait = const Duration(milliseconds: 20),
     this._maia = const NoOpinion(),
     this.lichessWriter,
@@ -151,6 +153,7 @@ final class WindowFixture {
   final SettingsStore? _settings;
   final EngineLauncher? _launchEngine;
   final PlayerStore? _players;
+  final List<RecentGames> gameSites;
   final MovePolicy _maia;
   final navigator = GlobalKey<NavigatorState>();
 
@@ -227,7 +230,7 @@ final class WindowFixture {
       },
       lichessExplorer: lichess,
       masterBook: ScriptedBook(),
-      gameSites: const [],
+      gameSites: gameSites,
       // The usernames, in memory: none until a test sets them.
       accounts: MemoryAccounts(),
       // One book in use, with both repertoires in it.

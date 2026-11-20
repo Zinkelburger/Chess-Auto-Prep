@@ -150,7 +150,8 @@ final class PlayerAnalysisView extends ModeView {
       'Get games',
       icon: AppIcons.download,
       players.analysis.player?.accounts.isNotEmpty == true &&
-              !players.analysis.busy
+              !players.analysis.busy &&
+              !players.analysis.deleting
           ? () => unawaited(
               players.analysis.select(players.analysis.player!, download: true),
             )
@@ -167,7 +168,9 @@ final class PlayerAnalysisView extends ModeView {
     ),
     AppAction(
       'Analyze with engine',
-      players.analysis.corpus == null || players.hunt.running
+      players.analysis.corpus == null ||
+              players.hunt.running ||
+              players.analysis.deleting
           ? null
           : () {
               players.analysis.configure(list: PlayerList.weaknesses);

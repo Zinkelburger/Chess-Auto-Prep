@@ -216,6 +216,7 @@ final class SavedGames extends ChangeNotifier {
   Future<GamesDiscard> delete(
     Player person, {
     required GamesSummary confirmed,
+    Future<void> Function()? beforeReports,
   }) async {
     if (!deleting.add(person.id)) return const GamesNotDiscarded('busy');
     _notify();
@@ -244,7 +245,10 @@ final class SavedGames extends ChangeNotifier {
         if (discarded case GamesDiscarded(recoveredTo: _?)) result = discarded;
       }
     }
-    if (result is GamesDiscarded) await reports.discardFor(person.id);
+    if (result is GamesDiscarded) {
+      await beforeReports?.call();
+      await reports.discardFor(person.id);
+    }
     deleting.remove(person.id);
     _notify();
     if (!_disposed) unawaited(refresh());
