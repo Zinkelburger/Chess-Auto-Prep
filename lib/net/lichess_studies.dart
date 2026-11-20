@@ -24,12 +24,6 @@ final class LichessStudyLink {
   /// is downloaded.
   final String? chapterId;
 
-  /// What the dialog echoes back, so the user can see what was recognised
-  /// before they press the button.
-  String get describe => chapterId == null
-      ? 'Lichess study · $studyId'
-      : 'Lichess study chapter · $studyId/$chapterId';
-
   @override
   bool operator ==(Object other) =>
       other is LichessStudyLink &&

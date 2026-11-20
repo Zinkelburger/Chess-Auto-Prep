@@ -105,6 +105,12 @@ final class FileTournaments
 
   String _folder(String id) {
     _checkRoot();
+    return _named(id);
+  }
+
+  /// Where the tournament [id] lives under [root], without looking at the
+  /// disk.
+  String _named(String id) {
     if (id.isEmpty ||
         id.startsWith('.') ||
         p.basename(id) != id ||
@@ -115,8 +121,11 @@ final class FileTournaments
     return p.join(root.path, id);
   }
 
+  /// The games file of [id], named without touching the disk: a screen
+  /// asks for it while it builds, where a failing disk must not throw. The
+  /// document store checks the file itself when it is opened.
   @override
-  DocumentRef games(String id) => DocumentRef(p.join(_folder(id), 'games.pgn'));
+  DocumentRef games(String id) => DocumentRef(p.join(_named(id), 'games.pgn'));
   String _metadata(String id) => p.join(_folder(id), 'tournament.json');
   String _pending(String id) => p.join(_folder(id), '.v2-pending.json');
 
@@ -158,7 +167,7 @@ final class FileTournaments
   Future<Tournament?> _readTournament(String id, List<String> warnings) async {
     try {
       await _recover(id);
-      final text = await recoveryText(_metadata(id));
+      final text = await _readRecord(_metadata(id));
       if (text == null) return null;
       final tournament = Tournament(tournamentObject(jsonDecode(text)));
       if (tournament.id != id) {
@@ -182,7 +191,7 @@ final class FileTournaments
       return withDirectoryLock(root, () async {
         final folder = Directory(_folder(initial.id));
         await recoveryDirectory(folder, create: true);
-        final current = await recoveryText(_metadata(initial.id));
+        final current = await _readRecord(_metadata(initial.id));
         if (current != null && !_same(current, initial)) {
           throw StateError('That tournament already exists.');
         }
@@ -207,7 +216,7 @@ final class FileTournaments
         throw StateError('The tournament was removed.');
       }
       await _recover(before.id);
-      final current = await recoveryText(_metadata(before.id));
+      final current = await _readRecord(_metadata(before.id));
       final target = _encoded(after);
       final prior = await documents.open(games(before.id));
       final written = _text(prior);
@@ -238,7 +247,7 @@ final class FileTournaments
 
   Future<void> _recover(String id) async {
     final record = File(_pending(id));
-    final text = await recoveryText(record.path);
+    final text = await _readRecord(record.path);
     if (text == null) return;
     final Map<String, Object?> data;
     try {
@@ -290,27 +299,28 @@ final class FileTournaments
   }
 
   @override
-  Future<TournamentResult<void>> remove(
-    Tournament tournament,
-  ) => _guard('remove tournament', () async {
-    await withDirectoryLock(root, () async {
-      await _recover(tournament.id);
-      if (!_same(await recoveryText(_metadata(tournament.id)), tournament)) {
-        throw StateError('The tournament changed. Refresh before deleting it.');
-      }
-      final trash = Directory(p.join(root.path, '.trash'));
-      await recoveryDirectory(trash, create: true);
-      await movePathNoReplace(
-        _folder(tournament.id),
-        p.join(
-          trash.path,
-          '${tournament.id}-${DateTime.now().microsecondsSinceEpoch}',
-        ),
-      );
-      await flushRecoveryDirectory(trash.path);
-      await flushRecoveryDirectory(root.path);
-    });
-  });
+  Future<TournamentResult<void>> remove(Tournament tournament) =>
+      _guard('remove tournament', () async {
+        await withDirectoryLock(root, () async {
+          await _recover(tournament.id);
+          if (!_same(await _readRecord(_metadata(tournament.id)), tournament)) {
+            throw StateError(
+              'The tournament changed. Refresh before deleting it.',
+            );
+          }
+          final trash = Directory(p.join(root.path, '.trash'));
+          await recoveryDirectory(trash, create: true);
+          await movePathNoReplace(
+            _folder(tournament.id),
+            p.join(
+              trash.path,
+              '${tournament.id}-${DateTime.now().microsecondsSinceEpoch}',
+            ),
+          );
+          await flushRecoveryDirectory(trash.path);
+          await flushRecoveryDirectory(root.path);
+        });
+      });
 
   @override
   Future<TournamentResult<List<TournamentEngine>>> engines() async {
@@ -344,7 +354,7 @@ final class FileTournaments
   /// caller holds the directory lock.
   Future<(List<TournamentEngine>?, bool)> _registry(String path) async {
     try {
-      final text = await recoveryText(path);
+      final text = await _readRecord(path);
       if (text == null) return (null, false);
       final data = jsonDecode(text);
       if (data is! List) {
@@ -444,9 +454,18 @@ const _timeLabel = 'timeLabel';
 String _reason(Object error) => error is FormatException
     ? 'Unreadable or conflicting tournament data.'
     : '$error';
-Future<void> _publish(String path, String text) async {
+
+/// What the JSON file at [path] holds, or null when there is none. A
+/// create killed half way leaves the new name linked to its staged copy as
+/// well, which a recovery read refuses; the staged name is never the file,
+/// so it goes first. The caller holds the directory lock.
+Future<String?> _readRecord(String path) async {
   await discardLeftoverStage(path);
-  if (await recoveryText(path) == null) {
+  return recoveryText(path);
+}
+
+Future<void> _publish(String path, String text) async {
+  if (await _readRecord(path) == null) {
     await createFileExclusively(path, utf8.encode(text));
   } else {
     await replaceFile(path, utf8.encode(text));

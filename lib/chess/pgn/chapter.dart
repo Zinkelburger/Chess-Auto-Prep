@@ -125,9 +125,6 @@ final class ChapterIssue {
   final int game;
   final PgnIssue issue;
 
-  /// One plain English sentence fragment naming what was found.
-  String get detail => issue.detail;
-
   @override
   String toString() => 'game $game, $issue';
 }

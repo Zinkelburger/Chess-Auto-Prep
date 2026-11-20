@@ -55,9 +55,7 @@ final class MoveIllegal extends AddMoveResult {
 /// assertion because the alternative is a release build writing a game that
 /// does not hold the move the user just made, and telling them it did.
 final class MoveNotWritten extends AddMoveResult {
-  const MoveNotWritten(this.uci);
-
-  final String uci;
+  const MoveNotWritten();
 }
 
 /// The game the move belongs in must keep the bytes it has, so nothing was
@@ -115,7 +113,7 @@ AddMoveResult addMove(
   final path = at.child(siblings.length);
   final there = [for (final step in edited.chapter.tree.lineTo(path)) step.san];
   if (!const ListEquality<String>().equals(there, [...prefix, node.san])) {
-    return MoveNotWritten(uci);
+    return const MoveNotWritten();
   }
   return MoveAdded(
     chapter: edited.chapter,

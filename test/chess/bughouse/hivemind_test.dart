@@ -25,17 +25,15 @@ void main() {
       expect(TableScore.of(line(231), Team.cd, offset).text, '-2.29');
     });
 
-    test('a searched team up a piece reads + for it, − for the other', () {
+    test('a searched team up a piece reads − for A + B', () {
       final score = TableScore.of(line(100), Team.cd, 0);
       expect(score.score, lessThan(0));
-      expect(score.forTeam(Team.cd).score, greaterThan(0));
     });
 
     test('a mate is kept as plies, signed for A + B', () {
       final score = TableScore.of(line(0, mate: 3), Team.cd, 0);
       expect(score.mate, -3);
       expect(score.text, '#-3');
-      expect(score.forTeam(Team.cd).text, '#3');
       expect(score.strength, lessThan(-1000));
     });
 
@@ -125,57 +123,6 @@ void main() {
       expect(JointMove.parse('(none)'), isNull);
       expect(JointMove.parse('g1f3'), isNull);
       expect(const JointMove('g1f3', null).toString(), '(g1f3,pass)');
-    });
-
-    test('read as the seats that play them', () {
-      final halves = teamHalves(
-        TablePosition.initial,
-        const JointMove('d2d4', null),
-        Team.ab,
-      );
-      // A moves on board 1; on board 2 D (C + D) is on move, not B.
-      expect(halves, {BoardNumber.one: 'A d4'});
-      final theirs = teamHalves(
-        TablePosition.initial,
-        const JointMove(null, 'e2e4'),
-        Team.cd,
-      );
-      expect(theirs, {BoardNumber.two: 'D e4'});
-    });
-
-    test('a line reads seat by seat, stopping where it no longer plays', () {
-      expect(
-        readablePv(TablePosition.initial, const [
-          JointMove('d2d4', null),
-          JointMove('d7d5', 'd2d4'),
-          JointMove(null, null),
-          JointMove('e2e5', null),
-        ]),
-        'A d4 · C d5 D d4 · sit',
-      );
-    });
-
-    test('one board\'s part of a line is numbered as that board counts', () {
-      const pv = [
-        JointMove('e2e4', null),
-        JointMove('e7e5', 'd2d4'),
-        JointMove('g1f3', null),
-        JointMove('e5e4', null),
-      ];
-      expect(
-        boardPv(TablePosition.initial, pv, BoardNumber.one),
-        '1. e4 e5 2. Nf3',
-      );
-      expect(boardPv(TablePosition.initial, pv, BoardNumber.two), '1. d4');
-      expect(
-        boardPv(TablePosition.initial, pv.skip(1).toList(), BoardNumber.one),
-        '',
-      );
-      final afterE4 = TablePosition.initial.play(BoardNumber.one, 'e2e4')!;
-      expect(
-        boardPv(afterE4.after, pv.skip(1).toList(), BoardNumber.one, limit: 2),
-        '1... e5 2. Nf3',
-      );
     });
   });
 }

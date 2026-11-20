@@ -103,6 +103,8 @@ Authority? _support(List<String> parts, String name) {
   if (parts.length == 1 && {'books.json', 'settings.json'}.contains(name)) {
     return Authority.authoritative;
   }
+  // The PGN Viewer's unsaved edits: the only copy of them until a save.
+  if (top == 'viewer-drafts') return Authority.authoritative;
   if (top == 'logs') return Authority.log;
   if (top == 'backups') return Authority.kept;
   if (top == 'recovery-quarantine') return Authority.recovery;
@@ -132,6 +134,22 @@ Authority? _documents(
     return Authority.authoritative;
   }
   if ({'tournament.json', 'people.json', 'match.json'}.contains(name)) {
+    return Authority.authoritative;
+  }
+  // Groups removed from the player directory, kept.
+  if (parts.length >= 2 && parts[0] == 'opponents' && parts[1] == '.removed') {
+    return Authority.recovery;
+  }
+  // The player directory's groups, and the engine tournaments' registry.
+  if (parts.length == 3 &&
+      parts[0] == 'opponents' &&
+      parts[1] == 'tournaments' &&
+      p.posix.extension(name) == '.json') {
+    return Authority.authoritative;
+  }
+  if (parts.length == 2 &&
+      parts[0] == 'engine_tournaments' &&
+      name == 'engines.json') {
     return Authority.authoritative;
   }
   return directory ? Authority.authoritative : null;

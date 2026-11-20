@@ -174,9 +174,6 @@ final class BookList {
   }
 }
 
-/// The folder of the chapter file at [path], both relative.
-String folderOf(String path) => p.posix.dirname(path);
-
 /// [path] under [root] as a book writes it: relative, `/` between the parts.
 /// Null when it is not under [root], or cannot be written as a selector.
 String? bookPath(String root, String path) {
