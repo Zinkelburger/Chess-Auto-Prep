@@ -498,11 +498,8 @@ String _reach(double reach) {
 /// The number of the move [ply] half-moves after [root], and whether it is
 /// Black's.
 (int, bool) _moveNumber(Fen root, int ply) {
-  final fields = root.value.split(' ');
-  final blackFirst = fields.length > 1 && fields[1] == 'b';
-  final first = fields.length > 5 ? int.tryParse(fields[5]) ?? 1 : 1;
-  final offset = ply + (blackFirst ? 1 : 0);
-  return (first + offset ~/ 2, offset.isOdd);
+  final offset = ply + (root.whiteToMove ? 0 : 1);
+  return (root.fullMove + offset ~/ 2, offset.isOdd);
 }
 
 /// The last move to the find's position as UCI, for the floated board's

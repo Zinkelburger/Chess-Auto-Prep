@@ -15,9 +15,11 @@ import 'settings.dart';
 ///
 /// Preferences never stop the app. A file that cannot be understood is moved
 /// aside into `recovery-quarantine/` — kept, not deleted — and the app starts
-/// on the defaults. A symlinked `settings.json` (dotfiles) is followed for
-/// reading and writing. A write that fails keeps the value on screen, says so,
-/// and the next change writes again. A store made with no folder keeps
+/// on the defaults. A file the disk will not read stays where it is: the app
+/// starts on the defaults, says so, and writes nothing over it until a read
+/// succeeds. A symlinked `settings.json` (dotfiles) is followed for reading
+/// and writing. A write that fails keeps the value on screen, says so, and
+/// the next change writes again. A store made with no folder keeps
 /// everything in memory, which is what a test wants.
 final class SettingsStore extends ChangeNotifier {
   SettingsStore({
@@ -38,6 +40,10 @@ final class SettingsStore extends ChangeNotifier {
   Settings _value;
   String? _problem;
   bool _disposed = false;
+
+  /// The file is there but the disk would not read it: nothing is written
+  /// until a read succeeds.
+  bool _unread = false;
 
   /// Counts changes, so a read that finishes after one does not undo it.
   int _edits = 0;
@@ -67,6 +73,19 @@ final class SettingsStore extends ChangeNotifier {
     } on PathNotFoundException {
       value = Settings.defaults;
     } on Object catch (error) {
+      if (error is FileSystemException &&
+          error.osError != null &&
+          !_isFolder(file)) {
+        // The disk failed, which says nothing about what the file holds: it
+        // stays where it is, and no change is written over it this session.
+        log.w('read ${file.path}; it stays as it is', error);
+        _unread = true;
+        _problem =
+            'Your settings could not be read, so changes are not saved: '
+            '${error.osError?.message ?? error.message}';
+        _notify();
+        return;
+      }
       // A FormatException can include the input text; name only the kind.
       log.w('read ${file.path}', error.runtimeType);
       await _moveAside(file);
@@ -74,12 +93,27 @@ final class SettingsStore extends ChangeNotifier {
     }
     if (_disposed || edits != _edits) return;
     _value = value;
+    if (_unread) {
+      _unread = false;
+      _problem = null;
+    }
     _notify();
+  }
+
+  /// Whether a folder stands where the file should: something to move
+  /// aside, not a disk that failed.
+  static bool _isFolder(File file) {
+    try {
+      return FileSystemEntity.typeSync(file.path, followLinks: false) ==
+          FileSystemEntityType.directory;
+    } on FileSystemException {
+      return false;
+    }
   }
 
   /// The file's text. A Windows sharing violation, another program such as
   /// an antivirus or a sync client holding the file for a moment, is
-  /// retried for a short while; only what still fails is moved aside.
+  /// retried for a short while.
   Future<String> _read(File file) async {
     for (var attempt = 0; ; attempt++) {
       try {
@@ -133,6 +167,9 @@ final class SettingsStore extends ChangeNotifier {
   /// One write; its outcome decides [problem], so the last write says it.
   /// A staged copy left by a crash is simply overwritten.
   Future<void> _write(File file, Settings value) async {
+    // What the file holds is not known, so the defaults shown in its place
+    // must not replace it; the problem read reported stays.
+    if (_unread) return;
     try {
       final target = _target(file);
       await target.parent.create(recursive: true);

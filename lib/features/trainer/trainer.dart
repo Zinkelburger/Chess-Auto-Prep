@@ -30,10 +30,6 @@ import 'trainer_state.dart';
 import 'training_scope.dart';
 import 'training_selection.dart';
 
-/// How many new lines one Learn sitting takes: enough to learn in one go,
-/// few enough to remember tomorrow.
-const learnSitting = 10;
-
 /// The Train tab's owner: the lines of the open chapter, or of its whole
 /// repertoire, with their progress, and the sitting being trained.
 ///

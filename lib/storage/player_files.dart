@@ -256,6 +256,10 @@ final class PlayerFiles implements PlayerStore {
         path,
         p.join(trash.path, '${group.id}-${playerId()}.json'),
       );
+      // Both names, and a `.removed` made just now, survive a power loss.
+      for (final folder in [trash, _groups, root]) {
+        await syncDirectoryWhereSupported(folder.path, syncDirectory);
+      }
     });
   }
 }

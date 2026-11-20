@@ -1,10 +1,44 @@
 /**
- * The puzzle set as served from /bughouse-puzzles/: a small index with one
- * row per puzzle (enough to filter and count) and immutable, content-hashed
- * shards of 50 full records that load on demand. The filtering, labels and
- * deep-link parsing are pure so tests/bughouse-state.ts covers them.
+ * A puzzle set as served from /bughouse-puzzles/ (FICS games between people)
+ * or /bughouse-puzzles/engine/ (HypeBeast's engine games): a small index with
+ * one row per puzzle (enough to filter and count) and immutable,
+ * content-hashed shards of 50 full records that load on demand. The
+ * filtering, labels and deep-link parsing are pure so tests/puzzles.ts
+ * covers them.
  */
 import type { Difficulty, Puzzle, PuzzleKind } from './puzzle';
+
+/** The two sets. Each keeps its own results, filter and place in the browser. */
+export type SetName = 'human' | 'engine';
+export interface SetInfo {
+  base: string;
+  label: string;
+  storeKey: string;
+  /** The "missed" filter's wording: who played the game. */
+  missed: string;
+}
+export const SET_NAMES: SetName[] = ['human', 'engine'];
+export const SETS: Record<SetName, SetInfo> = {
+  human: { base: '/bughouse-puzzles', label: 'Human games', storeKey: 'bughouse-puzzles-v2', missed: 'Only ones the player missed' },
+  engine: { base: '/bughouse-puzzles/engine', label: 'Engine games', storeKey: 'bughouse-puzzles-engine-v1', missed: 'Only ones the engine missed' },
+};
+/** Where the chosen set is remembered. */
+export const SET_KEY = 'bughouse-puzzles-set';
+
+/** The set an id belongs to: engine ids are `e` and six hex digits, FICS ids start with the game number. */
+export function setOfId(id: string): SetName {
+  return /^e[0-9a-f]{6}-/.test(id) ? 'engine' : 'human';
+}
+
+/** A saved set name made safe. */
+export function normalizeSet(raw: unknown): SetName {
+  return raw === 'engine' ? 'engine' : 'human';
+}
+
+/** The set to open: a deep link's, else the one chosen last. */
+export function initialSet(linked: string | null, saved: unknown): SetName {
+  return linked ? setOfId(linked) : normalizeSet(saved);
+}
 
 export interface IndexEntry {
   id: string;
@@ -17,7 +51,7 @@ export interface IndexEntry {
   difficulty: Difficulty;
   side: 'w' | 'b';
   board: 'A' | 'B';
-  /** Whether the player found the line in the game. */
+  /** Whether the player (or engine) found the line in the game. */
   found: boolean;
   shard: number;
 }
@@ -43,7 +77,7 @@ export interface Filter {
   length: LengthFilter;
   difficulty: DifficultyFilter;
   theme: string | null;
-  /** Only puzzles the player missed in the game. */
+  /** Only puzzles the player (or engine) missed in the game. */
   missed: boolean;
 }
 

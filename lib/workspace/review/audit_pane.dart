@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../chess/audit/chapter_audit.dart';
-import '../../chess/fen.dart';
 import '../../ui/app_icons.dart';
 import '../../ui/list_row.dart';
 import '../../ui/problem_line.dart';
@@ -287,8 +286,8 @@ String auditMoveText(AuditFinding finding) {
     WeakMove(:final mistake) => mistake ? '?' : '?!',
     StrongReply() => '',
   };
-  final (number, black) = _moveNumber(finding.fen);
-  return '$number${black ? '…' : '.'}${finding.san}$mark';
+  final fen = finding.fen;
+  return '${fen.fullMove}${fen.whiteToMove ? '.' : '…'}${finding.san}$mark';
 }
 
 /// What is at stake and how often it comes up. A mate is said as one,
@@ -326,12 +325,4 @@ String _reach(double reach) {
   if (reach >= 0.995) return 'always';
   final onceIn = reach <= 0 ? 0 : (1 / reach).round();
   return onceIn < 1 || onceIn > 9999 ? 'rarely' : '1 in $onceIn';
-}
-
-/// The number of the move played from [fen], and whether it is Black's.
-(int, bool) _moveNumber(Fen fen) {
-  final fields = fen.value.split(' ');
-  final black = fields.length > 1 && fields[1] == 'b';
-  final number = fields.length > 5 ? int.tryParse(fields[5]) ?? 1 : 1;
-  return (number, black);
 }

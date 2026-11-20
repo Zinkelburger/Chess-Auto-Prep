@@ -27,11 +27,7 @@ final class StudiesLoaded extends StudiesState {
 /// The folder is there but could not be read. The panel says so and offers
 /// to try again; it never shows an empty list instead.
 final class StudiesLoadFailed extends StudiesState {
-  const StudiesLoadFailed(this.detail);
-
-  /// The operating system's message, for the log; the panel writes the
-  /// sentence.
-  final String detail;
+  const StudiesLoadFailed();
 }
 
 /// What became of a change to the studies folder.

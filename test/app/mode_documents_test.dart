@@ -206,6 +206,28 @@ void main() {
     expect(w.session.game, 1);
   });
 
+  test('a study handed to the viewer comes back with its game list when '
+      'its tab is picked', () async {
+    final study = studyRef('Openings');
+    w.store.documents[study] = store.Opened(
+      threeChapterStudy,
+      scriptedRevision(threeChapterStudy),
+    );
+    await w.requests.openStudy(study, chapter: 1);
+    await w.requests.readInViewer(study, game: 1);
+    expect(w.viewer.file, study);
+    keepClassics();
+    await w.requests.openFile(classics, game: 0);
+    expect(w.viewer.file, classics);
+
+    await go(Mode.repertoires);
+    await w.requests.documents.select(study);
+    expect(w.requests.mode, Mode.pgnViewer);
+    expect(w.session.source, study);
+    expect(w.session.game, 1);
+    expect(w.viewer.file, study);
+  });
+
   test('Back after picking another mode\'s tab goes to the document and '
       'mode that were up before it', () async {
     final study = studyRef('Openings');
@@ -227,6 +249,28 @@ void main() {
     expect(await w.requests.back(), isA<RequestDone>());
     expect(w.requests.mode, Mode.repertoires);
     expect(w.session.source, kidMain);
+  });
+
+  test('Back and Forward bring back the analysis board each mode had, '
+      'with its moves', () async {
+    w.session.playMove('e2e4');
+    final builderBoard = w.requests.documents.tabs.selected;
+    await go(Mode.study);
+    final studyBoard = w.requests.documents.tabs.selected;
+    expect(studyBoard, isNot(builderBoard));
+    w.session.playMove('d2d4');
+
+    expect(await w.requests.back(), isA<RequestDone>());
+    expect(w.requests.mode, Mode.repertoires);
+    expect(w.requests.documents.tabs.selected, builderBoard);
+    expect(w.session.tree!.children.single.san, 'e4');
+    expect(shownTitle(), startsWith('Builder · '));
+    expect(titleOf(studyBoard), startsWith('Study · '));
+
+    expect(await w.requests.forward(), isA<RequestDone>());
+    expect(w.requests.mode, Mode.study);
+    expect(w.requests.documents.tabs.selected, studyBoard);
+    expect(w.session.tree!.children.single.san, 'd4');
   });
 
   test('a file read in the viewer and handed to Study comes back in Study '

@@ -13,6 +13,10 @@ void main() {
         nps: nps,
       );
 
+  /// The status a pane wide enough for all of it shows.
+  String running(String name, EngineLine? best, {String? notice}) =>
+      engineStatusChoices(name, best, notice: notice).first;
+
   test('speed and counts are written short', () {
     expect(speedText(850000), '850 kN/s');
     expect(speedText(1234567), '1.2 MN/s');
@@ -38,12 +42,12 @@ void main() {
 
   test('a depth from one to ninety-nine is shown, and any speed or count '
       'above none', () {
-    expect(engineRunningStatus('SF', best(depth: 1)), 'Depth 1 · SF');
-    expect(engineRunningStatus('SF', best(depth: 99)), 'Depth 99 · SF');
-    expect(engineRunningStatus('SF', best(depth: 100)), 'SF');
-    expect(engineRunningStatus('SF', best(nodes: 0, nps: 0)), 'Depth 20 · SF');
+    expect(running('SF', best(depth: 1)), 'Depth 1 · SF');
+    expect(running('SF', best(depth: 99)), 'Depth 99 · SF');
+    expect(running('SF', best(depth: 100)), 'SF');
+    expect(running('SF', best(nodes: 0, nps: 0)), 'Depth 20 · SF');
     expect(
-      engineRunningStatus('SF', best(nodes: 1, nps: 1)),
+      running('SF', best(nodes: 1, nps: 1)),
       'Depth 20 · 0 kN/s · 1 nodes · SF',
     );
   });
@@ -57,30 +61,21 @@ void main() {
   });
 
   test('the status says only what the engine has said', () {
-    expect(engineRunningStatus('Stockfish 19', null), 'Stockfish 19');
+    expect(running('Stockfish 19', null), 'Stockfish 19');
+    expect(running('Stockfish 19', best(depth: 18)), 'Depth 18 · Stockfish 19');
     expect(
-      engineRunningStatus('Stockfish 19', best(depth: 18)),
-      'Depth 18 · Stockfish 19',
-    );
-    expect(
-      engineRunningStatus(
-        'Stockfish 19',
-        best(depth: 31, nodes: 456000000, nps: 15200000),
-      ),
+      running('Stockfish 19', best(depth: 31, nodes: 456000000, nps: 15200000)),
       'Depth 31 · 15 MN/s · 456M nodes · Stockfish 19',
     );
   });
 
   test('a finished game and a found mate leave the depth out', () {
     expect(
-      engineRunningStatus(
-        'Stockfish 19',
-        best(depth: 0, score: const MateIn(0)),
-      ),
+      running('Stockfish 19', best(depth: 0, score: const MateIn(0))),
       'Stockfish 19',
     );
     expect(
-      engineRunningStatus(
+      running(
         'Stockfish 19',
         best(depth: 245, score: const MateIn(2), nps: 900000),
       ),
@@ -90,7 +85,7 @@ void main() {
 
   test('the engine standing in says why last', () {
     expect(
-      engineRunningStatus('Stockfish 19', null, notice: 'Komodo did not start'),
+      running('Stockfish 19', null, notice: 'Komodo did not start'),
       'Stockfish 19 · Komodo did not start',
     );
   });

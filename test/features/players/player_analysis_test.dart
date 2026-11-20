@@ -528,7 +528,7 @@ void main() {
       store.documents[ref] = Opened(combined, scriptedRevision(combined));
       await owner.select(owner.player!);
       owner.search('Carol');
-      expect(owner.positions.first.game, 1);
+      expect(owner.positions.first.games, {1});
       expect(owner.positions.first.count, 1);
       store.documents[ref] = Opened(blackGame, scriptedRevision(blackGame));
       expect(await owner.currentSources(), false);

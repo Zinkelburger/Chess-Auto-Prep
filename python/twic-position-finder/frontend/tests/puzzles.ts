@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { Attempt, analysisLink, applyMove, inCheck, startPosition, type Puzzle } from '../src/bughouse-puzzles/puzzle';
-import { DEFAULT_FILTER, PuzzleStore, applyFilter, facetCounts, lengthLabel, normalizeFilter, parseHash, puzzleHash, themeCounts, themeLabel, type IndexEntry, type PuzzleIndex } from '../src/bughouse-puzzles/set';
+import { DEFAULT_FILTER, PuzzleStore, SETS, SET_NAMES, applyFilter, facetCounts, initialSet, lengthLabel, normalizeFilter, normalizeSet, parseHash, puzzleHash, setOfId, themeCounts, themeLabel, type IndexEntry, type PuzzleIndex } from '../src/bughouse-puzzles/set';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1';
 
@@ -118,4 +118,32 @@ assert.deepEqual(fetched, ['/bughouse-puzzles/index.json', '/bughouse-puzzles/s0
 await assert.rejects(store.get(index.puzzles[1]), /503/);
 await assert.rejects(store.get(index.puzzles[1]), /503/, 'a failed shard is fetched again, not cached');
 assert.equal(fetched.filter((u) => u.endsWith(index.shards[1])).length, 2);
-console.log('Bughouse puzzles and the puzzle set passed.');
+
+// Two sets: FICS games and engine games. A deep link opens the set its id belongs to;
+// results, filters and places are stored apart, and the FICS key is the one already in use.
+assert.equal(setOfId('3675501-B-113'), 'human');
+assert.equal(setOfId('e1a2b3c-17-A-84'), 'engine');
+assert.equal(setOfId('e1-17-A-84'), 'human', 'only the engine id shape counts');
+assert.equal(parseHash('#e1a2b3c-17-A-84'), 'e1a2b3c-17-A-84', 'engine ids pass the deep-link pattern');
+assert.equal(initialSet('e1a2b3c-17-A-84', 'human'), 'engine', 'a deep link wins over the saved set');
+assert.equal(initialSet('3675501-B-113', 'engine'), 'human');
+assert.equal(initialSet(null, 'engine'), 'engine');
+assert.equal(initialSet(null, null), 'human', 'the FICS set by default');
+assert.equal(normalizeSet('robots'), 'human');
+assert.deepEqual(SET_NAMES, ['human', 'engine']);
+assert.equal(SETS.human.storeKey, 'bughouse-puzzles-v2', 'FICS progress stays where it was');
+assert.notEqual(SETS.engine.storeKey, SETS.human.storeKey, 'the sets never share stored progress');
+assert.equal(SETS.human.base, '/bughouse-puzzles');
+assert.equal(SETS.engine.base, '/bughouse-puzzles/engine');
+assert.equal(SETS.human.missed, 'Only ones the player missed');
+assert.equal(SETS.engine.missed, 'Only ones the engine missed');
+assert.deepEqual([SETS.human.label, SETS.engine.label], ['Human games', 'Engine games']);
+const engineFetched: string[] = [];
+const engineStore = new PuzzleStore(SETS.engine.base, async (url) => {
+  engineFetched.push(url);
+  return url.endsWith('index.json') ? { ...index, shards: ['s00-cccccccccc.json'], puzzles: [{ ...index.puzzles[0], id: 'e1a2b3c-1-A-40' }] } : { puzzles: [{ ...puzzle, id: 'e1a2b3c-1-A-40' }] };
+});
+await engineStore.loadIndex();
+assert.equal((await engineStore.get(engineStore.index!.puzzles[0])).id, 'e1a2b3c-1-A-40');
+assert.deepEqual(engineFetched, ['/bughouse-puzzles/engine/index.json', '/bughouse-puzzles/engine/s00-cccccccccc.json']);
+console.log('Bughouse puzzles and the puzzle sets passed.');

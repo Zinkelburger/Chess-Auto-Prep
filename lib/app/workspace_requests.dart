@@ -69,6 +69,7 @@ final class Place {
     this.game,
     this.cursor = const NodePath.root(),
     this.scratch = false,
+    this.board,
   });
 
   final Mode mode;
@@ -81,6 +82,9 @@ final class Place {
   /// Whether the analysis board was up.
   final bool scratch;
 
+  /// Which analysis board was up, when [scratch]: each mode has its own.
+  final KeptBoard? board;
+
   /// `My games`, `Repertoire builder · Najdorf`: what Back's tooltip names.
   String get label => switch (source) {
     final source? => '${mode.label} · ${source.name}',
@@ -91,7 +95,8 @@ final class Place {
       other.mode == mode &&
       other.source == source &&
       other.game == game &&
-      other.scratch == scratch;
+      other.scratch == scratch &&
+      identical(other.board, board);
 }
 
 /// The window's cross-mode requests: which mode fills the left column, the
@@ -276,6 +281,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     game: _session.game,
     cursor: _session.cursor.value,
     scratch: _session.isScratch,
+    board: _session.isScratch ? _session.analysisPage : null,
   );
 
   /// Keeps where the user is before a jump takes them elsewhere. Going
@@ -333,9 +339,9 @@ final class WorkspaceRequests extends ChangeNotifier {
     }
 
     if (place.scratch) {
-      final result = _session.isScratch
+      final result = _atBoard(place)
           ? const RequestDone()
-          : await _analysisBoard(ticket, left: leave);
+          : await _analysisBoard(ticket, page: place.board, left: leave);
       if (!_disposed && result is RequestDone) documents.carry(place.mode);
       return stayed(result);
     }
@@ -351,6 +357,8 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (_disposed || ticket.overtaken) return const RequestDropped();
     final result = await _open(ticket, source, game: place.game, left: leave);
     if (_disposed || result is! RequestDone) return stayed(result);
+    await documents.restoreParked(source);
+    if (_disposed || ticket.overtaken) return const RequestDropped();
     if (viewing && ticket.current && (away || _viewer.file != source)) {
       await _viewer.opened(
         source,
@@ -371,11 +379,16 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// Whether going to [place] leaves the document on the board where it is,
   /// so there is no draft to ask about.
   bool _alreadyAt(Place place) => switch (place) {
-    Place(scratch: true) => _session.isScratch,
+    Place(scratch: true) => _atBoard(place),
     Place(:final source?) =>
       source == _session.source && place.game == _session.game,
     _ => true,
   };
+
+  /// Whether the analysis board [place] had is the one up.
+  bool _atBoard(Place place) =>
+      _session.isScratch &&
+      (place.board == null || identical(place.board, _session.analysisPage));
 
   /// Puts [sentence] in the bar, with [action] beside it, or clears it:
   /// what a command came to when it did not do what was asked, or, with

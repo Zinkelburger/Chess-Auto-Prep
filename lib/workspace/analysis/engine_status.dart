@@ -10,12 +10,10 @@ const shownDepthLimit = 100;
 /// and, last, why it is not the engine the user chose.
 ///
 /// `Depth 24 · 12 MN/s · 345M nodes · Stockfish 19`
-String engineRunningStatus(String name, EngineLine? best, {String? notice}) =>
-    engineStatusChoices(name, best, notice: notice).first;
-
-/// [engineRunningStatus], then shorter ways to say it for a narrow pane,
-/// each leaving out the least needed fact: the nodes, then the engine's
-/// name, then the speed. Why another engine stands in is kept to the last.
+///
+/// Then shorter ways to say it for a narrow pane, each leaving out the
+/// least needed fact: the nodes, then the engine's name, then the speed.
+/// Why another engine stands in is kept to the last.
 List<String> engineStatusChoices(
   String name,
   EngineLine? best, {

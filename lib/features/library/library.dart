@@ -554,7 +554,7 @@ final class Library extends ChangeNotifier {
 
   LibraryLoadFailed _loadFailed(String detail) {
     log.w('list the repertoires under $_root', detail);
-    return LibraryLoadFailed(detail);
+    return const LibraryLoadFailed();
   }
 
   void _set(LibraryState state) {

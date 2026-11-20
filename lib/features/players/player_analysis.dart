@@ -200,7 +200,6 @@ final class PlayerAnalysis extends ChangeNotifier {
         fen: at.fen,
         side: at.side,
         line: at.line,
-        game: included.first,
         ply: at.ply,
         start: at.start,
       );

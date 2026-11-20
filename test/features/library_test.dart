@@ -68,7 +68,7 @@ void main() {
       saver.dispose();
     });
     await library.refresh();
-    expect((library.state as LibraryLoadFailed).detail, 'Permission denied');
+    expect(library.state, isA<LibraryLoadFailed>());
   });
 
   test('search filters the list by name', () async {
