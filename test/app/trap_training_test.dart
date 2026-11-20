@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/chess/generation/eval.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_heading.dart';
+import 'package:chess_auto_prep/features/trainer/lesson.dart';
 import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
@@ -67,11 +68,13 @@ void main() {
     WidgetTester tester,
     String text, {
     bool listed = true,
+    ChapterRef? source,
   }) async {
-    w.store.documents[main] = Opened(text, scriptedRevision(text));
+    final chapter = source ?? main;
+    w.store.documents[chapter.wholeFile] = Opened(text, scriptedRevision(text));
     if (listed) w.chapterFiles.listing = kidWith(const []);
     await w.library.refresh();
-    await w.session.open(main);
+    await w.session.open(chapter);
     await w.parts.workspace.finds.record(
       trapTree,
       rootFen: Fen.initial,
@@ -126,6 +129,63 @@ void main() {
     expect(w.requests.mode, Mode.repertoires);
     expect(w.session.source, main);
     expect(w.lineTrainer.lesson, isNotNull);
+  });
+
+  testWidgets('training a trap credits only the open course chapter', (
+    tester,
+  ) async {
+    const path = '/repertoires/KID/Course.pgn';
+    final first = ChapterRef.at(path, section: 'A');
+    final second = ChapterRef.at(path, section: 'B');
+    const course =
+        '// Color: White\n\n'
+        '[Event "Continuation"]\n[ChapterName "A"]\n[LineID "line-a"]\n\n'
+        '1. e4 f6 2. d4 *\n\n'
+        '[Event "Short line"]\n[ChapterName "B"]\n[LineID "line-b"]\n\n'
+        '1. e4 f6 *\n';
+    w.chapterFiles.listing = kidWith([first, second]);
+    await openWith(tester, course, listed: false, source: first);
+    w.lineTrainer.setScope(TrainScope.repertoire);
+    await tester.pumpAndSettle();
+    await trainTheTrap(tester);
+
+    final lesson = w.lineTrainer.lesson!;
+    const expected = (source: path, id: 'line-a');
+    expect(lesson.line.key, expected);
+
+    const answers = ['e2e4', 'd2d4'];
+    final reply = Duration(milliseconds: lesson.options.replyMillis);
+    for (final move in answers) {
+      lesson.next();
+      lesson.play(move);
+      await tester.pump(reply * 2);
+    }
+    for (final move in answers) {
+      lesson.play(move);
+      await tester.pump(reply);
+    }
+    await tester.pump(finishedPause);
+    expect(w.progress.reviews.keys, [expected]);
+    expect(w.progress.reviews[expected]!.lastRating, 'good');
+  });
+
+  testWidgets('a course opened by path trains its sole named chapter', (
+    tester,
+  ) async {
+    const path = '/repertoires/KID/Course.pgn';
+    const course =
+        '// Color: White\n\n'
+        '[Event "Continuation"]\n[ChapterName "A"]\n[LineID "long"]\n\n'
+        '1. e4 f6 2. d4 *\n\n'
+        '[Event "Trap"]\n[ChapterName "A"]\n[LineID "short"]\n\n'
+        '1. e4 f6 *\n';
+    w.chapterFiles.listing = kidWith([ChapterRef.at(path, section: 'A')]);
+    await openWith(tester, course, listed: false, source: ChapterRef.at(path));
+    w.lineTrainer.setScope(TrainScope.repertoire);
+    await tester.pumpAndSettle();
+    await trainTheTrap(tester);
+
+    expect(w.lineTrainer.lesson?.line.key, (source: path, id: 'short'));
   });
 
   testWidgets('a trap no chapter plays goes into the draft, asked first, '

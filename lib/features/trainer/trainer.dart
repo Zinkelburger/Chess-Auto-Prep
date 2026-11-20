@@ -4,6 +4,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
 
 import '../../chess/pgn/chapter.dart';
+import '../../chess/pgn/chapter_sections.dart';
 import '../../chess/pgn/study.dart';
 import '../../chess/pgn/study_training.dart';
 import '../../chess/training/line_order.dart';
@@ -446,17 +447,34 @@ class Trainer extends ChangeNotifier {
   /// as a trap from the Positions list. The chapter as it stands now is
   /// read first. False when no such line can be trained.
   Future<bool> trainLineThrough(List<String> sans) async {
+    final source = _session.source;
     await _load(force: true);
     await _loadsSettled();
     final state = _state;
-    final source = _session.source?.path;
-    if (_disposed || state is! TrainerReady || source == null) return false;
+    if (_disposed ||
+        state is! TrainerReady ||
+        source == null ||
+        _session.source != source) {
+      return false;
+    }
+    ChapterLines? listed(ChapterRef ref) =>
+        state.chapters.where((c) => c.ref == ref).firstOrNull;
+    var chapter = listed(source);
+    if (chapter == null && source.section == null) {
+      // A saved path can open a singleton that the repertoire lists by name.
+      final section = sectionsIn(
+        _session.chapter?.lines ?? const [],
+      ).singleOrNull;
+      if (section != null) {
+        chapter = listed(ChapterRef.at(source.path, section: section));
+      }
+    }
+    if (chapter == null) return false;
     bool plays(TrainingLine line) =>
-        line.key.source == source &&
         line.moves.length >= sans.length &&
         [for (final move in line.moves.take(sans.length)) move.san].join(' ') ==
             sans.join(' ');
-    final holding = state.lines.where(plays).toList()
+    final holding = chapter.lines.where(plays).toList()
       ..sort((a, b) => a.moves.length.compareTo(b.moves.length));
     if (holding.isEmpty) return false;
     trainLine(holding.first);
