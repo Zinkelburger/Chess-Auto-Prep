@@ -53,6 +53,43 @@ void main() {
     return (process, child);
   }
 
+  test(
+    'oversized output is bounded and the following UCI token survives',
+    () async {
+      Future<List<int>> retained(int chunks) async {
+        final (process, child) = await spawned();
+        final read = process.lines.toList();
+        final chunk = List.filled(8192, 65);
+        for (var i = 0; i < chunks; i++) {
+          child.out.add(chunk);
+          child.err.add(chunk);
+        }
+        child.out.add(utf8.encode('\nuciok\n'));
+        child.err.add([10]);
+        await child.end();
+        final lines = await read;
+        await child.err.done;
+        expect(lines.last, 'uciok');
+        // The fixture emits only ASCII, so each code unit is one byte.
+        return [
+          for (final buffer in [
+            lines,
+            process.transcript.lines,
+            process.recentErrors,
+          ])
+            buffer.fold<int>(0, (bytes, line) => bytes + line.length),
+        ];
+      }
+
+      final smaller = await retained(256);
+      final larger = await retained(512);
+      for (var i = 0; i < smaller.length; i++) {
+        // Allow room for a diagnostic naming the number of discarded bytes.
+        expect(larger[i], lessThanOrEqualTo(smaller[i] + 128));
+      }
+    },
+  );
+
   test('standard error keeps its last twenty lines; the transcript keeps the '
       'first forty of both streams', () async {
     final (process, child) = await spawned();
