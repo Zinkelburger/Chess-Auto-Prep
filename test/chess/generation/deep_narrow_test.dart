@@ -36,6 +36,90 @@ void main() {
   final root = positionOf(kingAndPawn);
   final rootPosition = const Fen(kingAndPawn).position;
 
+  test(
+    'resuming with one first move uses the fresh one-move shortlist',
+    () async {
+      final ranking = Ranking(['e2e4', 'd2d4', 'c2c4', 'g1f3']);
+      final start = positionOf(Fen.initial.value);
+      final evaluator = ScriptedEvaluator(
+        scores: {afterUci(start, 'd2d4').fen: -50},
+      );
+      SearchConfig config(int count) => SearchConfig(
+        side: Side.white,
+        horizonPlies: 1,
+        lossLimitCp: null,
+        maxOurMoves: 1,
+        rootMoves: count,
+      );
+      Future<OurNode> search(int count, {OurNode? seed}) async {
+        final result = await buildSearchTree(
+          root: start,
+          config: config(count),
+          evaluator: evaluator,
+          candidates: ranking,
+          policy: oneReply,
+          seed: seed,
+        );
+        return (result as SearchComplete).tree as OurNode;
+      }
+
+      final wide = await search(4);
+      expect(wide.candidates, hasLength(4));
+      expect(wide.chosen.move.uci, 'd2d4');
+      final fresh = await search(1);
+      expect(fresh.candidates.single.move.uci, 'e2e4');
+      final file = encodeTreeV4(wide, config(4), complete: true);
+      final read = decodeTreeV4(file) as TreeDecoded;
+      for (final seed in [wide, read.root as OurNode]) {
+        ranking.asked.clear();
+        evaluator.asked.clear();
+        await search(4, seed: seed);
+        expect(ranking.asked, isEmpty);
+        final resumed = await search(1, seed: seed);
+        expect(resumed.candidates.single.move.uci, fresh.chosen.move.uci);
+        expect(evaluator.asked, isEmpty);
+      }
+    },
+  );
+
+  test('reopening a paused widening at the original width keeps the saved '
+      'move and reply without reranking', () async {
+    SearchConfig config(int width) => SearchConfig(
+      side: Side.white,
+      horizonPlies: 2,
+      lossLimitCp: null,
+      maxOurMoves: 1,
+      rootMoves: width,
+    );
+    final evaluator = ScriptedEvaluator();
+    final ranking = Ranking(['e2e4', 'e2e3', 'e1d1', 'e1f1']);
+    Future<SearchResult> search(int width, {SearchNode? seed, LastPly? stop}) =>
+        buildSearchTree(
+          root: root,
+          config: config(width),
+          evaluator: evaluator,
+          candidates: ranking,
+          policy: oneReply,
+          seed: seed,
+          lastPly: stop,
+        );
+
+    final narrow = (await search(1) as SearchComplete).tree;
+    final paused = await search(4, seed: narrow, stop: () => 0);
+    expect((paused as SearchIncomplete).reason, StopReason.levelDone);
+    final file = encodeTreeV4(paused.tree, config(4), complete: false);
+    final read = decodeTreeV4(file) as TreeDecoded;
+    ranking.asked.clear();
+    evaluator.asked.clear();
+
+    final resumed = await search(1, seed: read.root) as SearchComplete;
+    final move = (resumed.tree as OurNode).candidates.single;
+    expect(move.move.uci, 'e2e4');
+    expect((move.child as OpponentNode).replies.single.move.uci, 'e8d8');
+    expect(ranking.asked, isEmpty);
+    expect(evaluator.asked, isEmpty);
+  });
+
   group('pins beside a shortlist', () {
     test('at the first move the pin is searched beside the engine\'s best, '
         'and kept however the engine scores it', () async {
