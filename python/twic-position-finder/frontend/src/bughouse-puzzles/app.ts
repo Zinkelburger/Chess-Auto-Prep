@@ -7,6 +7,8 @@
  * key map follow the Tactics Trainer: a wrong move shows briefly and is
  * taken back, a right one gets the defender's reply, and View solution
  * plays out the rest. The current puzzle's id lives in the URL hash.
+ * Clicking a move, ←/→, Home/End or the step buttons show an earlier board
+ * of the line; the board is locked until play returns to the latest move.
  *
  * Solving shows only the board, the task and the moves; choosing puzzles,
  * progress and the notes on the set live in the Settings sheet.
@@ -70,6 +72,8 @@ export class BughousePuzzlesApp {
   private timer: ReturnType<typeof setTimeout> | null = null;
   /** A wrong move shown on the board until it is taken back. */
   private wrong: string | null = null;
+  /** The number of moves on the board being looked at; null shows the latest. */
+  private view: number | null = null;
   /** Whether the theme facet shows every theme or only the commonest. */
   private themesOpen = false;
   /** Counts up on every `go`, so a slow shard cannot land on a later puzzle. */
@@ -146,6 +150,8 @@ export class BughousePuzzlesApp {
     $('bp-next').onclick = () => this.next();
     $('bp-retry').onclick = () => this.go(this.index);
     $('bp-solution').onclick = () => this.reveal();
+    $('bp-back').onclick = () => this.browse(this.shown - 1);
+    $('bp-forward').onclick = () => this.browse(this.shown + 1);
     $('bp-retry-load').onclick = () => { if (this.all.length) this.go(this.index); else void this.start(); };
     $('bp-clear-filters').onclick = () => this.applyFilter({ ...DEFAULT_FILTER }, this.list[this.index]?.id ?? null);
     const sheet = $<HTMLDialogElement>('bp-settings');
@@ -168,6 +174,10 @@ export class BughousePuzzlesApp {
       else if (e.key === 'ArrowDown' || key === 's') { e.preventDefault(); this.next(); }
       else if (e.key === ' ') { e.preventDefault(); this.reveal(); }
       else if (key === 'r') { e.preventDefault(); this.go(this.index); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); this.browse(this.shown - 1); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); this.browse(this.shown + 1); }
+      else if (e.key === 'Home') { e.preventDefault(); this.browse(0); }
+      else if (e.key === 'End') { e.preventDefault(); this.browse(this.attempt?.ply ?? 0); }
     });
   }
 
@@ -297,6 +307,7 @@ export class BughousePuzzlesApp {
     this.clearTimer();
     this.index = i;
     this.wrong = null;
+    this.view = null;
     this.attempt = null;
     const entry = this.list[i];
     const generation = ++this.generation;
@@ -373,6 +384,7 @@ export class BughousePuzzlesApp {
     if (!a || a.done) return;
     this.clearTimer();
     this.wrong = null;
+    this.view = null;
     const play = () => {
       a.step();
       this.renderLine();
@@ -395,6 +407,18 @@ export class BughousePuzzlesApp {
     $('bp-analysis-link').hidden = false;
   }
 
+  /** How many moves of the line the board shows now. */
+  private get shown(): number { return this.view ?? this.attempt?.ply ?? 0; }
+
+  /** Show the board after `ply` moves; the latest move returns to play. Waits out a reply or a take-back. */
+  private browse(ply: number) {
+    const a = this.attempt;
+    if (!a || this.timer || ply < 0 || ply > a.ply || ply === this.shown) return;
+    this.view = ply === a.ply ? null : ply;
+    this.renderLine();
+    this.renderBoard();
+  }
+
   private clearTimer() {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
@@ -404,8 +428,9 @@ export class BughousePuzzlesApp {
 
   private renderBoard(showWrong = false, intro: Attempt['pos'] | null = null) {
     const a = this.attempt!;
-    let pos = intro ?? a.pos;
-    let last = intro ? [] : a.last;
+    const past = intro ? null : this.view === null ? null : a.history[this.view];
+    let pos = intro ?? past?.pos ?? a.pos;
+    let last = intro ? [] : past?.last ?? a.last;
     if (showWrong && this.wrong) {
       // Show the wrong move where it landed until it is taken back.
       pos = { ...pos, pieces: { ...pos.pieces } };
@@ -418,9 +443,9 @@ export class BughousePuzzlesApp {
       pos,
       bottom: a.solver,
       solver: a.solver,
-      legal: this.timer || intro || a.done ? [] : a.legal(),
+      legal: this.timer || intro || past || a.done ? [] : a.legal(),
       last,
-      check: !showWrong && !intro && inCheck(a.pos),
+      check: !showWrong && !intro && inCheck(pos),
     });
   }
 
@@ -447,7 +472,7 @@ export class BughousePuzzlesApp {
     box.replaceChildren();
     const startNo = Number(a.puzzle.fen.split(' ')[5]) || 1;
     const blackStarts = a.solver === 'black';
-    const token = (i: number, san: string, cls: string) => {
+    const token = (i: number, san: string, cls: string, ply: number | null) => {
       const whiteMove = blackStarts ? i % 2 === 1 : i % 2 === 0;
       if (whiteMove || i === 0) {
         const n = document.createElement('span');
@@ -455,13 +480,22 @@ export class BughousePuzzlesApp {
         n.textContent = `${startNo + Math.floor((i + (blackStarts ? 1 : 0)) / 2)}.${whiteMove ? '' : '..'}`;
         box.append(n);
       }
-      const t = document.createElement('span');
-      t.className = `san-token played ${cls}`.trimEnd();
+      // A move of the line is a button that shows the board after it.
+      const t = document.createElement(ply === null ? 'span' : 'button');
+      t.className = `san-token ${ply === null ? 'played ' : ''}${cls}`.trimEnd();
       t.textContent = san;
+      if (t instanceof HTMLButtonElement) {
+        t.type = 'button';
+        t.onclick = () => this.browse(ply!);
+        if (ply === this.shown && !this.wrong) t.setAttribute('aria-current', 'true');
+      }
       box.append(t);
     };
-    a.played.forEach((san, i) => token(i, san, i % 2 === 0 ? 'best' : ''));
-    if (this.wrong) token(a.played.length, this.wrongLabel(this.wrong), 'wrong');
+    const shown = this.shown;
+    a.played.forEach((san, i) => token(i, san, `${i % 2 === 0 ? 'best' : ''}${i + 1 === shown && !this.wrong ? ' active' : ''}`.trim(), i + 1));
+    if (this.wrong) token(a.played.length, this.wrongLabel(this.wrong), 'wrong', null);
+    $<HTMLButtonElement>('bp-back').disabled = shown === 0 || !!this.wrong;
+    $<HTMLButtonElement>('bp-forward').disabled = shown >= a.ply || !!this.wrong;
   }
 
   /** A wrong move has no SAN in the data: "Nf7", "e5", "e8=N" or the drop as written. */

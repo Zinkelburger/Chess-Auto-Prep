@@ -62,7 +62,13 @@
 .bp-gear { margin-left: auto; padding: 6px 8px; gap: 4px; }
 .bp-gear svg { width: 18px; height: 18px; }
 .bp-filter-active { color: var(--accent); font-size: 0.8rem; }
-.bp-line { min-height: 36px; gap: 2px 4px; margin: 0; padding: 4px 0; align-content: center; }
+.bp-line-row { display: flex; align-items: flex-start; gap: 8px; }
+.bp-line { flex: 1; min-height: 36px; gap: 2px 4px; margin: 0; padding: 4px 0; align-content: center; }
+.bp-line button.san-token { padding: 3px 4px; }
+.bp-step { display: flex; gap: 2px; padding-top: 2px; }
+.bp-step .btn { padding: 6px; }
+.bp-step svg { width: 18px; height: 18px; }
+.bp-step .btn:disabled { opacity: 0.35; }
 .bp-line .san-num { color: var(--text-faint); font-family: var(--mono); font-size: 0.85rem; padding: 3px 0 3px 2px; align-self: center; }
 .bp-line .san-token.wrong { color: var(--danger); text-decoration: line-through; }
 .bp-controls { display: grid; grid-template-columns: auto 1fr 1fr 1.3fr; gap: 8px; }

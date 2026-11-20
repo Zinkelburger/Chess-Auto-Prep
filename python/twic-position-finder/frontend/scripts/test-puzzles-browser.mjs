@@ -129,6 +129,32 @@ try {
   await ready(page);
   await solve(pick);
   await page.screenshot({ path: path.join(output, 'puzzles-engine-solved-long.png') });
+
+  // Step back through the solved line: a click on the first move, then the arrow keys and the step buttons.
+  // The pieces once chessground's move animation has settled.
+  const boardFen = async () => {
+    await new Promise((r) => setTimeout(r, 400));
+    return page.evaluate(() => [...document.querySelectorAll('#bp-board piece:not(.fading):not(.ghost)')]
+      .map((p) => `${p.className}@${p.style.transform}`).sort().join());
+  };
+  const activeMove = () => page.$$eval('#bp-line .san-token', (ts) => ts.findIndex((t) => t.classList.contains('active')));
+  const solvedBoard = await boardFen();
+  assert.equal(await activeMove(), pick.san.length - 1, 'the last move is the one shown');
+  assert.ok(await page.$eval('#bp-forward', (b) => b.disabled), 'nothing after the last move');
+  await page.click('#bp-line .san-token');
+  await page.waitForFunction(() => document.querySelector('#bp-line .san-token').classList.contains('active'));
+  const afterFirst = await boardFen();
+  assert.notEqual(afterFirst, solvedBoard, 'the board went back to the first move');
+  await page.screenshot({ path: path.join(output, 'puzzles-engine-browse.png') });
+  await page.keyboard.press('ArrowLeft');
+  assert.equal(await activeMove(), -1, 'the start of the puzzle has no move marked');
+  assert.ok(await page.$eval('#bp-back', (b) => b.disabled), 'nothing before the start');
+  await page.click('#bp-forward');
+  assert.equal(await activeMove(), 0);
+  assert.equal(await boardFen(), afterFirst);
+  await page.keyboard.press('End');
+  assert.equal(await activeMove(), pick.san.length - 1);
+  assert.equal(await boardFen(), solvedBoard, 'End returns to the solved board');
   await page.evaluate((id) => { location.hash = id; }, engineId);
   await ready(page);
 

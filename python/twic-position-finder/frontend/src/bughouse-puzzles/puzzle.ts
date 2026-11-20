@@ -156,11 +156,14 @@ export class Attempt {
   readonly solver: Colour;
   /** SAN of what was actually played, which differs from `san` only for another mate at the end. */
   readonly played: string[] = [];
+  /** The board after each number of moves played, from the puzzle's start, for stepping back through the line. */
+  readonly history: { pos: Position; last: string[] }[];
 
   constructor(readonly puzzle: Puzzle) {
     this.pos = startPosition(puzzle.fen);
     this.solver = this.pos.turn;
     this.last = puzzle.last ? squaresOf(puzzle.last) : [];
+    this.history = [{ pos: this.pos, last: this.last }];
   }
 
   get done(): boolean { return this.ply >= this.puzzle.line.length; }
@@ -223,6 +226,7 @@ export class Attempt {
     this.last = squaresOf(uci);
     this.played.push(san);
     this.ply += 1;
+    this.history.push({ pos: this.pos, last: this.last });
   }
 }
 

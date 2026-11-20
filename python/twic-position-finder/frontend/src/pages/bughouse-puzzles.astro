@@ -51,7 +51,17 @@ const gear = 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.
           </div>
         </div>
 
-        <div class="line-moves bp-line" id="bp-line" aria-label="Moves played"></div>
+        <div class="bp-line-row">
+          <div class="line-moves bp-line" id="bp-line" aria-label="Moves played"></div>
+          <div class="bp-step">
+            <button type="button" class="btn btn-text btn-sm" id="bp-back" title="Back one move (←)" aria-label="Back one move" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={chevronLeft}/></svg>
+            </button>
+            <button type="button" class="btn btn-text btn-sm" id="bp-forward" title="Forward one move (→)" aria-label="Forward one move" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={chevronRight}/></svg>
+            </button>
+          </div>
+        </div>
 
         <div class="bp-controls">
           <button type="button" class="btn btn-outline bp-prev" id="bp-prev" title="Previous puzzle (P or ↑)" aria-label="Previous puzzle" disabled>

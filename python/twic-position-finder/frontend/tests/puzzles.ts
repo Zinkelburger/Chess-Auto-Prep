@@ -32,6 +32,13 @@ assert.deepEqual(attempt.legal(), ['N@e7', 'N@f6']);
 assert.equal(attempt.play('n@e7'), 'solved', 'drop letters match in either case');
 assert.ok(attempt.done && inCheck(attempt.pos));
 assert.equal(attempt.pos.pockets.white, '', 'the mating knight came from the reserve');
+// Every board of the attempt is kept, so the page can step back through the line.
+assert.equal(attempt.history.length, 4, 'the start and one board per move');
+assert.equal(attempt.history[0].pos.pieces.c5, 'N', 'the first board is the puzzle start');
+assert.deepEqual(attempt.history[0].last, ['e8', 'f8'], 'with the opponent\'s move that led there');
+assert.deepEqual(attempt.history[1].last, ['c5', 'd7']);
+assert.equal(attempt.history[2].pos.pieces.g8, 'k', 'after the defender\'s reply');
+assert.equal(attempt.history[3].pos, attempt.pos, 'the last board is the live one');
 const revealed = new Attempt(puzzle);
 while (revealed.step()) { /* play the line out */ }
 assert.ok(revealed.failed && revealed.done, 'showing the solution counts as a miss');

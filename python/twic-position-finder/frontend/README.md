@@ -357,8 +357,10 @@ app.ts          page controller: play, reply, Solution, Retry, #<id> deep links 
 Solving shows only the board, its two pockets, one feedback box in lila's
 words ("Black to move", then "Best move!" or "Solved!"; no mate count and no
 icon), the moves and four buttons; who played the game and whether they found
-the move stay out of the way. Once a puzzle is over, **Analyse this board**
-opens its position on `/bughouse`.
+the move stay out of the way. The moves are clickable: a click, ←/→,
+Home/End or the two small arrows beside them show an earlier board of the
+line, and the board stays locked until play is back on the latest move. Once a
+puzzle is over, **Analyse this board** opens its position on `/bughouse`.
 
 Styles: the shared trainer vocabulary (`src/styles/trainer.css`, also used by
 the Tactics Trainer), the board and pocket in `src/styles/bughouse-board.css`
@@ -447,6 +449,6 @@ scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test
   failed download and a phone's first visit, and writes screenshots to
   `build/bughouse-web/`.
 - `test:puzzles:browser` drives `/bughouse-puzzles`: the FICS set by default,
-  Settings switching to engine games, one engine puzzle solved on the board,
-  results kept per set, and deep links opening the right set; screenshots
+  Settings switching to engine games, one engine puzzle solved on the board
+  and stepped back through, results kept per set, and deep links opening the right set; screenshots
   also go to `build/bughouse-web/`.
