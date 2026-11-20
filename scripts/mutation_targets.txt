@@ -316,6 +316,21 @@
 #     `baseline + .05` (a float the estimate does not land on exactly).
 #   lib/features/players/saved_games.dart:281 the disposed flag (taking it
 #     down closes its refreshes first).
+# lib/features/players, swept Nov 20 2026: files whose only survivors are
+# equivalent, a widget's look or a default constant:
+#   lib/features/players/players.dart:20 `_stopLookup`'s start (a lookup
+#     clears it before reading it), :131 `busy` during a retry (a save is
+#     refused while one waits to be retried anyway, and a second retry
+#     joins the running one), :182 the `false` answered for a group gone
+#     (the one caller ignores the answer).
+#   lib/features/players/player_games.dart:126 the off-thread size: the
+#     same corpus either side of it.
+#   lib/features/players/download_dialog.dart:29, :30 the fields' starts
+#     (initState sets each), :61 `canFail` (the look), :125-126, :135-136
+#     the steppers' bounds (a kept range is clamped to them when read).
+#   lib/features/players/group_dialog.dart:32 the rounds' start (initState
+#     sets it), :100-101 the stepper's bounds, :74 autofocus (the look).
+#   lib/features/players/player_lookup.dart:72 one line: the look.
 #   lib/features/settings/lichess_account.dart:179 `Connecting`'s
 #     `browserOpened` default (shown only until the login says whether the
 #     browser took the page).
