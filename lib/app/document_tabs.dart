@@ -186,9 +186,19 @@ final class DocumentTabs {
     _selecting = id;
     try {
       if (page.source case final source?) {
-        final result = page.viewedFile
-            ? await requests.openFile(source, game: page.game, keepPlace: true)
-            : await requests.open(source, game: page.game);
+        final result = switch (mode) {
+          _ when page.viewedFile => await requests.openFile(
+            source,
+            game: page.game,
+            keepPlace: true,
+          ),
+          // Handed to the viewer, it comes back among its games, as then.
+          Mode.pgnViewer when page.game != null => await requests.readInViewer(
+            source,
+            game: page.game,
+          ),
+          _ => await requests.open(source, game: page.game),
+        };
         if (_disposed || result is! RequestDone || session.source != source) {
           return;
         }

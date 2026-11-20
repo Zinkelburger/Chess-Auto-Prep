@@ -206,6 +206,28 @@ void main() {
     expect(w.session.game, 1);
   });
 
+  test('a study handed to the viewer comes back with its game list when '
+      'its tab is picked', () async {
+    final study = studyRef('Openings');
+    w.store.documents[study] = store.Opened(
+      threeChapterStudy,
+      scriptedRevision(threeChapterStudy),
+    );
+    await w.requests.openStudy(study, chapter: 1);
+    await w.requests.readInViewer(study, game: 1);
+    expect(w.viewer.file, study);
+    keepClassics();
+    await w.requests.openFile(classics, game: 0);
+    expect(w.viewer.file, classics);
+
+    await go(Mode.repertoires);
+    await w.requests.documents.select(study);
+    expect(w.requests.mode, Mode.pgnViewer);
+    expect(w.session.source, study);
+    expect(w.session.game, 1);
+    expect(w.viewer.file, study);
+  });
+
   test('Back after picking another mode\'s tab goes to the document and '
       'mode that were up before it', () async {
     final study = studyRef('Openings');
