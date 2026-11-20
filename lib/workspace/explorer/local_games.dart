@@ -11,6 +11,7 @@ import '../../chess/pgn/chapter_line.dart';
 import '../../chess/tactics/game_ids.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
+import '../../storage/document_ref.dart';
 import '../../storage/my_accounts.dart';
 import '../../storage/my_games_files.dart';
 import '../latest.dart';
@@ -86,6 +87,9 @@ abstract interface class SavedGames implements LocalGames {
   /// The PGN of the game the games list names [id], while it is in the
   /// tree; null otherwise.
   String? gamePgn(String id);
+
+  /// The PGN to copy into a collection, confirmed by a successful read.
+  Future<String?> readGamePgn(String id);
 }
 
 /// `This file`: the games of the document open in the workspace, narrowed
@@ -262,6 +266,8 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
   OpeningIndex? _index;
   IndexBuild? _build;
   Map<String, String> _texts = const {};
+  Map<DocumentRef, (GameSite, List<String>)> _accountGames = const {};
+  Set<String>? _readableTexts;
   List<String> _from = const [];
   final _reads = Latest();
   bool _disposed = false;
@@ -282,6 +288,21 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
 
   @override
   String? gamePgn(String id) => _texts[id];
+
+  @override
+  Future<String?> readGamePgn(String id) async {
+    final text = gamePgn(id);
+    if (_disposed || text == null) return null;
+    final readable = _readableTexts?.contains(text) ?? true;
+    if (_state is TreeBuilt && readable) return text;
+    final ticket = _reads.now;
+    final read = await _gather(() => ticket.overtaken);
+    if (read == null || ticket.overtaken) return null;
+    return read.accountGames.values
+        .expand((file) => file.$2)
+        .where((game) => _idOf(game) == id)
+        .firstOrNull;
+  }
 
   @override
   void want() {
@@ -306,8 +327,14 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
     notifyListeners();
     try {
       final read = await _gather(() => ticket.overtaken);
-      if (read == null || ticket.overtaken) return;
-      final corpus = read.corpus;
+      if (ticket.overtaken) return;
+      if (read == null) throw StateError('Could not read your saved accounts.');
+      final retained = _accountGames.entries.where(
+        (entry) => read.unavailable.containsKey(entry.key),
+      );
+      // Readable duplicates win, then retained files in their previous order.
+      final accountGames = {...read.accountGames}..addEntries(retained);
+      final corpus = myGamesCorpus(files: accountGames.values.toList());
       final index = corpus.texts.isEmpty
           ? null
           : await _indexCorpus(corpus, ticket);
@@ -316,17 +343,26 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
       if (ticket.overtaken || (index == null && corpus.texts.isNotEmpty)) {
         return;
       }
+      _readableTexts = retained.isEmpty
+          ? null
+          : {for (final (_, games) in read.accountGames.values) ...games};
+      _accountGames = accountGames;
       _index = index;
       _texts = Map.unmodifiable({
         for (final (i, id) in corpus.ids.indexed) id: corpus.texts[i],
       });
       _from = List.unmodifiable(corpus.from);
-      _state = index == null
+      final notice = read.unavailable.isEmpty
+          ? null
+          : 'Could not read your ${read.unavailable.values.join(' and ')} games.';
+      _state = index == null && notice != null
+          ? TreeFailed(notice)
+          : index == null
           ? const TreeEmpty(
               'No games of yours are saved yet. '
               'Get games in Tactics or My games.',
             )
-          : const TreeBuilt();
+          : TreeBuilt(notice: notice);
     } on Object catch (error) {
       if (ticket.overtaken) return;
       log.w('read your games', error);
@@ -362,25 +398,23 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
 
   Future<_MyGamesRead?> _gather(bool Function() gone) async {
     final accountRead = await _accounts.snapshot();
-    if (gone()) return null;
-    if (accountRead is! AccountsSnapshot) {
-      throw StateError('Your saved accounts could not be read.');
-    }
+    if (gone() || accountRead is! AccountsSnapshot) return null;
     final accounts = accountRead.accounts;
-    final files = <(GameSite, List<String>)>[];
+    final accountGames = <DocumentRef, (GameSite, List<String>)>{};
+    final unavailable = <DocumentRef, String>{};
     for (final MapEntry(key: site, value: account) in accounts.entries) {
       final read = await _cache.snapshotAll(site, account.username);
       if (gone()) return null;
-      // One account's file that cannot be read leaves its games out; the
-      // other accounts' games are still worth an explorer.
-      if (read is! CachedGamesSnapshot) {
-        log.w('read your ${site.label} games', '$read');
-        continue;
+      switch (read) {
+        case CachedGamesSnapshot(:final ref, :final games):
+          accountGames[ref] = (site, [for (final game in games) game.text]);
+        case CachedGamesUnavailable(:final detail):
+          log.w('read your ${site.label} games', detail);
+          unavailable[_cache.refFor(site, account.username)] = site.label;
       }
-      files.add((site, [for (final game in read.games) game.text]));
     }
     if (gone()) return null;
-    return (corpus: myGamesCorpus(files: files));
+    return (accountGames: accountGames, unavailable: unavailable);
   }
 
   void _stop() {
@@ -397,7 +431,10 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
   }
 }
 
-typedef _MyGamesRead = ({MyGamesCorpus corpus});
+typedef _MyGamesRead = ({
+  Map<DocumentRef, (GameSite, List<String>)> accountGames,
+  Map<DocumentRef, String> unavailable,
+});
 
 /// The user's games gathered from every downloaded file, each once, newest
 /// first, with the id the games list names each by.

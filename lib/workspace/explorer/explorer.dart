@@ -351,7 +351,8 @@ final class Explorer extends ChangeNotifier {
       TreeFailed(:final sentence) => sentence,
       _ => null,
     };
-    if (games.answerAt(fen) case final answer?) {
+    if (games.answerAt(fen) case final answer?
+        when !answer.isEmpty || _notice == null) {
       _show(_shown(fen, answer));
       return;
     }
@@ -360,6 +361,7 @@ final class Explorer extends ChangeNotifier {
       TreeUnbuilt() => const ExplorerReading(0, 0),
       TreeEmpty(:final sentence) => ExplorerNothing(sentence),
       TreeFailed(:final sentence) => ExplorerFailed(sentence),
+      TreeBuilt(:final notice?) => ExplorerFailed(notice),
       TreeBuilt() => const ExplorerNothing('No games found for this position.'),
     });
   }
@@ -661,7 +663,7 @@ final class ExplorerDatabases {
           game.id,
           masters: source == ExplorerSource.masters,
         ),
-        ExplorerSource.myGames => myGames.gamePgn(game.id),
+        ExplorerSource.myGames => myGames.readGamePgn(game.id),
         ExplorerSource.thisFile || ExplorerSource.book => null,
       };
 }

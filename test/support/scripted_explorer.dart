@@ -127,6 +127,9 @@ final class ScriptedLocalGames extends ChangeNotifier implements SavedGames {
 
   @override
   String? gamePgn(String id) => pgns[id];
+
+  @override
+  Future<String?> readGamePgn(String id) async => gamePgn(id);
 }
 
 /// Where fetched games are kept in these tests.

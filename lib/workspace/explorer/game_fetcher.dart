@@ -62,9 +62,17 @@ final class GameFetcher extends ChangeNotifier {
   }) async {
     _fetching = game.id;
     notifyListeners();
+    final name = '${gameFileName(game, source)}.pgn';
+    final ref = ChapterRef.at(p.join(_collections, 'explorer games', name));
     String? pgn;
+    var alreadyKept = false;
     try {
-      pgn = await _databases.gamePgn(game, source);
+      alreadyKept =
+          source == ExplorerSource.myGames &&
+          await _documents.open(ref) is store.Opened;
+      if (!alreadyKept && !_disposed) {
+        pgn = await _databases.gamePgn(game, source);
+      }
     } on Object catch (error) {
       // Fetching ends either way, or every row would wait on this one.
       log.w('fetch the explorer game ${game.id}', error);
@@ -72,14 +80,8 @@ final class GameFetcher extends ChangeNotifier {
     if (_disposed) return const GameNotKept('');
     _fetching = null;
     notifyListeners();
+    if (alreadyKept) return GameKept(ref, ply: ply);
     if (pgn == null) return const GameNotKept('Could not fetch that game.');
-    final ref = ChapterRef.at(
-      p.join(
-        _collections,
-        'explorer games',
-        '${gameFileName(game, source)}.pgn',
-      ),
-    );
     return switch (await _documents.create(ref, pgn)) {
       store.Created() || store.Collision() => GameKept(ref, ply: ply),
       store.IoFailure(:final detail) => GameNotKept(
