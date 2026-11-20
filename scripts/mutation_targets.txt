@@ -316,6 +316,52 @@
 #     `baseline + .05` (a float the estimate does not land on exactly).
 #   lib/features/players/saved_games.dart:281 the disposed flag (taking it
 #     down closes its refreshes first).
+# lib/features/players, swept Nov 20 2026: files whose only survivors are
+# equivalent, a widget's look or a default constant:
+#   lib/features/players/players.dart:20 `_stopLookup`'s start (a lookup
+#     clears it before reading it), :131 `busy` during a retry (a save is
+#     refused while one waits to be retried anyway, and a second retry
+#     joins the running one), :182 the `false` answered for a group gone
+#     (the one caller ignores the answer).
+#   lib/features/players/player_games.dart:126 the off-thread size: the
+#     same corpus either side of it.
+#   lib/features/players/download_dialog.dart:29, :30 the fields' starts
+#     (initState sets each), :61 `canFail` (the look), :125-126, :135-136
+#     the steppers' bounds (a kept range is clamped to them when read).
+#   lib/features/players/group_dialog.dart:32 the rounds' start (initState
+#     sets it), :100-101 the stepper's bounds, :74 autofocus (the look).
+#   lib/features/players/player_lookup.dart:72 one line: the look.
+#   lib/features/players/player_dialogs.dart:182, :371 the boxes' line
+#     counts and :362 `canFail`: the look.
+#   lib/features/players/person_row.dart:54 the wide layout at exactly the
+#     break, :89, :122 the line counts: the look.
+#   lib/features/players/player_book.dart:27 `busy`'s start (reading the
+#     player's games, which a check needs, resets it), :56 `busy` while a
+#     check runs (the progress shown; a second check overtakes the first
+#     and comes to the same gaps).
+#   lib/features/players/player_picker.dart:77 the search's padding, :138,
+#     :144 the row's line counts: the look.
+#   lib/features/players/players_screen.dart:198, :424, :430 the line
+#     counts, :321, :360 the rules' height: the look.
+#   lib/features/players/analysis_panel.dart:603 the list switch's rebuild
+#     test past its list (the app has one theme, so the colour never
+#     changes; `==` on it only rebuilds more often), :264 the 100 positions
+#     listed (a default), :202, :400 paddings, :375, :411 the header's and
+#     status's type and lines: the look.
+#   lib/features/players/analysis_rows.dart:117-118, :193, :203, :236, :256
+#     line counts and wrapping: the look.
+#   lib/features/players/analysis_filters.dart:105, :116 the steppers'
+#     upper bounds (defaults), :52 the padding: the look.
+#   lib/features/players/findings_view.dart:180-181, :191-192, :222-223,
+#     :233-234 the steppers' bounds (defaults), :67 the bar's fraction (the
+#     progress shown), :102, :147, :286, :317 line counts and :134, :272
+#     paddings: the look.
+#   lib/features/players/player_book_pane.dart:35, :57 paddings, :76, :128,
+#     :137 line counts: the look.
+#   lib/features/players/player_tree_pane.dart:183 the share of no games
+#     (a row is drawn only for a move some game played, so the total is
+#     never 0), :61, :66, :139 the heading's padding, lines and height: the
+#     look.
 #   lib/features/settings/lichess_account.dart:179 `Connecting`'s
 #     `browserOpened` default (shown only until the login says whether the
 #     browser took the page).

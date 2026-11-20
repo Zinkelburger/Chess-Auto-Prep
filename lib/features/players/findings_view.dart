@@ -121,11 +121,13 @@ class _EngineRunState extends State<EngineRun> {
   /// What the last run came to, and the way to the findings put aside.
   /// Before any run, what the button looks for.
   Widget _summary(PlayerHunt hunt, ThemeData theme) {
+    final checked =
+        '${hunt.done} ${hunt.done == 1 ? 'position' : 'positions'} checked';
     if (hunt.findings.isEmpty) {
       final words = hunt.running
           ? ''
           : hunt.total > 0
-          ? '${hunt.done} positions checked · no findings'
+          ? '$checked · no findings'
           : 'Finds positions this player handles badly, and strong replies '
                 'their opponents never tried.';
       return Padding(
@@ -140,8 +142,7 @@ class _EngineRunState extends State<EngineRun> {
           child: Text(
             hunt.running
                 ? '$found ${found == 1 ? 'finding' : 'findings'} so far'
-                : '${hunt.done} positions checked · '
-                      '$found ${found == 1 ? 'finding' : 'findings'}',
+                : '$checked · $found ${found == 1 ? 'finding' : 'findings'}',
             style: theme.textTheme.labelSmall,
             maxLines: 2,
           ),
