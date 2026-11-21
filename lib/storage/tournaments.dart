@@ -123,9 +123,13 @@ final class FileTournaments
 
   /// The games file of [id], named without touching the disk: a screen
   /// asks for it while it builds, where a failing disk must not throw. The
-  /// document store checks the file itself when it is opened.
+  /// document store checks the file itself when it is opened. It is spelled
+  /// under the configured folder, as every other document is, so a
+  /// Documents folder reached through a symlink still holds it.
   @override
-  DocumentRef games(String id) => DocumentRef(p.join(_named(id), 'games.pgn'));
+  DocumentRef games(String id) => DocumentRef(
+    p.join(_configuredRoot.path, p.basename(_named(id)), 'games.pgn'),
+  );
   String _metadata(String id) => p.join(_folder(id), 'tournament.json');
   String _pending(String id) => p.join(_folder(id), '.v2-pending.json');
 

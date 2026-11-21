@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate' show ReceivePort;
 
+import 'package:chess_auto_prep/app/environment.dart';
 import 'package:chess_auto_prep/chess/tournament/config.dart';
 import 'package:chess_auto_prep/chess/tournament/result.dart';
+import 'package:chess_auto_prep/storage/pgn_file_import.dart';
 import 'package:chess_auto_prep/storage/pgn_file_store.dart';
 import 'package:chess_auto_prep/storage/tournaments.dart';
 import 'package:crypto/crypto.dart';
@@ -49,6 +51,43 @@ void main() {
     );
   });
   tearDown(() => files.dispose());
+  test('saves the first tournament game when Documents is a symlink', () async {
+    final link = Link(p.join(files.root.path, 'linked-documents'));
+    await link.create(files.documents.path);
+    final env = AppEnvironment.native(
+      documents: Directory(link.path),
+      support: files.support,
+    );
+    addTearDown(env.close);
+    final tournaments = env.tournaments!;
+    final before = initial();
+    expect(
+      await tournaments.create(before),
+      isA<TournamentSaved<Tournament>>(),
+    );
+
+    const gamePgn =
+        '[Event "Match"]\n[Result "0-1"]\n\n1. f3 e5 2. g4 Qh4# 0-1\n';
+    final after = before.changed({
+      'status': 'running',
+      'games': [
+        {'gameIndex': 0, 'result': 'blackWins'},
+      ],
+    });
+    final saved = await tournaments.save(
+      before,
+      after,
+      gamePgn,
+      expectedPgn: null,
+    );
+    expect(saved, isA<TournamentSaved<Tournament>>());
+    final games = File(p.join(root.path, before.id, 'games.pgn'));
+    expect(await games.readAsBytes(), utf8.encode(gamePgn));
+    final path = tournaments.games(before.id).path;
+    final opened = await env.fileImport.insideDocuments(path) as FileToOpen;
+    expect(opened.copied, isFalse);
+    expect(opened.path, path);
+  }, skip: Platform.isWindows ? 'symlink privileges not assumed' : false);
   test(
     'one damaged record reports its name without hiding other tournaments',
     () async {
