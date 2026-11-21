@@ -46,7 +46,7 @@ final class SpawnedProcess implements UciProcess {
     // console's code page, and a decoding error here would go unheard.
     _process.stderr
         .transform(const Utf8Decoder(allowMalformed: true))
-        .transform(const LineSplitter())
+        .transform(const BoundedLines())
         .listen(_remember, onError: (Object _) {});
   }
 
@@ -90,7 +90,7 @@ final class SpawnedProcess implements UciProcess {
   Stream<String> get lines async* {
     yield* _process.stdout
         .transform(const Utf8Decoder(allowMalformed: true))
-        .transform(const LineSplitter())
+        .transform(const BoundedLines())
         .map((line) {
           transcript.add(line);
           return line;
@@ -126,6 +126,83 @@ final class SpawnedProcess implements UciProcess {
 }
 
 const _keptErrors = 20;
+
+/// The most of one line kept from an engine. UCI lines run to a few hundred
+/// characters; a program that writes megabytes without a line break is not
+/// held in memory whole.
+const maxEngineLine = 64 * 1024;
+
+/// Splits text into lines as [LineSplitter] does, at `\n`, `\r\n` or `\r`,
+/// keeping only the first [maxEngineLine] characters of each line and
+/// dropping the rest of it, so the line after a runaway one still arrives.
+final class BoundedLines extends StreamTransformerBase<String, String> {
+  const BoundedLines();
+
+  @override
+  Stream<String> bind(Stream<String> stream) =>
+      Stream.eventTransformed(stream, _BoundedLineSink.new);
+}
+
+final class _BoundedLineSink implements EventSink<String> {
+  _BoundedLineSink(this._out);
+
+  final EventSink<String> _out;
+  final _line = StringBuffer();
+
+  /// The last chunk ended in `\r`; a `\n` starting the next one ends nothing.
+  bool _afterCarriage = false;
+
+  static const _lf = 0x0A;
+  static const _cr = 0x0D;
+
+  @override
+  void add(String chunk) {
+    var i = 0;
+    if (_afterCarriage && chunk.isNotEmpty) {
+      _afterCarriage = false;
+      if (chunk.codeUnitAt(0) == _lf) i = 1;
+    }
+    var start = i;
+    for (; i < chunk.length; i++) {
+      final c = chunk.codeUnitAt(i);
+      if (c != _lf && c != _cr) continue;
+      _keep(chunk, start, i);
+      _emit();
+      if (c == _cr) {
+        if (i + 1 == chunk.length) {
+          _afterCarriage = true;
+        } else if (chunk.codeUnitAt(i + 1) == _lf) {
+          i++;
+        }
+      }
+      start = i + 1;
+    }
+    _keep(chunk, start, chunk.length);
+  }
+
+  void _keep(String chunk, int start, int end) {
+    if (start >= end) return;
+    final room = maxEngineLine - _line.length;
+    final take = end - start < room ? end - start : room;
+    if (take > 0) _line.write(chunk.substring(start, start + take));
+  }
+
+  void _emit() {
+    _out.add(_line.toString());
+    _line.clear();
+  }
+
+  @override
+  void addError(Object error, [StackTrace? stackTrace]) =>
+      _out.addError(error, stackTrace);
+
+  @override
+  void close() {
+    if (_line.isNotEmpty) _emit();
+    _out.close();
+  }
+}
+
 const _transcriptLines = 40;
 
 /// The first 40 lines an engine wrote, standard output and standard
