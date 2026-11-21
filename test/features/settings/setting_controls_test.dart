@@ -57,7 +57,7 @@ void main() {
     await tester.pump();
     expect(
       tester.getSemantics(find.byType(EditableText).first),
-      containsSemantics(isTextField: true, isObscured: true),
+      isSemantics(isTextField: true, isObscured: true),
     );
     semantics.dispose();
   });

@@ -103,7 +103,7 @@ void main() {
     );
     await pump(tester);
     await engineSays(tester, const [('N@e4', 200)]);
-    final rings = board(tester).shapes!.whereType<Circle>();
+    final rings = board(tester).shapes.whereType<Circle>();
     expect(rings.where((c) => c.orig == Square.e4).map((c) => c.color), [
       engineBestArrow,
     ]);

@@ -120,13 +120,10 @@ void main() {
     final semantics = tester.ensureSemantics();
     play(['e2e4', 'e7e5']);
     await pump(tester);
-    expect(
-      tester.getSemantics(find.text('e5')),
-      containsSemantics(isSelected: true),
-    );
+    expect(tester.getSemantics(find.text('e5')), isSemantics(isSelected: true));
     expect(
       tester.getSemantics(find.text('1. e4')),
-      containsSemantics(isSelected: false),
+      isSemantics(isSelected: false),
     );
     semantics.dispose();
   });

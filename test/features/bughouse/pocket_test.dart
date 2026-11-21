@@ -105,13 +105,13 @@ void main() {
       tester.getSemantics(
         find.bySemanticsLabel(RegExp('^White: 1 knight in hand')),
       ),
-      containsSemantics(isSelected: true),
+      isSemantics(isSelected: true),
     );
     expect(
       tester.getSemantics(
         find.bySemanticsLabel(RegExp('^White: 1 bishop in hand')),
       ),
-      containsSemantics(isSelected: false),
+      isSemantics(isSelected: false),
     );
     semantics.dispose();
   });
@@ -170,7 +170,7 @@ void main() {
           body: Center(
             child: SizedBox.fromSize(
               size: BughousePreviewBoard.size,
-              child: BughousePreviewBoard(
+              child: const BughousePreviewBoard(
                 position: Crazyhouse.initial,
                 orientation: Side.white,
                 lastMove: 'e2e4',
