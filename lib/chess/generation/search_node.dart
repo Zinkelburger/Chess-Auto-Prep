@@ -322,10 +322,11 @@ int nodesIn(SearchNode node) => switch (node) {
 };
 
 /// Whether [node] is searched [plies] half-moves deep: no position nearer
-/// than that is left unexpanded or cut off at a horizon, so going on with
-/// the same depth would add nothing.
+/// than that is left unexpanded or cut off at a horizon, and none at that
+/// depth is left unscored by a search stopped before reaching it, so going
+/// on with the same depth would add nothing.
 bool searchedTo(SearchNode node, int plies) => switch (node) {
-  _ when plies <= 0 => true,
+  _ when plies <= 0 => node is! FrontierNode || node.evaluated,
   TerminalNode() => true,
   HorizonNode() || FrontierNode() => false,
   OurNode(:final candidates) => candidates.every(
@@ -343,9 +344,9 @@ bool searchedTo(SearchNode node, int plies) => switch (node) {
 /// is not cut again, because its shares are already renormalised.
 SearchNode cutReplies(SearchNode node, {double? mass, int? most}) =>
     switch (node) {
-      OurNode(:final fen, :final evalForUs, :final candidates) => OurNode.over(
+      OurNode(:final fen, :final candidates) => OurNode.over(
         fen: fen,
-        evalForUs: evalForUs,
+        evalForUs: node.evaluated ? node.evalForUs : null,
         candidates: [
           for (final c in candidates)
             CandidateMove(
@@ -354,33 +355,27 @@ SearchNode cutReplies(SearchNode node, {double? mass, int? most}) =>
             ),
         ],
       ),
-      OpponentNode(
-        :final fen,
-        :final evalForUs,
-        :final replies,
-        :final repliesFrom,
-      ) =>
-        () {
-          final shares = likeliestReplies(
-            {for (final r in replies) r.move.uci: r.probability},
-            mass: mass,
-            most: most,
-          );
-          return OpponentNode.over(
-            fen: fen,
-            evalForUs: evalForUs,
-            repliesFrom: repliesFrom,
-            replies: [
-              for (final r in replies)
-                if (shares[r.move.uci] case final share?)
-                  ReplyMove(
-                    move: r.move,
-                    probability: share,
-                    child: cutReplies(r.child, mass: mass, most: most),
-                  ),
-            ],
-          );
-        }(),
+      OpponentNode(:final fen, :final replies, :final repliesFrom) => () {
+        final shares = likeliestReplies(
+          {for (final r in replies) r.move.uci: r.probability},
+          mass: mass,
+          most: most,
+        );
+        return OpponentNode.over(
+          fen: fen,
+          evalForUs: node.evaluated ? node.evalForUs : null,
+          repliesFrom: repliesFrom,
+          replies: [
+            for (final r in replies)
+              if (shares[r.move.uci] case final share?)
+                ReplyMove(
+                  move: r.move,
+                  probability: share,
+                  child: cutReplies(r.child, mass: mass, most: most),
+                ),
+          ],
+        );
+      }(),
       _ => node,
     };
 

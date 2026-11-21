@@ -4,6 +4,7 @@
 // settings alone; and no pane splits while the Analysis tab holds a board
 // of its own.
 import 'package:chess_auto_prep/app/mode.dart';
+import 'package:chess_auto_prep/chess/pgn/game_review.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/features/settings/setting_rows.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
@@ -67,6 +68,59 @@ void main() {
     await saveCopy(tester, 'Spare');
     final collections = w.parts.documents.viewer.collections;
     expect(paths(), contains('$collections/Spare.pgn'));
+  });
+
+  testWidgets('a review written into the open file while the copy is named '
+      'still gives a copy, with the review in it', (tester) async {
+    await w.pumpShell(tester);
+    await w.requests.open(kidMain);
+    await tester.pumpAndSettle();
+    await chooseAction(tester, 'Save a copy…');
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(Dialog),
+        matching: find.byType(TextField),
+      ),
+      'Spare',
+    );
+    // A review of every game writes each into the file as it ends, and it
+    // goes on while the dialog is up.
+    expect(
+      w.session.apply(
+        (now) =>
+            annotateGame(now, const [ReviewValue(15, '0.15', [])], game: 1),
+      ),
+      isNull,
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save a copy'));
+    await tester.pumpAndSettle();
+    final copy = w.store.documents.entries
+        .where((e) => e.key.path == '/repertoires/KID/Spare.pgn')
+        .firstOrNull
+        ?.value;
+    expect(copy, isA<Opened>());
+    expect((copy! as Opened).text, contains('[%eval 0.15]'));
+  });
+
+  testWidgets('a pending Actions copy cannot write a newly opened chapter', (
+    tester,
+  ) async {
+    await w.pumpShell(tester);
+    await w.requests.open(kidMain);
+    await tester.pumpAndSettle();
+    await chooseAction(tester, 'Save a copy…');
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(Dialog),
+        matching: find.byType(TextField),
+      ),
+      'KID notes',
+    );
+    await w.requests.open(benkoMain);
+    expect(w.session.source, benkoMain);
+    await tester.tap(find.widgetWithText(FilledButton, 'Save a copy'));
+    await tester.pumpAndSettle();
+    expect(paths(), isNot(contains('/repertoires/benko/KID notes.pgn')));
   });
 
   testWidgets('cancelling Discard changes in Actions keeps both games’ edits '

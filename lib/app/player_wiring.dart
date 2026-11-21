@@ -209,7 +209,8 @@ final class PlayerModes {
     if (_disposed) return null;
     // A file already under this name was made by an earlier click whose
     // link was not saved; it is adopted unless someone else links it.
-    if (made is! Created && (made is! Collision || _linkedElsewhere(ref))) {
+    if (made is! Created &&
+        (made is! Collision || _linkedElsewhere(ref, except: player.id))) {
       requests.say(
         'Could not create the prep study. A file with that name may already exist; use Link study to open it.',
       );
@@ -251,15 +252,22 @@ final class PlayerModes {
     }
   }
 
-  /// Whether a player or group already links [ref], so that a file found
-  /// under a derived name is theirs and not one to adopt. Case is ignored:
-  /// names differing only by case share one file on Windows and macOS.
-  bool _linkedElsewhere(ChapterRef ref) {
+  /// Whether a player or group already links [ref], as a prep study or
+  /// through Link study, so that a file found under a derived name is theirs
+  /// and not one to adopt. The player [except] may adopt a file they linked
+  /// themselves. Case is ignored: names differing only by case share one
+  /// file on Windows and macOS.
+  bool _linkedElsewhere(ChapterRef ref, {String? except}) {
     bool same(Object? path) =>
         path is String &&
         path.isNotEmpty &&
         p.equals(path.toLowerCase(), ref.path.toLowerCase());
-    return directory.players.any((person) => same(person.text('prep_file'))) ||
+    return directory.players.any(
+          (person) =>
+              same(person.text('prep_file')) ||
+              (person.id != except &&
+                  person.studies.any((link) => same(link.path))),
+        ) ||
         directory.groups.any((g) => same(g.study));
   }
 

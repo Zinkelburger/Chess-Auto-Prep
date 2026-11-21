@@ -117,9 +117,13 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
   }
 
   Future<void> _saveCopy() async {
+    final session = widget.session;
+    final source = CopySource(session);
     final name = await askCopyName(context);
     if (name == null || !mounted) return;
-    final result = await widget.session.saveCopy(name);
+    final result = source.matches(session)
+        ? await session.saveCopy(name)
+        : copyOvertaken;
     if (!mounted) return;
     setState(() => _notice = copySaid(result));
   }

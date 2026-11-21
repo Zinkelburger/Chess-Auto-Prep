@@ -57,10 +57,17 @@ class _PlayerPickerState extends State<PlayerPicker> {
         if (widget.players.error case final error?)
           ListMessage(
             error,
-            action: OutlinedButton(
-              onPressed: widget.players.load,
-              child: const Text('Try again'),
-            ),
+            action: widget.players.needsRetry
+                ? OutlinedButton(
+                    onPressed: widget.players.busy
+                        ? null
+                        : widget.players.retry,
+                    child: const Text('Retry save'),
+                  )
+                : OutlinedButton(
+                    onPressed: widget.players.load,
+                    child: const Text('Try again'),
+                  ),
           ),
         if (all.isEmpty)
           ListMessage(
