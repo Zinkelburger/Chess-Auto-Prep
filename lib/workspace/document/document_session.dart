@@ -603,8 +603,8 @@ final class DocumentSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Why an edit may not happen now, or null when it may: a read-only
-  /// document not holding edits, or an undo still reading what it restored.
+  /// Why an edit may not happen now, or null: a read-only file, or an undo
+  /// going out, which edits wait for unless Save hands them over to write.
   String? _editBlocked() {
     if (_readOnly case final reason? when !_holdsEdits) {
       // What is left is the standing refusal, which says why.
@@ -615,7 +615,7 @@ final class DocumentSession extends ChangeNotifier {
     if (_saver.referencesPending || _saver.state is DocumentFollowing) {
       return _editRefused('the chapter must finish saving or be read again');
     }
-    if (_restoring || (_saver.undoing && _holdsEdits)) {
+    if (_restoring || (_saver.undoing && _holdsEdits && !_editors.saving)) {
       return _editRefused('an undo is still putting the chapter back');
     }
     return null;
@@ -717,7 +717,7 @@ final class DocumentSession extends ChangeNotifier {
 
   /// Writes the held edits as one save; false when they stay held.
   bool keepHeld() {
-    _editors.commit();
+    _editors.commit(saving: _readOnly == null && _saver.takesWords);
     _saveHeld();
     return _held == null;
   }
