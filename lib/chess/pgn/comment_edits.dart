@@ -113,11 +113,19 @@ CommentResult setGlyph(
   bool position = false,
 }) {
   if (at.isRoot) return _unchanged(chapter);
+  // As with notes, the glyphs shown are the first game's that has any; a
+  // game with other glyphs on the move was never on screen, so it keeps
+  // them. With none of this kind shown, the glyph joins the ones that are.
+  final inGroup = position ? isPositionGlyph : isGlyph;
+  final shown = chapter.tree.nodeAt(at)?.nags ?? const <int>[];
+  final group = shown.where(inGroup).toList();
   return _edited(
     chapter,
     at,
     (node) => _glyphed(node, nag, position: position),
-    holds: (node) => node.nags.any(position ? isPositionGlyph : isGlyph),
+    holds: group.isEmpty
+        ? (node) => shown.isNotEmpty && _sameNags(node.nags, shown)
+        : (node) => _sameNags(node.nags.where(inGroup).toList(), group),
   );
 }
 
