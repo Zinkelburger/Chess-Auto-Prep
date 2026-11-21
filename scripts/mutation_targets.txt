@@ -670,6 +670,31 @@
 #     never typed in are already empty), :316 the Elo stepper's top (a
 #     default), :42, :127, :143, :304, :450, :456 a width, a line count, an
 #     inset, a field's width, shrink-wrap and dense rows: the look.
+# lib/features/bughouse, with equivalent mutants a --max 30 sample can draw:
+#   lib/features/bughouse/board_moves.dart:35 the worked-on board's border
+#     colour, :75 the Last move icon, :158 a hand edit's muted ink, :367
+#     `softWrap`: the look; :330 the reveal's 100 ms scroll: timing.
+#   lib/features/bughouse/lab_lines.dart:243 the first move in bold, :130
+#     the rows' reserved height, :223 the sit word's width: the look; :29
+#     the eight moves a row shows (a default); :170 the copied line's step
+#     limit (a joint move holds at most two board moves, so it is never
+#     reached).
+#   lib/features/bughouse/pocket.dart:86 `skipTraversal` (the wrapper
+#     cannot take focus, so traversal never lands on it); :172, :176 `by > 0`
+#     -> `>=` (a step is 1 or -1); :319 `&&` -> `||` (a setState of the same
+#     value rebuilds the same, and a region taken down reports no exit);
+#     :94, :95, :348 the corners' and the count's offsets, :214 the black
+#     dot's ring, :242 the floated board's size, :316, :337 the hover tint:
+#     the look.
+#   lib/features/bughouse/table_boards.dart:218 `<` -> `<=` against the
+#     arrow cut-off (a shift computed from Q does not land on 0.2 exactly),
+#     :255 the wheel's step of 1 (`stepOn` reads only its sign) and `>` ->
+#     `>=` (a scroll of 0 has returned already), :262 the default shift
+#     (only the best arrow takes it, and its width ignores it), :618 `&&` ->
+#     `||` (only a middle press, which means nothing here, would clear the
+#     drawn shapes), :127, :469, :471 gaps and a width: the look.
+#   lib/features/bughouse/lab_panel.dart:59, :143 `gameCount > 1` -> `>= 1`
+#     (a file's count is 0 or at least 2), :161, :309 line counts: the look.
 # lib/features/settings, with equivalent mutants a --max 30 sample can draw:
 #   lib/features/settings/update_offer.dart:71 the 4 GiB cap's factors (a
 #     default constant; the cap's boundary is asserted at its value).
