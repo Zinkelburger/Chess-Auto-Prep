@@ -183,7 +183,11 @@ final class DocumentTabs {
     final side = page.side;
     final draft = page.draft;
     final from = requests.here;
+    // The user going to another mode meanwhile keeps them there.
+    final choice = requests.modeChoice;
     _selecting = id;
+    // Whether no newer request came while the tab's document was read.
+    var current = true;
     try {
       if (page.source case final source?) {
         final result = switch (mode) {
@@ -199,10 +203,13 @@ final class DocumentTabs {
           ),
           _ => await requests.open(source, game: page.game),
         };
-        if (_disposed || result is! RequestDone || session.source != source) {
-          return;
-        }
+        // A file put up before something newer came keeps the tab's edits
+        // and place, even though the window stays where the user went.
+        if (_disposed || session.source != source) return;
+        final asked = requests.navigation;
+        current = result is RequestDone;
         if (draft != null && !await _restore(page, source, draft)) return;
+        current = current && asked.current;
       } else if (page.board case final board?) {
         final result = await requests.analysisBoard(page: board);
         if (_disposed || result is! RequestDone) return;
@@ -210,7 +217,7 @@ final class DocumentTabs {
     } finally {
       if (_selecting == id) _selecting = null;
     }
-    requests.switchTo(mode, from: from);
+    if (current && choice.current) requests.switchTo(mode, from: from);
     session.cursor.goTo(cursor);
     if (session.orientation != side) session.flip();
   }
