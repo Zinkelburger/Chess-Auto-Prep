@@ -55,8 +55,9 @@ final class CommentUnwritable extends CommentRefused {
 /// Writes [text] as the comment of the node at [at].
 ///
 /// The root path is the chapter's introduction, the comment before the
-/// first move; a chapter with no games gets a game of no moves to hold it. Any other node is shared by every game that plays through
-/// it, so the comment is written into every game holding the words shown
+/// first move; a chapter with no games gets a game of no moves to hold it.
+/// Any other node is shared by every game that plays through it, so the
+/// comment is written into every game holding the words shown
 /// there, or into the first game when none holds any. A game holding other
 /// words keeps them: the chapter shows the note of the first game that
 /// holds one, so the user never saw those. Empty text removes the prose and keeps the move's
