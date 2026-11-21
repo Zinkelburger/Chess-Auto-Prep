@@ -70,6 +70,17 @@ void main() {
     expect(read.tree!.children.single.uci, 'a1b1');
   });
 
+  test('a FEN tag with space before its closing bracket sets the board', () {
+    final read = readGame(
+      '[Event "Endgame"]\n[FEN "7k/8/8/8/8/8/4P3/K7 w - - 0 1" ]\n\n1. e4 *',
+    );
+    expect(read.issues, isEmpty);
+    expect(
+      read.tree!.children.single.fen,
+      const Fen('7k/8/8/8/4P3/8/8/K7 b - - 0 1'),
+    );
+  });
+
   group('move numbers', () {
     test('are read however they are spaced', () {
       for (final game in const [
