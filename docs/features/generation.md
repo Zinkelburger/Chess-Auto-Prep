@@ -140,7 +140,8 @@ Stockfish and an outage hands the rest of the run to Stockfish. Remote scores
 never enter `eval_cache.db`.
 
 **Make lines** — on a writable repertoire chapter, for its side, after a run →
-a draft chapter `<chapter> (draft)` (then `(draft 2)`…) beside it: one game
+a draft chapter `<chapter> (draft)` (then `(draft 2)`…; a `/` in a course
+section's name becomes `_`) beside it: one game
 per line the search answered, at most 100, the lines that start with the same
 reply together and the reply games take most often first; near-copies fold
 into a kept line as a sideline of at most 6 plies or are dropped; lines whose

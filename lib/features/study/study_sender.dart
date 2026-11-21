@@ -21,7 +21,8 @@ import 'study_commands.dart' show studyNameOf;
 /// it is seen from. A chapter that came from the study being sent to, or
 /// was sent there before, names its Lichess chapter in `ChapterURL`: its
 /// moves and tags are put in place of Lichess's and it keeps its place
-/// there. Every other chapter is added. The chapters Lichess made are then
+/// there, once: a later chapter naming the same one is added. Every other
+/// chapter is added. The chapters Lichess made are then
 /// written into the study as `ChapterURL`, as one undoable edit, so sending
 /// again updates them instead of adding them twice.
 final class StudySender extends ChangeNotifier {
@@ -184,10 +185,16 @@ final class StudySender extends ChangeNotifier {
       null => null,
     };
     LichessWrite? result;
-    if (!run.fresh && link?.studyId == run.study && link?.chapterId != null) {
+    // Two chapters naming one Lichess chapter (a copy, a chapter imported
+    // again) would overwrite each other there: the first takes its place and
+    // the next goes as a new chapter.
+    if (!run.fresh &&
+        link?.studyId == run.study &&
+        link?.chapterId != null &&
+        run.replacing.add(link!.chapterId!)) {
       result = await _writer.replaceChapter(
         run.study,
-        link!.chapterId!,
+        link.chapterId!,
         pgn: pgn,
         tags: lichessTagsOf(line),
       );
@@ -355,6 +362,9 @@ final class _Run {
 
   /// The `ChapterURL` of each chapter Lichess made, by its place here.
   final urls = <int, String>{};
+
+  /// The Lichess chapters a chapter of this send has already gone in place of.
+  final replacing = <String>{};
   var added = 0, updated = 0, skipped = 0;
   LichessNotWritten? failure;
 }

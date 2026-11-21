@@ -46,13 +46,14 @@ void main() {
     },
   );
 
-  test('a PGN beside the repertoires belongs to the root itself', () {
+  test('a root-level PGN is its own repertoire', () {
     final catalog = RepertoireCatalog(
       files: ScriptedFiles(),
       root: '/repertoires',
     );
     addTearDown(catalog.dispose);
-    expect(catalog.repertoireOf('/repertoires/Loose.pgn'), '/repertoires');
+    final loose = p.join(catalog.root, 'Loose.pgn');
+    expect(catalog.repertoireOf(loose), loose);
     expect(catalog.repertoireOf('/repertoires/A/Main.pgn'), '/repertoires/A');
   });
 
