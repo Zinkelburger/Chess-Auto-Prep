@@ -19,8 +19,16 @@ final class DraftNotWritten extends DraftPublication {
 
 /// What the [number]th draft of [chapter] is called: `Chapter (draft)`,
 /// then `Chapter (draft 2)`, `Chapter (draft 3)`…
-String draftName(String chapter, int number) =>
-    number == 1 ? '$chapter (draft)' : '$chapter (draft $number)';
+String draftName(String chapter, int number) => number == 1
+    ? '${_draftStem(chapter)} (draft)'
+    : '${_draftStem(chapter)} (draft $number)';
+
+/// [chapter] as the start of its drafts' file names. A course section may
+/// be called `Open/Semi-Open`; as a file name that separator would put the
+/// draft in a folder of its own, away from the chapter, so it becomes `_`.
+String _draftStem(String chapter) => chapter.replaceAll(_separators, '_');
+
+final _separators = p.style == p.Style.windows ? RegExp(r'[/\\]') : RegExp('/');
 
 /// Where a line proposed for a chapter goes: a draft already beside it
 /// ([ExistingDraft]) or a new one ([NewDraft]). Its [name] is what the user
@@ -70,7 +78,7 @@ Iterable<ChapterRef> draftsBeside(
     (ref) =>
         ref.heading.draft &&
         p.dirname(ref.path) == folder &&
-        ref.name.startsWith('${source.name} (draft'),
+        ref.name.startsWith('${_draftStem(source.name)} (draft'),
   );
 }
 
