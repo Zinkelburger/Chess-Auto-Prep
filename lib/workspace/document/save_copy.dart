@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../chess/pgn/chapter.dart';
 import '../../storage/chapter_files.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/status_bar.dart';
@@ -15,13 +16,25 @@ import 'session_results.dart';
 final class CopySource {
   CopySource(DocumentSession session)
     : _source = session.source,
-      _opened = session.openTicket;
+      _opened = session.openTicket,
+      _chapter = session.chapter;
 
   final ChapterRef? _source;
   final Ticket _opened;
+  final Chapter? _chapter;
 
-  bool matches(DocumentSession session) =>
-      _opened.current && session.source == _source;
+  /// Whether [session] still shows the document named: nothing was read
+  /// into it since, or what was read is the same file with the same words.
+  bool matches(DocumentSession session) {
+    if (session.source != _source) return false;
+    if (_opened.current) return true;
+    final now = session.chapter;
+    final then = _chapter;
+    return identical(now, then) ||
+        (now != null &&
+            then != null &&
+            writeChapter(now) == writeChapter(then));
+  }
 }
 
 /// What a copy whose document changed under its dialog came to.
