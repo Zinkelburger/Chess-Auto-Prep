@@ -3,6 +3,7 @@ import 'package:collection/collection.dart';
 import 'board_shapes.dart';
 import 'chapter.dart';
 import 'chapter_edit.dart';
+import 'chapter_edits.dart' show withIntroductionGame;
 import 'chapter_line.dart';
 import 'comment_text.dart';
 import 'game_tree.dart';
@@ -54,8 +55,9 @@ final class CommentUnwritable extends CommentRefused {
 /// Writes [text] as the comment of the node at [at].
 ///
 /// The root path is the chapter's introduction, the comment before the
-/// first move. Any other node is shared by every game that plays through
-/// it, so the comment is written into every game holding the words shown
+/// first move; a chapter with no games gets a game of no moves to hold it.
+/// Any other node is shared by every game that plays through it, so the
+/// comment is written into every game holding the words shown
 /// there, or into the first game when none holds any. A game holding other
 /// words keeps them: the chapter shows the note of the first game that
 /// holds one, so the user never saw those. Empty text removes the prose and keeps the move's
@@ -77,6 +79,15 @@ CommentResult setComment(
   final unwritable = text == null ? null : commentRefusal(text);
   if (unwritable != null) return CommentUnwritable(unwritable);
   if (at.isRoot) {
+    final words = withProse(null, text);
+    if (chapter.lines.isEmpty && words != null && words.isNotEmpty) {
+      // A chapter with no games has nowhere to keep its introduction but a
+      // game of no moves, which the first move played then extends.
+      return CommentWritten(
+        withIntroductionGame(chapter, words),
+        written: GamesWritten(appended: 1),
+      );
+    }
     return _withIntroduction(chapter, (comment) => withProse(comment, text));
   }
   // Games can hold different notes on one move, and the chapter shows the
@@ -103,11 +114,19 @@ CommentResult setGlyph(
   bool position = false,
 }) {
   if (at.isRoot) return _unchanged(chapter);
+  // As with notes, the glyphs shown are the first game's that has any; a
+  // game with other glyphs on the move was never on screen, so it keeps
+  // them. With none of this kind shown, the glyph joins the ones that are.
+  final inGroup = position ? isPositionGlyph : isGlyph;
+  final shown = chapter.tree.nodeAt(at)?.nags ?? const <int>[];
+  final group = shown.where(inGroup).toList();
   return _edited(
     chapter,
     at,
     (node) => _glyphed(node, nag, position: position),
-    holds: (node) => node.nags.any(position ? isPositionGlyph : isGlyph),
+    holds: group.isEmpty
+        ? (node) => shown.isNotEmpty && _sameNags(node.nags, shown)
+        : (node) => _sameNags(node.nags.where(inGroup).toList(), group),
   );
 }
 

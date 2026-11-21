@@ -238,7 +238,8 @@ final class _Search {
         path.reach < config.replyFloor;
     var eval = saved.evaluated ? saved.evalForUs : null;
     if (kind == null && eval == null && (beyond || !_hasMoves(saved))) {
-      eval = await _scored(path);
+      // A stopped search leaves the rest unscored for the next resume.
+      if (!_stopping()) eval = await _scored(path);
       if (eval == null) {
         return PendingNode(path, FrontierNode(fen: path.fen, evalForUs: null));
       }
@@ -798,14 +799,20 @@ final class Replies extends Expansion {
   Iterable<PendingNode> get children => replies.map((entry) => entry.$3);
 }
 
+/// What an engine said about [node], or null when nothing has scored it:
+/// [SearchNode.evalForUs] reads an unscored node as level, which is not a
+/// score to keep.
+Eval? _scoreOf(SearchNode node) => node.evaluated ? node.evalForUs : null;
+
 /// Builds the immutable tree out of the finished scaffolding, bottom up. A
-/// node nothing was expanded into stays the leaf it already was.
+/// node nothing was expanded into stays the leaf it already was, and one
+/// nothing scored stays unscored.
 SearchNode assembleTree(PendingNode pending) =>
     pending.cached ??= switch (pending.expansion) {
       null => pending.leaf,
       OurMoves(:final admitted) => OurNode.over(
         fen: pending.leaf.fen,
-        evalForUs: pending.leaf.evalForUs,
+        evalForUs: _scoreOf(pending.leaf),
         candidates: [
           for (final (move, child) in admitted)
             CandidateMove(move: move, child: assembleTree(child)),
@@ -813,7 +820,7 @@ SearchNode assembleTree(PendingNode pending) =>
       ),
       Replies(:final replies, :final from) => OpponentNode.over(
         fen: pending.leaf.fen,
-        evalForUs: pending.leaf.evalForUs,
+        evalForUs: _scoreOf(pending.leaf),
         repliesFrom: from,
         replies: [
           for (final (move, probability, child) in replies)

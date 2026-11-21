@@ -310,6 +310,26 @@ void main() {
     );
   });
 
+  testWidgets('the edit strip cannot copy a version reloaded while naming', (
+    tester,
+  ) async {
+    await conflict(tester);
+    await tester.tap(find.text('Save a copy…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      ),
+      'My draft',
+    );
+    await fixture.session.reloadFromDisk();
+    expect(fixture.session.chapter!.tree.children.first.san, 'e4');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save a copy'));
+    await tester.pumpAndSettle();
+    expect(fixture.store.documents[chapterRef('KID', 'My draft')], isNull);
+  });
+
   testWidgets('a name already taken replaces nothing and says so', (
     tester,
   ) async {

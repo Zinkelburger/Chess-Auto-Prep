@@ -4,9 +4,12 @@
 // settings alone; and no pane splits while the Analysis tab holds a board
 // of its own.
 import 'package:chess_auto_prep/app/mode.dart';
+import 'package:chess_auto_prep/chess/pgn/game_review.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/features/settings/setting_rows.dart';
+import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/workspace/board/board_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -65,6 +68,59 @@ void main() {
     await saveCopy(tester, 'Spare');
     final collections = w.parts.documents.viewer.collections;
     expect(paths(), contains('$collections/Spare.pgn'));
+  });
+
+  testWidgets('a review written into the open file while the copy is named '
+      'still gives a copy, with the review in it', (tester) async {
+    await w.pumpShell(tester);
+    await w.requests.open(kidMain);
+    await tester.pumpAndSettle();
+    await chooseAction(tester, 'Save a copy…');
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(Dialog),
+        matching: find.byType(TextField),
+      ),
+      'Spare',
+    );
+    // A review of every game writes each into the file as it ends, and it
+    // goes on while the dialog is up.
+    expect(
+      w.session.apply(
+        (now) =>
+            annotateGame(now, const [ReviewValue(15, '0.15', [])], game: 1),
+      ),
+      isNull,
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save a copy'));
+    await tester.pumpAndSettle();
+    final copy = w.store.documents.entries
+        .where((e) => e.key.path == '/repertoires/KID/Spare.pgn')
+        .firstOrNull
+        ?.value;
+    expect(copy, isA<Opened>());
+    expect((copy! as Opened).text, contains('[%eval 0.15]'));
+  });
+
+  testWidgets('a pending Actions copy cannot write a newly opened chapter', (
+    tester,
+  ) async {
+    await w.pumpShell(tester);
+    await w.requests.open(kidMain);
+    await tester.pumpAndSettle();
+    await chooseAction(tester, 'Save a copy…');
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(Dialog),
+        matching: find.byType(TextField),
+      ),
+      'KID notes',
+    );
+    await w.requests.open(benkoMain);
+    expect(w.session.source, benkoMain);
+    await tester.tap(find.widgetWithText(FilledButton, 'Save a copy'));
+    await tester.pumpAndSettle();
+    expect(paths(), isNot(contains('/repertoires/benko/KID notes.pgn')));
   });
 
   testWidgets('cancelling Discard changes in Actions keeps both games’ edits '
@@ -128,6 +184,45 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Training'), findsWidgets);
     expect(find.text('Look'), findsNothing);
+  });
+
+  Future<ChapterRef> openWithHeldMove(WidgetTester tester) async {
+    final ref = collectionRef('games');
+    w.store.documents[ref] = Opened(
+      threeGameFile,
+      scriptedRevision(threeGameFile),
+    );
+    await w.pumpShell(tester);
+    await w.requests.openFile(ref);
+    await tester.pumpAndSettle();
+    tester.widget<BoardView>(find.byType(BoardView)).onMove('b2b3');
+    await tester.pumpAndSettle();
+    return ref;
+  }
+
+  testWidgets('editing the scratch board keeps the source PGN in Read '
+      'with its move unsaved', (tester) async {
+    final ref = await openWithHeldMove(tester);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(w.parts.workspace.inspection!.active, isTrue);
+    expect(w.session.hasHeldEdits, isTrue);
+
+    await chooseAction(tester, 'Edit');
+    await w.saver.flush();
+    expect((w.store.documents[ref] as Opened).text, threeGameFile);
+    expect(w.session.hasHeldEdits, isTrue);
+    expect(find.text('Done'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Close Analysis').last);
+    await tester.pumpAndSettle();
+    final readEdit = tester.widget<SegmentedButton<bool>>(
+      find.byType(SegmentedButton<bool>),
+    );
+    expect(readEdit.selected, {false});
   });
 
   testWidgets('no pane splits while the Analysis tab holds its own board', (

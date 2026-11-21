@@ -104,6 +104,43 @@ String _idSpelling(String spelling) {
   return spelling.startsWith('0') ? spelling.replaceAll('0', 'O') : spelling;
 }
 
+/// Whether [after], an edit of [before] placed by [games], can change the
+/// id a kept game is trained under: it moved a game or rewrote one. Opened
+/// game by game, only a trained file counts ([_trainable]), and a game
+/// rewritten in place with its main line and id header as they were keeps
+/// its id, so the file's other games are not read to find that out.
+bool _mayChangeIds(Chapter before, Chapter after, GamesArranged games) {
+  final focused = before.game != null || after.game != null;
+  if (focused && !_trainable(before)) return false;
+  for (final (place, from) in games.order.indexed) {
+    if (from == null || place >= after.lines.length) continue;
+    if (from != place) return true;
+    if (games.rewritten.contains(from) &&
+        (!focused || !_sameLine(before.lines[from], after.lines[place]))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// Whether [a] and [b] are trained under the same id wherever they stand.
+bool _sameLine(ChapterLine a, ChapterLine b) {
+  final (was, now) = (a.tree, b.tree);
+  return was != null &&
+      now != null &&
+      a.lineId == b.lineId &&
+      const ListEquality<String>().equals(
+        mainLineSpellings(was),
+        mainLineSpellings(now),
+      );
+}
+
+/// Whether [chapter]'s games are trained: a repertoire, which states its
+/// side, or a study whose chapters name theirs.
+bool _trainable(Chapter chapter) =>
+    statedSide(chapter.preamble) != null ||
+    chapter.lines.any((line) => studyTrainingSide(line) != null);
+
 /// [after], an edit of [before] placed by [games], with every game it kept
 /// whose id would change carrying the id it was trained under in [before],
 /// and the arrangement naming those games as rewritten.
@@ -118,25 +155,17 @@ String _idSpelling(String spelling) {
 /// Each pin can change which game claims an id first, so the ids are asked
 /// again until the edited games all keep theirs.
 ///
-/// Repertoires and studies with per-chapter sides are trainable. Other
+/// Repertoires (a file with a `// Color:` line) and studies with
+/// per-chapter sides are trainable, opened whole or game by game. Other
 /// files opened game by game keep the tags they came with.
 ({Chapter chapter, GamesArranged games}) withIdsPinned(
   Chapter before,
   Chapter after,
   GamesArranged games,
 ) {
-  if ((before.game != null || after.game != null) &&
-      !before.lines.any((line) => studyTrainingSide(line) != null)) {
+  if (!_mayChangeIds(before, after, games)) {
     return (chapter: after, games: games);
   }
-  final moved = [
-    for (final (place, from) in games.order.indexed)
-      if (from != null &&
-          place < after.lines.length &&
-          (from != place || games.rewritten.contains(from)))
-        (place: place, from: from),
-  ];
-  if (moved.isEmpty) return (chapter: after, games: games);
   // Ids are claimed in file order, so an edit can change the id of any game
   // it kept, not only those it wrote. A game it did not write is pinned only
   // while its text is what it was: an undeclared change is the store's to

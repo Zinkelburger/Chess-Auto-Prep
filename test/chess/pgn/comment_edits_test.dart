@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/chess/pgn/comment_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/games_written.dart';
+import 'package:chess_auto_prep/chess/pgn/line_moves.dart';
 import 'package:chess_auto_prep/chess/pgn/move_text.dart';
 import 'package:dartchess/dartchess.dart' show Square;
 import 'package:flutter_test/flutter_test.dart';
@@ -116,6 +117,63 @@ void main() {
         '[Event "C"]\n[Result "*"]\n\n1. d4 d5 2. Bf4 *\n';
     final d5 = NodePath.of([0, 0]);
 
+    test('changing the shown glyph preserves a different glyph in game B', () {
+      final before = parseChapter(
+        name: 'Shared',
+        text: shared
+            .replaceFirst('{first}', r'$1')
+            .replaceFirst('{second}', r'$2'),
+      );
+      expect(before.tree.nodeAt(d5)!.nags, [1]);
+
+      final edit = setGlyph(before, at: d5, nag: 3) as CommentWritten;
+      expect(edit.chapter.lines[0].text, contains(r'd5 $3'));
+      expect(edit.chapter.lines[1].text, before.lines[1].text);
+      expect(edit.written.rewritten, {0});
+    });
+
+    test('adding a move glyph keeps the visible position glyph beside it', () {
+      final before = parseChapter(
+        name: 'Shared',
+        text:
+            '[Event "A"]\n\n1. d4 d5 *\n\n'
+            '[Event "B"]\n\n1. d4 d5 \$14 *\n\n'
+            '[Event "C"]\n\n1. d4 d5? *\n',
+      );
+      expect(before.tree.nodeAt(d5)!.nags, [14]);
+
+      final edit = setGlyph(before, at: d5, nag: 1) as CommentWritten;
+      expect(edit.written.rewritten, {1});
+      expect(edit.chapter.lines[0].text, before.lines[0].text);
+      expect(edit.chapter.lines[1].text, contains(r'd5 $1 $14'));
+      expect(edit.chapter.lines[2].text, before.lines[2].text);
+      expect(reread(edit.chapter).tree.nodeAt(d5)!.nags, [1, 14]);
+    });
+
+    test('only games with the same whole move-glyph group are edited', () {
+      final before = parseChapter(
+        name: 'Shared',
+        text:
+            '[Event "A"]\n\n1. d4 d5! *\n\n'
+            '[Event "B"]\n\n1. d4 d5 \$1 \$2 *\n\n'
+            '[Event "C"]\n\n1. d4 d5! \$16 *\n',
+      );
+      final edit = setGlyph(before, at: d5, nag: 3) as CommentWritten;
+      expect(edit.written.rewritten, {0, 2});
+      expect(edit.chapter.lines[0].text, contains(r'd5 $3'));
+      expect(edit.chapter.lines[1].text, before.lines[1].text);
+      expect(edit.chapter.lines[2].text, contains(r'd5 $3 $16'));
+    });
+
+    test('the first glyph on a shared move goes into the first game', () {
+      final before = parseChapter(name: 'Shared', text: shared);
+      final edit = setGlyph(before, at: d5, nag: 1) as CommentWritten;
+      expect(edit.written.rewritten, {0});
+      expect(edit.chapter.lines[0].text, contains(r'd5 $1 {first}'));
+      expect(edit.chapter.lines[1].text, before.lines[1].text);
+      expect(edit.chapter.lines[2].text, before.lines[2].text);
+    });
+
     test('an edit rewrites the note shown and keeps the one never shown', () {
       final before = parseChapter(name: 'Shared', text: shared);
       final after = commented(before, at: d5, text: 'Ours');
@@ -202,6 +260,49 @@ void main() {
     expect(after.lines[0].text, contains('{Play the Exchange.} 1. d4'));
     expect(after.lines[1].text, before.lines[1].text);
     expect(reread(after).tree.rootComment, 'Play the Exchange.');
+  });
+
+  test('a new chapter keeps its introduction before the first move', () {
+    final before = parseChapter(name: 'Sidelines', text: emptyChapter);
+    final after = commented(
+      before,
+      at: const NodePath.root(),
+      text: 'Play for d5',
+    );
+    expect(reread(after).tree.rootComment, 'Play for d5');
+    final played = reread(added(reread(after), const NodePath.root(), 'e2e4'));
+    expect(played.lines, hasLength(1));
+    expect(played.tree.rootComment, 'Play for d5');
+    expect(played.tree.children.single.san, 'e4');
+  });
+
+  test('clearing a root arrow lets an empty chapter accept an endgame', () {
+    const arrow = BoardShape(Square.e2, Square.e4, ShapeColour.green);
+    var chapter = parseChapter(name: 'Sidelines', text: emptyChapter);
+    for (final shapes in const <List<BoardShape>>[
+      [arrow],
+      [],
+    ]) {
+      final edit = setShapes(
+        chapter,
+        at: const NodePath.root(),
+        shapes: shapes,
+      );
+      chapter = switch (edit) {
+        ChapterEdited(:final chapter) => reread(chapter),
+        ChapterUnchanged() => chapter,
+        ChapterEditRefused(:final reason) => fail(reason),
+      };
+    }
+    expect(chapter.lines, isEmpty);
+    final endgame = parseChapter(
+      name: 'Pawn ending',
+      text:
+          '[Event "Ending"]\n[SetUp "1"]\n'
+          '[FEN "4k3/8/8/8/3P4/8/8/4K3 w - - 0 1"]\n\n1. Kd2 *\n',
+    );
+    final moved = linesAddedTo(chapter, lines: endgame.lines) as ChapterEdited;
+    expect(reread(moved.chapter).tree.rootFen, endgame.tree.rootFen);
   });
 
   test('an edit to the prose keeps the engine and clock tokens', () {

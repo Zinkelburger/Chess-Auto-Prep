@@ -30,6 +30,9 @@ final class Players extends ChangeNotifier {
   bool _disposed = false;
   PendingObligation<void>? _failed;
 
+  /// What [error] said when [_failed] failed, kept while it waits.
+  String? _failedSaid;
+
   PlayerGroup? get group => groups.where((g) => g.id == groupId).firstOrNull;
   List<Player> get visible =>
       players
@@ -62,19 +65,28 @@ final class Players extends ChangeNotifier {
     changed();
   }
 
+  /// Reads the directory again. A save that failed stays said, with its
+  /// Retry and Discard, until one of those settles it: a reload must not
+  /// hide it while it still holds every later save back.
   Future<void> load() async {
     if (busy || _disposed) return;
     busy = true;
-    error = null;
+    error = _failed == null ? null : _failedSaid;
     changed();
     try {
       await _read();
     } on Object catch (e) {
-      error = 'Could not load players: $e';
+      _loadFailed(e);
     } finally {
       busy = false;
       changed();
     }
+  }
+
+  /// Says a read failed, beside a failed save that is still waiting.
+  void _loadFailed(Object e) {
+    final failed = 'Could not load players: $e';
+    error = _failed == null ? failed : '$_failedSaid\n$failed';
   }
 
   Future<void> _read() async {
@@ -116,7 +128,7 @@ final class Players extends ChangeNotifier {
     } on Object catch (e) {
       log.w(label, e);
       if (!obligation.committed) _failed = obligation;
-      error = failedBecause('Could not save.', e);
+      error = _failedSaid = failedBecause('Could not save.', e);
       return false;
     } finally {
       busy = false;
@@ -134,7 +146,12 @@ final class Players extends ChangeNotifier {
       await failed.run();
       _failed = null;
       error = null;
-      await _read();
+      // The save landed; a read that fails now is a failed load.
+      try {
+        await _read();
+      } on Object catch (e) {
+        _loadFailed(e);
+      }
     } on PlayerConflict catch (e) {
       // The row changed since the failed save; as in [_write], it is dropped.
       failed.discard();
@@ -147,7 +164,7 @@ final class Players extends ChangeNotifier {
       }
     } on Object catch (e) {
       log.w('save players', e);
-      error = failedBecause('Could not save.', e);
+      error = _failedSaid = failedBecause('Could not save.', e);
     } finally {
       busy = false;
       changed();

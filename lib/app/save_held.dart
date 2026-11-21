@@ -21,18 +21,32 @@ Future<void> saveHeld(
     }
     return;
   }
+  final source = CopySource(session);
+  final game = session.game;
   final where = await showOptionsDialog(
     context,
     title: 'Save your moves',
     options: [for (final target in _HeldTarget.values) (target, target.label)],
   );
   if (where == null || !context.mounted) return;
+  // A file opened or read again while a dialog was up is not what the user
+  // chose to save, nor, for a study, another game of it.
   switch (where) {
     case _HeldTarget.copy:
       final name = await askCopyName(context);
       if (name == null) return;
-      sayCopy(requests.say, await session.saveCopy(name, into: collections));
+      sayCopy(
+        requests.say,
+        source.matches(session)
+            ? await session.saveCopy(name, into: collections)
+            : copyOvertaken,
+      );
     case _HeldTarget.study:
+      if (!source.matches(session) || session.game != game) {
+        return requests.say(
+          'The document changed while you chose. Nothing was added.',
+        );
+      }
       await requests.addToStudy([?gameDraft(session)]);
   }
 }

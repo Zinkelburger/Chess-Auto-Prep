@@ -20,6 +20,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../chess/generation/scripted_sources.dart';
+import '../chess/generation/search_harness.dart' show searchFrom, treeOf;
 import '../support/scripted_engine.dart';
 import '../support/session_fixture.dart';
 
@@ -121,6 +122,58 @@ void main() {
       );
     },
   );
+
+  test('resuming an uncut builder tree scores and saves an unscored reply '
+      'at the new horizon', () async {
+    fixture.session.playMove('e2e4');
+    final root = fixture.session.cursor.fen.value;
+    final afterKd8 = afterUci(positionOf(root), 'e8d8').fen;
+    const oldConfig = SearchConfig(
+      side: Side.white,
+      horizonPlies: 2,
+      lossLimitCp: null,
+    );
+    final uncut = treeOf(
+      await searchFrom(
+        root,
+        config: oldConfig,
+        policy: const ScriptedPolicy({'e8d8': 0.95, 'e8f8': 0.05}),
+      ),
+    );
+    final text = encodeTreeV4(
+      uncut,
+      oldConfig,
+      complete: true,
+      evalDepth: request.evalDepth,
+      opponentRating: request.elo,
+    );
+    // The C builder scored our continuations without scoring the
+    // opponent replies that led to them.
+    final document = jsonDecode(text) as Map<String, Object?>;
+    final tree = document['tree'] as Map<String, Object?>;
+    for (final reply in (tree['children'] as List).cast<Map>()) {
+      reply.remove('engine_eval_cp');
+    }
+
+    String? saved;
+    final evaluator = ScriptedEvaluator(scores: {afterKd8: 300});
+    final restarted = fillWith(
+      evaluator,
+      loadTree: (_, _) => Stream.value(jsonEncode(document)),
+      keepTree: (_, text, {required runId}) async {
+        saved = text;
+      },
+    );
+    expect(
+      await restarted.resume(const FillRequest(elo: 2200, depthPlies: 1)),
+      isNull,
+    );
+    expect(evaluator.asked, contains(afterKd8));
+    final savedTree = (jsonDecode(saved!) as Map)['tree'] as Map;
+    final kept = (savedTree['children'] as List).single as Map;
+    expect(kept['fen'], afterKd8);
+    expect(kept['engine_eval_cp'], 300);
+  });
 
   test(
     'candidate count and reply coverage govern and survive the saved search',
