@@ -109,7 +109,7 @@ final class WindowActions {
           ...documentActions(
             session: _boardWorkspace.session,
             analysis: _boardWorkspace.analysis,
-            editing: editing,
+            editing: workspace.inspection!.editing,
             onSaveCopy: () {},
             onDiscardHeld: () => unawaited(
               confirmDiscardHeld(context, () => _boardWorkspace.session),

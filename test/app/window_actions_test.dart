@@ -6,7 +6,9 @@
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/features/settings/setting_rows.dart';
+import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/workspace/board/board_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -128,6 +130,45 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Training'), findsWidgets);
     expect(find.text('Look'), findsNothing);
+  });
+
+  Future<ChapterRef> openWithHeldMove(WidgetTester tester) async {
+    final ref = collectionRef('games');
+    w.store.documents[ref] = Opened(
+      threeGameFile,
+      scriptedRevision(threeGameFile),
+    );
+    await w.pumpShell(tester);
+    await w.requests.openFile(ref);
+    await tester.pumpAndSettle();
+    tester.widget<BoardView>(find.byType(BoardView)).onMove('b2b3');
+    await tester.pumpAndSettle();
+    return ref;
+  }
+
+  testWidgets('editing the scratch board keeps the source PGN in Read '
+      'with its move unsaved', (tester) async {
+    final ref = await openWithHeldMove(tester);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(w.parts.workspace.inspection!.active, isTrue);
+    expect(w.session.hasHeldEdits, isTrue);
+
+    await chooseAction(tester, 'Edit');
+    await w.saver.flush();
+    expect((w.store.documents[ref] as Opened).text, threeGameFile);
+    expect(w.session.hasHeldEdits, isTrue);
+    expect(find.text('Done'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Close Analysis').last);
+    await tester.pumpAndSettle();
+    final readEdit = tester.widget<SegmentedButton<bool>>(
+      find.byType(SegmentedButton<bool>),
+    );
+    expect(readEdit.selected, {false});
   });
 
   testWidgets('no pane splits while the Analysis tab holds its own board', (

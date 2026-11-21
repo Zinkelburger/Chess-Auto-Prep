@@ -216,7 +216,9 @@ takes a FEN only). A FEN may be quoted, a `[FEN "…"]` tag or cut short; one th
 played says why (`Not a playable FEN. …`); `Nothing to paste: copy a PGN or
 FEN first.` Ctrl+N / `New analysis tab` opens the `Analysis` tab: a scratch
 copy of the whole current game at the cursor, facing the same way, that never
-writes the source. While that tab is up, paste and set-up fill it instead. In
+writes the source. Its Read or Edit is its own, starting as the source's, so
+turning on Edit there leaves the source's held edits held. While that tab is
+up, paste and set-up fill it instead. In
 the builder `Save to repertoire…` and in Study `Add game to study…` ask where,
 then a chapter name; `Save to repertoire…` also offers `New repertoire…`,
 which asks its name and makes the board's lines its first chapter. Closing the window forgets analysis boards.
