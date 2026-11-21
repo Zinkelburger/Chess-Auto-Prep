@@ -203,6 +203,11 @@ final class DocumentSession extends ChangeNotifier {
   /// file; a study chapter is one game.
   ChapterRef? get source => _source;
 
+  /// Overtaken once another document is opened here, or this one is read
+  /// again: what a question about the document on screen checks when its
+  /// answer comes back.
+  Ticket get openTicket => _opens.now;
+
   int? get game => _chapter?.game;
   GameTree? get tree => _chapter?.tree;
 

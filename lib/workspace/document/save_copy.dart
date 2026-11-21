@@ -1,28 +1,27 @@
 import 'package:flutter/material.dart';
 
-import '../../chess/pgn/chapter.dart';
 import '../../storage/chapter_files.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/status_bar.dart';
+import '../latest.dart';
 import 'document_session.dart';
 import 'session_results.dart';
 
-/// The file and words a Save a copy was asked for. The copy is named in a
-/// dialog, and a file opened from the desktop or read again meanwhile is not
-/// what the user named, so the copy is written only while [matches].
+/// The document a Save a copy was asked for. The copy is named in a dialog,
+/// and a file opened from the desktop or read again meanwhile is not what
+/// the user named, so the copy is written only while [matches]. Edits made
+/// in the same document meanwhile, such as a review writing its games, are
+/// still this document and go into the copy.
 final class CopySource {
   CopySource(DocumentSession session)
     : _source = session.source,
-      _text = _textOf(session.snapshot());
+      _opened = session.openTicket;
 
   final ChapterRef? _source;
-  final String? _text;
+  final Ticket _opened;
 
   bool matches(DocumentSession session) =>
-      session.source == _source && _textOf(session.snapshot()) == _text;
-
-  static String? _textOf(Chapter? chapter) =>
-      chapter == null ? null : writeChapter(chapter);
+      _opened.current && session.source == _source;
 }
 
 /// What a copy whose document changed under its dialog came to.
