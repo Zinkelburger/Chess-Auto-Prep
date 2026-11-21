@@ -12,6 +12,7 @@ import 'package:chess_auto_prep/chess/pgn/study.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/saved_place.dart';
+import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:chess_auto_prep/workspace/document/study_choice.dart';
 import 'package:chess_auto_prep/workspace/document/study_drafts.dart';
 import 'package:chess_auto_prep/workspace/document/study_picker.dart';
@@ -74,6 +75,42 @@ void main() {
       w.store.releaseAll();
       expect(await pending, isA<RequestDropped>());
       expect(w.session.source, kid);
+    });
+
+    test(
+      'a conflict reload finishes on the chapter shared with Trainer',
+      () async {
+        await w.requests.open(kid);
+        const changed = '// Color: Black\n\n[Event "Disk"]\n\n1. g3 *\n';
+        w.store.documents[kid] = Opened(changed, scriptedRevision(changed));
+        w.session.setComment(const NodePath.root(), 'Conflicting note');
+        await w.saver.flush();
+        expect(w.saver.settled, isFalse);
+        final read = w.store.readEarly = Completer<void>();
+        final reloading = w.session.reloadFromDisk();
+        await pumpEventQueue();
+        expect(w.store.readEarly, isNull);
+        w.requests.switchTo(Mode.trainer);
+        read.complete();
+        expect(await reloading, isA<DocumentOpened>());
+        expect(w.requests.mode, Mode.trainer);
+        expect(w.session.tree!.children.single.san, 'g3');
+        expect(w.saver.settled, isTrue);
+      },
+    );
+
+    test('a frozen chapter follows its saved copy into Trainer', () async {
+      await freezeKid();
+      final write = w.store.createGate = Completer<void>();
+      final copying = w.session.saveCopy('Editable');
+      await pumpEventQueue();
+      expect(w.store.createGate, isNull);
+      w.requests.switchTo(Mode.trainer);
+      write.complete();
+      expect((await copying as CopySaved).nowEditing, isTrue);
+      expect(w.requests.mode, Mode.trainer);
+      expect(w.session.source?.path, '/repertoires/KID/Editable.pgn');
+      expect(w.session.commentAt(NodePath.of([0])), contains('frozen words'));
     });
 
     test('an open a later one overtook drops without a word', () async {
@@ -317,6 +354,40 @@ void main() {
         expect(w.requests.mode, Mode.pgnViewer);
         expect(w.session.game, 0);
         expect(w.viewer.file, games);
+      },
+    );
+
+    test('choosing Databases supersedes a pending recent file open', () async {
+      final gate = Completer<void>();
+      final importer = w.parts.env.fileImport as ScriptedImport;
+      importer.beforeImport = gate.future;
+      final opening = w.requests.openFile(games);
+      await pumpEventQueue();
+      expect(importer.asked, [games.path]);
+      w.requests.switchTo(Mode.databases);
+      gate.complete();
+      expect(await opening, isA<RequestDropped>());
+      expect(w.requests.mode, Mode.databases);
+      expect(w.viewer.file, isNull);
+    });
+
+    test(
+      'reselecting the current mode supersedes a pending recent file',
+      () async {
+        w.requests.switchTo(Mode.databases);
+        final back = w.requests.backTo;
+        final gate = Completer<void>();
+        final importer = w.parts.env.fileImport as ScriptedImport;
+        importer.beforeImport = gate.future;
+        final opening = w.requests.openFile(games);
+        await pumpEventQueue();
+        expect(importer.asked, [games.path]);
+        w.requests.switchTo(Mode.databases);
+        gate.complete();
+        expect(await opening, isA<RequestDropped>());
+        expect(w.requests.mode, Mode.databases);
+        expect(w.requests.backTo, same(back));
+        expect(w.viewer.file, isNull);
       },
     );
 
@@ -674,6 +745,33 @@ void main() {
         );
       },
     );
+
+    for (final fails in [true, false]) {
+      test('an accepted repertoire save reports its outcome after leaving '
+          '(failure: $fails)', () async {
+        w.session.playMove('e2e4');
+        final write = w.store.createGate = Completer<void>();
+        if (fails) w.store.creates.add(const IoFailure('disk full'));
+        final saving = w.requests.saveBoardAsRepertoire('Italian');
+        await pumpEventQueue();
+        expect(w.store.createGate, isNull);
+        w.requests.switchTo(Mode.databases);
+        write.complete();
+        final result = await saving;
+        if (fails) {
+          expect(result, isA<RequestRefused>());
+          expect(w.requests.status, 'Could not save the analysis board.');
+        } else {
+          expect(result, isA<RequestDropped>());
+          expect(
+            w.store.documents.keys.map((ref) => ref.path),
+            contains('/repertoires/Italian/Main.pgn'),
+          );
+        }
+        expect(w.requests.mode, Mode.databases);
+        expect(w.session.source, isNull);
+      });
+    }
 
     test('added to a study, the board is written at its end and the bar '
         'offers to open it; the mode stays', () async {

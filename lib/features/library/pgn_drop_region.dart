@@ -40,19 +40,28 @@ class _PgnDropRegionState extends State<PgnDropRegion>
     final say = StatusScope.of(context);
     if (paths.isEmpty) say('Drop a PGN file to import a repertoire.');
     const failed = 'The dropped PGN could not be imported.';
-    await attempt('import dropped PGN files', () async {
+    // Every dropped file is imported, even after the region has gone: the
+    // drop was accepted, and closing waits for the whole of it.
+    final library = widget.library;
+    Future<void> importAll() async {
       for (final path in paths) {
-        if (!mounted) return;
-        final result = await announce(
-          context,
-          widget.library.importPath(path),
+        final result = await library.importPath(path);
+        final message = libraryMessage(
+          result,
           thing: 'repertoire',
           name: p.basenameWithoutExtension(path),
           failed: failed,
         );
-        if (mounted && result is LibraryAdded) widget.onOpen(result.first);
+        if (message != null) say(message);
+        if (mounted && widget.library == library && result is LibraryAdded) {
+          widget.onOpen(result.first);
+        }
       }
-    }, failure: failed);
+    }
+
+    final work = importAll();
+    library.pendingWrites?.watch(library, work);
+    await attempt('import dropped PGN files', () => work, failure: failed);
     if (problem case final sentence?) say(sentence);
   }
 

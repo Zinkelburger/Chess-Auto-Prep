@@ -101,7 +101,9 @@ A widget file outside `app/` never imports `dart:io` or `net/`. From
   or takes it off (a list click, Open/Import/Paste, an explorer game, Close
   file), each answering a sealed `RequestResult`. Questions to the user come
   through interfaces (`ExitGuard`'s `DraftQuestion`, `WindowInput`), so flows
-  are tested without widgets. Request tickets cancel superseded opens.
+  are tested without widgets. Request tickets cancel superseded opens, and
+  a document still on its way to another mode is dropped once the user
+  chooses a mode, so it never pulls them back.
 - `AppExit` (`app/app.dart`) closes once however often it is asked: it
   disables input, pauses producers, flushes the document and waits for
   `PendingWrites`, then stops the engines, then closes the log.

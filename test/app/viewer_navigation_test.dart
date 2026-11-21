@@ -1,6 +1,10 @@
+import 'dart:async';
+
+import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/app/workspace_requests.dart';
 import 'package:chess_auto_prep/chess/game_filter.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
+import 'package:chess_auto_prep/chess/pgn/collection_player.dart';
 import 'package:chess_auto_prep/chess/pgn/game_order.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/reading_place.dart';
@@ -16,6 +20,46 @@ import '../support/viewer_fixture.dart';
 import '../support/window_fixture.dart';
 
 void main() {
+  test(
+    'leaving the viewer during a long lookup preserves the saved place',
+    () async {
+      final ref = collectionRef('Long collection');
+      final text = [
+        for (var i = 0; i < 500; i++)
+          '[Event "Game $i"]\n[GameId "game$i"]\n[White "A"]\n[Black "B"]\n\n1. e4 *\n',
+      ].join('\n');
+      final stored = _StoredPlace(
+        ReadingPlace(
+          game: 499,
+          key: 'game499',
+          path: NodePath.of([0]),
+          sort: GameOrder.dateDesc,
+          perspective: const FollowPlayer('B'),
+        ),
+      );
+      final app = WindowFixture(viewerPlaces: stored);
+      addTearDown(app.dispose);
+      app.store.documents[ref] = Opened(text, scriptedRevision(text));
+      // Opening from the followed player's side flips the installed file.
+      // The lookup starts before this microtask and answers from an isolate.
+      void onFlip() {
+        if (app.viewer.file != ref) return;
+        app.session.removeListener(onFlip);
+        scheduleMicrotask(() => app.requests.switchTo(Mode.databases));
+      }
+
+      app.session.addListener(onFlip);
+      await app.requests.openFile(ref);
+      expect(app.requests.mode, Mode.databases);
+      expect(app.viewer.current, 499);
+      expect(app.viewer.sort, GameOrder.dateDesc);
+      expect(app.session.cursor.value, NodePath.of([0]));
+      await app.viewer.pendingWrites.settle();
+      expect(stored.place.game, 499);
+      expect(stored.place.sort, GameOrder.dateDesc);
+    },
+  );
+
   test(
     'an overtaken reading-place lookup keeps the newer file first in recents',
     () async {

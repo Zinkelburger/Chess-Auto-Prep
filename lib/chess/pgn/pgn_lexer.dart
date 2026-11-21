@@ -153,9 +153,16 @@ final class _Scan {
     }
     final valueStart = j + 1;
     final valueEnd = _valueEnd(valueStart);
-    if (valueEnd < 0 || valueEnd + 1 >= text.length) return null;
-    if (text.codeUnitAt(valueEnd + 1) != closeBracket) return null;
-    i = valueEnd + 2;
+    if (valueEnd < 0) return null;
+    // PGN allows white space between the value and the closing bracket.
+    var close = valueEnd + 1;
+    while (close < text.length && isBlank(text.codeUnitAt(close))) {
+      close++;
+    }
+    if (close >= text.length || text.codeUnitAt(close) != closeBracket) {
+      return null;
+    }
+    i = close + 1;
     final value = unescapedTagValue(text.substring(valueStart, valueEnd));
     final raw = text.substring(start, i);
     final trailer = _trailer();

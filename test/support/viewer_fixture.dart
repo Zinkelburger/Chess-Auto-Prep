@@ -29,6 +29,7 @@ final class ScriptedRecentFiles implements RecentFiles {
 
   /// Whether the next save lands.
   bool accepting = true;
+  Future<void>? beforeSave;
 
   /// Every list that was saved, in order.
   final saved = <List<String>>[];
@@ -40,6 +41,7 @@ final class ScriptedRecentFiles implements RecentFiles {
   Future<bool> save(List<String> paths) async {
     saved.add(List.of(paths));
     if (accepting) listing = RecentFilesListed(saved.last);
+    if (beforeSave case final gate?) await gate;
     return accepting;
   }
 }
@@ -49,6 +51,9 @@ final class ScriptedRecentFiles implements RecentFiles {
 final class ScriptedImport implements PgnFileImport {
   /// What a path outside Documents becomes; null fails the import.
   String? copyTo;
+
+  /// Holds the import while the user chooses where to go next.
+  Future<void>? beforeImport;
 
   /// Every path asked about, in order.
   final asked = <String>[];
@@ -72,6 +77,7 @@ final class ScriptedImport implements PgnFileImport {
   @override
   Future<ImportResult> insideDocuments(String path) async {
     asked.add(path);
+    if (beforeImport case final gate?) await gate;
     if (path.startsWith('/Documents/')) {
       return FileToOpen(path, copied: false);
     }

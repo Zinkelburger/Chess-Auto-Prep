@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/app/document_tabs.dart';
 import 'package:chess_auto_prep/app/mode.dart';
+import 'package:chess_auto_prep/app/workspace_requests.dart';
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart' as store;
@@ -230,6 +233,71 @@ void main() {
     expect(w.session.commentAt(cursor), contains('Unsaved viewer note'));
     expect(w.store.requestedSaves, isEmpty);
   });
+
+  test('an installed viewer tab recovers its edits and cursor while '
+      'Databases is open', () async {
+    final games = collectionRef('Games');
+    w.store.documents[games] = store.Opened(
+      threeGameFile,
+      scriptedRevision(threeGameFile),
+    );
+    await w.requests.openFile(games, game: 1);
+    w.session.holdsEdits = true;
+    w.session.cursor.forward();
+    final cursor = w.session.cursor.value;
+    w.session.setComment(cursor, 'Parked note');
+    await w.requests.newAnalysisBoard();
+    final gate = Completer<void>();
+    w.recent.beforeSave = gate.future;
+    final selecting = w.requests.documents.select(games);
+    await pumpEventQueue();
+    expect(w.viewer.file, games);
+    expect(w.recent.saved, hasLength(2));
+    expect(w.session.hasHeldEdits, isFalse);
+    w.requests.switchTo(Mode.databases);
+    gate.complete();
+    await selecting;
+    expect(w.requests.mode, Mode.databases);
+    w.requests.switchTo(Mode.pgnViewer);
+    expect(w.session.hasHeldEdits, isTrue);
+    expect(w.session.cursor.value, cursor);
+    expect(w.session.commentAt(cursor), 'Parked note');
+  });
+
+  test(
+    'restoring a Study tab cannot cancel a newer viewer file choice',
+    () async {
+      w.requests.switchTo(Mode.study);
+      await w.requests.open(kidMain, game: 0);
+      w.session.holdsEdits = true;
+      w.session.setComment(const NodePath.root(), 'Parked note');
+      w.requests.switchTo(Mode.pgnViewer);
+      await pumpEventQueue();
+      final games = collectionRef('New choice');
+      w.store.documents[games] = store.Opened(
+        threeGameFile,
+        scriptedRevision(threeGameFile),
+      );
+      final gate = Completer<void>();
+      final importer = w.parts.env.fileImport as ScriptedImport;
+      importer.beforeImport = gate.future;
+      Future<RequestResult>? opening;
+      void chooseFile() {
+        if (w.session.source == kidMain && w.session.hasHeldEdits) {
+          w.session.removeListener(chooseFile);
+          opening = w.requests.openFile(games);
+        }
+      }
+
+      w.session.addListener(chooseFile);
+      await w.requests.documents.select(kidMain);
+      expect(importer.asked, [games.path]);
+      expect(w.requests.mode, Mode.pgnViewer);
+      gate.complete();
+      expect(await opening, isA<RequestDone>());
+      expect(w.viewer.file, games);
+    },
+  );
 
   test('a parked draft put away, by keeping or discarding it, does not come '
       'back with its tab', () async {
