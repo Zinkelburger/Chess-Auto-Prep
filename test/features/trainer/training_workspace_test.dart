@@ -10,6 +10,7 @@ import 'package:chess_auto_prep/storage/settings_store.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/book/repertoire_catalog.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 import '../../support/books_fixture.dart';
 import '../../support/scripted_files.dart';
@@ -77,6 +78,92 @@ void main() {
     expect(trainer.lesson!.line.name, 'First');
     expect(trainer.lesson!.left, 1);
   });
+
+  Future<ChapterRef> listSingleCourse() async {
+    final course = ChapterRef.at(p.join(catalog.root, 'Course.pgn'));
+    session.store.documents[course] = Opened(_main, scriptedRevision(_main));
+    files.listing = Repertoires([
+      RepertoireFolder(
+        name: course.name,
+        path: course.path,
+        modified: DateTime.utc(2026),
+        chapters: [course],
+      ),
+    ]);
+    await catalog.refresh();
+    return course;
+  }
+
+  test('a saved directory selection loads its single paused course', () async {
+    final course = await listSingleCourse();
+    trainer.selection.followDocument();
+    await settings.update(
+      settings.value.copyWith(
+        training: TrainingOptions(
+          repertoirePath: catalog.root,
+          pausedScopes: {catalog.root},
+        ),
+      ),
+    );
+    trainer.selection.enter(session.session.source);
+    await trainer.reload();
+
+    expect(trainer.scopeLines.map((line) => line.key.source), [course.path]);
+    expect(trainer.selection.repertoirePaused, isTrue);
+    expect(trainer.learnCount, 0);
+  });
+
+  test(
+    'a root-level PGN trains only its own lines when chosen or already open',
+    () async {
+      RepertoireFolder loosePgn(String name, String text) {
+        final chapter = ChapterRef(
+          repertoire: name,
+          name: name,
+          path: p.join(catalog.root, '$name.pgn'),
+        );
+        session.store.documents[chapter] = Opened(text, scriptedRevision(text));
+        return RepertoireFolder(
+          name: name,
+          path: chapter.path,
+          modified: DateTime.utc(2026),
+          chapters: [chapter],
+        );
+      }
+
+      files.listing = Repertoires([
+        ...catalog.repertoires,
+        loosePgn('Course', _main),
+        loosePgn('Other', _other),
+      ]);
+      await catalog.refresh();
+      final course = catalog.repertoires.singleWhere((r) => r.name == 'Course');
+      trainer.selection.choose(course);
+      await trainer.reload();
+      expect(trainer.scopeLines.map((line) => line.key.source), [course.path]);
+
+      trainer.selection.followDocument();
+      await session.session.open(course.chapters.single);
+      await settings.update(Settings.defaults);
+      trainer.selection.enter(session.session.source);
+      await trainer.reload();
+      expect(trainer.scopeLines.map((line) => line.key.source), [course.path]);
+
+      // Older versions remembered the directory when a loose PGN was open.
+      trainer.selection.followDocument();
+      await settings.update(
+        Settings.defaults.copyWith(
+          training: TrainingOptions(repertoirePath: catalog.root),
+        ),
+      );
+      trainer.selection.enter(session.session.source);
+      await trainer.reload();
+      expect(trainer.scopeLines.map((line) => line.key.source), [
+        course.path,
+        p.join(catalog.root, 'Other.pgn'),
+      ]);
+    },
+  );
 
   test(
     'completed lines stay learned after settings reload and browsing elsewhere',

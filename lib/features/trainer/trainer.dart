@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/study.dart';
@@ -729,8 +730,14 @@ class Trainer extends ChangeNotifier {
             revision: _session.trainingSourceRevision,
           )
         : null;
+    // Older versions remembered the repertoires folder itself while a PGN
+    // directly under it was open: that choice still trains those PGNs.
+    final looseRoot = root == _catalog?.root;
     final (:chapters, :problem) = await _chapters.chaptersWhere(
-      (ref) => ref.path == root || _catalog?.repertoireOf(ref.path) == root,
+      (ref) =>
+          ref.path == root ||
+          _catalog?.repertoireOf(ref.path) == root ||
+          (looseRoot && p.dirname(ref.path) == root),
       open,
     );
     if (load.overtaken) return;
