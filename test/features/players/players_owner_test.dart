@@ -164,6 +164,27 @@ void main() {
     },
   );
 
+  test('reloads that keep failing behind a failed save say so once', () async {
+    final flaky = _FailOnce(files);
+    final failing = Players(flaky, pending);
+    addTearDown(failing.dispose);
+    await failing.load();
+    final a = failing.players.firstWhere((p) => p.name == 'A');
+    flaky.failNext = true;
+    expect(await failing.save(a.edited({'rating': 1}), expected: a), isFalse);
+    flaky.failReads = true;
+    await failing.load();
+    await failing.load();
+    await failing.load();
+    expect(failing.needsRetry, isTrue);
+    expect(failing.error, startsWith('Could not save. The disk is full.'));
+    expect(
+      'Could not load players'.allMatches(failing.error!).length,
+      1,
+      reason: failing.error,
+    );
+  });
+
   test('retrying a failed save over a row another window changed drops it '
       'and leaves later saves free', () async {
     final flaky = _FailOnce(files);
@@ -267,8 +288,17 @@ final class _FailOnce implements PlayerStore {
     OSError('No space left on device', Platform.isWindows ? 112 : 28),
   );
 
+  /// Whether every read fails, as an unreadable folder does.
+  bool failReads = false;
+
   @override
-  Future<PlayerDirectory> read() => files.read();
+  Future<PlayerDirectory> read() async {
+    if (failReads) {
+      throw const FileSystemException('Cannot list', 'players');
+    }
+    return files.read();
+  }
+
   @override
   Future<void> savePlayer(Player player, {Player? expected}) async {
     if (failNext) {

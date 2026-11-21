@@ -30,6 +30,9 @@ final class Players extends ChangeNotifier {
   bool _disposed = false;
   PendingObligation<void>? _failed;
 
+  /// What [error] said when [_failed] failed, kept while it waits.
+  String? _failedSaid;
+
   PlayerGroup? get group => groups.where((g) => g.id == groupId).firstOrNull;
   List<Player> get visible =>
       players
@@ -68,7 +71,7 @@ final class Players extends ChangeNotifier {
   Future<void> load() async {
     if (busy || _disposed) return;
     busy = true;
-    if (_failed == null) error = null;
+    error = _failed == null ? null : _failedSaid;
     changed();
     try {
       await _read();
@@ -83,7 +86,7 @@ final class Players extends ChangeNotifier {
   /// Says a read failed, beside a failed save that is still waiting.
   void _loadFailed(Object e) {
     final failed = 'Could not load players: $e';
-    error = _failed == null || error == null ? failed : '$error\n$failed';
+    error = _failed == null ? failed : '$_failedSaid\n$failed';
   }
 
   Future<void> _read() async {
@@ -125,7 +128,7 @@ final class Players extends ChangeNotifier {
     } on Object catch (e) {
       log.w(label, e);
       if (!obligation.committed) _failed = obligation;
-      error = failedBecause('Could not save.', e);
+      error = _failedSaid = failedBecause('Could not save.', e);
       return false;
     } finally {
       busy = false;
@@ -161,7 +164,7 @@ final class Players extends ChangeNotifier {
       }
     } on Object catch (e) {
       log.w('save players', e);
-      error = failedBecause('Could not save.', e);
+      error = _failedSaid = failedBecause('Could not save.', e);
     } finally {
       busy = false;
       changed();
