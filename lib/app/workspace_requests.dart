@@ -33,32 +33,10 @@ import '../workspace/latest.dart';
 import 'document_tabs.dart';
 import 'exit_guard.dart';
 import 'mode.dart';
+import 'request_result.dart';
 import 'window_input.dart';
 
-/// What came of a request to put something on the board.
-sealed class RequestResult {
-  const RequestResult();
-}
-
-/// It is on the board, or it was already.
-final class RequestDone extends RequestResult {
-  const RequestDone();
-}
-
-/// It could not be done, and [sentence] — also in [WorkspaceRequests.status]
-/// — says why.
-final class RequestRefused extends RequestResult {
-  const RequestRefused(this.sentence);
-
-  final String sentence;
-}
-
-/// Nothing happened and nothing needs saying: the user stayed or closed a
-/// dialog, a later request overtook this one, or the list that asked says
-/// why itself.
-final class RequestDropped extends RequestResult {
-  const RequestDropped();
-}
+export 'request_result.dart';
 
 /// Where the user was, for Back and Forward: the mode, and the document on
 /// the board and where in it.
@@ -158,7 +136,7 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// Overtaken each time the user chooses a mode; [_sinceChoice] is the
   /// latest request's ticket of it, taken as that request started.
   final _chosen = Latest();
-  late Ticket _sinceChoice = _chosen.now;
+  Ticket? _sinceChoice;
 
   Mode get mode => _mode;
 
@@ -441,7 +419,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     int? game,
   }) async {
     // A mode the user chose since the request began is where they stay.
-    bool dropped() => ticket.overtaken || _sinceChoice.overtaken;
+    bool dropped() => ticket.overtaken || (_sinceChoice?.overtaken ?? false);
     if (dropped()) return const RequestDropped();
     Go? left;
     if (ref != _session.source || game != _session.game) {
