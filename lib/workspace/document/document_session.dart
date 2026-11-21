@@ -200,12 +200,8 @@ final class DocumentSession extends ChangeNotifier {
 
   /// The file the chapter was read from, and which game of it is on the
   /// board — null when its games are merged. A repertoire chapter is the
-  /// file; a study chapter is one game.
+  /// file; a study chapter is one game. [openTicket] lapses at the next read.
   ChapterRef? get source => _source;
-
-  /// Overtaken once another document is opened here, or this one is read
-  /// again: what a question about the document on screen checks when its
-  /// answer comes back.
   Ticket get openTicket => _opens.now;
 
   int? get game => _chapter?.game;
@@ -928,8 +924,7 @@ final class DocumentSession extends ChangeNotifier {
   }
 
   /// Writes [landed] and shows what it says to show, following a course
-  /// file's chapter to the one shown. Answers why nothing was written, or
-  /// null.
+  /// file's chapter to the one shown. Answers why nothing was written, or null.
   String? _land(Landing? landed, {bool writes = false}) {
     if (landed == null) {
       return _editRefused('a new line could not be given its chapter name');
