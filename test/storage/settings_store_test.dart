@@ -180,7 +180,7 @@ void main() {
     final run = await FaultyDisk(support).run(
       FaultPlan.where(
         (op) => op.kind == IoKind.read && op.key.path == 'settings.json',
-        const FailBefore(IoError.eio, times: 1),
+        const FailBefore(IoError.eio),
       ),
       () async {
         final store = SettingsStore(support: support);
