@@ -417,6 +417,78 @@ void main() {
     expect(books.shareOf(books.chosen!, course), BookShare.some);
   });
 
+  test(
+    'an unnamed course chapter can be kept on its own after reload',
+    () async {
+      const path = '/repertoires/Course/Course.pgn';
+      final unnamed = ChapterRef.at(path);
+      final named = ChapterRef.at(path, section: 'Najdorf');
+      final course = RepertoireFolder(
+        name: 'Course',
+        path: '/repertoires/Course',
+        modified: DateTime(2026),
+        chapters: [unnamed, named],
+      );
+      final whole = books.create('Whole course')!;
+      books.setRepertoire(whole, course, true);
+      books.setChapter(whole, course, named, false);
+      final empty = books.create('From scratch')!;
+      books.setChapter(empty, course, unnamed, true);
+      await books.settled;
+
+      final reopened = Books(
+        store: MemoryBooks(BookList.decode(store.books.encode())),
+        root: '/repertoires',
+      );
+      addTearDown(reopened.dispose);
+      await reopened.load();
+      expect(
+        {
+          for (final book in reopened.books)
+            book.name: (
+              reopened.contains(book, unnamed),
+              reopened.contains(book, named),
+            ),
+        },
+        {'Whole course': (true, false), 'From scratch': (true, false)},
+      );
+    },
+  );
+
+  test('unticking one chapter of a file held whole keeps its others', () {
+    const path = '/repertoires/Course/Course.pgn';
+    final unnamed = ChapterRef.at(path);
+    final najdorf = ChapterRef.at(path, section: 'Najdorf');
+    final dragon = ChapterRef.at(path, section: 'Dragon');
+    final plain = RepertoireFolder(
+      name: 'Course',
+      path: '/repertoires/Course',
+      modified: DateTime(2026),
+      chapters: [unnamed],
+    );
+    final book = books.create('Spring')!;
+    // Ticked while the file had no chapter names: the whole file.
+    books.setChapter(book, plain, unnamed, true);
+    final course = RepertoireFolder(
+      name: 'Course',
+      path: '/repertoires/Course',
+      modified: DateTime(2026),
+      chapters: [unnamed, najdorf, dragon],
+    );
+    expect(books.shareOf(books.chosen!, course), BookShare.all);
+
+    books.setChapter(books.chosen!, course, najdorf, false);
+    expect(
+      [for (final ref in course.chapters) books.contains(books.chosen, ref)],
+      [true, false, true],
+    );
+    books.setChapter(books.chosen!, course, unnamed, false);
+    expect(
+      [for (final ref in course.chapters) books.contains(books.chosen, ref)],
+      [false, false, true],
+    );
+  });
+
   test('deleting the book in use leaves none in use', () {
     final book = books.create('Spring')!;
     books.delete(book);

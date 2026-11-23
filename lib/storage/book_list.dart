@@ -46,7 +46,9 @@ final class Book {
         (folder) => folder == path || p.posix.isWithin(folder, path),
       ) ||
       chapters.contains(BookChapter(path, section)) ||
-      (section != null && chapters.contains(BookChapter(path, null)));
+      chapters.contains(
+        BookChapter(path, section == null ? BookChapter.unnamed : null),
+      );
 
   Book copyWith({
     String? name,
@@ -94,9 +96,14 @@ final class Book {
 }
 
 /// A chapter in a book: the file at [path], or its games that carry the
-/// `[ChapterName]` [section].
+/// `[ChapterName]` [section]; [unnamed] for its games that carry none.
 final class BookChapter {
   const BookChapter(this.path, this.section);
+
+  /// The [section] of the games that name no chapter in a file where others
+  /// do. No chapter can be called this, and a null section is the whole
+  /// file, so the two are told apart when the file gains or loses names.
+  static const unnamed = '';
 
   /// Relative to the repertoires folder, `/` between the parts.
   final String path;

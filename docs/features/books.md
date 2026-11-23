@@ -49,8 +49,9 @@ when none was → `A book named "X" already exists.`, `Could not make the book.`
 included. A part-ticked box ticks the rest; a ticked one takes the folder out.
 
 **Tick a chapter** — that chapter alone (a course chapter by its
-`[ChapterName]`). Unticking one chapter of a whole repertoire keeps the others
-ticked one by one.
+`[ChapterName]`; the games of a course file that name none are a chapter of
+their own). Unticking one chapter of a whole repertoire, or of a file ticked
+before it had chapter names, keeps the others ticked one by one.
 
 **Use this book / Stop using** — the book in use changes for every reader at
 once.
