@@ -49,7 +49,7 @@ final class ExternalDocumentEdits {
     if (session._disposed ||
         shown == null ||
         ref == null ||
-        session._opening != null ||
+        session._reads.pending != null ||
         session._restoring ||
         session._readOnly != null ||
         session._held != null ||
@@ -115,7 +115,7 @@ final class ExternalDocumentEdits {
   bool _sameEditor(ShownDocument shown, int generation, DocumentRef ref) =>
       !_session._disposed &&
       _session._document == generation &&
-      _session._opening == null &&
+      _session._reads.pending == null &&
       !_session._restoring &&
       _session._held == null &&
       _session._source == ref &&

@@ -414,7 +414,11 @@ hidden recovery or staging folders.
   (`trainedIdsOf`). Any edit that would change that id first writes
   `[LineID]` with the current id (`withIdsPinned`). Progress therefore stays
   keyed by path and id, and chapter changes inside a file never touch the
-  training files.
+  training files. A line the app makes — a branch played on the board, a
+  trap added, a study chapter — is written with a `[LineID]` of its own
+  (`newVariationId`) that owes nothing to its moves or place, so a line made
+  where a deleted one stood starts with no training history; the command
+  that makes it names the id, so the same edit made again writes the same.
 - **Import writes one file.** A multi-chapter course or study becomes
   `<repertoire>.pgn` with `[ChapterName]` and a distinct `[LineID]` on every
   line (`courseText`). Imports are staged in a `.import-` folder and renamed

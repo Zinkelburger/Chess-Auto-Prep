@@ -292,6 +292,7 @@ String studyChapterText(
   required String name,
   String ending = '\n',
   bool? keepChapterUrl,
+  String? lineId,
 }) {
   final linked = keepChapterUrl ?? draft.keepChapterUrl;
   final tags = withStudyTags(
@@ -311,6 +312,7 @@ String studyChapterText(
       ..write(tag.text)
       ..write(tag.trailer);
   }
+  if (lineId != null) buffer.write('${PgnTag('LineID', lineId).text}$ending');
   final result = draft.result ?? '*';
   return (buffer
         ..write(ending)

@@ -133,14 +133,14 @@ String draftHeading({
 /// so the chapter comes out as if the line had been played into it. A
 /// move that is not legal where it falls, or that cannot be written, is a
 /// refusal and nothing changes.
-ChapterEdit lineAdded(Chapter chapter, List<String> sans) {
+ChapterEdit lineAdded(Chapter chapter, List<String> sans, {String? seed}) {
   var edited = chapter;
   GamesArranged? arranged;
   var at = const NodePath.root();
   for (final san in sans) {
     final move = positionOf(edited.tree.fenAt(at))?.parseSan(san);
     if (move == null) return ChapterEditRefused('$san is not legal there');
-    switch (addMove(edited, at: at, uci: move.uci)) {
+    switch (addMove(edited, at: at, uci: move.uci, seed: seed)) {
       case MoveIllegal() || MoveNotWritten():
         return ChapterEditRefused('$san could not be written');
       case MoveRefused(:final reason):

@@ -72,11 +72,13 @@ final class MoveRefused extends AddMoveResult {
 /// already a child changes nothing. A node with no continuation yet extends
 /// the game whose main line ends exactly there. A node that already has
 /// continuations is a branch point, and a branch is a new game — that is
-/// what a chapter file means by a line.
+/// what a chapter file means by a line. [seed] names the command for a new
+/// game's id (see [newVariationId]); without one the id comes from its moves.
 AddMoveResult addMove(
   Chapter chapter, {
   required NodePath at,
   required String uci,
+  String? seed,
 }) {
   final move = Move.parse(uci);
   final node = move == null ? null : moveNode(chapter.tree.fenAt(at), move);
@@ -101,7 +103,7 @@ AddMoveResult addMove(
   } else {
     edited =
         (siblings.isEmpty ? _extended(chapter, prefix, node) : null) ??
-        _appended(chapter, prefix, node);
+        _appended(chapter, prefix, node, seed);
   }
   // Merging keeps the order of the moves a chapter already had and puts the
   // ones only the edited game plays after them, so a move no sibling matched
@@ -217,10 +219,15 @@ _Edited? _extended(Chapter chapter, List<String> prefix, MoveNode node) {
 /// Written straight rather than through the rewrite gate: a new game
 /// replaces no bytes, so there is nothing here for a bad write to lose. That
 /// it reads back as itself is what the assertion in [addMove] checks.
-_Edited _appended(Chapter chapter, List<String> prefix, MoveNode node) {
+_Edited _appended(
+  Chapter chapter,
+  List<String> prefix,
+  MoveNode node,
+  String? seed,
+) {
   final tree = lineTree(chapter.tree.rootFen, [...prefix, node.san]);
   return (
-    chapter: _withNewGame(chapter, tree, _title(chapter, prefix, node)),
+    chapter: _withNewGame(chapter, tree, _title(chapter, prefix, node), seed),
     written: GamesWritten(appended: 1),
   );
 }
@@ -236,12 +243,18 @@ Chapter withIntroductionGame(Chapter chapter, String comment) => _withNewGame(
     comment,
   ),
   'Repertoire Line',
+  null,
 );
 
 /// [chapter] with a new game of [tree], called [title], at the end of the
 /// file.
-Chapter _withNewGame(Chapter chapter, GameTree tree, String title) {
-  final tags = _newTags(chapter, tree, title);
+Chapter _withNewGame(
+  Chapter chapter,
+  GameTree tree,
+  String title,
+  String? seed,
+) {
+  final tags = _newTags(chapter, tree, title, seed);
   final lines = [...chapter.lines];
   // The game before it only gains the blank line that puts the new one on a
   // line of its own, which is not a game written again.
@@ -266,7 +279,14 @@ Chapter _withNewGame(Chapter chapter, GameTree tree, String title) {
 /// The tags a new line gets: whose it is, that it is study
 /// material rather than a finished game, the root when it is not the
 /// initial position, and the id every later lookup needs.
-List<PgnTag> _newTags(Chapter chapter, GameTree tree, String title) {
+List<PgnTag> _newTags(
+  Chapter chapter,
+  GameTree tree,
+  String title,
+  String? seed,
+) {
+  final at = chapter.lines.length;
+  final taken = idsInUse(chapter);
   final white = chapter.side == Side.white;
   return List.unmodifiable([
     PgnTag('Event', title),
@@ -279,7 +299,9 @@ List<PgnTag> _newTags(Chapter chapter, GameTree tree, String title) {
     ],
     PgnTag(
       'LineID',
-      newLineId(mainlineSans(tree), chapter.lines.length, idsInUse(chapter)),
+      seed == null
+          ? newLineId(mainlineSans(tree), at, taken)
+          : newVariationId(seed, at, taken),
     ),
   ]);
 }

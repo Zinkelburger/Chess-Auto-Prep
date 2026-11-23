@@ -34,11 +34,34 @@ void main() {
   });
 
   test('a branch written as a new game gets an id of its own', () {
-    final result = addMove(chapter, at: _bb5, uci: 'g8f6') as MoveAdded;
+    final result =
+        addMove(chapter, at: _bb5, uci: 'g8f6', seed: 'move') as MoveAdded;
     final added = result.chapter.lines.last;
     expect(result.chapter.lines, hasLength(2));
     expect(added.lineId, isNot(ruy));
     expect(trainedIds(result.chapter.lines), [ruy, added.lineId]);
+  });
+
+  test('replaying a branch command writes identical PGN', () {
+    Chapter branch(Chapter before, String seed) =>
+        (addMove(before, at: _bb5, uci: 'g8f6', seed: seed) as MoveAdded)
+            .chapter;
+
+    final first = branch(chapter, 'first');
+    final id = first.lines.last.lineId!;
+    final derived = addMove(chapter, at: _bb5, uci: 'g8f6') as MoveAdded;
+    expect(id, isNot(derived.chapter.lines.last.lineId));
+    expect(writeChapter(branch(chapter, 'first')), writeChapter(first));
+    expect(branch(chapter, 'second').lines.last.lineId, isNot(id));
+
+    final occupied = parseChapter(
+      name: 'Ruy',
+      text: _ruy.replaceFirst('[Event "Ruy"]', '[Event "Ruy"]\n[LineID "$id"]'),
+    );
+    final retried = branch(occupied, 'first');
+    expect(retried.lines.first.lineId, id);
+    expect(retried.lines.last.lineId, isNot(id));
+    expect(writeChapter(branch(occupied, 'first')), writeChapter(retried));
   });
 
   test('a line dropped on the chapter carrying that id gets its own', () {
@@ -74,7 +97,8 @@ void main() {
     final file = parseChapter(name: 'Course', text: course);
     expect(trainedIds(file.lines), [ruy, 'berlin']);
     final view = sectionView(file, 'Berlin');
-    final result = addMove(view.chapter, at: _bb5, uci: 'd7d6') as MoveAdded;
+    final result =
+        addMove(view.chapter, at: _bb5, uci: 'd7d6', seed: 'move') as MoveAdded;
     final back = spliced(
       view,
       result.chapter,

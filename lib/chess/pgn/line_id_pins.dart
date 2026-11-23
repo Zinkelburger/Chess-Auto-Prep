@@ -291,6 +291,20 @@ String headerText(List<PgnHeader> tags) {
   return buffer.toString();
 }
 
+/// The `[LineID]` of a game the app makes: its own, owing nothing to its
+/// moves or its place, so a line made where a deleted one stood does not
+/// take over that one's training history. [seed] names the command that
+/// makes it, and the same command run again writes the same id. The dash
+/// after `line_` is in no id derived from moves or a hash.
+String newVariationId(String seed, int index, Set<String> taken) {
+  var attempt = 0;
+  while (true) {
+    final hash = sha256.convert(utf8.encode('$seed|$index|${attempt++}'));
+    final id = 'line_-${base64Url.encode(hash.bytes).substring(0, 21)}';
+    if (!taken.contains(id)) return id;
+  }
+}
+
 /// The `[LineID]` a game written for [sans] at file position [index] gets.
 ///
 /// It is the id a game that carries no id header is trained under —

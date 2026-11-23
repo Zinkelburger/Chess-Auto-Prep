@@ -12,6 +12,7 @@ import '../../storage/chapter_files.dart';
 import '../../storage/deleted_chapters.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/edit_scope.dart' show GamesRearranged;
+import '../../storage/operation_id.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/pgn_document_store.dart' as store;
 import '../../storage/pgn_export.dart';
@@ -192,6 +193,8 @@ final class Studies extends ChangeNotifier {
     StudyChoice into,
     List<ChapterDraft> drafts,
   ) async {
+    // One for the whole add, so an edit made again writes the same ids.
+    final seed = newOperationId();
     switch (into) {
       case NewStudy(:final name):
         if (nameProblem(name) case final wrong?) return StudyProblem(wrong);
@@ -201,6 +204,7 @@ final class Studies extends ChangeNotifier {
           study: name,
           drafts: drafts,
           linkOf: _linkOf,
+          seed: seed,
         );
         if (edit is! ChapterEdited) return _refusedAdd(edit);
         final created = await _created(name, writeChapter(edit.chapter));
@@ -213,8 +217,8 @@ final class Studies extends ChangeNotifier {
         return _changes.changing(
           study.path,
           () async => _session.source?.path == study.path
-              ? _addOpen(study, drafts)
-              : _addOnDisk(study, drafts),
+              ? _addOpen(study, drafts, seed)
+              : _addOnDisk(study, drafts, seed),
         );
     }
   }
@@ -223,7 +227,11 @@ final class Studies extends ChangeNotifier {
   /// one chapter.
   static Object _linkOf(String url) => parseStudyLink(url) ?? url;
 
-  StudyResult _addOpen(ChapterRef study, List<ChapterDraft> drafts) {
+  StudyResult _addOpen(
+    ChapterRef study,
+    List<ChapterDraft> drafts,
+    String seed,
+  ) {
     final chapter = _session.chapter;
     if (chapter == null || _session.game == null) {
       return const StudyProblem('Open that study from its list first.');
@@ -235,6 +243,7 @@ final class Studies extends ChangeNotifier {
         study: studyNameOf(open),
         drafts: drafts,
         linkOf: _linkOf,
+        seed: seed,
       ),
       writes: true,
     );
@@ -243,19 +252,22 @@ final class Studies extends ChangeNotifier {
         : StudyProblem('Could not add to ${study.name}: $refused.');
   }
 
-  Future<StudyResult> _addOnDisk(ChapterRef study, List<ChapterDraft> drafts) =>
-      _editOnDisk(
-        study,
-        (chapter) => pgn.addChapters(
-          chapter,
-          study: studyNameIn(chapter.lines) ?? study.name,
-          drafts: drafts,
-          linkOf: _linkOf,
-        ),
-        refused: _refusedAdd,
-        done: (before) =>
-            StudyDone(opened: study, chapter: before.lines.length),
-      );
+  Future<StudyResult> _addOnDisk(
+    ChapterRef study,
+    List<ChapterDraft> drafts,
+    String seed,
+  ) => _editOnDisk(
+    study,
+    (chapter) => pgn.addChapters(
+      chapter,
+      study: studyNameIn(chapter.lines) ?? study.name,
+      drafts: drafts,
+      linkOf: _linkOf,
+      seed: seed,
+    ),
+    refused: _refusedAdd,
+    done: (before) => StudyDone(opened: study, chapter: before.lines.length),
+  );
 
   /// Writes [edit] into [study], held against opening it meanwhile: where a
   /// send's chapter links go once the user has left the study. Answers
