@@ -463,7 +463,10 @@ Every PGN write goes through `PgnDocumentStore` (`storage/pgn_document_store.dar
 
 Only `Saved` clears the dirty state. A conflict keeps the draft and offers
 keep editing, save a copy or reload; dismissing a dialog never grants
-overwrite.
+overwrite. A document leaves the board only with words the user was asked
+about: a copy made on the way out lets it go while the copy still holds what
+is up (`DocumentSession.coveredBy`), and words an editor hands over that the
+file will not take keep it up, with the words still in their field.
 
 A save declares its `EditScope`: the games of the on-disk version it rewrites
 and how many it appends, or `WholeDocument` (restore, import, or a caller that

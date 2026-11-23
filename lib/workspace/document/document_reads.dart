@@ -28,9 +28,9 @@ final class _DocumentReads {
   }
 
   /// Reads [ref] in and puts it up, unless a newer request overtakes it.
-  Future<OpenResult> read(ChapterRef ref, int? game) {
+  Future<OpenResult> read(ChapterRef ref, int? game, [CopySaved? copy]) {
     final ticket = _opens.begin();
-    return switching(ticket, () => _opened(ref, game, ticket));
+    return switching(ticket, () => _opened(ref, game, ticket, copy));
   }
 
   /// Runs [change], which puts another document up, with undo held off
@@ -44,7 +44,12 @@ final class _DocumentReads {
     }
   }
 
-  Future<OpenResult> _opened(ChapterRef ref, int? game, Ticket ticket) async {
+  Future<OpenResult> _opened(
+    ChapterRef ref,
+    int? game,
+    Ticket ticket,
+    CopySaved? copy,
+  ) async {
     // A rename, move or delete of this document may still be running, with a
     // draft behind it that belongs to the file it was typed into: it goes out
     // before this document takes the saver over, and before the read below,
@@ -67,7 +72,7 @@ final class _DocumentReads {
     );
     if (ticket.overtaken) return const OpenOvertaken();
     if (_session.access.versionOf(ref.path) != version) {
-      return _opened(ref, game, ticket);
+      return _opened(ref, game, ticket, copy);
     }
     final DocumentShown shown;
     switch (read) {
@@ -77,7 +82,7 @@ final class _DocumentReads {
       case DocumentShown():
         shown = read;
     }
-    _session._editors.commit();
+    if (!_session._handedOver()) return const OpenOvertaken();
     if ((!leftAsIs || _session._saver.drafts != drafts) &&
         !_session._saver.settled) {
       // Words typed during the read, a Save among them, go to their file
@@ -88,14 +93,16 @@ final class _DocumentReads {
         return const OpenOvertaken();
       }
       // A flush to the file being opened supersedes the read.
-      if (into == ref.path) return _opened(ref, game, ticket);
+      if (into == ref.path) return _opened(ref, game, ticket, copy);
     }
     // A same-file autosave may already have settled while the read was out.
     if (_session.access.versionOf(ref.path) != version ||
         (_session._saver.documentPath == ref.path &&
             _session._saver.lastReceipt != receipt)) {
-      return _opened(ref, game, ticket);
+      return _opened(ref, game, ticket, copy);
     }
+    // Words written since the copy made on the way out are not its.
+    if (!_session.coveredBy(copy)) return const OpenOvertaken();
     _session._show(
       shown.chapter,
       ref,

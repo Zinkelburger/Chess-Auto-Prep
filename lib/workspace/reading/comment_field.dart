@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../chess/pgn/comment_text.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/move_label.dart';
-import '../../storage/chapter_files.dart' show ChapterRef;
 import '../../ui/app_keys.dart';
 import '../../ui/listening_state.dart';
 import '../../ui/move_notation.dart';
@@ -147,7 +146,9 @@ class _CommentFieldState extends State<CommentField>
     final before = session.commentAt(at);
     _committing = true;
     try {
-      session.setComment(at, text);
+      // Refused words stay the field's: a token the note shows no trace of
+      // would otherwise pass for words the document took.
+      if (!session.setComment(at, text)) return;
     } finally {
       _committing = false;
     }
@@ -233,7 +234,7 @@ class _CommentFieldState extends State<CommentField>
 
 /// The document a path of the session's is a path into: the file and, for
 /// one shown a game at a time, the game.
-typedef _Document = ({ChapterRef? source, int? game});
+typedef _Document = (int, String?, int?);
 
 _Document _documentOf(DocumentSession session) =>
-    (source: session.source, game: session.game);
+    (session.generation, session.source?.section, session.game);

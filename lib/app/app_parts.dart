@@ -132,9 +132,19 @@ final class AppParts {
   /// The copy the question on the way out asked for: the name of the file
   /// it wrote, or null. A copy that failed leaves the user where they were,
   /// so the bar says why.
-  Future<String?> _copied() async {
+  Future<CopySaved?> _copied() async {
     final written = await _copyOnLeave(session);
-    if (written is CopySaved) return written.name;
+    if (_disposed) return null;
+    if (written is CopySaved) {
+      if (session.coveredBy(written)) return written;
+      // Written since the copy began: the user is where they were, to
+      // decide about those words too.
+      requests.say(
+        'Saved a copy as ${written.name}. The document changed while it was '
+        'written, so it is still open.',
+      );
+      return null;
+    }
     if (written != null) sayCopy(requests.say, written);
     return null;
   }

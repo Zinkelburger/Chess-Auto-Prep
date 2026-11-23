@@ -9,6 +9,7 @@ import 'package:chess_auto_prep/storage/pgn_document_store.dart'
     show IoFailure, Opened, SaveRefused, Unfinished;
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/document/document_session.dart';
+import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -285,7 +286,7 @@ void main() {
       edit('one');
       await pumpEventQueue();
       final question = _Question(waits: true);
-      final copying = Completer<String?>();
+      final copying = Completer<CopySaved?>();
       final guard = ExitGuard(
         saver: fixture.saver,
         question: question,
@@ -302,7 +303,7 @@ void main() {
       await question.first;
       question.answerNow(DraftChoice.keepWaiting);
       expect(await closing, isFalse);
-      copying.complete('Accepted copy.pgn');
+      copying.complete(const CopySaved('Accepted copy.pgn'));
       await pumpEventQueue();
     },
   );
@@ -328,13 +329,13 @@ void main() {
     final guard = ExitGuard(
       saver: fixture.saver,
       question: question,
-      saveCopy: () async => 'Main copy.pgn',
+      saveCopy: () async => const CopySaved('Main copy.pgn'),
       wait: moment,
     );
     final first = guard.mayLeaveDocument();
     final second = guard.mayLeaveDocument();
-    expect((await first as Go).copy, 'Main copy.pgn');
-    expect((await second as Go).copy, 'Main copy.pgn');
+    expect((await first as Go).copy?.name, 'Main copy.pgn');
+    expect((await second as Go).copy?.name, 'Main copy.pgn');
     expect(question.asked, hasLength(1));
   });
 

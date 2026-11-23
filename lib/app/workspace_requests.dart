@@ -416,7 +416,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     }
     final leave = left ?? await _leaving.mayLeaveDocument();
     if (ticket.overtaken || leave is! Go) return const RequestDropped();
-    final result = await _session.open(ref, game: game);
+    final result = await _session.open(ref, game: game, copy: leave.copy);
     if (ticket.overtaken) return const RequestDropped();
     switch (result) {
       case OpenOvertaken():
@@ -610,8 +610,8 @@ final class WorkspaceRequests extends ChangeNotifier {
     final leave = left ?? await _leaving.mayLeaveDocument();
     if (ticket.overtaken || leave is! Go) return const RequestDropped();
     final shown = page == null
-        ? await _session.showAnalysisBoard()
-        : await _session.restoreAnalysisPage(page);
+        ? await _session.showAnalysisBoard(null, leave.copy)
+        : await _session.restoreAnalysisPage(page, leave.copy);
     if (!shown || ticket.overtaken) return const RequestDropped();
     _saidCopy(leave);
     return const RequestDone();
@@ -623,6 +623,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (ticket.overtaken || leave == null) return const RequestDropped();
     if (!await _session.showAnalysisBoard(
           boards.analysisBoard(side: Side.white),
+          leave.copy,
         ) ||
         ticket.overtaken) {
       return const RequestDropped();
@@ -650,7 +651,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (ticket.overtaken) return const RequestDropped();
     final leave = await _leavingFile();
     if (ticket.overtaken || leave == null) return const RequestDropped();
-    final shown = await _session.showAnalysisBoard(board);
+    final shown = await _session.showAnalysisBoard(board, leave.copy);
     if (!shown || ticket.overtaken) return const RequestDropped();
     _session.cursor.goTo(cursor);
     // A read-only line preview belongs only in the new scratch tab. Preserve
@@ -678,6 +679,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (ticket.overtaken || leave == null) return const RequestDropped();
     final shown = await _session.showAnalysisBoard(
       boards.analysisBoard(side: side, root: root, sans: sans),
+      leave.copy,
     );
     if (!shown || ticket.overtaken) return const RequestDropped();
     if (_session.tree case final tree?) {
@@ -744,7 +746,8 @@ final class WorkspaceRequests extends ChangeNotifier {
     final leave = await _leavingFile();
     if (ticket.overtaken || leave == null) return const RequestDropped();
     final from = _here;
-    if (!await _session.showAnalysisBoard(board) || ticket.overtaken) {
+    if (!await _session.showAnalysisBoard(board, leave.copy) ||
+        ticket.overtaken) {
       return const RequestDropped();
     }
     if (!_keepBoard.contains(_mode) && !_modeChosenSince) {
@@ -861,7 +864,14 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (_session.source == null) return const RequestDropped();
     final leave = await _leaving.mayLeaveDocument();
     if (ticket.overtaken || leave is! Go) return const RequestDropped();
-    _session.closed();
+    // The file goes as it does for the analysis board: words typed while
+    // the question waited are written first, and it stays up if they are
+    // not what the copy holds or the file will not take them.
+    if (!await _session.showAnalysisBoard(null, leave.copy) ||
+        ticket.overtaken) {
+      return const RequestDropped();
+    }
+    _session.takeSetAsideUndo();
     _viewer.closed();
     _saidCopy(leave);
     return const RequestDone();
@@ -928,7 +938,7 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// The bar after a document came or went: where a copy the leave question
   /// wrote went, or nothing.
   void _saidCopy(Go leave) => switch (leave.copy) {
-    final copy? => sayCopy(say, CopySaved(copy)),
+    final copy? => sayCopy(say, copy),
     null => say(null),
   };
 
