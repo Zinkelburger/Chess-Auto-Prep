@@ -1,6 +1,8 @@
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
+import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
 import 'package:chess_auto_prep/workspace/document/document_session.dart';
 import 'package:chess_auto_prep/workspace/document/session_results.dart';
@@ -303,6 +305,29 @@ void main() {
       side: Side.white,
     );
     expect((pasted as PastedBoard).chapter.tree.children.single.san, 'e4');
+    expect(pasted.note, 'Pasted the first of 2 games.');
+  });
+
+  test('a paste read only in part keeps the variations, notes and players '
+      'of the part that was read', () {
+    final pasted =
+        pastedBoard(
+              '[Event "Club"]\n[White "Alice"]\n[Black "Bob"]\n[Result "1-0"]\n\n'
+              '1. e4 {Best by test} e5 (1... c5 2. Nf3 {Open}) 2. Nf3 Nc6 '
+              '3. Qh7 Nf6 1-0\n',
+              side: Side.white,
+            )
+            as PastedBoard;
+    final tree = pasted.chapter.tree;
+    expect(mainlineSans(tree), ['e4', 'e5', 'Nf3', 'Nc6']);
+    final e4 = tree.children.single;
+    expect(e4.comment, 'Best by test');
+    expect([for (final reply in e4.children) reply.san], ['e5', 'c5']);
+    expect(e4.children.last.children.single.comment, 'Open');
+    final text = writeChapter(pasted.chapter);
+    expect(text, contains('[White "Alice"]'));
+    expect(text, contains('[Result "*"]'), reason: 'a board, not the game');
+    expect(pasted.note, startsWith('Pasted the game as far as it could be'));
   });
 
   test('a board from a position with no moves takes its first move', () {

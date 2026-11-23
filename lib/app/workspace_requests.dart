@@ -726,12 +726,17 @@ final class WorkspaceRequests extends ChangeNotifier {
         boards.pastedFen(text) == null) {
       return _importPasted(ticket, text.trim());
     }
-    return switch (positionOnly
+    switch (positionOnly
         ? boards.pastedPosition(text)
         : boards.pastedBoard(text, side: _session.orientation)) {
-      boards.PasteRefused(:final reason) => _refused(reason),
-      boards.PastedBoard(:final chapter) => _toBoard(ticket, chapter),
-    };
+      case boards.PasteRefused(:final reason):
+        return _refused(reason);
+      case boards.PastedBoard(:final chapter, :final note):
+        final result = await _toBoard(ticket, chapter);
+        // What the paste left out is said, not silently dropped.
+        if (result is RequestDone && note != null) say(note, problem: false);
+        return result;
+    }
   }
 
   /// A position set up by hand as a new analysis board, seen from [side].
