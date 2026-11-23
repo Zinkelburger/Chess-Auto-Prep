@@ -6,6 +6,9 @@ import 'package:path/path.dart' as p;
 
 import '../../chess/explorer_answer.dart';
 import '../../chess/explorer_choice.dart';
+import '../../chess/pgn/game_text.dart';
+import '../../chess/pgn/pgn_reader.dart';
+import '../../chess/pgn/tree_edit.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/pgn_document_store.dart' as store;
@@ -73,18 +76,54 @@ final class GameFetcher extends ChangeNotifier {
     _fetching = null;
     notifyListeners();
     if (pgn == null) return const GameNotKept('Could not fetch that game.');
-    final ref = ChapterRef.at(
-      p.join(
-        _collections,
-        'explorer games',
-        '${gameFileName(game, source)}.pgn',
-      ),
-    );
-    return switch (await _documents.create(ref, pgn)) {
-      store.Created() || store.Collision() => GameKept(ref, ply: ply),
+    final name = gameFileName(game, source);
+    final ref = _kept(name);
+    switch (await _documents.create(ref, pgn)) {
+      case store.Created():
+        return GameKept(ref, ply: ply);
+      case store.IoFailure(:final detail):
+        return GameNotKept('Could not keep that game: $detail');
+      case store.Collision():
+    }
+    if (await _isThatGame(ref, pgn)) return GameKept(ref, ply: ply);
+    // A database built again gives its ids out afresh, so the file kept
+    // under this one can be another game: this one gets a file of its own,
+    // named by its moves so opening it again finds the same file.
+    final moves = sha256.convert(utf8.encode(_mainline(pgn).join(' ')));
+    final other = _kept('$name ${moves.toString().substring(0, 8)}');
+    return switch (await _documents.create(other, pgn)) {
+      store.Created() || store.Collision() => GameKept(other, ply: ply),
       store.IoFailure(:final detail) => GameNotKept(
         'Could not keep that game: $detail',
       ),
+    };
+  }
+
+  ChapterRef _kept(String name) =>
+      ChapterRef.at(p.join(_collections, 'explorer games', '$name.pgn'));
+
+  /// Whether the file at [ref] holds the game [pgn] is: the same moves as
+  /// far as both go, so a kept game the user has played on from, or
+  /// written in, is still that game. A file that cannot be read is opened
+  /// as it is, where the viewer says what is wrong with it.
+  Future<bool> _isThatGame(ChapterRef ref, String pgn) async {
+    final String kept;
+    switch (await _documents.open(ref)) {
+      case store.Opened(:final text):
+        kept = text;
+      case store.Absent() || store.Unreadable():
+        return true;
+    }
+    final (was, now) = (_mainline(kept), _mainline(pgn));
+    final shared = was.length < now.length ? was.length : now.length;
+    return listEquals(was.sublist(0, shared), now.sublist(0, shared));
+  }
+
+  static List<String> _mainline(String pgn) {
+    final game = splitChapterText(pgn).games.firstOrNull?.text ?? pgn;
+    return switch (readGame(game).tree) {
+      final tree? => mainlineSans(tree),
+      null => const [],
     };
   }
 
