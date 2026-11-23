@@ -118,12 +118,10 @@ void main() {
       expect((sender.state as SendDone).updated, 1);
       expect(lichess.added, hasLength(1));
 
+      // Neither changed since: neither is written again.
       lichess.replaced.clear();
       await sender.send(into: 'wxyz9876');
-      expect(
-        lichess.replaced.map((r) => r.chapter),
-        unorderedEquals(['oldchap0', copyId]),
-      );
+      expect(lichess.replaced, isEmpty);
       expect(lichess.added, hasLength(1));
     },
   );
@@ -203,8 +201,10 @@ void main() {
   });
 
   test('a send that only updated names no chapters added', () async {
-    final (_, sender) = await open(chapters(1));
+    final (fixture, sender) = await open(_chapter('Round 1'));
     await sender.send();
+    fixture.session.cursor.toEnd();
+    fixture.session.playMove('g1f3');
     await sender.send(into: 'wxyz9876');
     final done = sender.state as SendDone;
     expect((done.added, done.updated, done.skipped), (0, 1, 0));
@@ -259,7 +259,7 @@ void main() {
     await fixture.session.open(fixture.ref, game: 0);
     await sender.send(into: 'wxyz9876');
     final done = sender.state as SendDone;
-    expect((done.added, done.updated), (0, 2));
+    expect((done.added, done.updated), (0, 0));
     expect(lichess.added, hasLength(2));
   });
 

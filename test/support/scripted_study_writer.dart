@@ -68,6 +68,10 @@ final class ScriptedStudyWriter implements LichessStudyWriter {
   }
 
   @override
+  Future<bool?> hasChapter(String study, String chapter) async =>
+      failing == null ? !gone.contains(chapter) : null;
+
+  @override
   Future<LichessWrite> replaceChapter(
     String study,
     String chapter, {

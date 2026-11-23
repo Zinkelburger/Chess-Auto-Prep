@@ -53,6 +53,11 @@ final class StudySender extends ChangeNotifier {
   StudySend _state = const SendIdle();
   bool _disposed = false;
 
+  /// What this window last sent to each Lichess chapter, moves and tags.
+  /// Sending the same again changes nothing there but the computer analysis
+  /// Lichess keeps for the chapter, which every replacement clears.
+  final _onLichess = <String, String>{};
+
   StudySend get state => _state;
 
   /// Lichess keeps at most this many chapters in one study.
@@ -184,6 +189,8 @@ final class StudySender extends ChangeNotifier {
       final url? => parseStudyLink(url),
       null => null,
     };
+    final tags = lichessTagsOf(line);
+    final form = '$tags\n$pgn';
     LichessWrite? result;
     // Two chapters naming one Lichess chapter (a copy, a chapter imported
     // again) would overwrite each other there: the first takes its place and
@@ -192,13 +199,24 @@ final class StudySender extends ChangeNotifier {
         link?.studyId == run.study &&
         link?.chapterId != null &&
         run.replacing.add(link!.chapterId!)) {
-      result = await _writer.replaceChapter(
-        run.study,
-        link.chapterId!,
-        pgn: pgn,
-        tags: lichessTagsOf(line),
-      );
-      if (result is LichessWritten) run.updated++;
+      final at = '${run.study}/${link.chapterId}';
+      // Sent as it is before: left alone while Lichess still has it.
+      final there = _onLichess[at] == form
+          ? await _writer.hasChapter(run.study, link.chapterId!)
+          : null;
+      if (there ?? false) return true;
+      if (there == null) {
+        result = await _writer.replaceChapter(
+          run.study,
+          link.chapterId!,
+          pgn: pgn,
+          tags: tags,
+        );
+      }
+      if (result is LichessWritten) {
+        run.updated++;
+        _onLichess[at] = form;
+      }
       // A chapter deleted on Lichess since is sent again as a new one.
       if (result case LichessNotWritten(
         problem: LichessWriteProblem.notFound,
@@ -222,6 +240,7 @@ final class StudySender extends ChangeNotifier {
       case LichessWritten(:final id?):
         run.added++;
         run.urls[index] = chapterUrl(run.study, id);
+        _onLichess['${run.study}/$id'] = form;
       case LichessWritten():
     }
     return true;

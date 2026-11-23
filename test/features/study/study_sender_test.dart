@@ -108,8 +108,26 @@ void main() {
     expect(sender.state, isA<SendIdle>());
   });
 
-  test('sending again updates the chapters already there', () async {
+  test('sending again leaves the chapters nothing changed in alone', () async {
     await sender.send();
+    lichess.added.clear();
+    await sender.send(into: 'wxyz9876');
+    // Replacing a chapter clears the computer analysis Lichess keeps for it.
+    expect(lichess.added, isEmpty);
+    expect(lichess.replaced, isEmpty);
+    final done = sender.state as SendDone;
+    expect((done.added, done.updated), (0, 0));
+  });
+
+  test('sending again updates the chapters already there', () async {
+    // What another window sent: this one has not seen it go.
+    final other = StudySender(
+      lichess,
+      fixture.session,
+      openPage: (_) async => true,
+    );
+    addTearDown(other.dispose);
+    await other.send();
     lichess.added.clear();
     lichess.pgns.clear();
     await sender.send(into: 'wxyz9876');
@@ -130,7 +148,7 @@ void main() {
     lichess.gone.add('chap1000');
     lichess.added.clear();
     await sender.send(into: 'wxyz9876');
-    expect(lichess.replaced.map((r) => r.chapter), ['chap0000']);
+    expect(lichess.replaced, isEmpty, reason: 'the other did not change');
     expect(lichess.added.map((a) => (a.name, a.initial)), [('Round 2', false)]);
     expect(url(1), 'https://lichess.org/study/wxyz9876/chap2000');
   });
