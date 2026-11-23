@@ -401,7 +401,11 @@ same `[ChapterName]` (the Lichess study export's tag). `chapterSections`
 (`chess/pgn/chapter_sections.dart`) gives each named chapter `(path, section)`
 identity, even as the last chapter left; untagged games form the unnamed
 section. Listings walk nested folders without following symlinks or entering
-hidden recovery or staging folders.
+hidden recovery or staging folders. A `repertoires` (or other library) folder that is a link leading nowhere,
+as when its drive is not connected, is not an empty library and its files
+are not deleted: listings and opens answer unreadable, and an unfinished
+rename or move under it waits (`behindDeadLink`) instead of being set aside.
+A file standing where the folder should be is reported the same way.
 
 - **One write path.** A course chapter opens as a `SectionView`; `spliced`
   puts the edit back and the store checks the whole file. Untouched games keep

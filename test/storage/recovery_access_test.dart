@@ -153,7 +153,7 @@ void main() {
   test('a file named repertoires leaves studies and books readable', () async {
     // This Documents folder already contains a user file with that name
     // when the application first opens the profile.
-    await File(
+    final file = await File(
       p.join(fixture.documents.path, 'repertoires'),
     ).writeAsString('notes');
     final root = await Directory(
@@ -187,7 +187,40 @@ void main() {
         completion('Match prep'),
       ),
     ]);
+    final chapters = ChapterDirectory(
+      Directory(file.path),
+      recovery: store.recovery,
+    );
+    expect(await chapters.list(), isA<RepertoiresUnreadable>());
+    expect(await chapters.deleted(), isA<DeletedUnreadable>());
+    expect(await file.readAsString(), 'notes');
   });
+
+  test(
+    'a disconnected library keeps a landed rename until it can finish',
+    () async {
+      final before = fixture.ref('repertoires/Course/Old.pgn');
+      final after = fixture.ref('repertoires/Course/New.pgn');
+      final revision = await fixture.put(before, oneGame('1. d4'));
+      await fixture.train(before);
+      await _landedMove(fixture, before, after, revision);
+      final root = Directory(p.join(fixture.documents.path, 'repertoires'));
+      final offline = await root.rename(p.join(fixture.root.path, 'offline'));
+      final link = Link(root.path);
+      await link.create(p.join(fixture.root.path, 'drive'));
+      final store = restarted(fixture);
+      final read = await store.open(after);
+      expect(_owedMoves(fixture), hasLength(1));
+      expect(fixture.quarantined(), isEmpty);
+      expect(read, isA<Unreadable>());
+      await link.delete();
+      await offline.rename(root.path);
+      expect(await store.open(after), isA<Opened>());
+      expect(_owedMoves(fixture), isEmpty);
+      await fixture.expectTrained(after);
+    },
+    skip: Platform.isWindows,
+  );
 
   test('a corrupt note blocks no training, listing or import', () async {
     final flat = fixture.ref('repertoires/Flat.pgn');

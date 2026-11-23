@@ -39,6 +39,11 @@ sealed class MovedPath implements Pivot {
           documents.path) {
         return const HoldsOther('The recorded training root alias changed.');
       }
+      for (final path in [record.from, record.to]) {
+        if (await behindDeadLink(documents, path)) {
+          return CannotTell('$path is behind a link that leads nowhere now.');
+        }
+      }
       await relocationParents(documents, record.from, create: false);
       await relocationParents(documents, record.to, create: false);
       final holds = await _holds();
@@ -217,6 +222,22 @@ String _existingAncestor(String directory, String root) {
     current = p.dirname(current);
   }
   return current;
+}
+
+/// Whether [path] lies behind a link under [documents] that leads nowhere
+/// just now: a library kept on a drive that is not connected. Everything
+/// behind it looks deleted, so nothing about it is decided until it is back.
+Future<bool> behindDeadLink(Directory documents, String path) async {
+  var at = documents.path;
+  for (final part in p.split(p.relative(p.dirname(path), from: at))) {
+    if (part == '.') continue;
+    at = p.join(at, part);
+    if (await FileSystemEntity.isLink(at) &&
+        await FileSystemEntity.type(at) == FileSystemEntityType.notFound) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /// Probe every existing ancestor of [path] under [documents] without
