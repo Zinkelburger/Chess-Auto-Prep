@@ -53,6 +53,7 @@ void main() {
   Future<void> searchesTheStart(Hivemind engine) async {
     final answer = await engine.search((
       position: TablePosition.initial,
+      played: null,
       team: Team.ab,
       maySit: false,
       mustMove: MustMove.either,
