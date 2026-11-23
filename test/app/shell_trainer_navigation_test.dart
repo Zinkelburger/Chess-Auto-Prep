@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/workspace/reading/move_tree_view.dart';
+import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_files.dart';
@@ -169,7 +170,8 @@ void main() {
   ) async {
     await bookLesson(tester);
     w.store.saves.add(const IoFailure('disk full'));
-    w.session.playMove('g8f6');
+    // A note: the trainer's board adds no move to the repertoire.
+    w.session.setComment(const NodePath.root(), 'Remember the plan.');
     await tester.pumpAndSettle();
     expect(w.saver.settled, isFalse);
     final draft = w.session.tree;

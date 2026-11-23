@@ -206,6 +206,7 @@ final class PlayerHunt extends ChangeNotifier {
 
   Future<void> start() async {
     if (running || analysis.busy || analysis.corpus == null) return;
+    if (analysis.deletingPlayer) return;
     _corpus = analysis.corpus;
     final ticket = _hunts.begin();
     _activeReportKey = _reportKey;

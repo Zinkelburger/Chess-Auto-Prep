@@ -150,7 +150,8 @@ final class PlayerAnalysisView extends ModeView {
       'Get games',
       icon: AppIcons.download,
       players.analysis.player?.accounts.isNotEmpty == true &&
-              !players.analysis.busy
+              !players.analysis.busy &&
+              !players.analysis.deletingPlayer
           ? () => unawaited(
               players.analysis.select(players.analysis.player!, download: true),
             )
