@@ -118,10 +118,11 @@ Iterable<String> gamesOfLines(Iterable<String> lines) sync* {
     } else if (headed ||
         kind == _Line.other ||
         tags.isEmpty && kind != _Line.tag) {
-      if (started)
+      if (started) {
         game
           ..write(tags)
           ..write(line);
+      }
       tags.clear();
       if (kind == _Line.other) headed = false;
     } else {
