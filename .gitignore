@@ -163,3 +163,7 @@ packaging/windows/prerequisites/VC_redist.x64.exe
 python/twic-position-finder/frontend/public/prep-engine/
 python/twic-position-finder/frontend/public/hypebeast-engine/net*
 python/twic-position-finder/frontend/public/crazyhouse-engine/
+
+# The impeccable skill's native binaries (16 MB per client copy); its
+# installer puts them back and its hooks skip quietly without them.
+**/skills/impeccable/scripts/bin/
