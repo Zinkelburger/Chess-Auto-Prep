@@ -4,7 +4,9 @@
 // anything but its own bytes.
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_edit.dart';
+import 'package:chess_auto_prep/chess/pgn/game_review.dart';
 import 'package:chess_auto_prep/chess/pgn/line_moves.dart';
+import 'package:chess_auto_prep/chess/training/training_line.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
@@ -233,6 +235,60 @@ void main() {
     expect(host, contains('e6'));
     expect(host, isNot(contains('0.3')));
   });
+
+  test('a graft keeps the host quiz range and clocks on shared moves', () {
+    final host = oneGame(
+      '[Event "Host"]\n\n'
+      '1. e4 {Main move} e5 2. Nf3 {[%tstart] [%clk 0:04:30]} '
+      'Nc6 3. Bb5 {[%tend]} a6 *',
+    );
+    final source = oneGame(
+      '[Event "Source"]\n\n'
+      '1. e4 {Develop [%tstart] [%clk 0:14:00] [%emt 0:00:03]} '
+      'e5 {[%tend] [%clk 0:13:00]} 2. Nf3 {[%clk 0:12:00]} '
+      'd6 {[%clk 0:11:00]} *',
+    );
+    final after = edited(
+      lineGraftedInto(host, host: 0, line: source.lines.single),
+    );
+
+    final tree = onDisk(after.chapter).lines.single.tree!;
+    final moves = tree.mainLine.toList();
+    expect(quizWindow(moves), (start: 2, end: 5));
+    expect(moves[0].comment, 'Main move Develop');
+    expect(moves[1].comment, isNull);
+    expect(moves[2].comment, '[%tstart] [%clk 0:04:30]');
+    expect(moves[2].children.last.comment, '[%clk 0:11:00]');
+  });
+
+  test(
+    'removing a review clears only the evaluations it owns after a graft',
+    () {
+      final host = oneGame(
+        '[Event "Host"]\n\n'
+        '1. e4 {First} e5 {Reply [%eval 0.2]} 2. Nf3 {Plan} Nc6 *',
+      );
+      final source = oneGame(
+        '[Event "Source"]\n\n'
+        '1. e4 {[%cap_review_eval] [%eval 0.4]} '
+        'e5 {[%eval 0.5] [%cap_review_eval]} 2. Nf3 {[%eval 0.1]} '
+        'Nc6 {[%cap_review_eval]} *',
+      );
+      final after = edited(
+        lineGraftedInto(host, host: 0, line: source.lines.single),
+      );
+
+      final tree = onDisk(after.chapter).lines.single.tree!;
+      expect(storedReviewValue(tree.children.single.comment)?.cp, 40);
+      expect(tree.mainLine.last.comment, isNull);
+      expect(withoutReview(tree).mainLine.map((move) => move.comment), [
+        'First',
+        'Reply [%eval 0.2]',
+        'Plan [%eval 0.1]',
+        null,
+      ]);
+    },
+  );
 
   test('a folded line that adds only a note is still an edit', () {
     final before = oneGame(

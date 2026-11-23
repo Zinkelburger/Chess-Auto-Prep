@@ -49,7 +49,7 @@ final class ExternalDocumentEdits {
     if (session._disposed ||
         shown == null ||
         ref == null ||
-        session._opening != null ||
+        session._reads.pending != null ||
         session._restoring ||
         session._readOnly != null ||
         session._held != null ||
@@ -115,7 +115,7 @@ final class ExternalDocumentEdits {
   bool _sameEditor(ShownDocument shown, int generation, DocumentRef ref) =>
       !_session._disposed &&
       _session._document == generation &&
-      _session._opening == null &&
+      _session._reads.pending == null &&
       !_session._restoring &&
       _session._held == null &&
       _session._source == ref &&
@@ -292,13 +292,22 @@ final class _Editors extends ChangeNotifier {
   bool get saving => _saving;
   bool _saving = false;
 
-  void commit({bool saving = false}) {
+  /// Counts the words an editor handed over that the document would not
+  /// take; they stay in their field.
+  int _refusals = 0;
+  void refuse() => _refusals++;
+
+  /// Asks every editor for its words. False when the document would not
+  /// take some of them.
+  bool commit({bool saving = false}) {
     final was = _saving;
+    final refused = _refusals;
     _saving = saving || was;
     try {
       notifyListeners();
     } finally {
       _saving = was;
     }
+    return refused == _refusals;
   }
 }

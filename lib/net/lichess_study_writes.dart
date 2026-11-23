@@ -91,6 +91,9 @@ abstract interface class LichessStudyWriter {
     required String pgn,
     required Map<String, String> tags,
   });
+
+  /// Whether [chapter] is still in [study]; null when Lichess did not say.
+  Future<bool?> hasChapter(String study, String chapter);
 }
 
 /// How long one write may take before it counts as not arriving.
@@ -169,6 +172,32 @@ final class LichessStudyWriterApi implements LichessStudyWriter {
       '$path/tags',
       {'pgn': header},
     );
+  }
+
+  @override
+  Future<bool?> hasChapter(String study, String chapter) async {
+    final token = await _token();
+    if (token == null || token.isEmpty) return null;
+    try {
+      final response = await _client
+          .get(
+            site.replace(
+              path:
+                  '/api/study/${Uri.encodeComponent(study)}/'
+                  '${Uri.encodeComponent(chapter)}.pgn',
+            ),
+            headers: lichessHeaders(token: token),
+          )
+          .timeout(studyWriteTimeout);
+      return switch (response.statusCode) {
+        200 => true,
+        404 => false,
+        _ => null,
+      };
+    } on Object catch (error) {
+      log.w('ask Lichess for the chapter $study/$chapter', error.runtimeType);
+      return null;
+    }
   }
 
   Future<LichessWrite> _post(

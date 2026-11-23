@@ -41,6 +41,13 @@ final class PlayerAnalysis extends ChangeNotifier {
   final GamesCache cache;
   final List<RecentGames> sites;
   final PendingWrites pending;
+
+  /// The players whose saved games are being deleted. Nothing is downloaded
+  /// for one of them, and no engine run started on their games, until that
+  /// is over: a download landing in a folder on its way to recovery would go
+  /// with it, or bring the deleted games back.
+  final deleting = <String>{};
+  bool get deletingPlayer => deleting.contains(player?.id);
   Player? player;
   PlayerCorpus? corpus;
   Side side = Side.white;
@@ -235,6 +242,7 @@ final class PlayerAnalysis extends ChangeNotifier {
   }
 
   Future<void> select(Player next, {bool download = false}) async {
+    if (download && deleting.contains(next.id)) return;
     final ticket = _selections.begin();
     final same = player?.id == next.id;
     player = next;

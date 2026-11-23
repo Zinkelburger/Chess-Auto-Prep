@@ -166,7 +166,7 @@ class _AnalysisPanelState extends State<AnalysisPanel>
         rowAction(
           'Get games…',
           () => unawaited(_getGames(player)),
-          busy: owner.busy,
+          busy: owner.busy || owner.deletingPlayer,
           icon: AppIcons.download,
         ),
       rowAction(

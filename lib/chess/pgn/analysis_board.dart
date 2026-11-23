@@ -4,6 +4,7 @@ import '../fen.dart';
 import '../position_setup.dart';
 import 'chapter.dart';
 import 'game_text.dart';
+import 'game_tree.dart';
 import 'pgn_reader.dart';
 import 'tree_edit.dart';
 
@@ -56,9 +57,14 @@ sealed class Pasted {
 }
 
 final class PastedBoard extends Pasted {
-  const PastedBoard(this.chapter);
+  const PastedBoard(this.chapter, {this.note});
 
   final Chapter chapter;
+
+  /// What the board does not hold of what was pasted, in a sentence for the
+  /// screen: the games after the first, or what came after a move that
+  /// could not be read. Null when it holds all of it.
+  final String? note;
 }
 
 final class PasteRefused extends Pasted {
@@ -99,14 +105,53 @@ Pasted pastedBoard(String text, {required Side side}) {
   }
   final facing = tree.rootFen == Fen.initial ? side : _toMove(tree.rootFen);
   // Moves after the first one that cannot be read are dropped, as a chapter
-  // would drop them; the board shows what could be played, from the game's
+  // would drop them; the board shows what could be read, from the game's
   // own start, so the rest of the text is never half-shown.
+  final others = games.length > 1
+      ? 'Pasted the first of ${games.length} games.'
+      : null;
   if (read.issues.isNotEmpty) {
     return PastedBoard(
-      analysisBoard(side: facing, root: tree.rootFen, sans: mainlineSans(tree)),
+      _readPart(facing, tree, read.tags) ??
+          analysisBoard(
+            side: facing,
+            root: tree.rootFen,
+            sans: mainlineSans(tree),
+          ),
+      note:
+          'Pasted the game as far as it could be read: '
+          '${read.issues.first.detail}.',
     );
   }
-  return PastedBoard(_chapterOf(facing, game));
+  return PastedBoard(_chapterOf(facing, game), note: others);
+}
+
+/// The part of a pasted game that was read, written as a game of its own:
+/// its variations, comments and glyphs with it, and the tags that say who
+/// played. Null when that would not read back whole, and then the main line
+/// alone is shown.
+Chapter? _readPart(Side side, GameTree tree, List<PgnHeader> pasted) {
+  const board = {'Event', 'Result', 'FEN', 'SetUp'};
+  final tags = [
+    const PgnTag('Event', analysisBoardName),
+    for (final tag in pasted.whereType<PgnTag>())
+      if (!board.contains(tag.key)) PgnTag(tag.key, tag.value),
+    const PgnTag('Result', '*'),
+    if (tree.rootFen != Fen.initial) ...[
+      PgnTag('FEN', tree.rootFen.value),
+      const PgnTag('SetUp', '1'),
+    ],
+  ];
+  final String text;
+  try {
+    text = writeGameText(tags, tree, terminator: '*', separator: '\n');
+  } on Object {
+    return null;
+  }
+  final again = readGame(text);
+  return again.tree == null || again.issues.isNotEmpty
+      ? null
+      : _chapterOf(side, text);
 }
 
 /// [text] as an analysis board at the position it holds, seen from the

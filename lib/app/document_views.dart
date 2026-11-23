@@ -245,9 +245,19 @@ final class TrainerView extends _LibraryView {
 
   final Trainer _trainer;
 
-  /// Coming here is coming to train, whichever tab was left up.
+  /// Coming here is coming to train, whichever tab was left up. Nothing
+  /// played on the board here is added to the repertoire.
   @override
-  void entered() => show(WorkspaceTab.train);
+  void entered() {
+    workspace.session.followsOnly = true;
+    show(WorkspaceTab.train);
+  }
+
+  @override
+  void left() {
+    workspace.session.followsOnly = false;
+    super.left();
+  }
 
   @override
   Listenable get changes => Listenable.merge([super.changes, _trainer]);
@@ -347,8 +357,11 @@ abstract base class _ReadingView extends _DocumentModeView {
     _hold();
   }
 
-  void _hold() => workspace.session.holdsEdits =
-      !editing.value || workspace.session.readOnly != null;
+  void _hold() {
+    workspace.session.holdsEdits =
+        !editing.value || workspace.session.readOnly != null;
+    workspace.review?.followReadEdit();
+  }
 
   @override
   void space() {

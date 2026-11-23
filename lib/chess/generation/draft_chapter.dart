@@ -127,20 +127,59 @@ String draftHeading({
     '${rootLine(rootMoves)}'
     '// Created on ${created.toString().split('.').first}\n\n';
 
+/// A new draft with no moves that starts where [source] does. A chapter
+/// whose games bring their own `[FEN]` starts somewhere its heading cannot
+/// say, so the draft is given one game of no moves from that position; a
+/// draft from the start of the game would refuse every line of the chapter.
+String emptyDraftText({
+  required String name,
+  required Chapter source,
+  required DateTime created,
+}) {
+  final root = source.tree.rootFen;
+  final heading = readHeading(source.preamble);
+  final headingRoot = heading.rootFen;
+  final preamble = draftHeading(
+    name: name,
+    side: source.side,
+    rootMoves: headingRoot.position == root.position
+        ? heading.rootMoves
+        : const [],
+    created: created,
+  );
+  if (headingRoot == root) return preamble;
+  final white = source.side == Side.white;
+  final tags = [
+    const PgnTag('Event', 'Repertoire Line'),
+    PgnTag('White', white ? 'Me' : 'Training'),
+    PgnTag('Black', white ? 'Training' : 'Me'),
+    const PgnTag('Result', '*'),
+    PgnTag('FEN', root.value),
+    const PgnTag('SetUp', '1'),
+  ];
+  final game = writeGameText(
+    tags,
+    GameTree(rootFen: root),
+    terminator: '*',
+    separator: '\n',
+  );
+  return '$preamble$game\n';
+}
+
 /// [sans], played from [chapter]'s start, added to it as one edit — one
 /// undo, and the cursor stays where it is. The moves it already holds are
 /// followed and the rest written as the board writes a move ([addMove]),
 /// so the chapter comes out as if the line had been played into it. A
 /// move that is not legal where it falls, or that cannot be written, is a
 /// refusal and nothing changes.
-ChapterEdit lineAdded(Chapter chapter, List<String> sans) {
+ChapterEdit lineAdded(Chapter chapter, List<String> sans, {String? seed}) {
   var edited = chapter;
   GamesArranged? arranged;
   var at = const NodePath.root();
   for (final san in sans) {
     final move = positionOf(edited.tree.fenAt(at))?.parseSan(san);
     if (move == null) return ChapterEditRefused('$san is not legal there');
-    switch (addMove(edited, at: at, uci: move.uci)) {
+    switch (addMove(edited, at: at, uci: move.uci, seed: seed)) {
       case MoveIllegal() || MoveNotWritten():
         return ChapterEditRefused('$san could not be written');
       case MoveRefused(:final reason):

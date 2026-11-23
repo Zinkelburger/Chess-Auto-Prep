@@ -38,22 +38,29 @@ final class ViewerDraft {
 
   /// The whole file with the edits in it.
   final String text;
+
+  bool matches(ViewerDraft? other) =>
+      other != null &&
+      path == other.path &&
+      revision == other.revision &&
+      game == other.game &&
+      text == other.text;
 }
 
 /// Where the checkpoints live. The filesystem is a real boundary, so this
 /// is an interface: [ViewerDraftFiles] in the app, an in-memory one in a
 /// test.
 abstract interface class ViewerDrafts {
-  /// Keeps [draft] in place of any earlier one for its file. Throws when it
-  /// could not be written; the caller logs it and tries again next time.
-  Future<void> keep(ViewerDraft draft);
+  /// Keeps [draft], preserving any checkpoint other than [previous].
+  /// Throws when either copy could not be written.
+  Future<void> keep(ViewerDraft draft, {ViewerDraft? previous});
 
   /// The draft kept for [path], or null when there is none. One that cannot
   /// be read is set aside, never obeyed, and answers null.
   Future<ViewerDraft?> find(String path);
 
-  /// Forgets the draft for [path]: its edits were saved or discarded.
-  Future<void> drop(String path);
+  /// Forgets [draft] if it is still current: its edits were saved or discarded.
+  Future<void> drop(ViewerDraft draft);
 
   /// Moves the draft for [path] into the recovery quarantine, whole: newer
   /// edits are taking its place and it may hold work nothing else has.
@@ -81,7 +88,7 @@ final class ViewerDraftFiles implements ViewerDrafts {
       File(p.join(_folder.path, '${sha256.convert(utf8.encode(path))}.json'));
 
   @override
-  Future<void> keep(ViewerDraft draft) async {
+  Future<void> keep(ViewerDraft draft, {ViewerDraft? previous}) async {
     final record = {
       'version': version,
       'path': draft.path,
@@ -97,6 +104,23 @@ final class ViewerDraftFiles implements ViewerDrafts {
     await withDirectoryLock(_folder, () async {
       final file = _fileFor(draft.path);
       await discardLeftoverStage(file.path);
+      final current = await find(draft.path);
+      if (current == null && await file.exists()) {
+        throw FileSystemException('Cannot read viewer draft', file.path);
+      }
+      // One that is neither this window's last nor what is being written
+      // is another's; a write that landed without saying so is neither.
+      if (current != null &&
+          !current.matches(previous) &&
+          !current.matches(draft)) {
+        await quarantineCopy(
+          _support,
+          '$folder-${p.basename(file.path)}',
+          await file.readAsBytes(),
+          'newer unsaved edits replaced it',
+          requiredForWrite: true,
+        );
+      }
       await replaceFile(file.path, bytes);
     });
   }
@@ -131,10 +155,11 @@ final class ViewerDraftFiles implements ViewerDrafts {
   }
 
   @override
-  Future<void> drop(String path) async {
-    final file = _fileFor(path);
+  Future<void> drop(ViewerDraft draft) async {
     await withDirectoryLock(_folder, () async {
-      if (await file.exists()) await file.delete();
+      if (draft.matches(await find(draft.path))) {
+        await _fileFor(draft.path).delete();
+      }
     });
   }
 

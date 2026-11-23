@@ -1,8 +1,10 @@
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
+import 'package:chess_auto_prep/chess/pgn/chapter_edit.dart';
 import 'package:chess_auto_prep/chess/pgn/comment_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pgn/pgn_issue.dart';
+import 'package:chess_auto_prep/chess/pgn/study_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
@@ -66,6 +68,24 @@ void main() {
     expect(empty.side, Side.white);
     expect(empty.tree.isEmpty, isTrue);
     expect(empty.gameCount, 0);
+  });
+
+  test('deleting a game removes its setup tags even before Event', () {
+    const fen = Fen('4k3/8/8/8/8/8/4P3/4K3 w - - 0 1');
+    const survivor = '[Event "Opening"]\n[Result "*"]\n\n1. d4 d5 *\n';
+    final study = parseChapter(
+      name: 'Sidelines',
+      game: 0,
+      text:
+          '$emptyChapter\n'
+          '[SetUp "1"]\n[FEN "${fen.value}"]\n'
+          '[Event "Pawn ending"]\n[Result "*"]\n\n1. e4 *\n\n'
+          '$survivor',
+    );
+
+    final deleted = deleteChapter(study, index: 0) as ChapterEdited;
+    expect(writeChapter(deleted.chapter), '$emptyChapter\n$survivor');
+    expect(study.tree.rootFen, fen);
   });
 
   group('a game whose comment holds a blank line', () {

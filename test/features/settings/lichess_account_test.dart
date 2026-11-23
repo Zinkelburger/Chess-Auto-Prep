@@ -84,7 +84,8 @@ void main() {
     expect(state.problem, isNull);
   });
 
-  test('logging in again and cancelling keeps the saved account', () async {
+  test('logging in again and cancelling keeps the saved account, and says '
+      'it was turned away', () async {
     final before = saved = someone(name: 'Previous');
     final state = owner();
     await state.load();
@@ -95,7 +96,9 @@ void main() {
     await done;
     expect((state.status as SignedIn).account, same(before));
     expect(saved, same(before));
-    expect(state.problem, isNull);
+    // A renewal is asked for when Lichess refused the saved login: the row
+    // does not go back to reading as if it were fine.
+    expect(state.problem, LichessAccountState.renewLogin);
   });
 
   test('a browser that did not open is said so, with the page', () async {

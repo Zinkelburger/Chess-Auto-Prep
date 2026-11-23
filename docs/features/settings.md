@@ -75,8 +75,9 @@ Places, in order:
 ## Actions
 
 **Change a setting** — any control → `SettingsStore.update` shows the new
-value at once and writes the whole of `settings.json`; writes in flight merge
-so the newest value lands last. Display changes apply immediately; engine
+value at once and writes `settings.json`; writes in flight merge so the
+newest value lands last, and each write puts only the keys changed here over
+what the file holds by then, so a second copy of the app keeps its own. Display changes apply immediately; engine
 cores or memory restart the engine; other engine and search values apply to
 the next search or job. A failed write keeps the value on screen, shows the
 problem in the footer, and the next change writes again.
@@ -90,7 +91,9 @@ hint reads `Waiting for the browser…` with `Cancel`, or `The browser did not
 open. Copy the link and open it.` with `Copy link` and `Cancel`. `Cancel`
 puts back what the row showed before, so a login started again over a saved
 account leaves that account signed in, and a grant that arrives after it is
-not saved. Signed in:
+not saved; because logging in again is asked for when Lichess refused the
+saved login, the row then says `Lichess turned this login away. Log in again
+to renew it.` Signed in:
 `Logged in as <name> · until <date>` (or `· personal access token`) with `Log
 out`. Failures replace the hint in the error colour until the next attempt:
 `Lichess said the login was declined.`, `No answer from the browser in five
@@ -144,8 +147,11 @@ be read is logged and left out.
 
 ## Data
 
-- **`<support>/settings.json`** — one JSON object written whole on every
-  change through an atomic replace; the last write wins. Top-level keys:
+- **`<support>/settings.json`** — one JSON object written on every change
+  through an atomic replace. The file is read again under its lock first and
+  only the keys this window changed go over it: two copies of the app keep
+  each other's settings (the last to save a key has that key), and what the
+  other saved shows here after the next save. Top-level keys:
   `boardCoordinates`, `figurines`, `tournamentFinalPositions`, `engineCores`
   (`0` = half the machine), `engineMemoryMb`, `analysisEngine`,
   `engineLines`, `engineThreat`, `copyFilesIntoDocuments`, `opponentElo`,
@@ -158,7 +164,10 @@ be read is logged and left out.
   filters, threat arrow, pane layouts, last place, engine switch).
 - **Fail open** — settings never block startup. A file that cannot be read is
   moved into `<support>/recovery-quarantine/`, logged, and the app starts on
-  the defaults. A symlinked `settings.json` is followed.
+  the defaults. One the disk will not read stays where it is with a line
+  saying changes are not saved; every later change tries the read again, and
+  once it works the change is saved over what the file held and the rest of
+  the file comes up. A symlinked `settings.json` is followed.
 - **Lichess account** — SharedPreferences keys `lichess_access_token`,
   `lichess_auth_username`, `lichess_token_expiry`, `lichess_is_pat`. Plain preferences, not
   an OS keychain. An expired OAuth token or unreadable keys read as signed out.

@@ -4,6 +4,9 @@ import 'package:chess_auto_prep/chess/generation/eval.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_heading.dart';
+import 'package:chess_auto_prep/chess/pgn/line_id_pins.dart';
+import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
+import 'package:chess_auto_prep/chess/training/schedule.dart';
 import 'package:chess_auto_prep/features/trainer/lesson.dart';
 import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
@@ -16,28 +19,32 @@ import '../support/scripted_files.dart';
 import '../support/scripted_store.dart';
 import '../support/window_fixture.dart';
 
-Fen board(String name) => Fen('$name w - - 0 1');
-
-/// A search in which, after 1.e4, the likely 1...f6 loses: a trap.
-final trapTree = OurNode.over(
-  fen: Fen.initial,
+/// A search in which the likely reply f6 to e4 loses.
+OurNode trapTree(Fen root) => OurNode.over(
+  fen: root,
   evalForUs: const Eval(30),
   candidates: [
     CandidateMove(
       move: const MoveRef(uci: 'e2e4', san: 'e4'),
       child: OpponentNode.over(
-        fen: board('after-e4'),
+        fen: lineTree(root, const ['e4']).children.single.fen,
         evalForUs: const Eval(30),
         replies: [
           ReplyMove(
             move: const MoveRef(uci: 'e7e5', san: 'e5'),
             probability: 0.6,
-            child: HorizonNode(fen: board('e5'), evalForUs: const Eval(0)),
+            child: HorizonNode(
+              fen: lineTree(root, const ['e4', 'e5']).mainLine.last.fen,
+              evalForUs: const Eval(0),
+            ),
           ),
           ReplyMove(
             move: const MoveRef(uci: 'f7f6', san: 'f6'),
             probability: 0.4,
-            child: HorizonNode(fen: board('f6'), evalForUs: const Eval(250)),
+            child: HorizonNode(
+              fen: lineTree(root, const ['e4', 'f6']).mainLine.last.fen,
+              evalForUs: const Eval(250),
+            ),
           ),
         ],
       ),
@@ -75,9 +82,10 @@ void main() {
     if (listed) w.chapterFiles.listing = kidWith(const []);
     await w.library.refresh();
     await w.session.open(chapter);
+    final root = w.session.chapter!.tree.rootFen;
     await w.parts.workspace.finds.record(
-      trapTree,
-      rootFen: Fen.initial,
+      trapTree(root),
+      rootFen: root,
       prefix: const [],
       side: Side.white,
       elo: 1800,
@@ -187,6 +195,52 @@ void main() {
 
     expect(w.lineTrainer.lesson?.line.key, (source: path, id: 'short'));
   });
+  for (final (description, moves, paused) in [
+    ('a variation', '1. e4 e5 (1... f6)', false),
+    ('a paused main line', '1. e4 f6', true),
+  ]) {
+    testWidgets('a trap held as $description opens its drillable sibling', (
+      tester,
+    ) async {
+      final examples = ChapterRef.at(main.path, section: 'Examples');
+      final traps = ChapterRef.at(main.path, section: 'Traps');
+      w.chapterFiles.listing = kidWith([examples, traps]);
+      if (paused) {
+        final key = (source: main.path, id: 'open');
+        w.progress.reviews[key] = Review(
+          key: key,
+          lineName: 'Open',
+          excluded: true,
+        );
+      }
+      await openWith(tester, '''
+// Color: White
+
+[Event "Open"]
+[LineID "open"]
+
+$moves *
+
+[Event "Model game"]
+[ChapterName "Examples"]
+[Result "1-0"]
+
+1. e4 f6 2. d4 d5 1-0
+
+[Event "Trap line"]
+[ChapterName "Traps"]
+[LineID "trap"]
+
+1. e4 f6 2. d4 *
+''', listed: false);
+      w.lineTrainer.setScope(TrainScope.repertoire);
+      await tester.pumpAndSettle();
+      await trainTheTrap(tester);
+
+      expect(w.session.source, traps);
+      expect(w.lineTrainer.lesson!.line.key, (source: main.path, id: 'trap'));
+    });
+  }
 
   testWidgets('a trap no chapter plays goes into the draft, asked first, '
       'and is trained there', (tester) async {
@@ -207,6 +261,36 @@ void main() {
     await w.saver.flush();
     expect((w.store.documents[draft]! as Opened).text, contains('1. e4 f6'));
   });
+
+  for (final (description, setup) in [
+    (
+      'imported PGN setup position',
+      const Fen('rnbqkbnr/ppp1pppp/8/3p4/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2'),
+    ),
+    ('imported move counters', Fen('${Fen.initial.position} 8 17')),
+  ]) {
+    testWidgets('a new trap draft starts from the $description and is '
+        'trained from there', (tester) async {
+      await openWith(
+        tester,
+        '// Color: White\n\n[Event "Imported"]\n[Result "*"]\n'
+        '[SetUp "1"]\n[FEN "${setup.value}"]\n\n${setup.fullMove}. c4 *\n',
+      );
+      await listEveryFind(tester);
+      await trainTheTrap(tester);
+      await tester.tap(find.text('Add and train'));
+      await tester.pumpAndSettle();
+      await w.saver.flush();
+
+      final draft = ChapterRef.at('/repertoires/KID/Main (draft).pgn');
+      final saved = await w.library.chapterForSearch(draft);
+      expect(saved?.tree.rootFen, setup);
+      expect(mainlineSans(saved!.tree), ['e4', 'f6']);
+      expect(saved.lines.single.nameAt(0), 'Repertoire Line');
+      expect(w.lineTrainer.lesson?.line.key.id, trainedIdsOf(saved).single);
+      expect(w.lineTrainer.lesson?.line.start, setup);
+    });
+  }
 
   testWidgets('a trap no chapter plays, the draft declined, goes nowhere', (
     tester,
@@ -253,7 +337,7 @@ void main() {
     await w.library.refresh();
     await w.session.open(main);
     await w.parts.workspace.finds.record(
-      trapTree,
+      trapTree(Fen.initial),
       rootFen: Fen.initial,
       prefix: const [],
       side: Side.white,

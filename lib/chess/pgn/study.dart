@@ -244,8 +244,9 @@ String newStudyChapterText({
 
 /// A chapter on its way into a study from somewhere else: a game with the
 /// tags it already has, a line from a move tree, a board. The study's own
-/// six tags are written for it when it is added; its other tags travel
-/// with it.
+/// six tags are written for it when it is added. Its other tags travel
+/// with it, except the Lichess chapter it was sent to: a copy that kept
+/// that would replace the chapter it was copied from when it is sent.
 final class ChapterDraft {
   const ChapterDraft({
     required this.name,
@@ -253,6 +254,7 @@ final class ChapterDraft {
     required this.moves,
     this.tags = const [],
     this.result,
+    this.keepChapterUrl = false,
   });
 
   /// What the chapter is called; empty for `Chapter N`.
@@ -269,12 +271,17 @@ final class ChapterDraft {
   /// The game's termination marker, `1-0` or the like; null for `*`.
   final String? result;
 
+  /// Whether this is the chapter its `[ChapterURL]` names, as one imported
+  /// from the file Lichess wrote is, rather than a copy of it.
+  final bool keepChapterUrl;
+
   ChapterDraft named(String name) => ChapterDraft(
     name: name,
     orientation: orientation,
     moves: moves,
     tags: tags,
     result: result,
+    keepChapterUrl: keepChapterUrl,
   );
 }
 
@@ -284,7 +291,10 @@ String studyChapterText(
   required String study,
   required String name,
   String ending = '\n',
+  bool? keepChapterUrl,
+  String? lineId,
 }) {
+  final linked = keepChapterUrl ?? draft.keepChapterUrl;
   final tags = withStudyTags(
     draft.tags,
     study: study,
@@ -295,10 +305,14 @@ String studyChapterText(
   );
   final buffer = StringBuffer();
   for (final tag in tags) {
+    if (!linked && tag is PgnTag && tag.key == 'ChapterURL') {
+      continue;
+    }
     buffer
       ..write(tag.text)
       ..write(tag.trailer);
   }
+  if (lineId != null) buffer.write('${PgnTag('LineID', lineId).text}$ending');
   final result = draft.result ?? '*';
   return (buffer
         ..write(ending)

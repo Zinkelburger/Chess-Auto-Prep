@@ -217,11 +217,13 @@ class _Outcome extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                [
-                  'Sent to lichess.org/study/$study',
-                  if (added > 0) '$added added',
-                  if (updated > 0) '$updated updated',
-                ].join(' · '),
+                added + updated == 0
+                    ? 'lichess.org/study/$study is up to date'
+                    : [
+                        'Sent to lichess.org/study/$study',
+                        if (added > 0) '$added added',
+                        if (updated > 0) '$updated updated',
+                      ].join(' · '),
               ),
               if (skipped > 0)
                 Text(

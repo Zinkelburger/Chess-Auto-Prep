@@ -265,6 +265,29 @@ void main() {
     expect(drafts.kept[ref.path]?.text, contains('Parked note'));
   });
 
+  test('a failed checkpoint at the new name preserves both drafts', () async {
+    final drafts = ViewerDraftFiles(support);
+    final run = _Run(store, drafts);
+    addTearDown(run.kill);
+    await run.session.open(ref, game: 0);
+    run.session.setComment(NodePath.of(const [0]), 'Moving note');
+    expect(await run.keeper.settle(), isNull);
+
+    final renamed = collectionRef('renamed');
+    final other = ViewerDraft(
+      path: renamed.path,
+      game: 0,
+      revision: scriptedRevision(threeGameFile),
+      text: '1. d4 {Other note} *',
+    );
+    await drafts.keep(other);
+    File(p.join(support.path, quarantineFolder)).writeAsStringSync('');
+    run.session.relocated(renamed);
+    expect(await run.keeper.settle(), contains('were not kept'));
+    expect((await drafts.find(ref.path))?.text, contains('Moving note'));
+    expect((await drafts.find(renamed.path))?.text, other.text);
+  });
+
   test('discarding the edits forgets their copy', () async {
     final drafts = _MemoryDrafts();
     final run = _Run(store, drafts);
@@ -713,9 +736,13 @@ final class _MemoryDrafts implements ViewerDrafts {
   String? unwritablePath;
 
   @override
-  Future<void> keep(ViewerDraft draft) async {
+  Future<void> keep(ViewerDraft draft, {ViewerDraft? previous}) async {
     if (draft.path == unwritablePath) {
       throw FileSystemException('Cannot write checkpoint', draft.path);
+    }
+    final current = kept[draft.path];
+    if (current != null && !current.matches(previous)) {
+      await setAside(draft.path);
     }
     kept[draft.path] = draft;
   }
@@ -724,7 +751,9 @@ final class _MemoryDrafts implements ViewerDrafts {
   Future<ViewerDraft?> find(String path) async => kept[path];
 
   @override
-  Future<void> drop(String path) async => kept.remove(path);
+  Future<void> drop(ViewerDraft draft) async {
+    if (draft.matches(kept[draft.path])) kept.remove(draft.path);
+  }
 
   @override
   Future<void> setAside(String path) async {
@@ -736,17 +765,18 @@ final class _MemoryDrafts implements ViewerDrafts {
 /// A disk that takes no checkpoint.
 final class _RefusingDrafts implements ViewerDrafts {
   @override
-  Future<void> keep(ViewerDraft draft) async => throw FileSystemException(
-    'Cannot create file',
-    draft.path,
-    OSError('No space left on device', Platform.isWindows ? 112 : 28),
-  );
+  Future<void> keep(ViewerDraft draft, {ViewerDraft? previous}) async =>
+      throw FileSystemException(
+        'Cannot create file',
+        draft.path,
+        OSError('No space left on device', Platform.isWindows ? 112 : 28),
+      );
 
   @override
   Future<ViewerDraft?> find(String path) async => null;
 
   @override
-  Future<void> drop(String path) async {}
+  Future<void> drop(ViewerDraft draft) async {}
 
   @override
   Future<void> setAside(String path) async {}

@@ -436,8 +436,30 @@ final class PlayerModes {
   /// Deletes [person]'s downloaded games and reports as [confirmed] said,
   /// then shows the rest of their games when they are the player being
   /// analysed. True when they were deleted.
+  ///
+  /// A download or an engine run on those games is finished or stopped
+  /// first, and none starts until the delete is over: either would write
+  /// into the folder being put away.
   Future<bool> deleteGames(Player person, GamesSummary confirmed) async {
-    final result = await saved.delete(person, confirmed: confirmed);
+    if (analysis.player?.id == person.id && (analysis.busy || hunt.running)) {
+      requests.say(
+        hunt.running
+            ? 'Stop the engine run on ${person.name}’s games before '
+                  'deleting them.'
+            : 'Wait for ${person.name}’s games to finish loading before '
+                  'deleting them.',
+      );
+      return false;
+    }
+    if (!analysis.deleting.add(person.id)) return false;
+    analysis.changed();
+    final GamesDiscard result;
+    try {
+      result = await saved.delete(person, confirmed: confirmed);
+    } finally {
+      analysis.deleting.remove(person.id);
+      analysis.changed();
+    }
     if (_disposed) return result is GamesDiscarded;
     switch (result) {
       case GamesDiscarded():

@@ -6,6 +6,7 @@ import '../../chess/pgn/chapter_edit.dart';
 import '../../chess/pgn/study.dart';
 import '../../chess/pgn/study_cleanup.dart';
 import '../../chess/pgn/study_edits.dart';
+import '../../storage/operation_id.dart';
 import '../../workspace/document/document_session.dart';
 
 /// The chapter operations of a study, as commands over the open document.
@@ -26,16 +27,21 @@ String? addStudyChapter(
   required String name,
   required Side orientation,
   Fen root = Fen.initial,
-}) => _apply(
-  session,
-  (chapter) => addChapter(
-    chapter,
-    study: studyNameOf(chapter),
-    name: name.isEmpty ? nextChapterName(studyChapters(chapter.lines)) : name,
-    orientation: orientation,
-    root: root,
-  ),
-);
+}) {
+  // One id for the chapter however often the edit is made again.
+  final seed = newOperationId();
+  return _apply(
+    session,
+    (chapter) => addChapter(
+      chapter,
+      study: studyNameOf(chapter),
+      name: name.isEmpty ? nextChapterName(studyChapters(chapter.lines)) : name,
+      orientation: orientation,
+      root: root,
+      seed: seed,
+    ),
+  );
+}
 
 String? renameStudyChapter(
   DocumentSession session, {

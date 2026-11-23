@@ -709,6 +709,56 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('saved games are not deleted under an engine run on them, and '
+      'nothing downloads for a player whose games are being deleted', (
+    tester,
+  ) async {
+    const download = DocumentRef('/games_library/lichess_alex.pgn');
+    w.store.documents[download] = Opened(_games, scriptedRevision(_games));
+    final players = w.parts.players;
+    final current = players.directory.players.single;
+    await players.directory.save(
+      current.edited({'lichess': 'alex'}),
+      expected: current,
+    );
+    // Freshness notes are real files, read outside the fake clock.
+    Future<void> settle() async {
+      for (var i = 0; i < 6; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pumpAndSettle();
+      }
+    }
+
+    await w.pumpShell(tester);
+    w.requests.switchTo(Mode.players);
+    await settle();
+    final alex = players.directory.players.single;
+    final confirmed = players.saved.of(alex)!;
+    players.analysis.player = alex;
+
+    players.hunt.running = true;
+    expect(await players.deleteGames(alex, confirmed), isFalse);
+    expect(w.store.deleted, isEmpty);
+    expect(w.requests.status, contains('Stop the engine run'));
+    players.hunt.running = false;
+
+    players.analysis.deleting.add(alex.id);
+    await players.analysis.select(alex, download: true);
+    expect(players.analysis.busy, isFalse, reason: 'no download began');
+    await players.hunt.start();
+    expect(players.hunt.running, isFalse);
+    players.analysis.deleting.clear();
+
+    final deleted = players.deleteGames(alex, confirmed);
+    await settle();
+    expect(await deleted, isTrue);
+    expect(w.store.deleted.keys, [download]);
+    expect(players.analysis.deleting, isEmpty);
+    await settle();
+  });
+
   group('removing a person with downloads', () {
     const download = DocumentRef('/games_library/lichess_alex.pgn');
     Future<void> settle(WidgetTester tester) async {

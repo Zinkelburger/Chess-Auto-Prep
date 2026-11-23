@@ -131,6 +131,27 @@ void main() {
     },
   );
 
+  test('two boards: the engine is asked about the game played, and about '
+      'the table alone once a hand was edited', () async {
+    lab.showBoards(LabBoards.two);
+    for (final uci in ['g1f3', 'b8c6', 'f3g1', 'c6b8']) {
+      lab.play(BoardNumber.one, uci);
+    }
+    await on();
+    final asked = hivemind.asked.first;
+    expect(asked.played?.root, TablePosition.initial);
+    expect(asked.played?.moves, ['1g1f3', '1b8c6', '1f3g1', '1c6b8']);
+
+    // The same table set up afresh is another question, not a cached one.
+    hivemind.asked.clear();
+    lab.loadDualFen(lab.position.dualFen);
+    for (var i = 0; i < 20; i++) {
+      await settle();
+    }
+    expect(hivemind.asked, isNotEmpty);
+    expect(hivemind.asked.first.played?.moves, isEmpty);
+  });
+
   test('two boards: a team on move on both shows each board\'s own best '
       'moves, not the same move in every joint line', () async {
     lab

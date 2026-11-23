@@ -53,6 +53,12 @@ final class GameReview extends ChangeNotifier {
   /// Whether a finished review is written into the game.
   bool _annotate = true;
 
+  // A mode switch can change the session's save policy while the engine runs.
+  bool _holdEdits = false;
+
+  /// Remember the current Read or Edit policy if the review finishes elsewhere.
+  void followReadEdit() => _holdEdits = session.holdsEdits;
+
   /// The last finished review, for the game it was of, while that game's
   /// main line is still the one it reviewed.
   ({Object? game, List<Fen> fens, List<ReviewValue> values})? _last;
@@ -151,6 +157,7 @@ final class GameReview extends ChangeNotifier {
 
   Future<void> start() async {
     if (_disposed || running) return;
+    followReadEdit();
     session.snapshot();
     final chapter = session.chapter;
     if (chapter == null || session.shownTo != null) return;
@@ -196,9 +203,12 @@ final class GameReview extends ChangeNotifier {
       try {
         problem = session.readOnly != null
             ? null
-            : writeAnnotations
-            ? session.apply((now) => annotateGame(now, values))
-            : session.apply(removeReview);
+            : session.apply(
+                writeAnnotations
+                    ? (now) => annotateGame(now, values)
+                    : removeReview,
+                hold: _holdEdits,
+              );
         _chapter = session.chapter;
       } finally {
         _applying = false;
@@ -287,6 +297,7 @@ final class GameReview extends ChangeNotifier {
   /// edit to a game's main line or Stop ends it, keeping what was written.
   Future<void> startAll() async {
     if (_disposed || running) return;
+    followReadEdit();
     session.snapshot();
     final source = session.source;
     final chapter = session.chapter;
@@ -333,6 +344,7 @@ final class GameReview extends ChangeNotifier {
             (now) => _sameMainline(now, game.index, game.fens)
                 ? annotateGame(now, values, game: game.index)
                 : const ChapterUnchanged(),
+            hold: _holdEdits,
           );
         } finally {
           _applying = false;

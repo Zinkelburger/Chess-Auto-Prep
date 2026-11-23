@@ -259,25 +259,38 @@ final class Books extends ChangeNotifier {
     final folderPath = bookPath(_root, folder.path);
     final path = bookPath(_root, chapter.path);
     if (folderPath == null || path == null) return;
-    final own = BookChapter(path, chapter.section);
+    // The games of a course file that name no chapter are one chapter of
+    // it; a null section would be the whole file.
+    BookChapter? selector(ChapterRef ref) {
+      final at = bookPath(_root, ref.path);
+      if (at == null) return null;
+      final course = folder.chapters.any(
+        (other) => other.path == ref.path && other.section != null,
+      );
+      return BookChapter(
+        at,
+        ref.section ?? (course ? BookChapter.unnamed : null),
+      );
+    }
+
+    final own = selector(chapter)!;
     _replace(book.id, (book) {
       final repertoires = book.repertoires.toSet();
       final chapters = book.chapters.toSet();
-      if (!inBook && repertoires.remove(folderPath)) {
-        for (final other in folder.chapters) {
-          if (other == chapter || other.heading.draft) continue;
-          if (bookPath(_root, other.path) case final otherPath?) {
-            chapters.add(BookChapter(otherPath, other.section));
-          }
-        }
-      }
       if (inBook) {
         chapters.add(own);
-      } else {
-        chapters
-          ..remove(own)
-          ..remove(BookChapter(path, null));
+        return book.copyWith(repertoires: repertoires, chapters: chapters);
       }
+      // What held the chapter without naming it leaves the others it held,
+      // one by one: the folder its chapters, the whole file its own.
+      final folderHeld = repertoires.remove(folderPath);
+      final fileHeld = chapters.remove(BookChapter(path, null));
+      for (final other in folder.chapters) {
+        if (other == chapter || other.heading.draft) continue;
+        if (!folderHeld && !(fileHeld && other.path == chapter.path)) continue;
+        if (selector(other) case final kept?) chapters.add(kept);
+      }
+      chapters.remove(own);
       return book.copyWith(repertoires: repertoires, chapters: chapters);
     });
   }

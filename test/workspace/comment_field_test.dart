@@ -110,6 +110,11 @@ void main() {
     final field = tester.widget<EditableText>(find.byType(EditableText).first);
     expect(field.controller.text, 'One\nTwo');
     expect(fixture.session.commentAt(sicilian), 'One\nTwo [%eval 0.30]');
+
+    await tester.enterText(find.byType(TextField).first, 'One Two');
+    await blur(tester);
+    await tester.pumpAndSettle();
+    expect(fixture.onDisk, contains('{One Two [%eval 0.30]}'));
   });
 
   testWidgets('the words follow the cursor', (tester) async {

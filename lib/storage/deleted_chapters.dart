@@ -72,7 +72,12 @@ final class DeletedUnreadable extends DeletedListing {
 /// log line, as the repertoire listing passes over a folder; only a [root]
 /// that cannot be listed makes the whole listing unreadable.
 Future<DeletedListing> listDeleted(Directory root) async {
-  if (!await root.exists()) return const DeletedChapters([]);
+  if (!await root.exists()) {
+    final standing = await notAFolder(root);
+    return standing == null
+        ? const DeletedChapters([])
+        : DeletedUnreadable(standing);
+  }
   final found = await _deletedIn(root.path);
   try {
     await for (final entry in directoryEntries(root, followLinks: false)) {
@@ -141,3 +146,19 @@ final _recoveryName = RegExp(
   r'^(\d{1,17})-[0-9a-f]+-(.+)\.pgn$',
   caseSensitive: false,
 );
+
+/// Why [root], which is not a folder, is not simply a folder not made yet:
+/// a file stands where it should be, or a link there leads nowhere (its
+/// drive is not connected). Null when nothing is there at all. Either would
+/// otherwise read as an empty library, which the user's is not.
+Future<String?> notAFolder(Directory root) async {
+  final name = p.basename(root.path);
+  if (await FileSystemEntity.isLink(root.path)) {
+    return 'The $name folder is a link to a place that is not connected '
+        'just now.';
+  }
+  return await FileSystemEntity.type(root.path, followLinks: false) ==
+          FileSystemEntityType.notFound
+      ? null
+      : 'A file named $name stands where the $name folder should be.';
+}

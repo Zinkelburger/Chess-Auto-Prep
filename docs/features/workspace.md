@@ -209,16 +209,20 @@ games.`
 `lib/chess/pgn/analysis_board.dart`): moves, variations, comments, glyphs and
 undo work as on a chapter; the strip says `Not saved`. The document tab `+`
 opens an empty one. Ctrl+V (`Paste PGN or FEN`) puts a pasted PGN (first
-game, variations and comments kept), bare moves or a FEN on a new analysis
-board from any mode, except that in the builder and trainer a PGN becomes a
+game, variations and comments kept; `Pasted the first of N games.` when
+there were more), bare moves or a FEN on a new analysis board from any mode;
+a game with a move that cannot be read comes as far as it was read, with its
+variations, comments and players (`Pasted the game as far as it could be
+read: …`), except that in the builder and trainer a PGN becomes a
 repertoire (Actions ▸ `Paste PGN as repertoire`; there Actions ▸ `Paste FEN`
 takes a FEN only). A FEN may be quoted, a `[FEN "…"]` tag or cut short; one that cannot be
 played says why (`Not a playable FEN. …`); `Nothing to paste: copy a PGN or
 FEN first.` Ctrl+N / `New analysis tab` opens the `Analysis` tab: a scratch
 copy of the whole current game at the cursor, facing the same way, that never
 writes the source. Its Read or Edit is its own, starting as the source's, so
-turning on Edit there leaves the source's held edits held. While that tab is
-up, paste and set-up fill it instead. In
+turning on Edit there leaves the source's held edits held. A move or an undo
+made while the copy is still on its way is not taken, so it never lands on
+the source. While that tab is up, paste and set-up fill it instead. In
 the builder `Save to repertoire…` and in Study `Add game to study…` ask where,
 then a chapter name; `Save to repertoire…` also offers `New repertoire…`,
 which asks its name and makes the board's lines its first chapter. Closing the window forgets analysis boards.

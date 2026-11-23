@@ -302,6 +302,9 @@ String _refusalNotice(EditRefused refusal) => switch (refusal) {
   EditNotWritten(:final reason) =>
     'That change was not made: $reason. The chapter is as it was.',
   MoveLost() => 'That move could not be written, so nothing was saved.',
+  MovesNotTaken() =>
+    'Training does not add moves to the repertoire. New analysis tab opens '
+        'a copy to try them on.',
 };
 
 /// The save state in words. Only a failure and a conflict take a colour:

@@ -383,6 +383,7 @@ final class LabEngine extends ChangeNotifier {
     return [
       (
         table: table,
+        played: null,
         team: mover,
         mustMove: clock.maySit(mover) ? MustMove.either : MustMove.one,
         maySit: clock.maySit(mover),
@@ -391,6 +392,7 @@ final class LabEngine extends ChangeNotifier {
       ),
       (
         table: table,
+        played: null,
         team: mover.other,
         mustMove: MustMove.either,
         maySit: clock.maySit(mover.other),
@@ -405,6 +407,7 @@ final class LabEngine extends ChangeNotifier {
       if (position.hasMove(team))
         (
           table: position,
+          played: _played(position),
           team: team,
           mustMove: MustMove.either,
           maySit: clock.maySit(team),
@@ -412,6 +415,13 @@ final class LabEngine extends ChangeNotifier {
           shown: true,
         ),
   ];
+
+  /// The game that led to [position], when it is the table on screen and
+  /// moves alone led to it: the engine then sees a repeated position as one.
+  ({TablePosition root, List<String> moves})? _played(TablePosition position) {
+    final moves = position == lab.position ? lab.line.engineMoves : null;
+    return moves == null ? null : (root: lab.line.root, moves: moves);
+  }
 
   /// The search of [question] at [nodes] on the first engine, from memory when
   /// it was made before; null when it is no longer [wanted] or could not be
@@ -451,6 +461,8 @@ final class LabEngine extends ChangeNotifier {
 
   static _SearchKey _key(_Question question, int nodes) => (
     question.table.dualFen,
+    // The same table reached another way is another search.
+    question.played?.moves.join(' '),
     question.team,
     question.mustMove,
     question.maySit,
@@ -460,6 +472,7 @@ final class LabEngine extends ChangeNotifier {
 
   static HivemindQuestion _toAsk(_Question question, int nodes) => (
     position: question.table,
+    played: question.played,
     team: question.team,
     maySit: question.maySit,
     mustMove: question.mustMove,
@@ -612,11 +625,12 @@ final class LabEngine extends ChangeNotifier {
 /// Searches kept for the session before the memory starts over.
 const _rememberedSearches = 4000;
 
-typedef _SearchKey = (String, Team, MustMove, bool, int, int);
+typedef _SearchKey = (String, String?, Team, MustMove, bool, int, int);
 
 /// One team's search, and whether its rows are shown.
 typedef _Question = ({
   TablePosition table,
+  ({TablePosition root, List<String> moves})? played,
   Team team,
   MustMove mustMove,
   bool maySit,

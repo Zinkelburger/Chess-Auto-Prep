@@ -5,9 +5,12 @@
 @Timeout(Duration(seconds: 60))
 library;
 
+import 'dart:async';
+
 import 'package:chess_auto_prep/app/document_views.dart';
 import 'package:chess_auto_prep/app/mode.dart';
 import 'package:chess_auto_prep/app/mode_view.dart';
+import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/features/pgn_viewer/filter_pane.dart';
 import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
@@ -21,6 +24,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/scripted_engine.dart';
 import '../support/scripted_store.dart';
 import '../support/scripted_study_writer.dart';
 import '../support/study_fixture.dart';
@@ -224,6 +228,51 @@ void main() {
       expect(w.session.holdsEdits, isTrue);
     });
 
+    testWidgets('a review started on Read leaves the PGN unchanged after '
+        'switching to Opening books', (tester) async {
+      final engine = ScriptedEngine();
+      w = WindowFixture(
+        launchEngine: ({required cores, required memoryMb}) async =>
+            Started(engine),
+      );
+      addTearDown(w.dispose);
+      await w.pumpShell(tester, openFolders: false);
+      await openThreeGames(tester);
+      w.viewer.showGame(2); // 1. c4 *
+      await tester.pumpAndSettle();
+      final source = w.session.source!;
+      expect(w.session.readOnly, isNull);
+      expect(w.session.holdsEdits, isTrue);
+      expect(w.session.hasHeldEdits, isFalse);
+
+      await tester.tap(find.text('Actions'));
+      await tester.pumpAndSettle();
+      final analyze = find.widgetWithText(MenuItemButton, 'Analyze game');
+      await tester.ensureVisible(analyze);
+      await tester.tap(analyze);
+      await tester.pump();
+      final review = w.parts.workspace.review!;
+      engine.current
+        ..emit(line(depth: review.depth, pv: ['c2c4']))
+        ..end();
+      await tester.pump();
+      expect(review.completed, 1);
+      final reply = engine.current;
+
+      w.requests.switchTo(Mode.books);
+      await tester.pump();
+      reply
+        ..emit(line(depth: review.depth, pv: ['e7e5']))
+        ..end();
+      await tester.pump();
+      expect(review.running, isFalse);
+      expect(review.problem, isNull);
+      expect(review.annotated, isTrue);
+      expect(w.session.hasHeldEdits, isTrue);
+      await w.saver.flush();
+      expect((w.store.documents[source] as Opened).text, threeGameFile);
+    });
+
     testWidgets("filters by the Analysis tab's board while it is up", (
       tester,
     ) async {
@@ -307,6 +356,83 @@ void main() {
   });
 
   group('Study', () {
+    final openings = studyRef('Openings');
+
+    Future<ScriptedEngine> startReview(WidgetTester tester, Mode mode) async {
+      final engine = ScriptedEngine();
+      w = WindowFixture(
+        launchEngine: ({required cores, required memoryMb}) async =>
+            Started(engine),
+      );
+      addTearDown(w.dispose);
+      w.store.documents[openings] = Opened(
+        threeChapterStudy,
+        scriptedRevision(threeChapterStudy),
+      );
+      w.studyFiles.listing = StudiesListed([openings]);
+      await w.pumpShell(tester, openFolders: false);
+      if (mode == Mode.study) {
+        await w.requests.openStudy(openings);
+      } else {
+        await w.requests.readInViewer(openings, game: 0);
+      }
+      await tester.pumpAndSettle();
+      expect(w.session.holdsEdits, mode == Mode.pgnViewer);
+      expect(w.session.hasHeldEdits, isFalse);
+      final review = w.parts.workspace.review!;
+      unawaited(review.start());
+      await tester.pump();
+      engine.current
+        ..emit(line(depth: review.depth, pv: ['e2e4']))
+        ..end();
+      await tester.pump();
+      expect(review.completed, 1);
+      return engine;
+    }
+
+    Future<void> finishReview(
+      WidgetTester tester,
+      ScriptedEngine engine,
+    ) async {
+      final review = w.parts.workspace.review!;
+      engine.current
+        ..emit(line(depth: review.depth, pv: ['e7e5']))
+        ..end();
+      await tester.pump();
+      expect(review.running, isFalse);
+      expect(review.problem, isNull);
+      expect(review.annotated, isTrue);
+      await w.saver.flush();
+    }
+
+    testWidgets('Open in Study autosaves the pending review and the next '
+        'comment in Edit', (tester) async {
+      final engine = await startReview(tester, Mode.pgnViewer);
+      await w.requests.openStudy(openings);
+      await finishReview(tester, engine);
+      expect(w.session.hasHeldEdits, isFalse);
+      expect((w.store.documents[openings] as Opened).text, contains('[%eval '));
+
+      w.session.setComment(w.session.cursor.value, 'Watch the centre.');
+      await w.saver.flush();
+      expect(
+        (w.store.documents[openings] as Opened).text,
+        contains('Watch the centre.'),
+      );
+    });
+
+    testWidgets('Read in PGN Viewer holds a pending Study review even '
+        'after switching to Opening books', (tester) async {
+      final engine = await startReview(tester, Mode.study);
+      await w.requests.readInViewer(openings, game: 0);
+      expect(w.session.holdsEdits, isTrue);
+      w.requests.switchTo(Mode.books);
+      expect(w.session.holdsEdits, isFalse);
+      await finishReview(tester, engine);
+      expect(w.session.hasHeldEdits, isTrue);
+      expect((w.store.documents[openings] as Opened).text, threeChapterStudy);
+    });
+
     Future<void> openStudy(WidgetTester tester) async {
       final ref = studyRef('Endgames');
       w.store.documents[ref] = Opened(

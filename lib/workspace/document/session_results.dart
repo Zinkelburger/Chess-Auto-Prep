@@ -7,7 +7,9 @@
 /// taken, an undo refused, an edit refused. The widget writes the sentences.
 library;
 
+import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/comment_edits.dart';
+import '../../storage/document_ref.dart';
 
 sealed class OpenResult {
   const OpenResult();
@@ -34,7 +36,13 @@ sealed class CopyResult {
 }
 
 final class CopySaved extends CopyResult {
-  const CopySaved(this.name, {this.nowEditing = false});
+  const CopySaved(this.name, {this.nowEditing = false, this.of});
+
+  /// The file the copy was made beside and the chapter it holds, when it
+  /// was written on the way out of a document: the leave it was written for
+  /// goes only while that is still what is up, so words written since are
+  /// never dropped with it.
+  final ({DocumentRef beside, Chapter chapter})? of;
 
   /// The file name the copy was written under.
   final String name;
@@ -131,6 +139,12 @@ final class EditNotWritten extends EditRefused {
   const EditNotWritten(this.reason);
 
   final String reason;
+}
+
+/// The board only follows the file's moves just now, as it does while
+/// training: a move tried there is not one the file was meant to take.
+final class MovesNotTaken extends EditRefused {
+  const MovesNotTaken();
 }
 
 /// The chapter came back without the move that was played, so nothing was

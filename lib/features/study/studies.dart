@@ -12,6 +12,7 @@ import '../../storage/chapter_files.dart';
 import '../../storage/deleted_chapters.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/edit_scope.dart' show GamesRearranged;
+import '../../storage/operation_id.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/pgn_document_store.dart' as store;
 import '../../storage/pgn_export.dart';
@@ -192,11 +193,19 @@ final class Studies extends ChangeNotifier {
     StudyChoice into,
     List<ChapterDraft> drafts,
   ) async {
+    // One for the whole add, so an edit made again writes the same ids.
+    final seed = newOperationId();
     switch (into) {
       case NewStudy(:final name):
         if (nameProblem(name) case final wrong?) return StudyProblem(wrong);
         final empty = await readChapter(name: name, text: '');
-        final edit = pgn.addChapters(empty, study: name, drafts: drafts);
+        final edit = pgn.addChapters(
+          empty,
+          study: name,
+          drafts: drafts,
+          linkOf: _linkOf,
+          seed: seed,
+        );
         if (edit is! ChapterEdited) return _refusedAdd(edit);
         final created = await _created(name, writeChapter(edit.chapter));
         return created is StudyDone
@@ -208,20 +217,34 @@ final class Studies extends ChangeNotifier {
         return _changes.changing(
           study.path,
           () async => _session.source?.path == study.path
-              ? _addOpen(study, drafts)
-              : _addOnDisk(study, drafts),
+              ? _addOpen(study, drafts, seed)
+              : _addOnDisk(study, drafts, seed),
         );
     }
   }
 
-  StudyResult _addOpen(ChapterRef study, List<ChapterDraft> drafts) {
+  /// The Lichess chapter [url] names, so two spellings of one address are
+  /// one chapter.
+  static Object _linkOf(String url) => parseStudyLink(url) ?? url;
+
+  StudyResult _addOpen(
+    ChapterRef study,
+    List<ChapterDraft> drafts,
+    String seed,
+  ) {
     final chapter = _session.chapter;
     if (chapter == null || _session.game == null) {
       return const StudyProblem('Open that study from its list first.');
     }
     final first = chapter.lines.length;
     final refused = _session.apply(
-      (open) => pgn.addChapters(open, study: studyNameOf(open), drafts: drafts),
+      (open) => pgn.addChapters(
+        open,
+        study: studyNameOf(open),
+        drafts: drafts,
+        linkOf: _linkOf,
+        seed: seed,
+      ),
       writes: true,
     );
     return refused == null
@@ -229,18 +252,22 @@ final class Studies extends ChangeNotifier {
         : StudyProblem('Could not add to ${study.name}: $refused.');
   }
 
-  Future<StudyResult> _addOnDisk(ChapterRef study, List<ChapterDraft> drafts) =>
-      _editOnDisk(
-        study,
-        (chapter) => pgn.addChapters(
-          chapter,
-          study: studyNameIn(chapter.lines) ?? study.name,
-          drafts: drafts,
-        ),
-        refused: _refusedAdd,
-        done: (before) =>
-            StudyDone(opened: study, chapter: before.lines.length),
-      );
+  Future<StudyResult> _addOnDisk(
+    ChapterRef study,
+    List<ChapterDraft> drafts,
+    String seed,
+  ) => _editOnDisk(
+    study,
+    (chapter) => pgn.addChapters(
+      chapter,
+      study: studyNameIn(chapter.lines) ?? study.name,
+      drafts: drafts,
+      linkOf: _linkOf,
+      seed: seed,
+    ),
+    refused: _refusedAdd,
+    done: (before) => StudyDone(opened: study, chapter: before.lines.length),
+  );
 
   /// Writes [edit] into [study], held against opening it meanwhile: where a
   /// send's chapter links go once the user has left the study. Answers
@@ -376,6 +403,7 @@ final class Studies extends ChangeNotifier {
           moves: line.tree!,
           tags: line.tags,
           result: line.terminator,
+          keepChapterUrl: true,
         ),
     ]);
   });

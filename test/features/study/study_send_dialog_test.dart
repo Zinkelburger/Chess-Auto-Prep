@@ -46,8 +46,8 @@ void main() {
   FilledButton button(WidgetTester tester, String label) =>
       tester.widget<FilledButton>(find.widgetWithText(FilledButton, label));
 
-  testWidgets('one chapter sent says it was added, and sent again that it '
-      'was updated', (tester) async {
+  testWidgets('one chapter sent says it was added, and sent again unchanged '
+      'that Lichess is up to date', (tester) async {
     await openSend(tester, _oneChapter);
     expect(find.text('1 chapter of “Endgames”'), findsOneWidget);
     await tester.tap(find.text('Send 1 chapter'));
@@ -64,9 +64,10 @@ void main() {
     await tester.tap(find.text('Send 1 chapter'));
     await tester.pumpAndSettle();
     expect(
-      find.text('Sent to lichess.org/study/wxyz9876 · 1 updated'),
+      find.text('lichess.org/study/wxyz9876 is up to date'),
       findsOneWidget,
     );
+    expect(lichess.replaced, isEmpty);
     expect(lichess.created, hasLength(1));
   });
 

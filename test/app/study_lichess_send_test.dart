@@ -120,9 +120,11 @@ void main() {
     await tester.tap(find.text('Send 2 chapters'));
     await tester.pumpAndSettle();
     expect(lichess.created, hasLength(1));
-    expect(lichess.replaced.map((r) => r.chapter), ['chap0000', 'chap1000']);
+    // Nothing changed here since, so nothing is written over there.
+    expect(lichess.added, hasLength(2));
+    expect(lichess.replaced, isEmpty);
     expect(
-      find.text('Sent to lichess.org/study/wxyz9876 · 2 updated'),
+      find.text('lichess.org/study/wxyz9876 is up to date'),
       findsOneWidget,
     );
     expect(tester.takeException(), isNull);

@@ -19,6 +19,7 @@ import 'document_text.dart';
 import 'edit_scope.dart';
 import 'file_relocation.dart';
 import 'line_progress.dart';
+import 'moved_path.dart';
 import 'mutation_guards.dart';
 import 'operation_id.dart';
 import 'operation_participants.dart';
@@ -130,6 +131,12 @@ final class PgnFileStore implements PgnDocumentStore {
   Future<DocumentRead> _open(DocumentRef ref) async {
     switch (await probeDocument(ref.path)) {
       case FileMissing():
+        // Behind a link that leads nowhere it is not known to be gone: its
+        // drive is not connected, and it must not be taken for deleted.
+        if (p.isWithin(documents.path, ref.path) &&
+            await behindDeadLink(documents, ref.path)) {
+          return const Unreadable('Its folder is not connected just now.');
+        }
         return const Absent();
       case FileUnreadable(:final detail):
         log.w('open ${ref.path}', detail);

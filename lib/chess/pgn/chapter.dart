@@ -456,6 +456,20 @@ String preambleWithSide(String preamble, Side side) {
   return '$mark${lines.join('\n')}';
 }
 
+/// Whether [a] and [b] hold the same words, game by game, without writing
+/// either file out: a large one would stall the window.
+bool sameWords(Chapter a, Chapter b) {
+  if (a.preamble != b.preamble || a.lines.length != b.lines.length) {
+    return false;
+  }
+  for (final (i, line) in a.lines.indexed) {
+    final other = b.lines[i];
+    if (identical(line, other)) continue;
+    if (line.text != other.text || line.trailer != other.trailer) return false;
+  }
+  return true;
+}
+
 /// A chapter file with no games yet: the `//` preamble and nothing else.
 ///
 /// The colour line is the only record of which side the chapter is for, so it

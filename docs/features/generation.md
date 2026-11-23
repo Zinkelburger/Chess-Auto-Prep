@@ -112,6 +112,10 @@ while searching`. Values appear level by level. Refusals: `A search is already r
 **Pause / Finish depth** — `Pause` stops after the position under way and keeps
 the tree; `Finish depth N` scores the whole current level, then pauses. A
 search with no depth runs until paused or its 25,000-new-position budget.
+Closing the window pauses a running search the same way and saves its tree
+before the engines stop (`Saving the search before closing…`, for up to ten
+seconds), so `Resume` continues it next time; a close the user backs out of
+leaves the search running.
 
 **Resume / Deeper** — `Resume` shows where a tree with the same settings
 covers the board (in memory, else the newest saved tree for this board) and

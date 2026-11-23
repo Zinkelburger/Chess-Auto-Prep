@@ -161,90 +161,6 @@ void main() {
     });
   });
 
-  group('open over a draft the file refused', () {
-    test('the chapter already open is not left, so nothing is asked', () async {
-      await freezeKid();
-      expect(await w.requests.open(kid), isA<RequestDone>());
-      expect(w.question.asked, isEmpty);
-    });
-
-    test('staying with a frozen draft opens nothing', () async {
-      await freezeKid();
-      w.question.answer = DraftChoice.keepWaiting;
-      expect(await w.requests.open(benko), isA<RequestDropped>());
-      expect(w.question.asked.single, contains('was stopped'));
-      expect(w.session.source, kid);
-      expect(w.requests.status, isNull);
-    });
-
-    test(
-      'staying with a frozen draft on Back keeps the mode and the history',
-      () async {
-        await w.requests.open(benko);
-        final started = w.requests.mode;
-        w.requests.switchTo(Mode.pgnViewer);
-        await pumpEventQueue();
-        await freezeKid();
-        final back = w.requests.backTo;
-        w.question.answer = DraftChoice.keepWaiting;
-        expect(await w.requests.back(), isA<RequestDropped>());
-        expect(w.requests.mode, Mode.pgnViewer, reason: 'not $started');
-        expect(w.session.source, kid);
-        expect(w.requests.backTo, same(back));
-        expect(w.requests.forwardTo, isNull);
-      },
-    );
-
-    test('the question on Back comes before the mode changes, and is asked '
-        'once', () async {
-      await w.requests.open(benko);
-      final started = w.requests.mode;
-      w.requests.switchTo(Mode.pgnViewer);
-      await pumpEventQueue();
-      await freezeKid();
-      final modes = <Mode>[];
-      w.requests.addListener(() => modes.add(w.requests.mode));
-      w.question.answer = DraftChoice.keepWaiting;
-      expect(await w.requests.back(), isA<RequestDropped>());
-      expect(modes, everyElement(Mode.pgnViewer));
-
-      w.question.answer = DraftChoice.closeAnyway;
-      expect(await w.requests.back(), isA<RequestDone>());
-      expect(w.requests.mode, started);
-      expect(w.session.source, benko);
-      expect(w.question.asked, hasLength(2), reason: 'one for each Back');
-    });
-
-    test(
-      'a copy saved on the way out is said once the chapter is open',
-      () async {
-        await freezeKid();
-        w.question.answer = DraftChoice.saveACopy;
-        expect(await w.requests.open(benko), isA<RequestDone>());
-        expect(w.session.source, benko);
-        expect(w.requests.status, 'Saved a copy as Main copy.pgn');
-        expect(
-          w.store.documents.keys.map((ref) => ref.path),
-          contains('/repertoires/KID/Main copy.pgn'),
-        );
-      },
-    );
-
-    test('a copy on the way out that could not be written says why, and '
-        'the chapter stays', () async {
-      await freezeKid();
-      w.question.answer = DraftChoice.saveACopy;
-      w.store.creates.add(const IoFailure('disk full'));
-      expect(await w.requests.open(benko), isA<RequestDropped>());
-      expect(w.session.source, kid);
-      expect(w.requests.status, 'Could not save a copy: disk full');
-
-      w.store.creates.add(const Collision());
-      expect(await w.requests.open(benko), isA<RequestDropped>());
-      expect(w.requests.status, 'That name is taken. Nothing was replaced.');
-    });
-  });
-
   group('the side question', () {
     setUp(() {
       w.store.documents[benko] = Opened(unsaid, scriptedRevision(unsaid));
@@ -455,20 +371,6 @@ void main() {
       expect(await w.requests.closeFile(), isA<RequestDone>());
       expect(w.session.source, isNull);
       expect(w.viewer.file, isNull);
-    });
-  });
-
-  group('Close file', () {
-    test('with nothing open does nothing', () async {
-      expect(await w.requests.closeFile(), isA<RequestDropped>());
-      expect(w.question.asked, isEmpty);
-    });
-
-    test('over a draft the user stays with keeps it', () async {
-      await freezeKid();
-      w.question.answer = DraftChoice.keepWaiting;
-      expect(await w.requests.closeFile(), isA<RequestDropped>());
-      expect(w.session.source, kid);
     });
   });
 

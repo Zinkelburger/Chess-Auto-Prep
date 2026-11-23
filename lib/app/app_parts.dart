@@ -15,6 +15,7 @@ import '../workspace/document/document_session.dart';
 import '../workspace/document/draft_keeper.dart';
 import '../workspace/document/save_copy.dart';
 import '../workspace/document/session_results.dart';
+import '../workspace/search/fill_states.dart';
 import '../workspace/workspace.dart';
 import 'environment.dart';
 import 'exit_guard.dart';
@@ -132,9 +133,19 @@ final class AppParts {
   /// The copy the question on the way out asked for: the name of the file
   /// it wrote, or null. A copy that failed leaves the user where they were,
   /// so the bar says why.
-  Future<String?> _copied() async {
+  Future<CopySaved?> _copied() async {
     final written = await _copyOnLeave(session);
-    if (written is CopySaved) return written.name;
+    if (_disposed) return null;
+    if (written is CopySaved) {
+      if (session.coveredBy(written)) return written;
+      // Written since the copy began: the user is where they were, to
+      // decide about those words too.
+      requests.say(
+        'Saved a copy as ${written.name}. The document changed while it was '
+        'written, so it is still open.',
+      );
+      return null;
+    }
     if (written != null) sayCopy(requests.say, written);
     return null;
   }
@@ -295,13 +306,41 @@ final class AppParts {
     players.stop();
     databases.download?.stop();
     tournaments?.stop();
-    workspace.fill.cancel();
     training.myGames.pause();
     _sittingPaused = training.lines.lesson?.suspended == false;
     training.lines.suspend();
     training.puzzles.suspend();
     labs.engine.close();
     unawaited(account.cancel());
+  }
+
+  /// How long a search is given to finish the position it is on.
+  static const searchCloseWait = Duration(seconds: 10);
+
+  /// The window is closing for good. A running search pauses as its Pause
+  /// button does and the tree it built is saved before the engines stop, so
+  /// Resume continues it next time. It is left running until now: a close
+  /// the user backs out of costs it nothing. A position that takes longer
+  /// than [searchCloseWait] loses the run.
+  Future<void> finishForClose() async {
+    final fill = workspace.fill;
+    if (_disposed || fill.state is! FillRunning) return;
+    requests.say('Saving the search before closing…', problem: false);
+    final paused = Completer<void>();
+    void changed() {
+      if (fill.state is! FillRunning && !paused.isCompleted) paused.complete();
+    }
+
+    fill.addListener(changed);
+    fill.finish();
+    try {
+      await paused.future.timeout(searchCloseWait);
+      await env.pendingWrites.settle();
+    } on TimeoutException {
+      fill.cancel();
+    } finally {
+      fill.removeListener(changed);
+    }
   }
 
   /// Whether closing paused a sitting that was running, so a close the

@@ -66,19 +66,26 @@ final class CollectionAnalysis extends ChangeNotifier {
     final preview = source.cursor.commentLine.value;
     var page = _pages[key];
     final created = page == null;
-    if (page == null) {
-      final chapter = withSide(
-        await readChapter(name: analysisBoardName, text: gameText(source)),
-        side,
-      );
-      if (ticket.overtaken || key != _sourceKey) return false;
-      page = KeptBoard(chapter)..cursor = cursor;
-      _pages[key] = page;
-    }
-    if (!await session.restoreAnalysisPage(page) ||
-        ticket.overtaken ||
-        key != _sourceKey) {
-      return false;
+    // The tab says Analysis already, so what is played or taken back before
+    // the copy is up is not the source's.
+    source.copyOut();
+    try {
+      if (page == null) {
+        final chapter = withSide(
+          await readChapter(name: analysisBoardName, text: gameText(source)),
+          side,
+        );
+        if (ticket.overtaken || key != _sourceKey) return false;
+        page = KeptBoard(chapter)..cursor = cursor;
+        _pages[key] = page;
+      }
+      if (!await session.restoreAnalysisPage(page) ||
+          ticket.overtaken ||
+          key != _sourceKey) {
+        return false;
+      }
+    } finally {
+      source.copiedOut();
     }
     if (preview != null && created) {
       for (final move in preview.moves.take(preview.at + 1)) {

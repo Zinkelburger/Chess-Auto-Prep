@@ -158,6 +158,9 @@ cannot be moved aside is never written over or dropped: the new edits go into
 no checkpoint until a later write can move it, or until it is restored or
 saved as a copy. A renamed file's checkpoint
 stays under the old name until the one under the new name is written.
+When two copies of the app hold edits to the same file, each keeps a copy of
+the other's checkpoint in the recovery quarantine before writing its own
+over it, and saving or discarding edits removes only its own checkpoint.
 `Unsaved edits to <file> were not kept.` (with what the disk says) when a
 checkpoint could not be written.
 
@@ -178,7 +181,8 @@ Every addition is marked (`[%cap_review_eval]`, `[%cap_review_nag N]`,
 `[%cap_review_line N]`) so turning `Annotate PGN` off removes exactly that; an
 existing `[%eval]` is kept; a review line the user played on or wrote in
 becomes theirs. The review is one undoable edit, held on Read and written at
-once on Edit. Stop, an edit or another game cancels it and drops late results.
+once on Edit; one begun on Read stays held if another mode comes up before it
+ends. Stop, an edit or another game cancels it and drops late results.
 `Analyze all N games` (a file of several games, `Annotate PGN` on, games
 without a review) reviews each such game in turn, `Game 2 of 5 · 19 / 34
 positions`, writing each into its own game as it ends (one undoable edit per

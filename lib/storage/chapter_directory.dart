@@ -380,7 +380,12 @@ final class ChapterDirectory implements ChapterFiles {
   Future<_Inventory> _inventory() async {
     final folders = <_FolderFiles>[];
     final unreadable = <UnreadableFolder>[];
-    if (!await root.exists()) return (folders: folders, unreadable: unreadable);
+    if (!await root.exists()) {
+      if (await notAFolder(root) case final standing?) {
+        throw RecoveryRequired(standing);
+      }
+      return (folders: folders, unreadable: unreadable);
+    }
     await for (final entry in directoryEntries(root, followLinks: false)) {
       if (p.basename(entry.path).startsWith('.')) continue;
       if (entry is Link) {

@@ -16,6 +16,7 @@ import '../../chess/pv_text.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/document_ref.dart';
+import '../../storage/operation_id.dart';
 import '../../storage/pgn_document_store.dart' as store;
 import '../../storage/reference_change.dart';
 import '../latest.dart';
@@ -29,6 +30,7 @@ import 'session_results.dart';
 import 'undo_history.dart';
 
 part 'document_cursor.dart';
+part 'document_reads.dart';
 part 'external_document_edits.dart';
 
 /// The active immutable chapter, file and edits. DocumentSaver owns
@@ -44,7 +46,7 @@ final class DocumentSession extends ChangeNotifier {
   final store.PgnDocumentStore _store;
   final DocumentSaver _saver;
   final access = DocumentAccess();
-  final _parsed = ParsedFiles();
+  late final _reads = _DocumentReads(this);
   late final externalEdits = ExternalDocumentEdits(this);
 
   /// The persisted input behind the shown draft; training must retain this
@@ -127,9 +129,11 @@ final class DocumentSession extends ChangeNotifier {
   EditRefused? _refused;
   NodePath? _shownTo;
   bool _flipped = false;
-  final _opens = Latest();
 
   /// Counts documents put up; a cancelled read leaves the one up, and this.
+  /// A rename or move leaves it too: it is the same document under another
+  /// name, and words typed for it are still its.
+  int get generation => _document;
   int _document = 0;
 
   /// Changes whenever a game of the chapter on screen may stand elsewhere
@@ -140,10 +144,6 @@ final class DocumentSession extends ChangeNotifier {
   /// still names the same one.
   int get arrangement => _arrangement;
   int _arrangement = 0;
-
-  /// Pending navigation ticket. Undo waits so it cannot restore a previous
-  /// file's contents under the arriving file's identity.
-  Ticket? _opening;
 
   /// Edits wait while undo reads the version it restored.
   bool _restoring = false;
@@ -164,6 +164,20 @@ final class DocumentSession extends ChangeNotifier {
     _holdsEdits = on;
     notifyListeners();
   }
+
+  /// While set, the board adds no move to a file and only follows the ones
+  /// it holds. The trainer sets it, where a move tried is never meant for
+  /// the repertoire; the analysis board takes moves as ever.
+  bool followsOnly = false;
+
+  /// True while a copy of what is up is on its way to a board of its own
+  /// ([copyOut] until [copiedOut]). A move or an undo made meanwhile is
+  /// meant for that copy, so the document takes neither: it would change
+  /// the file the user just left.
+  bool get copyingOut => _copiesOut > 0;
+  int _copiesOut = 0;
+  void copyOut() => _copiesOut++;
+  void copiedOut() => _copiesOut--;
 
   /// Whether the file on the board has edits that are not on disk.
   bool get hasHeldEdits => _held != null;
@@ -202,7 +216,7 @@ final class DocumentSession extends ChangeNotifier {
   /// board — null when its games are merged. A repertoire chapter is the
   /// file; a study chapter is one game. [openTicket] lapses at the next read.
   ChapterRef? get source => _source;
-  Ticket get openTicket => _opens.now;
+  Ticket get openTicket => _reads.now;
 
   int? get game => _chapter?.game;
   GameTree? get tree => _chapter?.tree;
@@ -215,6 +229,22 @@ final class DocumentSession extends ChangeNotifier {
     _editors.commit();
     return _chapter;
   }
+
+  /// Whether a leave that [copy] was written for may drop what is up: the
+  /// copy holds exactly that. A leave with no copy has nothing to check.
+  bool coveredBy(CopySaved? copy) {
+    final copied = copy?.of;
+    if (copied == null) return true;
+    final now = snapshot();
+    return now != null &&
+        copied.beside == _source &&
+        sameWords(now, copied.chapter);
+  }
+
+  /// Takes the editors' words on the way out of the document. False when
+  /// it would not take them: they stay in their field with the reason on
+  /// screen, and so does the document, rather than going with it.
+  bool _handedOver() => _editors.commit();
 
   Listenable get committingEditors => _editors;
   final _editors = _Editors();
@@ -305,7 +335,9 @@ final class DocumentSession extends ChangeNotifier {
   ///
   /// Words the file has not taken are left with the document: the caller
   /// asked the user about them first, or the user said to throw them away.
-  Future<OpenResult> open(ChapterRef ref, {int? game}) {
+  /// A [copy] written on the way out must still hold what is up when the
+  /// document goes, or it stays and the user is asked again.
+  Future<OpenResult> open(ChapterRef ref, {int? game, CopySaved? copy}) {
     if (_held != null && ref == _source && game != null) {
       if (game == this.game || _isAnotherGame(game)) {
         cancelOpening();
@@ -313,83 +345,18 @@ final class DocumentSession extends ChangeNotifier {
         return Future.value(const DocumentOpened());
       }
     }
-    return _read(ref, game);
-  }
-
-  Future<OpenResult> _read(ChapterRef ref, int? game) {
-    final ticket = _opens.begin();
-    return _switching(ticket, () => _opened(ref, game, ticket));
+    return _reads.read(ref, game, copy);
   }
 
   /// A newer navigation intent supersedes a read even if it stays here.
-  void cancelOpening() {
-    _opens.cancel();
-    _opening = null;
-  }
-
-  /// Runs [change], which puts another document up, with undo held off
-  /// until it is over.
-  Future<T> _switching<T>(Ticket ticket, Future<T> Function() change) async {
-    _opening = ticket;
-    try {
-      return await change();
-    } finally {
-      if (_opening == ticket) _opening = null;
-    }
-  }
-
-  Future<OpenResult> _opened(ChapterRef ref, int? game, Ticket ticket) async {
-    // A rename, move or delete of this document may still be running, with a
-    // draft behind it that belongs to the file it was typed into: it goes out
-    // before this document takes the saver over, and before the read below,
-    // which must not answer with text older than that write.
-    await _saver.flush();
-    if (ticket.overtaken) return const OpenOvertaken();
-    await access.settled(ref.path);
-    if (ticket.overtaken) return const OpenOvertaken();
-    final version = access.versionOf(ref.path);
-    final receipt = _saver.lastReceipt;
-    final (leftAsIs, drafts) = (!_saver.settled, _saver.drafts);
-    final read = await readDocument(_store, ref, game: game, parsed: _parsed);
-    if (ticket.overtaken) return const OpenOvertaken();
-    if (access.versionOf(ref.path) != version) {
-      return _opened(ref, game, ticket);
-    }
-    final DocumentShown shown;
-    switch (read) {
-      case DocumentUnread(:final reason):
-        log.w('open ${ref.path}', reason);
-        return OpenFailed(reason);
-      case DocumentShown():
-        shown = read;
-    }
-    _editors.commit();
-    if ((!leftAsIs || _saver.drafts != drafts) && !_saver.settled) {
-      // Words typed during the read, a Save among them, go to their file
-      // before the handover. If the file will not take them, it stays up.
-      final into = _saver.documentPath;
-      await _saver.flush();
-      if (ticket.overtaken || !_saver.settled) {
-        return const OpenOvertaken();
-      }
-      // A flush to the file being opened supersedes the read.
-      if (into == ref.path) return _opened(ref, game, ticket);
-    }
-    // A same-file autosave may already have settled while the read was out.
-    if (access.versionOf(ref.path) != version ||
-        (_saver.documentPath == ref.path && _saver.lastReceipt != receipt)) {
-      return _opened(ref, game, ticket);
-    }
-    _show(shown.chapter, ref, shown.revision, shown.readOnly, view: shown.view);
-    return const DocumentOpened();
-  }
+  void cancelOpening() => _reads.cancel();
 
   /// Throws the draft away and takes what is on disk: how a conflict ends
   /// when the user decides the other version wins.
   Future<OpenResult> reloadFromDisk() async {
     final ref = _source;
     if (ref == null) return const OpenOvertaken();
-    return _read(ref, game);
+    return _reads.read(ref, game);
   }
 
   /// The open document was renamed or moved: the same file with the same
@@ -414,7 +381,7 @@ final class DocumentSession extends ChangeNotifier {
   void closed() {
     if (_source == null) return;
     _editors.commit();
-    _opens.cancel();
+    _reads.drop();
     _setAsideUndo = null;
     _showBoard();
   }
@@ -422,20 +389,21 @@ final class DocumentSession extends ChangeNotifier {
   /// The analysis board as it was left or, given [board], [board] on a new
   /// one, or on the one up when nothing was played or edited on it. False
   /// when another document was asked for meanwhile, or the session went.
-  Future<bool> showAnalysisBoard([Chapter? board]) {
-    if (board == null) return _selectAnalysis(_board, leftAsIs: _leftAsIs);
+  Future<bool> showAnalysisBoard([Chapter? board, CopySaved? copy]) {
+    if (board == null) return restoreAnalysisPage(_board, copy);
     final leftAsIs = _leftAsIs;
     _editors.commit();
     final blank = isScratch && _board.isBlank(_chapter);
     return _selectAnalysis(
       blank ? _board : KeptBoard(board),
       fresh: board,
+      copy: copy,
       leftAsIs: leftAsIs,
     );
   }
 
-  Future<bool> restoreAnalysisPage(KeptBoard page) =>
-      _selectAnalysis(page, leftAsIs: _leftAsIs);
+  Future<bool> restoreAnalysisPage(KeptBoard page, [CopySaved? copy]) =>
+      _selectAnalysis(page, copy: copy, leftAsIs: _leftAsIs);
 
   /// Whether the file has words it has not taken before an editor hands its
   /// note over: the caller asked about those first, and the user said to
@@ -446,16 +414,17 @@ final class DocumentSession extends ChangeNotifier {
   Future<bool> _selectAnalysis(
     KeptBoard page, {
     Chapter? fresh,
+    CopySaved? copy,
     required bool leftAsIs,
   }) async {
     if (_disposed) return false;
     if (identical(page, _board) && isScratch && fresh == null) return true;
     // Before the flush, which then writes what the words make of the file.
-    _editors.commit();
-    final ticket = _opens.begin();
+    if (!_handedOver()) return false;
+    final ticket = _reads.begin();
     final file = !isScratch;
-    if (file) await _switching(ticket, _saver.flush);
-    if (ticket.overtaken) return false;
+    if (file) await _reads.switching(ticket, _saver.flush);
+    if (ticket.overtaken || !coveredBy(copy)) return false;
     // Words nobody was asked about that the file will not take keep it up,
     // where the screen says why, as they do when another file is asked for.
     if (file && !leftAsIs && !_saver.settled) return false;
@@ -517,7 +486,7 @@ final class DocumentSession extends ChangeNotifier {
   /// the chapter comes back without is logged rather than saved.
   void playMove(String uci, {bool existingOnly = false}) {
     final chapter = _chapter;
-    if (chapter == null || _shownTo != null) return;
+    if (chapter == null || _shownTo != null || copyingOut) return;
     // The board shows a comment's line, not the cursor's position.
     if (cursor.commentLine.value != null) return;
     // A move the chapter already holds writes nothing, so following it is
@@ -527,8 +496,19 @@ final class DocumentSession extends ChangeNotifier {
       cursor._place(here);
       return;
     }
-    if (existingOnly || _editBlocked() != null) return;
-    switch (edits.addMove(chapter, at: cursor.value, uci: uci)) {
+    if (existingOnly) return;
+    if (followsOnly && !isScratch) {
+      _refused = const MovesNotTaken();
+      return notifyListeners();
+    }
+    if (_editBlocked() != null) return;
+    final added = edits.addMove(
+      chapter,
+      at: cursor.value,
+      uci: uci,
+      seed: newOperationId(),
+    );
+    switch (added) {
       case edits.MoveIllegal():
         return;
       case edits.MoveRefused(:final reason):
@@ -554,11 +534,16 @@ final class DocumentSession extends ChangeNotifier {
   /// so words typed under one move cannot land on another. Text that leaves
   /// the file as it is changes nothing; a game reading could not finish, or
   /// words a PGN file cannot hold, are refused and [refusedEdit] says so.
-  void setComment(NodePath at, String? text) => _commentEdit(
-    'comment',
-    (chapter) => edits.setComment(chapter, at: at, text: text),
-    quietWhenSame: true,
-  );
+  /// False when the document did not take the words.
+  bool setComment(NodePath at, String? text) {
+    final refused = _editors._refusals;
+    _commentEdit(
+      'comment',
+      (chapter) => edits.setComment(chapter, at: at, text: text),
+      quietWhenSame: true,
+    );
+    return refused == _editors._refusals;
+  }
 
   /// Puts the glyph [nag] on the move at [at] in place of the one it had, or
   /// takes it away when [nag] is null: the six marks a reader prints after a
@@ -586,12 +571,13 @@ final class DocumentSession extends ChangeNotifier {
     bool quietWhenSame = false,
   }) {
     final chapter = _chapter;
-    if (chapter == null || _editBlocked() != null) return;
+    if (chapter == null || _editBlocked() != null) return _editors.refuse();
     final hadRefusal = refusedEdit != null;
     switch (edit(chapter)) {
       case final edits.CommentRefused refusal:
         log.w('$what ${_source?.path}', refusalDetail(refusal));
         _refused = refusalOf(refusal);
+        _editors.refuse();
       case edits.CommentWritten(chapter: final edited, :final written):
         _clearRefusal();
         if (!identical(edited, chapter)) {
@@ -630,13 +616,14 @@ final class DocumentSession extends ChangeNotifier {
   /// so; one landing after the user left is still what its file holds, and
   /// the document on screen now is not touched.
   Future<UndoResult> undo() async {
+    if (copyingOut) return const UndoRefused();
     if (isScratch) return _undoOnBoard();
     if (_held != null) return _undoHeld();
     final ref = _source;
-    if (ref == null || _opening != null || _restoring) {
+    if (ref == null || _reads.pending != null || _restoring) {
       return const UndoRefused();
     }
-    final ticket = _opens.now;
+    final ticket = _reads.now;
     final result = await _saver.undo();
     if (result case Restored(:final text) when _stillOn(ref, ticket)) {
       await _showRestored(_source!, ticket, text);
@@ -672,7 +659,7 @@ final class DocumentSession extends ChangeNotifier {
     _restoring = true;
     final ({Chapter file, SectionView? view}) read;
     try {
-      read = await readShown(ref, text, game: game, parsed: _parsed);
+      read = await readShown(ref, text, game: game, parsed: _reads.parsed);
     } finally {
       _restoring = false;
     }
@@ -833,11 +820,14 @@ final class DocumentSession extends ChangeNotifier {
   /// edit that changes which game is the chapter moves the board with it.
   ///
   /// A document change with [writes] (such as a chapter rename) takes held
-  /// edits to disk with it once the change is accepted for writing.
+  /// edits to disk with it once the change is accepted for writing. [hold]
+  /// keeps the edit in the draft whatever the mode up now says: what began
+  /// while reading is not written because another mode came up meanwhile.
   String? apply(
     edits.ChapterEdit Function(Chapter chapter) edit, {
     ReferenceChanges? references,
     bool writes = false,
+    bool hold = false,
   }) {
     if (writes && _held != null && _readOnly == null) _editors.commit();
     final chapter = _chapter;
@@ -856,6 +846,7 @@ final class DocumentSession extends ChangeNotifier {
               references,
             ),
             writes: writes,
+            hold: hold,
           );
           if (reason != null) return reason;
         }
@@ -925,14 +916,14 @@ final class DocumentSession extends ChangeNotifier {
 
   /// Writes [landed] and shows what it says to show, following a course
   /// file's chapter to the one shown. Answers why nothing was written, or null.
-  String? _land(Landing? landed, {bool writes = false}) {
+  String? _land(Landing? landed, {bool writes = false, bool hold = false}) {
     if (landed == null) {
       return _editRefused('a new line could not be given its chapter name');
     }
     if (writes) _saveHeld();
     if (_held case final held?) {
       held.add(_shown!, landed);
-    } else if (_holdsEdits && !(writes && _readOnly == null)) {
+    } else if ((hold || _holdsEdits) && !(writes && _readOnly == null)) {
       _held = HeldEdits(_shown!, landed);
     } else {
       _saver.save(landed.text, landed.scope);
@@ -965,7 +956,7 @@ final class DocumentSession extends ChangeNotifier {
   /// as does one the user left while the copy was written. [into] is the
   /// folder to write it in instead, for a file outside Documents.
   Future<CopyResult> saveCopy(String name, {String? into}) async {
-    final ticket = _opens.now;
+    final ticket = _reads.now;
     final ref = _source;
     final atGame = game;
     final written = await copyAside(name, into: into);
@@ -974,7 +965,7 @@ final class DocumentSession extends ChangeNotifier {
     final frozen = _saver.state is SaveStopped || _readOnly != null;
     if (!frozen) return written;
     final path = p.join(into ?? p.dirname(ref.path), written.name);
-    final opened = await open(ChapterRef.at(path), game: atGame);
+    final opened = await open(ChapterRef.at(path), game: atGame, copy: written);
     return CopySaved(written.name, nowEditing: opened is DocumentOpened);
   }
 
@@ -992,7 +983,7 @@ final class DocumentSession extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _opens.close();
+    _reads.close();
     cursor._dispose();
     _editors.dispose();
     super.dispose();

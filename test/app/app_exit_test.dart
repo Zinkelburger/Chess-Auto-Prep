@@ -152,6 +152,48 @@ void main() {
     fixture.store.releaseAll();
   });
 
+  test('what waits for the close to go ahead runs before the engines stop, '
+      'never on a close the user backs out of, and cannot keep the window '
+      'open', () async {
+    AppExit exit({
+      required Future<void> Function() beforeExit,
+      Duration? wait,
+    }) => AppExit(
+      guard: ExitGuard(
+        saver: fixture.saver,
+        question: question,
+        wait: wait ?? const Duration(seconds: 5),
+      ),
+      prepare: () => events.add('prepare'),
+      onCancelled: () => events.add('cancelled'),
+      beforeExit: beforeExit,
+      stopEngines: () async => events.add('engines'),
+      closeLog: () async => events.add('log'),
+    );
+
+    fixture.store.hold = true;
+    edit('last words');
+    question.answer = DraftChoice.keepWaiting;
+    final stayed = exit(
+      beforeExit: () async => events.add('before exit'),
+      wait: const Duration(milliseconds: 20),
+    );
+    expect(await stayed.leave(), AppExitResponse.cancel);
+    expect(events, ['prepare', 'cancelled']);
+    fixture.store.releaseAll();
+    await fixture.saver.flush();
+
+    events.clear();
+    final left = exit(
+      beforeExit: () async {
+        events.add('before exit');
+        throw StateError('the search would not stop');
+      },
+    );
+    expect(await left.leave(), AppExitResponse.exit);
+    expect(events, ['prepare', 'before exit', 'engines', 'log']);
+  });
+
   test('closing anyway over a pending save shuts everything once', () async {
     fixture.store.hold = true;
     edit('last words');

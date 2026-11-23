@@ -401,7 +401,11 @@ same `[ChapterName]` (the Lichess study export's tag). `chapterSections`
 (`chess/pgn/chapter_sections.dart`) gives each named chapter `(path, section)`
 identity, even as the last chapter left; untagged games form the unnamed
 section. Listings walk nested folders without following symlinks or entering
-hidden recovery or staging folders.
+hidden recovery or staging folders. A `repertoires` (or other library) folder that is a link leading nowhere,
+as when its drive is not connected, is not an empty library and its files
+are not deleted: listings and opens answer unreadable, and an unfinished
+rename or move under it waits (`behindDeadLink`) instead of being set aside.
+A file standing where the folder should be is reported the same way.
 
 - **One write path.** A course chapter opens as a `SectionView`; `spliced`
   puts the edit back and the store checks the whole file. Untouched games keep
@@ -414,7 +418,11 @@ hidden recovery or staging folders.
   (`trainedIdsOf`). Any edit that would change that id first writes
   `[LineID]` with the current id (`withIdsPinned`). Progress therefore stays
   keyed by path and id, and chapter changes inside a file never touch the
-  training files.
+  training files. A line the app makes — a branch played on the board, a
+  trap added, a study chapter — is written with a `[LineID]` of its own
+  (`newVariationId`) that owes nothing to its moves or place, so a line made
+  where a deleted one stood starts with no training history; the command
+  that makes it names the id, so the same edit made again writes the same.
 - **Import writes one file.** A multi-chapter course or study becomes
   `<repertoire>.pgn` with `[ChapterName]` and a distinct `[LineID]` on every
   line (`courseText`). Imports are staged in a `.import-` folder and renamed
@@ -459,7 +467,10 @@ Every PGN write goes through `PgnDocumentStore` (`storage/pgn_document_store.dar
 
 Only `Saved` clears the dirty state. A conflict keeps the draft and offers
 keep editing, save a copy or reload; dismissing a dialog never grants
-overwrite.
+overwrite. A document leaves the board only with words the user was asked
+about: a copy made on the way out lets it go while the copy still holds what
+is up (`DocumentSession.coveredBy`), and words an editor hands over that the
+file will not take keep it up, with the words still in their field.
 
 A save declares its `EditScope`: the games of the on-disk version it rewrites
 and how many it appends, or `WholeDocument` (restore, import, or a caller that
@@ -522,13 +533,15 @@ note keeps it. Arrows and circles follow the same rule.
 ## Settings and credentials
 
 - One writer, `SettingsStore` (`storage/settings_store.dart`), for
-  `settings.json` in Support, saved whole on every change. Top-level keys this
-  build does not know are written back unchanged.
+  `settings.json` in Support. A save reads the file again under its lock and
+  writes only the keys changed in this window over it, so two copies of the
+  app do not undo each other. Top-level keys this build does not know are
+  written back unchanged.
 - Preferences never block startup: a file that cannot be understood is moved
   into `recovery-quarantine/`, logged, and the app starts on defaults. One the
   disk will not read stays where it is: the app starts on defaults, says so,
-  and saves no change over it that session. A symlinked `settings.json` is
-  followed.
+  and saves nothing over it until a save can read it, which then keeps every
+  key it held. A symlinked `settings.json` is followed.
 - A failed save keeps the choice on screen with one line saying so; the next
   change writes again. Jobs capture their configuration when they start.
 - Lichess and account credentials live in SharedPreferences

@@ -1,5 +1,6 @@
 import '../../chess/pgn/chapter_line.dart';
 import '../../chess/pgn/game_summary.dart';
+import '../../chess/pgn/game_text.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/move_label.dart' show numberedMoves;
 import '../../chess/pgn/study.dart';
@@ -46,14 +47,29 @@ ChapterDraft? lineDraft(DocumentSession session, NodePath path) {
 }
 
 /// The game of the file the board shows, when it shows one game of it or
-/// the file holds only one. The analysis board is no game of any file: its
-/// line carries only the placeholder players a new line is given.
+/// the file holds only one. The analysis board is no game of any file: a
+/// line made on it carries only the placeholder players a new line is
+/// given. A game pasted onto it, or copied to it from a file, is still that
+/// game, with the players and result it came with.
 ChapterLine? _lineOnBoard(DocumentSession session) {
   final chapter = session.chapter;
-  if (chapter == null || session.isScratch) return null;
+  if (chapter == null) return null;
+  if (session.isScratch) {
+    final first = chapter.lines.firstOrNull;
+    return first != null && _namesPlayers(first) ? first : null;
+  }
   final game = chapter.game;
   if (game == null) {
     return chapter.lines.length == 1 ? chapter.lines.single : null;
   }
   return game >= chapter.lines.length ? null : chapter.lines[game];
+}
+
+/// Whether [line] says who played it, rather than the `Me` and `Training`
+/// a line made on the board is given.
+bool _namesPlayers(ChapterLine line) {
+  const placeholders = {'', '?', 'Me', 'Training'};
+  bool named(String tag) =>
+      !placeholders.contains(tagValue(line.tags, tag)?.trim() ?? '');
+  return named('White') || named('Black');
 }

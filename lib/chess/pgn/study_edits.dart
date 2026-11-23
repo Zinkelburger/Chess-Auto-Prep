@@ -4,8 +4,10 @@ import '../fen.dart';
 import 'chapter.dart';
 import 'chapter_edit.dart';
 import 'chapter_line.dart';
+import 'game_text.dart';
 import 'game_tree.dart';
 import 'games_written.dart';
+import 'line_id_pins.dart';
 import 'pgn_reader.dart';
 import 'rewrite_gate.dart';
 import 'study.dart';
@@ -27,9 +29,11 @@ ChapterEdit addChapter(
   required Side orientation,
   Fen root = Fen.initial,
   GameTree? moves,
+  String? seed,
 }) => addChapters(
   chapter,
   study: study,
+  seed: seed,
   drafts: [
     ChapterDraft(
       name: name,
@@ -43,23 +47,48 @@ ChapterEdit addChapter(
 /// focus on the first of them. A draft with no name is called `Chapter N`.
 ///
 /// Every game already in the file is kept byte for byte; only the one that
-/// was last gains the whitespace that separates it from the next.
+/// was last gains the whitespace that separates it from the next. A draft
+/// keeps its Lichess chapter only when it is that chapter, not a copy of
+/// it, and no chapter before it in the study names the same one. With
+/// [seed], the command's name, a draft that brings no `[LineID]` is given
+/// one of its own (see [newVariationId]).
 ChapterEdit addChapters(
   Chapter chapter, {
   required String study,
   required List<ChapterDraft> drafts,
+  Object Function(String url)? linkOf,
+  String? seed,
 }) {
   final ending = _endingIn(chapter);
   var lines = chapter.lines;
+  final ids = {
+    for (final line in lines) ?line.lineId,
+    for (final draft in drafts)
+      for (final tag in draft.tags.whereType<PgnTag>())
+        if (tag.key == 'LineID') tag.value.trim(),
+  };
+  // One chapter of a study per Lichess chapter: the first to name it.
+  // [linkOf] says which chapter an address names, however it is spelled.
+  Object? link(List<PgnHeader> tags) => switch (tagValue(tags, _chapterUrl)) {
+    final url? => linkOf?.call(url) ?? url,
+    null => null,
+  };
+  final linked = {for (final line in lines) ?link(line.tags)};
   for (final draft in drafts) {
     final name = draft.name.trim().isEmpty
         ? nextChapterName(studyChapters(lines))
         : draft.name.trim();
+    final names = link(draft.tags);
     final text = studyChapterText(
       draft,
       study: study,
       name: name,
       ending: ending,
+      keepChapterUrl:
+          draft.keepChapterUrl && (names == null || linked.add(names)),
+      lineId: seed == null || idHeaderAt(draft.tags) >= 0
+          ? null
+          : _taken(ids, newVariationId(seed, lines.length, ids)),
     );
     final read = readGame(text);
     if (read.issues.isNotEmpty || read.tree == null) {
@@ -269,3 +298,10 @@ String _endingIn(Chapter chapter) {
 
 bool _holds(Chapter chapter, int index) =>
     index >= 0 && index < chapter.lines.length;
+
+const _chapterUrl = 'ChapterURL';
+
+String _taken(Set<String> ids, String id) {
+  ids.add(id);
+  return id;
+}

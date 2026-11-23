@@ -75,6 +75,37 @@ void main() {
     });
   });
 
+  test('a chapter a command adds gets an id of its own; one it brings is '
+      'kept', () {
+    ChapterDraft draft({bool withId = false}) => ChapterDraft(
+      name: 'New',
+      orientation: Side.white,
+      moves: parseChapter(name: 'x', text: chapterText('x', '1. e4')).tree,
+      tags: withId
+          ? parseChapter(
+              name: 'x',
+              text: '[Event "x"]\n[LineID "kept"]\n\n*\n',
+            ).lines.single.tags
+          : const [],
+    );
+    Chapter added(String seed) => edited(
+      addChapters(
+        study(['A']),
+        study: 'S',
+        drafts: [draft(), draft(withId: true), draft()],
+        seed: seed,
+      ),
+    ).chapter;
+
+    final ids = [for (final line in added('one').lines) line.lineId];
+    expect(ids[0], isNull, reason: 'the chapter already there is untouched');
+    expect(ids[1], startsWith('line_-'));
+    expect(ids[2], 'kept');
+    expect(ids[3], allOf(startsWith('line_-'), isNot(ids[1])));
+    expect(writeChapter(added('one')), writeChapter(added('one')));
+    expect(added('two').lines[1].lineId, isNot(ids[1]));
+  });
+
   test('renaming a chapter that is not in the study is refused', () {
     expect(
       renameChapter(study(['A']), study: 'S', index: 3, name: 'X'),

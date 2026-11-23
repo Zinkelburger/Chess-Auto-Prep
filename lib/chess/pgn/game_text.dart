@@ -67,7 +67,10 @@ typedef GameSpan = ({String text, String trailer});
 /// followed by whitespace, and that is not inside a `{}` comment. Both
 /// conditions cost a game when they are wrong: `[EventDate "…"]`, which
 /// course exports carry, would split every game in two, and a comment
-/// quoting a header would split one game where it should not.
+/// quoting a header would split one game where it should not. Tag lines
+/// above that line, once the moves of the game before have begun, are the
+/// same game's: a file may write `[FEN]` before `[Event]`, and a start
+/// position left with the game above would be lost to its own.
 ///
 /// A byte-order mark at the very start belongs to the file, not to its first
 /// game, so it goes into the preamble: a game the user edits is written
@@ -92,40 +95,94 @@ typedef GameSpan = ({String text, String trailer});
 /// any size can be read through it.
 Iterable<String> gamesOfLines(Iterable<String> lines) sync* {
   final game = StringBuffer();
+  // Tag lines not yet known to head a game, and the lines between them: the
+  // next game's when its `[Event` line follows, else the game's above.
+  final tags = StringBuffer();
   var started = false;
+  var headed = false;
   var commented = false;
   var first = true;
   for (final line in lines) {
     final end = line.endsWith('\n') ? line.length - 1 : line.length;
-    if (!commented && isEventLine(line, 0, end)) {
+    // See [splitChapterText]: the mark belongs to the file.
+    final kept = first && line.startsWith('\uFEFF') ? line.substring(1) : line;
+    final kind = commented ? _Line.other : _lineKind(line, 0, end);
+    if (kind == _Line.tag && isEventLine(line, 0, end)) {
       if (started) yield game.toString().trimRight();
       game.clear();
+      if (!headed) game.write(tags);
+      game.write(kept);
+      tags.clear();
       started = true;
-      // See [splitChapterText]: the mark belongs to the file.
-      game.write(first && line.startsWith('\uFEFF') ? line.substring(1) : line);
-    } else if (started) {
-      game.write(line);
+      headed = true;
+    } else if (headed ||
+        kind == _Line.other ||
+        tags.isEmpty && kind != _Line.tag) {
+      if (started) {
+        game
+          ..write(tags)
+          ..write(line);
+      }
+      tags.clear();
+      if (kind == _Line.other) headed = false;
+    } else {
+      tags.write(kept);
     }
     commented = commentOpenAfter(line, 0, end, commented);
     first = false;
   }
-  if (started) yield game.toString().trimRight();
+  if (started) {
+    game.write(tags);
+    yield game.toString().trimRight();
+  }
 }
 
 List<int> _gameStarts(String text) {
   final starts = <int>[];
   var lineStart = 0;
   var commented = false;
+  // Where the tag lines above the next `[Event` line begin, and whether the
+  // game above is still in its own tags: those are its, not the next game's.
+  int? tags;
+  var headed = false;
   while (lineStart <= text.length) {
     var lineEnd = text.indexOf('\n', lineStart);
     if (lineEnd < 0) lineEnd = text.length;
-    if (!commented && isEventLine(text, lineStart, lineEnd)) {
-      starts.add(lineStart);
+    final kind = commented ? _Line.other : _lineKind(text, lineStart, lineEnd);
+    if (kind == _Line.other) {
+      tags = null;
+      headed = false;
+    } else if (kind == _Line.tag) {
+      if (!headed) tags ??= lineStart;
+      if (isEventLine(text, lineStart, lineEnd)) {
+        starts.add(tags ?? lineStart);
+        tags = null;
+        headed = true;
+      }
     }
     commented = commentOpenAfter(text, lineStart, lineEnd, commented);
     lineStart = lineEnd + 1;
   }
   return starts;
+}
+
+/// What a line outside a `{}` comment is to the tags around it: a tag, a
+/// line the reader passes over between tags (blank, a `%` escape or a `;`
+/// comment), or anything else, which is where a game's moves or a file's
+/// preamble are.
+enum _Line { tag, between, other }
+
+_Line _lineKind(String text, int start, int end) {
+  var i = start;
+  while (i < end && isBlank(text.codeUnitAt(i))) {
+    i++;
+  }
+  if (i == end) return _Line.between;
+  return switch (text.codeUnitAt(i)) {
+    openBracket => _Line.tag,
+    percent || semicolon => _Line.between,
+    _ => _Line.other,
+  };
 }
 
 /// Whether the line [start]–[end] is where a game begins: its first

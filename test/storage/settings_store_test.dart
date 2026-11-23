@@ -173,6 +173,64 @@ void main() {
     expect(next.value.engineCores, 2, reason: 'the next start reads them');
   });
 
+  test('settings the disk would not read at the start are saved into once '
+      'it reads them, with every key the file held', () async {
+    const written = '{"engineCores": 2, "futureKey": {"a": 1}}';
+    await file().writeAsString(written);
+    final run = await FaultyDisk(support).run(
+      FaultPlan.where(
+        (op) => op.kind == IoKind.read && op.key.path == 'settings.json',
+        const FailBefore(IoError.eio),
+      ),
+      () async {
+        final store = SettingsStore(support: support);
+        await store.load();
+        final unread = store.problem;
+        await store.update(store.value.copyWith(engineLines: 5));
+        final shown = (unread, store.problem, store.value.engineCores);
+        store.dispose();
+        return shown;
+      },
+    );
+    final (unread, problem, cores) =
+        (run.end as Returned<(String?, String?, int)>).value;
+    expect(unread, contains('could not be read'));
+    expect(problem, isNull, reason: 'the save went through');
+    expect(cores, 2, reason: 'what the file held comes up');
+    final saved = jsonDecode(await file().readAsString()) as Map;
+    expect(saved['engineLines'], 5);
+    expect(saved['engineCores'], 2);
+    expect(saved['futureKey'], {'a': 1});
+  });
+
+  test('two copies of the app keep each other\'s settings', () async {
+    final first = SettingsStore(support: support);
+    final second = SettingsStore(support: support);
+    addTearDown(first.dispose);
+    addTearDown(second.dispose);
+    await first.load();
+    await second.load();
+
+    await first.update(first.value.copyWith(engineCores: 4));
+    await second.update(second.value.copyWith(engineLines: 5));
+    final saved = jsonDecode(await file().readAsString()) as Map;
+    expect(saved['engineCores'], 4, reason: 'the second save kept it');
+    expect(saved['engineLines'], 5);
+    expect(second.value.engineCores, 4, reason: 'and shows it');
+
+    // The same key changed in both: the last to save has it.
+    await first.update(first.value.copyWith(engineLines: 2));
+    await second.update(second.value.copyWith(engineCores: 6));
+    await first.update(first.value.copyWith(boardCoordinates: false));
+    expect(first.value.engineLines, 2);
+    expect(first.value.engineCores, 6);
+    final next = SettingsStore(support: support);
+    addTearDown(next.dispose);
+    await next.load();
+    expect((next.value.engineCores, next.value.engineLines), (6, 2));
+    expect(next.value.boardCoordinates, isFalse);
+  });
+
   test('a directory at the settings path is moved aside too', () async {
     await Directory(file().path).create();
     final store = SettingsStore(support: support);

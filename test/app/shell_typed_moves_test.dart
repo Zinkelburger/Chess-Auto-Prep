@@ -3,6 +3,7 @@ import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/features/library/library_panel.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/workspace/board/move_field.dart';
+import 'package:chess_auto_prep/workspace/document/session_results.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -56,6 +57,35 @@ void main() {
     await tester.tap(field);
     await tester.pumpAndSettle();
   }
+
+  testWidgets('in the trainer a new move is not added to the repertoire; a '
+      'new analysis tab takes it', (tester) async {
+    await openKid(tester);
+    final original = kidOnDisk();
+    w.requests.switchTo(Mode.trainer);
+    await tester.pumpAndSettle();
+    final at = w.session.cursor.value;
+
+    w.session.playMove('g8f6');
+    await tester.pumpAndSettle();
+    await w.saver.flush();
+    expect(kidOnDisk(), original);
+    expect(w.session.cursor.value, at);
+    expect(w.session.refusedEdit, isA<MovesNotTaken>());
+
+    await w.requests.newAnalysisBoard();
+    await tester.pumpAndSettle();
+    expect(w.session.isScratch, isTrue);
+    w.session.playMove('g8f6');
+    await tester.pumpAndSettle();
+    expect(w.session.tree!.nodeAt(w.session.cursor.value)?.san, 'Nf6');
+    await w.saver.flush();
+    expect(kidOnDisk(), original);
+
+    w.requests.switchTo(Mode.repertoires);
+    await tester.pumpAndSettle();
+    expect(w.session.followsOnly, isFalse);
+  });
 
   group('on a chapter', () {
     testWidgets('a click puts the keys in the field, and a new move is '
