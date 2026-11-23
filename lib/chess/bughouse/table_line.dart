@@ -150,6 +150,22 @@ final class TableLine {
   /// The nodes on the boards now, in the order made.
   List<int> get _applied => [...pathTo(_at.$1), ...pathTo(_at.$2)]..sort();
 
+  /// The moves on the boards now as the engine replays them from [root],
+  /// each with its board's digit (`1e2e4`), in the order played. Null when
+  /// a hand was edited on the way: moves alone do not reach the table then.
+  List<String>? get engineMoves {
+    final moves = <String>[];
+    for (final n in _applied) {
+      switch (nodes[n].entry) {
+        case LineMove(:final board, :final uci):
+          moves.add('${board.digit}$uci');
+        case HandEdit():
+          return null;
+      }
+    }
+    return moves;
+  }
+
   /// The moves on the boards now, in the order they were played.
   List<LineMove> get applied => [
     for (final n in _applied)

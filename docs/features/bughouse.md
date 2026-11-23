@@ -66,7 +66,11 @@ panel on the right: 440–640 px beside board 1 alone, 440–480 px beside both.
   then `Hivemind · 12,400 nodes` (the size of the search the rows come from,
   both teams' together with two boards), or why the engine stopped, in the
   error colour. While the engine searches, a 2 px bar under it fills towards
-  the size the search rests at.
+  the size the search rests at. With two boards the engine is told the game
+  that led to the table (`position fen … moves 1e2e4 …`), so it sees a
+  position that came up before and offers no move after a threefold
+  repetition; a table set up by FEN, or one whose hands were edited on the
+  way, is asked about as it stands.
 - **Lines** — each board's three best moves for the player on move there,
   one row each: in the panel with one board, under the board (below its
   bottom hand) with two. A row is its score, then the

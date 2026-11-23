@@ -45,8 +45,14 @@ final class TimeBudget extends HivemindBudget {
 /// One question for the engine: a table, the team whose move is wanted,
 /// whether that team may sit, a board it may not sit on, how many ranked
 /// lines to report and how long to think.
+///
+/// [played] is the table the game began on and the moves that led to
+/// [position] (`1e2e4 2d7d5`), when moves alone led there. The engine is
+/// then told the game rather than the position, which is how it knows a
+/// position that came up before; null asks about the position alone.
 typedef HivemindQuestion = ({
   TablePosition position,
+  ({TablePosition root, List<String> moves})? played,
   Team team,
   bool maySit,
   MustMove mustMove,
@@ -228,7 +234,11 @@ final class HivemindProcess implements Hivemind, EngineProcess {
     _cut = false;
     try {
       await _configure(question);
-      _send('position fen ${question.position.dualFen}');
+      _send(switch (question.played) {
+        (:final root, :final moves) when moves.isNotEmpty =>
+          'position fen ${root.dualFen} moves ${moves.join(' ')}',
+        _ => 'position fen ${question.position.dualFen}',
+      });
       final collecting = _collecting = _Collecting(
         wanted: question.lines,
         budget: question.budget,

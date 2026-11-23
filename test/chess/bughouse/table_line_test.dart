@@ -273,6 +273,17 @@ void main() {
     expect(line.without(exd5).replay(), isA<LineBroken>());
   });
 
+  test('the moves on the boards are what the engine replays, unless a hand '
+      'was edited on the way', () {
+    final line = playedLine('1e2e4 2d2d4 1e7e5');
+    expect(line.engineMoves, ['1e2e4', '2d2d4', '1e7e5']);
+    expect(stepped(line, BoardNumber.one, 1).engineMoves, ['1e2e4', '2d2d4']);
+    expect(
+      line.edited(BoardNumber.one, Side.black, Role.knight, 1).engineMoves,
+      isNull,
+    );
+  });
+
   test('presses at the end of a line are one hand edit; one that comes '
       'back to nothing is gone', () {
     var line = playedLine('1e2e4');

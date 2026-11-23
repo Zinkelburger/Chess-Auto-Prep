@@ -85,8 +85,10 @@ HivemindQuestion question({
   MustMove mustMove = MustMove.either,
   int lines = 3,
   HivemindBudget budget = const NodeBudget(200),
+  ({TablePosition root, List<String> moves})? played,
 }) => (
   position: TablePosition.initial,
+  played: played,
   team: team,
   maySit: maySit,
   mustMove: mustMove,
@@ -299,6 +301,27 @@ void main() {
         await engine.search(question(team: Team.cd)) as HivemindSearched;
     expect(answer.top!.mate, 1);
     expect(answer.top!.pv.single, const JointMove('d8h4', 'a2a3'));
+  });
+
+  test('a search told the game sends its moves, so a repeated position is '
+      'seen as one', () async {
+    final (engine, process) = await started();
+    process.next = startSearch;
+    await engine.search(
+      question(
+        played: (
+          root: TablePosition.initial,
+          moves: const ['1g1f3', '1b8c6', '1f3g1', '1c6b8'],
+        ),
+      ),
+    );
+    expect(
+      process.sent,
+      contains(
+        'position fen ${TablePosition.initial.dualFen} '
+        'moves 1g1f3 1b8c6 1f3g1 1c6b8',
+      ),
+    );
   });
 
   test('a search tells the engine the team, the clock and the rule', () async {

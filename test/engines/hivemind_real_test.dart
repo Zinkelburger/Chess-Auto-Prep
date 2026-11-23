@@ -44,6 +44,7 @@ void main() {
       final answer =
           await engine.search((
                 position: TablePosition.initial,
+                played: null,
                 team: Team.ab,
                 maySit: false,
                 mustMove: MustMove.either,
@@ -59,6 +60,7 @@ void main() {
                 position: TablePosition.initial
                     .play(BoardNumber.one, 'e2e4')!
                     .after,
+                played: null,
                 team: Team.ab,
                 maySit: false,
                 mustMove: MustMove.either,
@@ -78,6 +80,42 @@ void main() {
   );
 
   test(
+    'told the game, the engine sees a threefold repetition; told the table '
+    'alone it does not',
+    () async {
+      final engines = EngineSupervisor();
+      addTearDown(engines.dispose);
+      final start = await engines.startHivemind(_files, cores: 2);
+      final engine = (start as HivemindStarted).engine;
+      const cycle = ['1g1f3', '1b8c6', '1f3g1', '1c6b8'];
+      const moves = [...cycle, ...cycle];
+      var table = TablePosition.initial;
+      for (final move in moves) {
+        table = table.play(BoardNumber.one, move.substring(1))!.after;
+      }
+      Future<HivemindSearched> ask({required bool game}) async =>
+          await engine.search((
+                position: table,
+                played: game
+                    ? (root: TablePosition.initial, moves: moves)
+                    : null,
+                team: Team.ab,
+                maySit: false,
+                mustMove: MustMove.either,
+                lines: 1,
+                budget: const NodeBudget(60),
+              ))
+              as HivemindSearched;
+      expect((await ask(game: false)).best, isNotNull);
+      expect((await ask(game: true)).best, isNull);
+    },
+    skip: named || Platform.isLinux && binary.existsSync()
+        ? false
+        : 'no installed Hivemind on this machine',
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+
+  test(
     'the engine reports its lines while it searches',
     () async {
       final engines = EngineSupervisor();
@@ -90,6 +128,7 @@ void main() {
         final answer =
             await engine.search((
                   position: TablePosition.initial,
+                  played: null,
                   team: Team.ab,
                   maySit: false,
                   mustMove: MustMove.one,
