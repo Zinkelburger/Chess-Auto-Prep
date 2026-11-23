@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_heading.dart';
 import 'package:chess_auto_prep/chess/pgn/line_id_pins.dart';
 import 'package:chess_auto_prep/chess/pgn/tree_edit.dart';
+import 'package:chess_auto_prep/chess/training/schedule.dart';
 import 'package:chess_auto_prep/features/trainer/lesson.dart';
 import 'package:chess_auto_prep/features/trainer/trainer_state.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
@@ -194,6 +195,52 @@ void main() {
 
     expect(w.lineTrainer.lesson?.line.key, (source: path, id: 'short'));
   });
+  for (final (description, moves, paused) in [
+    ('a variation', '1. e4 e5 (1... f6)', false),
+    ('a paused main line', '1. e4 f6', true),
+  ]) {
+    testWidgets('a trap held as $description opens its drillable sibling', (
+      tester,
+    ) async {
+      final examples = ChapterRef.at(main.path, section: 'Examples');
+      final traps = ChapterRef.at(main.path, section: 'Traps');
+      w.chapterFiles.listing = kidWith([examples, traps]);
+      if (paused) {
+        final key = (source: main.path, id: 'open');
+        w.progress.reviews[key] = Review(
+          key: key,
+          lineName: 'Open',
+          excluded: true,
+        );
+      }
+      await openWith(tester, '''
+// Color: White
+
+[Event "Open"]
+[LineID "open"]
+
+$moves *
+
+[Event "Model game"]
+[ChapterName "Examples"]
+[Result "1-0"]
+
+1. e4 f6 2. d4 d5 1-0
+
+[Event "Trap line"]
+[ChapterName "Traps"]
+[LineID "trap"]
+
+1. e4 f6 2. d4 *
+''', listed: false);
+      w.lineTrainer.setScope(TrainScope.repertoire);
+      await tester.pumpAndSettle();
+      await trainTheTrap(tester);
+
+      expect(w.session.source, traps);
+      expect(w.lineTrainer.lesson!.line.key, (source: main.path, id: 'trap'));
+    });
+  }
 
   testWidgets('a trap no chapter plays goes into the draft, asked first, '
       'and is trained there', (tester) async {

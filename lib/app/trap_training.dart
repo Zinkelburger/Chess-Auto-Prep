@@ -4,6 +4,7 @@ import '../chess/generation/draft_chapter.dart';
 import '../chess/pgn/chapter.dart';
 import '../chess/pgn/chapter_heading.dart';
 import '../chess/pgn/tree_edit.dart';
+import '../chess/training/training_line.dart';
 import '../features/library/library.dart';
 import '../features/trainer/trainer.dart';
 import '../storage/chapter_files.dart';
@@ -71,17 +72,27 @@ final class TrapTraining {
       requests.say('This line starts where the chapter does not.');
       return;
     }
-    final holder = _plays(chapter, kept)
-        ? source
-        : await _chapterPlaying(source, kept);
+    final holders = await _chaptersPlaying(source, chapter, kept);
     if (session.source != source) return;
-    if (holder != null) {
-      if (await requests.readInBuilder(holder, sans) is! RequestDone) {
+    if (holders.isEmpty) {
+      return _trainInDraft(kept, source, chapter, addToDraft, showTrain);
+    }
+    // The chapter on the board first, then the others: the first that has
+    // the moves as a line it can ask. A chapter can hold them only as a
+    // variation, a model game or a line the user paused.
+    for (final holder in holders.where((held) => held.drills)) {
+      if (await requests.readInBuilder(holder.ref, sans) is! RequestDone) {
         return;
       }
-      return _trainOpen(sans, showTrain);
+      requests.switchTo(Mode.repertoires);
+      showTrain();
+      if (await trainer.trainLineThrough(sans)) return;
     }
-    return _trainInDraft(kept, source, chapter, addToDraft, showTrain);
+    // In the repertoire already, so not copied into a draft beside it.
+    requests.say(
+      '${holders.first.ref.name} plays that line, but not as a line to '
+      'train: it is a variation, a model game or a paused line there.',
+    );
   }
 
   /// The line put into [source]'s draft, then trained there. The draft is
@@ -158,17 +169,45 @@ final class TrapTraining {
     return newDraftBeside(source, chapters);
   }
 
-  /// The first other chapter of [source]'s repertoire that plays the line.
-  Future<ChapterRef?> _chapterPlaying(ChapterRef source, KeptFind kept) async {
+  /// The chapters of [source]'s repertoire that play the line, the one on
+  /// the board first, each with whether a line of its own to train goes
+  /// through it.
+  Future<List<({ChapterRef ref, bool drills})>> _chaptersPlaying(
+    ChapterRef source,
+    Chapter open,
+    KeptFind kept,
+  ) async {
     final folder = library.repertoires
         .where((f) => f.chapters.any((ref) => ref.path == source.path))
         .firstOrNull;
-    for (final ref in folder?.chapters ?? const <ChapterRef>[]) {
-      if (ref == source) continue;
-      final chapter = await library.chapterForSearch(ref);
-      if (chapter != null && _plays(chapter, kept)) return ref;
+    final holders = <({ChapterRef ref, bool drills})>[];
+    for (final ref in [
+      source,
+      ...?folder?.chapters.where((ref) => ref != source),
+    ]) {
+      final chapter = ref == source
+          ? open
+          : await library.chapterForSearch(ref);
+      if (chapter == null || !_plays(chapter, kept)) continue;
+      holders.add((ref: ref, drills: _drills(chapter, ref, kept)));
     }
-    return null;
+    return holders;
+  }
+
+  /// Whether [chapter] has the line's moves at the start of a line it asks,
+  /// rather than inside a variation or a finished game.
+  static bool _drills(Chapter chapter, ChapterRef ref, KeptFind kept) {
+    final sans = kept.find.sans;
+    return trainingLines(chapter, source: ref.path).any(
+      (line) =>
+          !line.modelGame &&
+          line.yourMoves > 0 &&
+          line.moves.length >= sans.length &&
+          [
+                for (final move in line.moves.take(sans.length)) move.san,
+              ].join(' ') ==
+              sans.join(' '),
+    );
   }
 
   /// Whether the chapter on the board, the draft, now plays the line.
