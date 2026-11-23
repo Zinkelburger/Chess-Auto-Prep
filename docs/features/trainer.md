@@ -88,7 +88,10 @@ study** in an adjacent pane, suspends the lesson and opens a scratch copy of
 its line at the current position. Analysis and Explorer can then be used
 alongside Train, with the normal database choices and resizable pane controls.
 The dedicated trainer's Analysis tab is its only engine surface and uses the
-shared engine on that board; exploration never edits the repertoire.
+shared engine on that board; exploration never edits the repertoire. With
+a repertoire itself on the board, a move it does not hold is not played and
+the edit strip says `Training does not add moves to the repertoire. New
+analysis tab opens a copy to try them on.`; moves it holds are followed.
 **Resume** restores the
 retained lesson position and conceals answers again. Engine startup failure
 stays in the normal engine controls and does not prevent returning.

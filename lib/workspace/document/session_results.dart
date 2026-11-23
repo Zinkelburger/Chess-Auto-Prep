@@ -133,6 +133,12 @@ final class EditNotWritten extends EditRefused {
   final String reason;
 }
 
+/// The board only follows the file's moves just now, as it does while
+/// training: a move tried there is not one the file was meant to take.
+final class MovesNotTaken extends EditRefused {
+  const MovesNotTaken();
+}
+
 /// The chapter came back without the move that was played, so nothing was
 /// written. Nothing should ever produce this.
 final class MoveLost extends EditRefused {

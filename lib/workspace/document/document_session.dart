@@ -162,6 +162,11 @@ final class DocumentSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// While set, the board adds no move to a file and only follows the ones
+  /// it holds. The trainer sets it, where a move tried is never meant for
+  /// the repertoire; the analysis board takes moves as ever.
+  bool followsOnly = false;
+
   /// Whether the file on the board has edits that are not on disk.
   bool get hasHeldEdits => _held != null;
 
@@ -459,7 +464,12 @@ final class DocumentSession extends ChangeNotifier {
       cursor._place(here);
       return;
     }
-    if (existingOnly || _editBlocked() != null) return;
+    if (existingOnly) return;
+    if (followsOnly && !isScratch) {
+      _refused = const MovesNotTaken();
+      return notifyListeners();
+    }
+    if (_editBlocked() != null) return;
     final added = edits.addMove(
       chapter,
       at: cursor.value,
