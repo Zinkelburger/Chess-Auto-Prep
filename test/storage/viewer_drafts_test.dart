@@ -39,7 +39,7 @@ void main() {
     () async {
       final drafts = ViewerDraftFiles(support);
       await drafts.keep(draft);
-      await drafts.drop(draft.path);
+      await drafts.drop(draft);
       expect(await drafts.find(draft.path), isNull);
       await drafts.keep(draft);
       await drafts.setAside(draft.path);
@@ -47,6 +47,21 @@ void main() {
       expect(quarantined(), hasLength(1));
     },
   );
+
+  test('a stale drop leaves the other writer’s checkpoint in place', () async {
+    final first = ViewerDraftFiles(support);
+    final second = ViewerDraftFiles(support);
+    final other = ViewerDraft(
+      path: draft.path,
+      game: draft.game,
+      revision: draft.revision,
+      text: '1. d4 {another note} *',
+    );
+    await first.keep(draft);
+    await second.keep(other);
+    await first.drop(draft);
+    expect((await second.find(draft.path))?.text, other.text);
+  });
 
   test('a Support folder not made yet is made, parents and all', () async {
     final nested = Directory(p.join(support.path, 'a', 'b'));
