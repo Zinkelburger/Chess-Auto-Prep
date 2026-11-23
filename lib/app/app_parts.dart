@@ -15,6 +15,7 @@ import '../workspace/document/document_session.dart';
 import '../workspace/document/draft_keeper.dart';
 import '../workspace/document/save_copy.dart';
 import '../workspace/document/session_results.dart';
+import '../workspace/search/fill_states.dart';
 import '../workspace/workspace.dart';
 import 'environment.dart';
 import 'exit_guard.dart';
@@ -305,13 +306,41 @@ final class AppParts {
     players.stop();
     databases.download?.stop();
     tournaments?.stop();
-    workspace.fill.cancel();
     training.myGames.pause();
     _sittingPaused = training.lines.lesson?.suspended == false;
     training.lines.suspend();
     training.puzzles.suspend();
     labs.engine.close();
     unawaited(account.cancel());
+  }
+
+  /// How long a search is given to finish the position it is on.
+  static const searchCloseWait = Duration(seconds: 10);
+
+  /// The window is closing for good. A running search pauses as its Pause
+  /// button does and the tree it built is saved before the engines stop, so
+  /// Resume continues it next time. It is left running until now: a close
+  /// the user backs out of costs it nothing. A position that takes longer
+  /// than [searchCloseWait] loses the run.
+  Future<void> finishForClose() async {
+    final fill = workspace.fill;
+    if (_disposed || fill.state is! FillRunning) return;
+    requests.say('Saving the search before closing…', problem: false);
+    final paused = Completer<void>();
+    void changed() {
+      if (fill.state is! FillRunning && !paused.isCompleted) paused.complete();
+    }
+
+    fill.addListener(changed);
+    fill.finish();
+    try {
+      await paused.future.timeout(searchCloseWait);
+      await env.pendingWrites.settle();
+    } on TimeoutException {
+      fill.cancel();
+    } finally {
+      fill.removeListener(changed);
+    }
   }
 
   /// Whether closing paused a sitting that was running, so a close the

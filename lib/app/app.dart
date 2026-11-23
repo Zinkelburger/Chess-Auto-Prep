@@ -82,6 +82,7 @@ class _ChessAutoPrepState extends State<ChessAutoPrep> {
     navigatorKey: _navigator,
     prepare: _parts.prepareToClose,
     onCancelled: _parts.resumeAfterClose,
+    beforeExit: _parts.finishForClose,
     stopEngines: _parts.env.stopEngines,
     closeLog: widget.closeLog,
   );
@@ -287,12 +288,17 @@ final class AppExit {
     this.navigatorKey,
     this.prepare,
     this.onCancelled,
+    this.beforeExit,
     required this._stopEngines,
     required this._closeLog,
   });
 
   final void Function()? prepare;
   final void Function()? onCancelled;
+
+  /// Runs once the close is going ahead, before the engines stop: what is
+  /// only worth doing when the window really goes.
+  final Future<void> Function()? beforeExit;
   final GlobalKey<NavigatorState>? navigatorKey;
   final closing = ValueNotifier(false);
   final ExitGuard _guard;
@@ -318,6 +324,12 @@ final class AppExit {
     try {
       prepare?.call();
       if (!await _draftIsSettled()) return AppExitResponse.cancel;
+      try {
+        await beforeExit?.call();
+      } on Object catch (error) {
+        // Nothing done on the way out decides whether the window closes.
+        log.w('finish before closing', error);
+      }
       await _stopEngines();
       log.i('exit');
       // A log that cannot be written never decides whether the window closes.
