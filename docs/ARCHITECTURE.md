@@ -529,13 +529,15 @@ note keeps it. Arrows and circles follow the same rule.
 ## Settings and credentials
 
 - One writer, `SettingsStore` (`storage/settings_store.dart`), for
-  `settings.json` in Support, saved whole on every change. Top-level keys this
-  build does not know are written back unchanged.
+  `settings.json` in Support. A save reads the file again under its lock and
+  writes only the keys changed in this window over it, so two copies of the
+  app do not undo each other. Top-level keys this build does not know are
+  written back unchanged.
 - Preferences never block startup: a file that cannot be understood is moved
   into `recovery-quarantine/`, logged, and the app starts on defaults. One the
   disk will not read stays where it is: the app starts on defaults, says so,
-  and saves no change over it that session. A symlinked `settings.json` is
-  followed.
+  and saves nothing over it until a save can read it, which then keeps every
+  key it held. A symlinked `settings.json` is followed.
 - A failed save keeps the choice on screen with one line saying so; the next
   change writes again. Jobs capture their configuration when they start.
 - Lichess and account credentials live in SharedPreferences
