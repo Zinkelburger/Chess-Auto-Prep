@@ -32,6 +32,9 @@ Future<bool> _keep(RecordStores s) async {
             '[Event "Draft"]\n[Result "*"]\n\n'
             '1. d4 Nf6 2. c4 c5 3. d5 b5 4. cxb5 a6 { Edited } *\n',
       ),
+      // The checkpoint kept before is this window's own, as the draft
+      // keeper says of the one it last wrote: nothing of another's to keep.
+      previous: seededDraft(s.profile),
     );
     return true;
   } on Exception {

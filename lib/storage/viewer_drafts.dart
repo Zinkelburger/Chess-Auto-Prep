@@ -108,7 +108,11 @@ final class ViewerDraftFiles implements ViewerDrafts {
       if (current == null && await file.exists()) {
         throw FileSystemException('Cannot read viewer draft', file.path);
       }
-      if (current != null && !current.matches(previous)) {
+      // One that is neither this window's last nor what is being written
+      // is another's; a write that landed without saying so is neither.
+      if (current != null &&
+          !current.matches(previous) &&
+          !current.matches(draft)) {
         await quarantineCopy(
           _support,
           '$folder-${p.basename(file.path)}',
