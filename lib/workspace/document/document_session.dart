@@ -170,6 +170,15 @@ final class DocumentSession extends ChangeNotifier {
   /// the repertoire; the analysis board takes moves as ever.
   bool followsOnly = false;
 
+  /// True while a copy of what is up is on its way to a board of its own
+  /// ([copyOut] until [copiedOut]). A move or an undo made meanwhile is
+  /// meant for that copy, so the document takes neither: it would change
+  /// the file the user just left.
+  bool get copyingOut => _copiesOut > 0;
+  int _copiesOut = 0;
+  void copyOut() => _copiesOut++;
+  void copiedOut() => _copiesOut--;
+
   /// Whether the file on the board has edits that are not on disk.
   bool get hasHeldEdits => _held != null;
 
@@ -477,7 +486,7 @@ final class DocumentSession extends ChangeNotifier {
   /// the chapter comes back without is logged rather than saved.
   void playMove(String uci, {bool existingOnly = false}) {
     final chapter = _chapter;
-    if (chapter == null || _shownTo != null) return;
+    if (chapter == null || _shownTo != null || copyingOut) return;
     // The board shows a comment's line, not the cursor's position.
     if (cursor.commentLine.value != null) return;
     // A move the chapter already holds writes nothing, so following it is
@@ -607,6 +616,7 @@ final class DocumentSession extends ChangeNotifier {
   /// so; one landing after the user left is still what its file holds, and
   /// the document on screen now is not touched.
   Future<UndoResult> undo() async {
+    if (copyingOut) return const UndoRefused();
     if (isScratch) return _undoOnBoard();
     if (_held != null) return _undoHeld();
     final ref = _source;

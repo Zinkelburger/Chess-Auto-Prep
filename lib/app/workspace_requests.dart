@@ -641,17 +641,26 @@ final class WorkspaceRequests extends ChangeNotifier {
     final cursor = _session.cursor.value;
     final preview = _session.cursor.commentLine.value;
     final side = _session.orientation;
-    final board = withSide(
-      await readChapter(
-        name: boards.analysisBoardName,
-        text: gameText(_session),
-      ),
-      side,
-    );
-    if (ticket.overtaken) return const RequestDropped();
-    final leave = await _leavingFile();
-    if (ticket.overtaken || leave == null) return const RequestDropped();
-    final shown = await _session.showAnalysisBoard(board, leave.copy);
+    final Go? leave;
+    final bool shown;
+    // The tab says Analysis from the keypress on, so nothing played or
+    // taken back before the copy is up goes to the document being copied.
+    _session.copyOut();
+    try {
+      final board = withSide(
+        await readChapter(
+          name: boards.analysisBoardName,
+          text: gameText(_session),
+        ),
+        side,
+      );
+      if (ticket.overtaken) return const RequestDropped();
+      leave = await _leavingFile();
+      if (ticket.overtaken || leave == null) return const RequestDropped();
+      shown = await _session.showAnalysisBoard(board, leave.copy);
+    } finally {
+      _session.copiedOut();
+    }
     if (!shown || ticket.overtaken) return const RequestDropped();
     _session.cursor.goTo(cursor);
     // A read-only line preview belongs only in the new scratch tab. Preserve
