@@ -235,6 +235,10 @@ void main() {
       '[Event "A"]\n\n1. e4 *\n\n\n  \n',
       '// only a preamble\nno games here\n',
       '',
+      '\uFEFF[SetUp "1"]\n[FEN "8/8/8/8/8/8/8/K1k5 w - - 0 1"]\n[Event "A"]\n\n'
+          '1. Ka2 *\n[White "x"]\n[Event "B"]\n[Site "s"]\n\n1. d4 *\n[Black "y"]\n',
+      '// A preamble\n[Site "s"]\n\n[Event "A"]\n\n1. e4 {said\n[White "x"]\n'
+          '[Event "B"] in a note} *\n[Event "C"]\n[Event "D"]\n\n1. c4 *\n',
     ];
     for (final file in files) {
       expect(
@@ -244,6 +248,25 @@ void main() {
       );
     }
     expect(gamesOfLines(linesOf(files[3])), hasLength(2));
+  });
+
+  test('tags written above Event belong to the game below them', () {
+    const second = '[SetUp "1"]\n[FEN "8/8/8/8/8/8/8/K1k5 w - - 0 1"]\n';
+    final file = splitChapterText(
+      '// Notes\n\n[Site "s"]\n[Event "A"]\n\n1. e4 *\n\n'
+      '$second\n[Event "B"]\n% a tool\n\n[Round "1"]\n*\n[Event "C"]\n\n*\n',
+    );
+    expect(file.preamble, '// Notes\n\n');
+    expect(
+      [for (final game in file.games) game.text],
+      [
+        '[Site "s"]\n[Event "A"]\n\n1. e4 *',
+        // Its own tags stay its own, whatever stands between them.
+        '$second\n[Event "B"]\n% a tool\n\n[Round "1"]\n*',
+        '[Event "C"]\n\n*',
+      ],
+    );
+    expect(readGame(file.games[1].text).tree?.rootFen.value, startsWith('8/8'));
   });
 }
 
