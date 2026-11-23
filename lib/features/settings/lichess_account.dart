@@ -57,8 +57,19 @@ final class LichessAccountState extends ChangeNotifier {
       waiting: (page, {required opened}) =>
           _set(Connecting(page: page, browserOpened: opened)),
     );
-    await _took(outcome, cancelledTo: before);
+    await _took(
+      outcome,
+      cancelledTo: before,
+      // Logging in again is asked for when Lichess turned the saved login
+      // away. Backing out keeps it, since it may still serve elsewhere, but
+      // the row must not read as if nothing were wrong with it.
+      cancelledProblem: before is SignedIn ? renewLogin : null,
+    );
   }, otherwise: null);
+
+  /// What the row says after a renewal the user backed out of.
+  static const renewLogin =
+      'Lichess turned this login away. Log in again to renew it.';
 
   /// Ends a waiting browser flow; the row goes back to the account it
   /// showed before, or to signed out.
@@ -110,6 +121,7 @@ final class LichessAccountState extends ChangeNotifier {
   Future<bool> _took(
     LoginOutcome outcome, {
     AccountStatus cancelledTo = const SignedOut(),
+    String? cancelledProblem,
   }) async {
     switch (outcome) {
       case LoggedIn(account: final grant):
@@ -131,7 +143,7 @@ final class LichessAccountState extends ChangeNotifier {
         _set(SignedIn(account), problem: null);
         return true;
       case LoginCancelled():
-        _set(cancelledTo, problem: null);
+        _set(cancelledTo, problem: cancelledProblem);
         return false;
       case LoginFailed(:final problem):
         _set(const SignedOut(), problem: problem.sentence);

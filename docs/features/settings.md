@@ -90,7 +90,9 @@ hint reads `Waiting for the browser…` with `Cancel`, or `The browser did not
 open. Copy the link and open it.` with `Copy link` and `Cancel`. `Cancel`
 puts back what the row showed before, so a login started again over a saved
 account leaves that account signed in, and a grant that arrives after it is
-not saved. Signed in:
+not saved; because logging in again is asked for when Lichess refused the
+saved login, the row then says `Lichess turned this login away. Log in again
+to renew it.` Signed in:
 `Logged in as <name> · until <date>` (or `· personal access token`) with `Log
 out`. Failures replace the hint in the error colour until the next attempt:
 `Lichess said the login was declined.`, `No answer from the browser in five
