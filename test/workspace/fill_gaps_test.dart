@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/generation/eval.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/chess/generation/sources.dart';
+import 'package:chess_auto_prep/chess/generation/tree_wire_v4_reader.dart';
 import 'package:chess_auto_prep/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/storage/chapter_files.dart';
@@ -259,6 +260,31 @@ void main() {
     );
     expect(fill.canMakeLines, isTrue);
   });
+
+  test(
+    'a search from the opposite side saves both trees beside the chapter',
+    () async {
+      final saved = <(ChapterRef, Side)>[];
+      final fill = fillWith(
+        ScriptedEvaluator(),
+        policy: const ScriptedPolicy({'e2e4': 1, 'e8d8': 1}),
+        keepTree: (ref, tree, {required runId}) async {
+          final decoded = decodeTreeV4(tree) as TreeDecoded;
+          saved.add((ref, decoded.config.side));
+        },
+      );
+      fixture.session.flip();
+      const bothSides = FillRequest(elo: 2200, depthPlies: 1, bothSides: true);
+      expect(await fill.resume(bothSides, orAfresh: true), isNull);
+      expect((fill.state as FillDone).complete, isTrue);
+      expect(fill.found!.side, Side.black);
+      expect(fill.canMakeLines, isFalse);
+      expect(
+        saved,
+        unorderedEquals([(fixture.ref, Side.black), (fixture.ref, Side.white)]),
+      );
+    },
+  );
 
   test('a failed tree save retains exact bytes and id for retry', () async {
     final pending = PendingWrites();

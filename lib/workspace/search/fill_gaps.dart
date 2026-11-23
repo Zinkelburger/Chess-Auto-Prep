@@ -394,6 +394,7 @@ final class FillGaps extends ChangeNotifier {
       chapter: repertoire && _session.readOnly == null
           ? (chapter, source)
           : null,
+      keptBeside: _session.readOnly == null ? source : null,
       pins: repertoire ? chapterPins(chapter) : const {},
     );
   }
@@ -662,7 +663,7 @@ final class FillGaps extends ChangeNotifier {
     List<(SearchNode, SearchConfig, bool)> mirrors,
   ) async {
     _set(done);
-    final source = target.chapter?.$2;
+    final source = target.keptBeside;
     final keep = _keepTree;
     final saving = <Future<void>>[
       if (finds?.record(

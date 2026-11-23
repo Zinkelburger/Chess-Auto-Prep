@@ -389,6 +389,7 @@ final class FillTarget {
     required this.sans,
     required this.side,
     this.chapter,
+    this.keptBeside,
     this.pins = const {},
   });
 
@@ -397,6 +398,11 @@ final class FillTarget {
   final List<String> sans;
   final Side side;
   final (Chapter, ChapterRef)? chapter;
+
+  /// The file the search's tree is kept beside, which is where Resume looks
+  /// for it: the file on the board, whichever side the search plays and
+  /// whether or not it may draft lines there.
+  final ChapterRef? keptBeside;
 
   /// The moves the repertoire chapter on the board already plays for
   /// [side], by position: the search plays them rather than choosing again,
