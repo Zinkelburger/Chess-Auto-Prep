@@ -196,7 +196,12 @@ final class Studies extends ChangeNotifier {
       case NewStudy(:final name):
         if (nameProblem(name) case final wrong?) return StudyProblem(wrong);
         final empty = await readChapter(name: name, text: '');
-        final edit = pgn.addChapters(empty, study: name, drafts: drafts);
+        final edit = pgn.addChapters(
+          empty,
+          study: name,
+          drafts: drafts,
+          linkOf: _linkOf,
+        );
         if (edit is! ChapterEdited) return _refusedAdd(edit);
         final created = await _created(name, writeChapter(edit.chapter));
         return created is StudyDone
@@ -214,6 +219,10 @@ final class Studies extends ChangeNotifier {
     }
   }
 
+  /// The Lichess chapter [url] names, so two spellings of one address are
+  /// one chapter.
+  static Object _linkOf(String url) => parseStudyLink(url) ?? url;
+
   StudyResult _addOpen(ChapterRef study, List<ChapterDraft> drafts) {
     final chapter = _session.chapter;
     if (chapter == null || _session.game == null) {
@@ -221,7 +230,12 @@ final class Studies extends ChangeNotifier {
     }
     final first = chapter.lines.length;
     final refused = _session.apply(
-      (open) => pgn.addChapters(open, study: studyNameOf(open), drafts: drafts),
+      (open) => pgn.addChapters(
+        open,
+        study: studyNameOf(open),
+        drafts: drafts,
+        linkOf: _linkOf,
+      ),
       writes: true,
     );
     return refused == null
@@ -236,6 +250,7 @@ final class Studies extends ChangeNotifier {
           chapter,
           study: studyNameIn(chapter.lines) ?? study.name,
           drafts: drafts,
+          linkOf: _linkOf,
         ),
         refused: _refusedAdd,
         done: (before) =>
@@ -376,6 +391,7 @@ final class Studies extends ChangeNotifier {
           moves: line.tree!,
           tags: line.tags,
           result: line.terminator,
+          keepChapterUrl: true,
         ),
     ]);
   });
