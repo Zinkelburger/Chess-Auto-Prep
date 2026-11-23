@@ -781,11 +781,14 @@ final class DocumentSession extends ChangeNotifier {
   /// edit that changes which game is the chapter moves the board with it.
   ///
   /// A document change with [writes] (such as a chapter rename) takes held
-  /// edits to disk with it once the change is accepted for writing.
+  /// edits to disk with it once the change is accepted for writing. [hold]
+  /// keeps the edit in the draft whatever the mode up now says: what began
+  /// while reading is not written because another mode came up meanwhile.
   String? apply(
     edits.ChapterEdit Function(Chapter chapter) edit, {
     ReferenceChanges? references,
     bool writes = false,
+    bool hold = false,
   }) {
     if (writes && _held != null && _readOnly == null) _editors.commit();
     final chapter = _chapter;
@@ -804,6 +807,7 @@ final class DocumentSession extends ChangeNotifier {
               references,
             ),
             writes: writes,
+            hold: hold,
           );
           if (reason != null) return reason;
         }
@@ -873,14 +877,14 @@ final class DocumentSession extends ChangeNotifier {
 
   /// Writes [landed] and shows what it says to show, following a course
   /// file's chapter to the one shown. Answers why nothing was written, or null.
-  String? _land(Landing? landed, {bool writes = false}) {
+  String? _land(Landing? landed, {bool writes = false, bool hold = false}) {
     if (landed == null) {
       return _editRefused('a new line could not be given its chapter name');
     }
     if (writes) _saveHeld();
     if (_held case final held?) {
       held.add(_shown!, landed);
-    } else if (_holdsEdits && !(writes && _readOnly == null)) {
+    } else if ((hold || _holdsEdits) && !(writes && _readOnly == null)) {
       _held = HeldEdits(_shown!, landed);
     } else {
       _saver.save(landed.text, landed.scope);
