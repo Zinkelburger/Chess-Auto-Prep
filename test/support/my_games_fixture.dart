@@ -1,14 +1,30 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:chess_auto_prep/chess/fen.dart';
+import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/pgn_reader.dart';
 import 'package:chess_auto_prep/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/chess/tactics/mining.dart';
+import 'package:chess_auto_prep/chess/tactics/puzzle.dart';
 import 'package:chess_auto_prep/engines/engine.dart';
 import 'package:chess_auto_prep/engines/engine_line.dart';
+import 'package:chess_auto_prep/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/features/tactics/my_games.dart';
+import 'package:chess_auto_prep/features/tactics/set_additions.dart';
+import 'package:chess_auto_prep/features/tactics/tactics_set.dart';
 import 'package:chess_auto_prep/net/recent_games.dart';
 import 'package:chess_auto_prep/storage/my_accounts.dart';
+import 'package:chess_auto_prep/storage/my_games_files.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/storage/settings_store.dart';
+import 'package:chess_auto_prep/workspace/document/document_saver.dart';
+import 'package:chess_auto_prep/workspace/document/document_session.dart';
 import 'package:dartchess/dartchess.dart' show Side;
+import 'package:path/path.dart' as p;
+
+import 'scripted_store.dart';
+import 'tactics_fixture.dart';
 
 /// A Lichess game where "Me", with Black, walks into Scholar's mate with
 /// `3... Nf6??`.
@@ -217,5 +233,95 @@ final class MemoryAccounts implements AccountStore {
       accounts[site] = Account(name);
     }
     return true;
+  }
+}
+
+/// The review over a scripted store holding the tactics set, the real
+/// session, saver and set, an engine that answers at once and sites whose
+/// answers the test writes. The games cache writes its `.fetched` note to a
+/// real folder, which is all of it that touches the disk.
+final class ReviewRig {
+  ReviewRig({
+    GamesFetch? lichess,
+    GamesFetch? chesscom,
+    ReviewEngine? engine,
+    Map<GameSite, Account>? accounts,
+    Map<String, EngineLine>? lines,
+    DateTime Function() now = DateTime.now,
+  }) : engine = AnsweringEngine(lines) {
+    this.lichess = ScriptedSite(GameSite.lichess, [
+      lichess ?? const GamesFetched([scholarsMate]),
+    ]);
+    this.chesscom = ScriptedSite(GameSite.chesscom, [
+      chesscom ?? const GamesFetched([quietChesscomGame]),
+    ]);
+    this.accounts = MemoryAccounts(
+      accounts ??
+          {
+            GameSite.lichess: const Account('Me'),
+            GameSite.chesscom: const Account('Me'),
+          },
+    );
+    additions = SetAdditions(
+      documents: store,
+      session: session,
+      saver: saver,
+      set: set,
+    );
+    games = MyGames(
+      accounts: this.accounts,
+      sites: [this.lichess, this.chesscom],
+      cache: cache,
+      set: additions,
+      engine: engine ?? () async => Started(this.engine),
+      settings: settings,
+      now: now,
+    );
+  }
+
+  final store = ScriptedDocumentStore()
+    ..documents[tacticsRef] = Opened(tacticsSet, scriptedRevision(tacticsSet));
+  late final saver = DocumentSaver(store, delay: Duration.zero);
+  late final session = DocumentSession(store, saver);
+  final settings = SettingsStore();
+  late final set = TacticsSet(
+    documents: store,
+    session: session,
+    settings: settings,
+    ref: tacticsRef,
+  );
+  final folder = Directory.systemTemp.createTempSync('v2-my-games-');
+  late final cache = GamesCache(
+    store,
+    folder: (Directory(
+      p.join(folder.path, 'games_library'),
+    )..createSync()).path,
+  );
+  final AnsweringEngine engine;
+  late final ScriptedSite lichess;
+  late final ScriptedSite chesscom;
+  late final MemoryAccounts accounts;
+  late final SetAdditions additions;
+  late final MyGames games;
+
+  String get setText => (store.documents[tacticsRef]! as Opened).text;
+
+  List<Puzzle> get puzzlesOnDisk =>
+      puzzlesOf(parseChapter(name: 'Default', text: setText).lines);
+
+  Future<void> start() async {
+    await games.load();
+    await games.start();
+  }
+
+  bool gamesDisposed = false;
+
+  void dispose() {
+    if (!gamesDisposed) games.dispose();
+    set.dispose();
+    session.dispose();
+    saver.dispose();
+    settings.dispose();
+    folder.deleteSync(recursive: true);
   }
 }

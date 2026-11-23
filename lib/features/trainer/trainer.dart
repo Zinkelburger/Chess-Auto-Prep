@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/study.dart';
@@ -455,12 +456,16 @@ class Trainer extends ChangeNotifier {
     await _load(force: true);
     await _loadsSettled();
     final state = _state;
-    final source = _session.source?.path;
+    final open = _session.source;
+    final source = open?.path;
     final start = _session.tree?.rootFen.position;
     if (request.overtaken || state is! TrainerReady || source == null) {
       return false;
     }
     if (start == null) return false;
+    // A course file holds several chapters; only the open one's lines are
+    // the chapter on the board. One opened by its path alone is the file.
+    final chapter = state.chapters.where((c) => c.ref == open).firstOrNull;
     bool plays(TrainingLine line) =>
         line.key.source == source &&
         line.start.isAt(start) &&
@@ -468,7 +473,7 @@ class Trainer extends ChangeNotifier {
         line.moves.length >= sans.length &&
         [for (final move in line.moves.take(sans.length)) move.san].join(' ') ==
             sans.join(' ');
-    final holding = state.lines.where(plays).toList()
+    final holding = (chapter?.lines ?? state.lines).where(plays).toList()
       ..sort((a, b) => a.moves.length.compareTo(b.moves.length));
     if (holding.isEmpty) return false;
     trainLine(holding.first);
@@ -725,8 +730,14 @@ class Trainer extends ChangeNotifier {
             revision: _session.trainingSourceRevision,
           )
         : null;
+    // Older versions remembered the repertoires folder itself while a PGN
+    // directly under it was open: that choice still trains those PGNs.
+    final looseRoot = root == _catalog?.root;
     final (:chapters, :problem) = await _chapters.chaptersWhere(
-      (ref) => ref.path == root || _catalog?.repertoireOf(ref.path) == root,
+      (ref) =>
+          ref.path == root ||
+          _catalog?.repertoireOf(ref.path) == root ||
+          (looseRoot && p.dirname(ref.path) == root),
       open,
     );
     if (load.overtaken) return;

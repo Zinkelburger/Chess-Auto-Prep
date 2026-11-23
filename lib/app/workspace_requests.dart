@@ -33,32 +33,10 @@ import '../workspace/latest.dart';
 import 'document_tabs.dart';
 import 'exit_guard.dart';
 import 'mode.dart';
+import 'request_result.dart';
 import 'window_input.dart';
 
-/// What came of a request to put something on the board.
-sealed class RequestResult {
-  const RequestResult();
-}
-
-/// It is on the board, or it was already.
-final class RequestDone extends RequestResult {
-  const RequestDone();
-}
-
-/// It could not be done, and [sentence] — also in [WorkspaceRequests.status]
-/// — says why.
-final class RequestRefused extends RequestResult {
-  const RequestRefused(this.sentence);
-
-  final String sentence;
-}
-
-/// Nothing happened and nothing needs saying: the user stayed or closed a
-/// dialog, a later request overtook this one, or the list that asked says
-/// why itself.
-final class RequestDropped extends RequestResult {
-  const RequestDropped();
-}
+export 'request_result.dart';
 
 /// Where the user was, for Back and Forward: the mode, and the document on
 /// the board and where in it.
@@ -155,7 +133,18 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// that waited can tell a later one was made meanwhile.
   final _asked = Latest();
 
+  /// Overtaken each time the user chooses a mode; [_sinceChoice] is the
+  /// latest request's ticket of it, taken as that request started.
+  final _chosen = Latest();
+  Ticket? _sinceChoice;
+
   Mode get mode => _mode;
+
+  /// A ticket a newer request overtakes.
+  Ticket get navigation => _asked.now;
+
+  /// A ticket the user choosing a mode ([switchTo]) overtakes.
+  Ticket get modeChoice => _chosen.now;
 
   /// What the bar under the top bar says; null when it says nothing.
   String? get status => _status;
@@ -173,7 +162,11 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// a draft stays in its tab. Back comes here again, or to [from]: where
   /// the user was before a tab of [mode] put its document up.
   void switchTo(Mode mode, {Place? from}) {
-    if (_disposed || mode == _mode) return;
+    if (_disposed) return;
+    // A document still on its way to another mode does not pull the user
+    // back from the one they went to, even the one they were in.
+    _chosen.cancel();
+    if (mode == _mode) return;
     _showMode(mode, from: from);
     documents.entered(mode);
   }
@@ -425,11 +418,12 @@ final class WorkspaceRequests extends ChangeNotifier {
     ChapterRef ref, {
     int? game,
   }) async {
-    if (ticket.overtaken) return const RequestDropped();
+    bool dropped() => ticket.overtaken || _modeChosenSince;
+    if (dropped()) return const RequestDropped();
     Go? left;
     if (ref != _session.source || game != _session.game) {
       final answer = await _leaving.mayLeaveDocument();
-      if (ticket.overtaken || answer is! Go) return const RequestDropped();
+      if (dropped() || answer is! Go) return const RequestDropped();
       left = answer;
     }
     final undo = _showModeFor(mode);
@@ -503,6 +497,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     final result = await opening;
     if (ticket.overtaken) return const RequestDropped();
     if (result is! RequestDone) return result;
+    if (_modeChosenSince) return const RequestDropped();
     // Commit navigation only after the document was accepted, but keep the
     // departure captured before the read so Back returns to the original file.
     _remember(from);
@@ -789,7 +784,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (!await _session.showAnalysisBoard(board) || ticket.overtaken) {
       return const RequestDropped();
     }
-    if (!_keepBoard.contains(_mode)) {
+    if (!_keepBoard.contains(_mode) && !_modeChosenSince) {
       _remember(from);
       documents.carry(Mode.repertoires);
       _mode = Mode.repertoires;
@@ -980,8 +975,12 @@ final class WorkspaceRequests extends ChangeNotifier {
     _session.cancelOpening();
   }
 
+  /// Whether the user chose a mode, to stay in, since a request began.
+  bool get _modeChosenSince => _sinceChoice?.overtaken ?? false;
+
   Ticket _nextRequest() {
     cancelPending();
+    _sinceChoice = _chosen.now;
     return _asked.now;
   }
 
@@ -994,6 +993,7 @@ final class WorkspaceRequests extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _asked.close();
+    _chosen.close();
     documents.dispose();
     super.dispose();
   }

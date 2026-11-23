@@ -485,7 +485,13 @@ final class Library extends ChangeNotifier {
   Future<LibraryResult> restoreChapter(
     DeletedChapter chapter, {
     String? name,
-  }) => _run('restore ${chapter.path}', () {
+  }) => _run('restore ${chapter.path}', () async {
+    // A PGN directly under the repertoires is a repertoire of its own, so it
+    // comes back only under a name no repertoire has.
+    if (p.equals(chapter.folder, _root) &&
+        _named(name ?? chapter.name) != null) {
+      return const LibraryNameTaken();
+    }
     final to = DocumentRef(chapter.restoredAs(name));
     return _relocate(ChapterRef.at(chapter.path), to);
   });

@@ -246,6 +246,31 @@ void main() {
     );
   }
 
+  test('a top-level restore requires a free repertoire name', () async {
+    const original = '[Event "French"]\n\n1. e4 e6 *\n';
+    final file = File(at('repertoires/French.pgn'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(original);
+    await library.refresh();
+    await library.deleteRepertoire(named('French'));
+    final gone = (await deletedChapters()).single;
+    await library.createRepertoire('FRENCH', Side.black);
+    final replacement = File(named('FRENCH').chapters.single.path);
+    final bytes = replacement.readAsBytesSync();
+
+    expect(await library.restoreChapter(gone), isA<LibraryNameTaken>());
+    expect(file.existsSync(), isFalse);
+    expect(File(gone.path).readAsStringSync(), original);
+
+    expect(
+      await library.restoreChapter(gone, name: 'Recovered'),
+      isA<LibraryDone>(),
+    );
+    expect(File(named('Recovered').path).readAsStringSync(), original);
+    expect(replacement.readAsBytesSync(), bytes);
+    expect(await deletedChapters(), isEmpty);
+  });
+
   test(
     'a deleted repertoire comes back chapter by chapter, rows and all',
     () async {

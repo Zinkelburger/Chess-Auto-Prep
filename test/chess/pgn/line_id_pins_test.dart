@@ -4,7 +4,10 @@ import 'package:chess_auto_prep/chess/pgn/chapter_line.dart';
 import 'package:chess_auto_prep/chess/pgn/games_written.dart';
 import 'package:chess_auto_prep/chess/pgn/line_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/line_id_pins.dart';
+import 'package:chess_auto_prep/chess/training/training_line.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/session_fixture.dart';
 
 /// Two short lines with no id headers, trained under ids worked out from
 /// their moves and their places — short enough that the place is part of
@@ -154,6 +157,30 @@ void main() {
     final after = withIdsPinned(study, edited.chapter, edited.games);
     expect(identical(after.chapter, edited.chapter), isTrue);
   });
+
+  test(
+    'a repertoire line extended in PGN Viewer keeps its training key',
+    () async {
+      final fixture = await openSession(_chapter);
+      addTearDown(fixture.dispose);
+      final session = fixture.session;
+      TrainingLine firstLine() =>
+          trainingLines(session.chapter!, source: fixture.ref.path).first;
+      final originalKey = firstLine().key;
+
+      await session.open(fixture.ref, game: 0);
+      session.holdsEdits = true;
+      session.cursor.toEnd();
+      session.playMove('b8c6');
+      session.keepHeld();
+      await fixture.saver.flush();
+
+      await session.open(fixture.ref);
+      final reopened = firstLine();
+      expect(reopened.moves.last.san, 'Nc6');
+      expect(reopened.key, originalKey);
+    },
+  );
 
   test('an id header is added after the last tag, moves untouched', () {
     final line = chapter.lines.first;

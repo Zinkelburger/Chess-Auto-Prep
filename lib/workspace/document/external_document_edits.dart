@@ -287,5 +287,18 @@ final class ExternalDocumentEdits {
 
 /// Only the session decides when editors must hand over their text.
 final class _Editors extends ChangeNotifier {
-  void commit() => notifyListeners();
+  /// Whether the text handed over now is written at once, by Save: like
+  /// words typed while editing, it need not wait for an undo going out.
+  bool get saving => _saving;
+  bool _saving = false;
+
+  void commit({bool saving = false}) {
+    final was = _saving;
+    _saving = saving || was;
+    try {
+      notifyListeners();
+    } finally {
+      _saving = was;
+    }
+  }
 }

@@ -2,6 +2,8 @@
 // player or list in hand; a game opened from the analysis at its start, at
 // the board's position or where it left the book, and nothing for a game
 // that is not there; and a group's prep sheet copied.
+import 'dart:io';
+
 import 'package:chess_auto_prep/app/mode_view.dart';
 import 'package:chess_auto_prep/app/player_views.dart';
 import 'package:chess_auto_prep/chess/book/book_check.dart';
@@ -14,6 +16,7 @@ import 'package:chess_auto_prep/features/players/player_tree_pane.dart';
 import 'package:chess_auto_prep/features/players/players_screen.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/storage/player_files.dart';
 import 'package:chess_auto_prep/ui/app_action.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
 import 'package:chess_auto_prep/workspace/workspace_tabs.dart';
@@ -30,13 +33,49 @@ const _games =
     '[Event "Club"]\n[White "Bob"]\n[Black "Alex"]\n[Date "2026.09.21"]\n'
     '[Result "0-1"]\n\n1. d4 d5 0-1';
 
+final class _PlayerStore implements PlayerStore {
+  final _memory = MemoryPlayers();
+  bool failNextSave = false;
+  bool failNextRead = false;
+
+  @override
+  Future<PlayerDirectory> read() async {
+    if (failNextRead) {
+      failNextRead = false;
+      throw const FileSystemException('Cannot list tournaments');
+    }
+    return _memory.read();
+  }
+
+  @override
+  Future<void> savePlayer(Player player, {Player? expected}) async {
+    if (failNextSave) {
+      failNextSave = false;
+      throw const FileSystemException('No space left on device');
+    }
+    await _memory.savePlayer(player, expected: expected);
+  }
+
+  @override
+  Future<void> saveGroup(PlayerGroup group, {PlayerGroup? expected}) =>
+      _memory.saveGroup(group, expected: expected);
+
+  @override
+  Future<void> removePlayer(Player player) => _memory.removePlayer(player);
+
+  @override
+  Future<void> removeGroup(PlayerGroup group) => _memory.removeGroup(group);
+}
+
 void main() {
   late WindowFixture w;
+  late _PlayerStore store;
   late Player player;
   const ref = DocumentRef('/collections/player.pgn');
 
   setUp(() async {
-    w = WindowFixture();
+    store = _PlayerStore();
+    w = WindowFixture(players: store);
     w.store.documents[ref] = Opened(_games, scriptedRevision(_games));
     player = Player.create('Alex').edited({
       'pgn_files': [ref.path],
@@ -124,6 +163,31 @@ void main() {
       for (final label in [...forAPlayer, 'Get games']) {
         expect(on(actions, label), isFalse, reason: label);
       }
+    });
+
+    testWidgets('the picker retries the pending save after entry reloads '
+        'the directory', (tester) async {
+      final directory = w.parts.players.directory;
+      const notes = 'Review the endgame';
+      store.failNextSave = true;
+      expect(
+        await directory.save(player.edited({'notes': notes}), expected: player),
+        isFalse,
+      );
+
+      final view = analysis()..entered();
+      await show(tester, view.list(const SizedBox()));
+      expect(find.text('Alex'), findsOneWidget);
+      store.failNextRead = true;
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Retry save'));
+      await tester.pumpAndSettle();
+      expect((await store.read()).players.single.text('notes'), notes);
+      expect(find.text('Retry save'), findsNothing);
+      final loadError = find.textContaining('Cannot list tournaments');
+      expect(loadError, findsOneWidget);
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Try again'));
+      await tester.pumpAndSettle();
+      expect(loadError, findsNothing);
     });
 
     testWidgets('with a player, offers their games; Get games only where '
@@ -265,6 +329,49 @@ void main() {
   });
 
   group('Players', () {
+    testWidgets('re-entering Players & prep keeps a failed edit available '
+        'to retry or discard', (tester) async {
+      tester.view
+        ..physicalSize = const Size(1400, 900)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final view = playersView();
+      final directory = w.parts.players.directory;
+      await show(tester, view.screen(const {}));
+
+      const notes = 'Prepare the Sicilian';
+      store.failNextSave = true;
+      expect(
+        await directory.save(player.edited({'notes': notes}), expected: player),
+        isFalse,
+      );
+      await tester.pump();
+      final retry = find.widgetWithText(OutlinedButton, 'Retry save');
+      expect(retry, findsOneWidget);
+
+      view.left();
+      await tester.pumpWidget(const SizedBox.shrink());
+      view.entered();
+      await show(tester, view.screen(const {}));
+      expect(retry, findsOneWidget);
+      expect(find.text('Discard failed edit and reload'), findsOneWidget);
+
+      store.failNextRead = true;
+      await directory.load();
+      await tester.pump();
+      expect(find.textContaining('Cannot list tournaments'), findsOneWidget);
+      expect(find.textContaining('Could not save.'), findsOneWidget);
+      expect(find.text('Alex'), findsOneWidget);
+      expect(find.text('Discard failed edit and reload'), findsOneWidget);
+      expect((await store.read()).players.single.text('notes'), isEmpty);
+
+      await tester.tap(retry);
+      await tester.pumpAndSettle();
+      expect((await store.read()).players.single.text('notes'), notes);
+      expect(retry, findsNothing);
+      expect(find.textContaining('Could not save.'), findsNothing);
+    });
+
     testWidgets('adds a player, or pastes several, unless the list is busy', (
       tester,
     ) async {

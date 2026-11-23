@@ -118,7 +118,9 @@ where Ctrl+V pastes onto the board) → the same import, named
 **Choose the side** — a chapter whose file names no side asks
 `Which side is <chapter> for?` when it opens and writes `// Color:` into the
 file; dismissing leaves it read as White and asks again next time. Import
-infers the side when the file does not say: the branching side is the
+takes the side the study chapters' `Orientation` tags agree on; when they
+name different sides it writes no `// Color:` and each chapter trains from
+its own. With no such tags it infers the side: the branching side is the
 opponent (needs 8+ lines), else the side most lines end on (4+ lines).
 Actions ▸ `Play as Black` / `Play as White` changes it later.
 

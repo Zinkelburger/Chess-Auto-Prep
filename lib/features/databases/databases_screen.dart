@@ -470,8 +470,7 @@ class _StorageDialog extends StatelessWidget {
                           ToolButton(
                             icon: AppIcons.delete,
                             tooltip: 'Delete ${store.name}…',
-                            onPressed:
-                                library.removing != null || store.bytes == 0
+                            onPressed: library.removing != null
                                 ? null
                                 : () => unawaited(_remove(context, store)),
                           ),

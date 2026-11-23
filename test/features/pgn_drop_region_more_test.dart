@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'package:chess_auto_prep/features/library/pgn_drop_region.dart';
 import 'package:chess_auto_prep/storage/document_ref.dart';
+import 'package:chess_auto_prep/storage/pending_writes.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/ui/status_bar.dart';
 import 'package:desktop_drop/desktop_drop.dart';
@@ -16,13 +17,17 @@ import '../support/scripted_store.dart';
 
 void main() {
   late LibraryFixture fixture;
+  late PendingWrites pending;
   late List<String> said;
+  late List<String> opened;
 
   Future<void> show(WidgetTester tester, {bool fresh = true}) async {
     if (fresh) {
-      fixture = await openLibrary([]);
+      pending = PendingWrites();
+      fixture = await openLibrary([], pendingWrites: pending);
       addTearDown(fixture.dispose);
       said = [];
+      opened = [];
     }
     await tester.pumpWidget(
       MaterialApp(
@@ -31,7 +36,7 @@ void main() {
             say: (sentence, {action, problem = true}) => said.add(sentence),
             child: PgnDropRegion(
               library: fixture.library,
-              onOpen: (_) {},
+              onOpen: (ref) => opened.add(ref.path),
               child: const SizedBox.expand(),
             ),
           ),
@@ -91,6 +96,44 @@ void main() {
     target(tester).onDragDone!(dropped([path]));
     await tester.pumpAndSettle();
     expect(said, isNot(contains('Drop a PGN file to import a repertoire.')));
+  });
+
+  testWidgets('every dropped PGN is imported after the region has gone', (
+    tester,
+  ) async {
+    await show(tester);
+    const first = '/Downloads/A.pgn';
+    const second = '/Downloads/B.pgn';
+    for (final (path, moves) in [(first, '1. e4 e5'), (second, '1. d4 d5')]) {
+      final text = '[Event "Club"]\n[Result "*"]\n\n$moves *';
+      fixture.store.documents[DocumentRef(path)] = Opened(
+        text,
+        scriptedRevision(text),
+      );
+    }
+    final gate = fixture.store.readEarly = Completer<void>();
+    target(tester).onDragDone!(dropped([first, second]));
+    await tester.pump();
+    expect(fixture.store.opened.last.path, first);
+    var settled = false;
+    final closing = pending.settle().then((problem) {
+      settled = true;
+      return problem;
+    });
+    // The user leaves the builder while the first file is being read.
+    await tester.pumpWidget(const SizedBox.shrink());
+    final secondRead = fixture.store.readEarly = Completer<void>();
+    gate.complete();
+    await tester.pump();
+    expect(fixture.store.opened.last.path, second);
+    expect(settled, isFalse, reason: 'closing waits for the whole drop');
+    secondRead.complete();
+    await tester.pumpAndSettle();
+
+    expect(await closing, isNull);
+    expect(fixture.textAt('/repertoires/A/Main.pgn'), contains('1. e4 e5'));
+    expect(fixture.textAt('/repertoires/B/Main.pgn'), contains('1. d4 d5'));
+    expect(opened, isEmpty);
   });
 
   testWidgets('takes drops at rest, and none while the library is busy', (

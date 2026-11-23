@@ -25,10 +25,19 @@ TournamentConfig config({
   ...extra,
 });
 
+/// Plays [moves] in turn, each with [score] from its own side (no score
+/// line at all when null), after [delay]; throws from `play` when [fails].
 final class ScriptEngine implements PlayingEngine {
-  ScriptEngine(this.moves, {this.score = 0});
+  ScriptEngine(
+    this.moves, {
+    this.score = 0,
+    this.delay = Duration.zero,
+    this.fails = false,
+  });
   final List<String?> moves;
-  final int score;
+  final int? score;
+  final Duration delay;
+  final bool fails;
   final requests = <List<String>>[];
   final budgets = <MoveBudget>[];
   bool quitCalled = false;
@@ -50,20 +59,26 @@ final class ScriptEngine implements PlayingEngine {
   PlayingSearch play(Fen root, List<String> history, MoveBudget budget) {
     requests.add(history);
     budgets.add(budget);
+    if (fails) throw StateError('engine gone');
     final move = moves.isEmpty ? null : moves.removeAt(0);
+    final score = this.score;
     return PlayingSearch(
       Search(
-        lines: Stream.value(
-          EngineLine(
-            depth: 1,
-            multiPv: 1,
-            score: Centipawns(score),
-            pv: const [],
-          ),
-        ),
+        lines: score == null
+            ? const Stream.empty()
+            : Stream.value(
+                EngineLine(
+                  depth: 1,
+                  multiPv: 1,
+                  score: Centipawns(score),
+                  pv: const [],
+                ),
+              ),
         stop: () async {},
       ),
-      Future.value(move),
+      delay == Duration.zero
+          ? Future.value(move)
+          : Future.delayed(delay, () => move),
     );
   }
 }
@@ -72,6 +87,7 @@ Future<PlayedGame> game(
   TournamentConfig cfg,
   List<ScriptEngine> engines, {
   bool Function()? stopping,
+  void Function(LiveGame position)? onPosition,
 }) async {
   var next = 0;
   return TournamentGameRunner(
@@ -79,9 +95,17 @@ Future<PlayedGame> game(
     pairing: cfg.schedule.first,
     launch: (_, _) async => Started(engines[next++]),
     stopping: stopping ?? () => false,
-    onPosition: (_) {},
+    onPosition: onPosition ?? (_) {},
   ).play();
 }
+
+/// Quiet pawn moves that neither repeat nor end the game: eight a side.
+final whitePawns = [for (final f in 'abcdefgh'.split('')) '${f}2${f}3'];
+final blackPawns = [for (final f in 'abcdefgh'.split('')) '${f}7${f}6'];
+
+/// Knight moves that keep every count of reversible moves running.
+final whiteKnights = ['g1f3', 'b1c3', 'f3d4', 'c3b5'];
+final blackKnights = ['g8f6', 'b8c6', 'f6d5', 'c6b4'];
 
 void main() {
   test(
@@ -208,6 +232,291 @@ void main() {
     );
     expect(await tag({'kind': 'fixedDepth', 'depth': 3}), '?');
   });
+  group('resignation adjudication', () {
+    Future<PlayedGame> resign(
+      Map<String, Object?> rules, {
+      required int white,
+      required int black,
+    }) => game(config(rules: {'resignEnabled': true, ...rules}), [
+      ScriptEngine([...whitePawns], score: white),
+      ScriptEngine([...blackPawns], score: black),
+    ]);
+
+    test('with both engines agreeing, White resigns on its fourth losing '
+        'move after Black first agrees', () async {
+      final result = await resign({}, white: -1000, black: 1000);
+      expect(result.record.result, '0-1');
+      expect(result.record.termination, 'resignAdjudication');
+      // White's first losing move has no agreement yet: moves 2 to 5 count.
+      expect(result.record.json['plies'], 9);
+    });
+
+    test('a losing engine whose opponent does not agree plays on unless one '
+        'side may resign alone', () async {
+      final both = await resign({'maxMoves': 8}, white: -1000, black: 0);
+      expect(both.record.termination, 'maxMoves');
+      final alone = await resign(
+        {'twoSidedResign': false},
+        white: -1000,
+        black: 0,
+      );
+      expect(alone.record.result, '0-1');
+      expect(alone.record.termination, 'resignAdjudication');
+      expect(alone.record.json['plies'], 7);
+    });
+
+    test('Black resigns at the threshold itself after the moves set', () async {
+      final result = await resign(
+        {'twoSidedResign': false, 'resignMoveCount': 2},
+        white: 0,
+        black: -900,
+      );
+      expect(result.record.result, '1-0');
+      expect(result.record.termination, 'resignAdjudication');
+      expect(result.record.json['plies'], 4);
+    });
+
+    test('nothing resigns with resignation off or without scores', () async {
+      final off = await resign(
+        {'resignEnabled': false, 'twoSidedResign': false, 'maxMoves': 4},
+        white: -1000,
+        black: -1000,
+      );
+      expect(off.record.termination, 'maxMoves');
+      final unscored = await game(
+        config(
+          rules: {
+            'twoSidedResign': false,
+            'resignEnabled': true,
+            'drawEnabled': true,
+            'drawMoveNumber': 1,
+            'drawMoveCount': 1,
+            'maxMoves': 2,
+          },
+        ),
+        [
+          ScriptEngine([...whitePawns], score: null),
+          ScriptEngine([...blackPawns], score: null),
+        ],
+      );
+      expect(unscored.record.termination, 'maxMoves');
+      expect(unscored.record.json['plies'], 4);
+    });
+
+    test('the move cap reached on the resigning move ends it drawn', () async {
+      final result = await resign(
+        {'twoSidedResign': false, 'resignMoveCount': 2, 'maxMoves': 2},
+        white: 0,
+        black: -1000,
+      );
+      expect(result.record.result, '1/2-1/2');
+      expect(result.record.termination, 'maxMoves');
+    });
+  });
+
+  group('draw adjudication', () {
+    Future<PlayedGame> level(
+      Map<String, Object?> rules, {
+      int score = 0,
+      List<String>? black,
+    }) => game(
+      config(
+        rules: {
+          'drawEnabled': true,
+          'drawScoreCp': 10,
+          'maxMoves': 4,
+          ...rules,
+        },
+      ),
+      [
+        ScriptEngine([...whiteKnights], score: score),
+        ScriptEngine([...(black ?? blackKnights)], score: score),
+      ],
+    );
+
+    test('level scores from the move set, for the moves set, draw', () async {
+      final result = await level({'drawMoveNumber': 3, 'drawMoveCount': 2});
+      expect(result.record.result, '1/2-1/2');
+      expect(result.record.termination, 'drawAdjudication');
+      // Black's second move reaches move 3; its third is the second level.
+      expect(result.record.json['plies'], 6);
+    });
+
+    test('scores past the threshold, or draws off, play on', () async {
+      final wide = await level({
+        'drawMoveNumber': 1,
+        'drawMoveCount': 1,
+      }, score: 50);
+      expect(wide.record.termination, 'maxMoves');
+      final off = await level({
+        'drawEnabled': false,
+        'drawMoveNumber': 1,
+        'drawMoveCount': 1,
+      });
+      expect(off.record.termination, 'maxMoves');
+    });
+
+    test('a pawn move starts the count of level moves again', () async {
+      final result = await level(
+        {'drawMoveNumber': 1, 'drawMoveCount': 2},
+        black: ['g8f6', 'e7e6', 'b8c6'],
+      );
+      expect(result.record.termination, 'drawAdjudication');
+      expect(result.record.json['plies'], 6);
+    });
+  });
+
+  group('clocks', () {
+    test('incremental clocks add the increment each move and the base '
+        'again each period, and tell the engine the moves to go', () async {
+      final white = ScriptEngine([...whitePawns]);
+      final result = await game(
+        config(
+          extra: {
+            'timeControl': {
+              'kind': 'incremental',
+              'baseMs': 60000,
+              'incrementMs': 1000,
+              'movesPerSession': 2,
+            },
+          },
+          rules: {'maxMoves': 3},
+        ),
+        [
+          white,
+          ScriptEngine([...blackPawns]),
+        ],
+      );
+      expect(result.record.termination, 'maxMoves');
+      expect(white.budgets.map((b) => b.movesToGo), [2, 1, 2]);
+      expect(white.budgets.map((b) => b.increment), [1000, 1000, 1000]);
+      final clocks = white.budgets.map((b) => b.whiteTime!).toList();
+      expect(clocks.first, 60000);
+      expect(clocks[1], inInclusiveRange(59000, 61000));
+      expect(clocks[2], inInclusiveRange(120000, 122000));
+      expect(white.budgets.last.blackTime, inInclusiveRange(120000, 122000));
+    });
+
+    test('a period of one move gives the base back after every move', () async {
+      final white = ScriptEngine([...whitePawns]);
+      await game(
+        config(
+          extra: {
+            'timeControl': {
+              'kind': 'incremental',
+              'baseMs': 60000,
+              'incrementMs': 0,
+              'movesPerSession': 1,
+            },
+          },
+          rules: {'maxMoves': 2},
+        ),
+        [
+          white,
+          ScriptEngine([...blackPawns]),
+        ],
+      );
+      expect(white.budgets.map((b) => b.movesToGo), [1, 1]);
+      expect(white.budgets.last.whiteTime, inInclusiveRange(118000, 120000));
+    });
+
+    test('sudden death sends no moves to go', () async {
+      final white = ScriptEngine([...whitePawns]);
+      final result = await game(
+        config(
+          extra: {
+            'timeControl': {
+              'kind': 'incremental',
+              'baseMs': 60000,
+              'incrementMs': 0,
+              'movesPerSession': 0,
+            },
+          },
+          rules: {'maxMoves': 2},
+        ),
+        [
+          white,
+          ScriptEngine([...blackPawns]),
+        ],
+      );
+      expect(result.record.termination, 'maxMoves');
+      expect(white.budgets.map((b) => b.movesToGo), [null, null]);
+    });
+
+    test('a move slower than the clock loses on time', () async {
+      final result = await game(
+        config(
+          extra: {
+            'timeControl': {
+              'kind': 'incremental',
+              'baseMs': 30,
+              'incrementMs': 0,
+            },
+          },
+        ),
+        [
+          ScriptEngine([
+            ...whitePawns,
+          ], delay: const Duration(milliseconds: 120)),
+          ScriptEngine([...blackPawns]),
+        ],
+      );
+      expect(result.record.result, '0-1');
+      expect(result.record.termination, 'timeForfeit');
+      expect(result.record.detail, 'The clock expired.');
+      expect(result.record.json['plies'], 0);
+    });
+
+    test('time per move and fixed nodes are sent as set', () async {
+      Future<MoveBudget> first(Map<String, Object?> time) async {
+        final white = ScriptEngine([]);
+        await game(config(extra: {'timeControl': time}), [
+          white,
+          ScriptEngine([]),
+        ]);
+        return white.budgets.single;
+      }
+
+      expect(
+        (await first({'kind': 'movetime', 'movetimeMs': 1500})).milliseconds,
+        1500,
+      );
+      expect((await first({'kind': 'fixedNodes', 'nodes': 5000})).nodes, 5000);
+      expect((await first({'kind': 'fixedDepth', 'depth': 7})).depth, 7);
+    });
+  });
+
+  test('an engine that fails while thinking loses the game', () async {
+    for (final whiteFails in [true, false]) {
+      final result = await game(config(), [
+        ScriptEngine([...whitePawns], fails: whiteFails),
+        ScriptEngine([...blackPawns], fails: !whiteFails),
+      ]);
+      expect(result.record.result, whiteFails ? '0-1' : '1-0');
+      expect(result.record.termination, 'engineFailure');
+      expect(result.record.detail, contains('engine gone'));
+    }
+  });
+
+  test('each move is reported live, and the PGN is dated and can carry '
+      'the evaluations', () async {
+    final seen = <LiveGame>[];
+    final result = await game(
+      config(extra: {'annotateMoves': true}, rules: {'maxMoves': 1}),
+      [
+        ScriptEngine(['e2e4'], score: 35),
+        ScriptEngine(['e7e5'], score: 20),
+      ],
+      onPosition: seen.add,
+    );
+    expect(seen.map((p) => (p.move, p.plies)), [('e4', 1), ('e5', 2)]);
+    expect(seen.last.fen.position, startsWith('rnbqkbnr/pppp1ppp/8/4p3'));
+    expect(result.pgn, matches(RegExp(r'\[Date "\d{4}\.\d\d\.\d\d"\]')));
+    // Each comment is from White's side: Black's +0.20 is -0.20.
+    expect(result.pgn, contains('+0.35/1 '));
+    expect(result.pgn, contains('-0.20/1 '));
+  });
+
   test('round robin and gauntlet alternate seats deterministically', () {
     final cfg = config(
       extra: {

@@ -219,7 +219,29 @@ _Edited? _extended(Chapter chapter, List<String> prefix, MoveNode node) {
 /// it reads back as itself is what the assertion in [addMove] checks.
 _Edited _appended(Chapter chapter, List<String> prefix, MoveNode node) {
   final tree = lineTree(chapter.tree.rootFen, [...prefix, node.san]);
-  final tags = _newTags(chapter, prefix, tree, node);
+  return (
+    chapter: _withNewGame(chapter, tree, _title(chapter, prefix, node)),
+    written: GamesWritten(appended: 1),
+  );
+}
+
+/// [chapter], which has no games, with one game of no moves holding
+/// [comment] as its introduction: an empty chapter has no other place for
+/// the words before its first move. The first move played extends it.
+Chapter withIntroductionGame(Chapter chapter, String comment) => _withNewGame(
+  chapter,
+  withComment(
+    GameTree(rootFen: chapter.tree.rootFen),
+    const NodePath.root(),
+    comment,
+  ),
+  'Repertoire Line',
+);
+
+/// [chapter] with a new game of [tree], called [title], at the end of the
+/// file.
+Chapter _withNewGame(Chapter chapter, GameTree tree, String title) {
+  final tags = _newTags(chapter, tree, title);
   final lines = [...chapter.lines];
   // The game before it only gains the blank line that puts the new one on a
   // line of its own, which is not a game written again.
@@ -234,30 +256,20 @@ _Edited _appended(Chapter chapter, List<String> prefix, MoveNode node) {
       separator: '\n',
     ),
   );
-  return (
-    chapter: withLines(
-      chapter,
-      lines,
-      preamble: chapter.lines.isEmpty
-          ? _spacedPreamble(chapter.preamble)
-          : null,
-    ),
-    written: GamesWritten(appended: 1),
+  return withLines(
+    chapter,
+    lines,
+    preamble: chapter.lines.isEmpty ? _spacedPreamble(chapter.preamble) : null,
   );
 }
 
 /// The tags a new line gets: whose it is, that it is study
 /// material rather than a finished game, the root when it is not the
 /// initial position, and the id every later lookup needs.
-List<PgnTag> _newTags(
-  Chapter chapter,
-  List<String> prefix,
-  GameTree tree,
-  MoveNode branch,
-) {
+List<PgnTag> _newTags(Chapter chapter, GameTree tree, String title) {
   final white = chapter.side == Side.white;
   return List.unmodifiable([
-    PgnTag('Event', _title(chapter, prefix, branch)),
+    PgnTag('Event', title),
     PgnTag('White', white ? 'Me' : 'Training'),
     PgnTag('Black', white ? 'Training' : 'Me'),
     const PgnTag('Result', '*'),

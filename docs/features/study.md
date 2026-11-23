@@ -71,7 +71,8 @@ result, time control and so on, without the study's own generated `Event`),
 the starting FEN when set up, and every move, comment, glyph and shape. A
 chapter whose `ChapterURL` names the destination has its moves and tags put in
 place of Lichess's, keeping its id and place (one Lichess no longer has is
-added again); every other chapter is added, the first one into a new study
+added again, and a later chapter naming the same one is added rather than
+written over it); every other chapter is added, the first one into a new study
 taking the place of its empty chapter. The link of each chapter Lichess makes
 is written back as `ChapterURL`, one undoable edit, so the next send updates
 instead of duplicating. A study left before Lichess answered takes its links on

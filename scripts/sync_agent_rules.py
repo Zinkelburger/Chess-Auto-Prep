@@ -44,12 +44,21 @@ def adapters():
     return result
 
 
+# Third-party skills whose own installer writes a variant per client (Codex
+# reads `$name` where Claude reads `/name`); they are not mirrored.
+INSTALLED_SKILLS = ('skills/impeccable/',)
+
+
 def skill_mirrors():
     """`.claude/skills/` is canonical; Codex reads the same files from `.agents/skills/`."""
     tracked = subprocess.run(
         ['git', 'ls-files', '.claude/skills', '.agents/skills'],
         cwd=ROOT, capture_output=True, text=True, check=True,
     ).stdout.split()
+    tracked = [
+        p for p in tracked
+        if not p.split('/', 1)[1].startswith(INSTALLED_SKILLS)
+    ]
     sources = {p.removeprefix('.claude/') for p in tracked if p.startswith('.claude/')}
     mirrors = {p.removeprefix('.agents/') for p in tracked if p.startswith('.agents/')}
     result = {}

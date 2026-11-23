@@ -1,9 +1,12 @@
+import 'package:chess_auto_prep/chess/fen.dart';
+import 'package:chess_auto_prep/chess/generation/eval.dart';
 import 'package:chess_auto_prep/chess/generation/search.dart';
 import 'package:chess_auto_prep/chess/generation/search_config.dart';
 import 'package:chess_auto_prep/chess/generation/search_node.dart';
+import 'package:chess_auto_prep/chess/generation/search_result.dart';
 import 'package:chess_auto_prep/chess/generation/tree_wire_v4.dart';
 import 'package:chess_auto_prep/chess/generation/tree_wire_v4_reader.dart';
-import 'package:dartchess/dartchess.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'search_harness.dart';
@@ -81,6 +84,85 @@ void main() {
       isTrue,
     );
   });
+
+  test(
+    'a shallower resume can pause between unscored builder replies',
+    () async {
+      final root = afterUci(positionOf(kingAndPawn), 'e2e4');
+      ReplyMove reply(String uci, String san) {
+        final after = afterUci(root, uci);
+        return ReplyMove(
+          move: MoveRef(uci: uci, san: san),
+          probability: 0.5,
+          child: OurNode.over(
+            fen: fenOf(after),
+            evalForUs: null,
+            candidates: [
+              CandidateMove(
+                move: const MoveRef(uci: 'e4e5', san: 'e5'),
+                child: HorizonNode(
+                  fen: fenOf(afterUci(after, 'e4e5')),
+                  evalForUs: const Eval(0),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+
+      final seed = OpponentNode.over(
+        fen: fenOf(root),
+        evalForUs: null,
+        replies: [reply('e8d8', 'Kd8'), reply('e8f8', 'Kf8')],
+      );
+      final evaluator = ScriptedEvaluator();
+      final deep = await buildSearchTree(
+        root: root,
+        config: const SearchConfig(side: Side.white, horizonPlies: 2),
+        evaluator: evaluator,
+        policy: oneReply,
+        seed: seed,
+      );
+      final restored = (deep as SearchComplete).tree as OpponentNode;
+      expect(evaluator.asked, isEmpty);
+      expect(restored.evaluated, isFalse);
+      for (final reply in restored.replies) {
+        expect(reply.child, isA<OurNode>());
+        expect(reply.child.evaluated, isFalse);
+      }
+
+      const shallow = SearchConfig(side: Side.white, horizonPlies: 1);
+      final paused = await buildSearchTree(
+        root: root,
+        config: shallow,
+        evaluator: evaluator,
+        policy: oneReply,
+        seed: restored,
+        isCancelled: () => evaluator.asked.isNotEmpty,
+      );
+      final stopped = paused as SearchIncomplete;
+      expect(stopped.reason, StopReason.cancelled);
+      final tree = stopped.tree as OpponentNode;
+      final first = tree.replies.first.child;
+      final pending = tree.replies.last.child;
+      expect(evaluator.asked, [seed.replies.first.child.fen.value]);
+      expect(first, isA<HorizonNode>());
+      expect(first.evaluated, isTrue);
+      expect(pending, isA<FrontierNode>());
+      expect(pending.evaluated, isFalse);
+      expect(searchedTo(tree, 1), isFalse);
+
+      final resumed = await buildSearchTree(
+        root: root,
+        config: shallow,
+        evaluator: evaluator,
+        policy: oneReply,
+        seed: tree,
+      );
+      expect(evaluator.asked, seed.replies.map((r) => r.child.fen.value));
+      expect(searchedTo((resumed as SearchComplete).tree, 1), isTrue);
+    },
+  );
 
   test(
     'a saved root with an en passant square nobody can use still resumes',

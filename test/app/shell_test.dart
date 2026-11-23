@@ -8,8 +8,10 @@ import 'package:chess_auto_prep/storage/chapter_files.dart';
 import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/storage/recent_pgn_files.dart';
 import 'package:chess_auto_prep/ui/theme.dart';
+import 'package:chess_auto_prep/workspace/board/board_column.dart';
 import 'package:chess_auto_prep/workspace/board/board_view.dart';
 import 'package:chess_auto_prep/workspace/document/document_saver.dart';
+import 'package:chess_auto_prep/workspace/reading/comment_field.dart';
 import 'package:chess_auto_prep/workspace/search/search_pane.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/gestures.dart';
@@ -331,6 +333,80 @@ void main() {
     await tester.pumpAndSettle();
     expect(w.session.source, isNull);
     expect(find.text('Recent files'), findsOneWidget);
+  });
+
+  testWidgets('Edit on the scratch board leaves the viewer variation unsaved', (
+    tester,
+  ) async {
+    final games = collectionRef('games');
+    w.store.documents[games] = Opened(
+      threeGameFile,
+      scriptedRevision(threeGameFile),
+    );
+    await pump(tester);
+    await w.requests.openFile(games, game: 0);
+    await tester.pumpAndSettle();
+    w.session.cursor.goTo(NodePath.of([0])); // After 1. e4.
+    w.session.playMove('c7c5');
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(w.parts.workspace.inspection!.active, isTrue);
+    expect(w.session.hasHeldEdits, isTrue);
+    expect(w.store.requestedSaves, isEmpty);
+
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    final edit = find.widgetWithText(MenuItemButton, 'Edit');
+    await tester.ensureVisible(edit);
+    await tester.tap(edit);
+    await tester.pumpAndSettle();
+    await w.saver.flush();
+
+    expect(textOf(w.store, games), threeGameFile);
+    expect(w.store.requestedSaves.where((save) => save.ref == games), isEmpty);
+    expect(w.session.hasHeldEdits, isTrue);
+    expect(find.byType(CommentField), findsOneWidget);
+
+    await tester.tap(find.text('Moves'));
+    await tester.pumpAndSettle();
+    expect(find.byType(CommentField), findsNothing);
+    await tester.tap(find.text('Analysis'));
+    await tester.pumpAndSettle();
+    expect(find.byType(CommentField), findsOneWidget);
+    expect(find.byTooltip('Good move'), findsOneWidget);
+  });
+
+  testWidgets('Read or Edit on the Analysis tab quiets or wakes its board', (
+    tester,
+  ) async {
+    final games = collectionRef('games');
+    w.store.documents[games] = Opened(
+      threeGameFile,
+      scriptedRevision(threeGameFile),
+    );
+    await pump(tester);
+    await w.requests.openFile(games, game: 0);
+    await tester.pumpAndSettle();
+    bool quiet() =>
+        tester.widget<BoardAndCounter>(find.byType(BoardAndCounter)).quiet;
+    expect(quiet(), isTrue);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    final inspection = w.parts.workspace.inspection!;
+    expect(inspection.active, isTrue);
+    expect(quiet(), isTrue);
+    inspection.editing.value = true;
+    await tester.pump();
+    expect(quiet(), isFalse);
+    inspection.editing.value = false;
+    await tester.pump();
+    expect(quiet(), isTrue);
   });
 
   testWidgets('Ctrl+Z reaches the document from the outline column', (

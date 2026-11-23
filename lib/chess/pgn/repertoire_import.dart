@@ -35,7 +35,8 @@ sealed class ImportRead {
 
 /// The chapters, in the order the file gave them, each holding at least one
 /// line, and the side they appear to be for when the file said or the moves
-/// made it plain.
+/// made it plain. A study whose chapters name different sides has none: each
+/// chapter is trained from its own.
 final class ImportedChapters extends ImportRead {
   const ImportedChapters({
     required this.chapters,
@@ -82,12 +83,26 @@ ImportRead readImport(String text, {required DateTime created}) {
   final grouping = _grouping(games);
   final chapters = <ImportedChapter>[];
   var lines = 0;
+  // A study names each chapter's side; one `// Color:` line for the file
+  // would train every chapter from one side, so it is written only when
+  // they agree. The lines that name none are read for theirs, and a side
+  // they plainly play against the named one leaves the file asking.
+  final named = {
+    for (final game in games)
+      if (game.hasMoves) ?game.side,
+  };
+  final fromMoves = inferredRepertoireSide([
+    for (final game in games)
+      if (game.hasMoves && !game.isComplete && game.side == null)
+        game.read.tree!,
+  ]);
   final side =
       statedSide(document.preamble) ??
-      inferredRepertoireSide([
-        for (final game in games)
-          if (game.hasMoves && !game.isComplete) game.read.tree!,
-      ]);
+      switch (named.length) {
+        0 => fromMoves,
+        1 when fromMoves == null || fromMoves == named.single => named.single,
+        _ => null,
+      };
   for (final group in grouping.groups) {
     final written = _Lines(grouping.titleKey);
     for (final game in group.games) {
@@ -180,6 +195,16 @@ final class _Game {
   bool get hasMoves => read.tree?.children.isNotEmpty ?? false;
 
   String? tag(String key) => tagValue(read.tags, key);
+
+  /// The side a study chapter is trained from: its `TrainingSide` tag,
+  /// else its `Orientation`.
+  Side? get side => switch ((tag('TrainingSide') ?? tag('Orientation'))
+      ?.trim()
+      .toLowerCase()) {
+    'white' => Side.white,
+    'black' => Side.black,
+    _ => null,
+  };
 
   /// A game with a result is somebody's finished game: its brackets are
   /// annotation, not repertoire, and it is kept as it is. The result is the

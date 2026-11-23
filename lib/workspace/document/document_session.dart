@@ -200,8 +200,9 @@ final class DocumentSession extends ChangeNotifier {
 
   /// The file the chapter was read from, and which game of it is on the
   /// board — null when its games are merged. A repertoire chapter is the
-  /// file; a study chapter is one game.
+  /// file; a study chapter is one game. [openTicket] lapses at the next read.
   ChapterRef? get source => _source;
+  Ticket get openTicket => _opens.now;
 
   int? get game => _chapter?.game;
   GameTree? get tree => _chapter?.tree;
@@ -602,8 +603,8 @@ final class DocumentSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Why an edit may not happen now, or null when it may: a read-only
-  /// document not holding edits, or an undo still reading what it restored.
+  /// Why an edit may not happen now, or null: a read-only file, or an undo
+  /// going out, which edits wait for unless Save hands them over to write.
   String? _editBlocked() {
     if (_readOnly case final reason? when !_holdsEdits) {
       // What is left is the standing refusal, which says why.
@@ -614,7 +615,7 @@ final class DocumentSession extends ChangeNotifier {
     if (_saver.referencesPending || _saver.state is DocumentFollowing) {
       return _editRefused('the chapter must finish saving or be read again');
     }
-    if (_restoring || (_saver.undoing && _holdsEdits)) {
+    if (_restoring || (_saver.undoing && _holdsEdits && !_editors.saving)) {
       return _editRefused('an undo is still putting the chapter back');
     }
     return null;
@@ -716,7 +717,7 @@ final class DocumentSession extends ChangeNotifier {
 
   /// Writes the held edits as one save; false when they stay held.
   bool keepHeld() {
-    _editors.commit();
+    _editors.commit(saving: _readOnly == null && _saver.takesWords);
     _saveHeld();
     return _held == null;
   }
@@ -923,8 +924,7 @@ final class DocumentSession extends ChangeNotifier {
   }
 
   /// Writes [landed] and shows what it says to show, following a course
-  /// file's chapter to the one shown. Answers why nothing was written, or
-  /// null.
+  /// file's chapter to the one shown. Answers why nothing was written, or null.
   String? _land(Landing? landed, {bool writes = false}) {
     if (landed == null) {
       return _editRefused('a new line could not be given its chapter name');

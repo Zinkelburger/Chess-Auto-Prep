@@ -201,6 +201,8 @@ void main() {
       (updates.status as UpdateFailed).problem,
       UpdateProblem.helperNotStarted,
     );
+    expect(rowWith(updates, 'Try again').warn, isTrue);
+    expect(rowWith(updates, 'Try again').hint, 'The installer did not start.');
     helper.starts = true;
     await press(updates, 'Try again');
     expect(updates.status, isA<UpdateArmed>());
@@ -218,10 +220,12 @@ void main() {
     expect(updates.status, isA<UpdateArmed>());
     helper.stops = false;
     await updates.cancelInstall();
-    expect(updates.status, isNot(isA<UpdateDownloaded>()));
+    expect(updates.status, isA<UpdateHelperStillRunning>());
+    expect(rowWith(updates, 'Try again').warn, isTrue);
     await updates.install();
     expect(helper.launches, 1, reason: 'not armed while it still runs');
     expect(updates.status, isNot(isA<UpdateArmed>()));
+    expect(rowWith(updates, 'Try again').warn, isTrue);
     await press(updates, 'Try again');
     expect(helper.launches, 1);
     expect(updates.status, isNot(isA<UpdateDownloaded>()));
@@ -305,6 +309,9 @@ void main() {
     ).writeAsStringSync('Update installation failed (exit 1).');
     final next = await started();
     expect(next.previousFailure, contains('exit 1'));
+    final shown = rowWith(next, 'Show log');
+    expect(shown.label, 'Previous update did not finish');
+    expect(shown.warn, isTrue);
     final after = await started();
     expect(after.previousFailure, isNull);
   });
@@ -465,6 +472,15 @@ ActionSetting actionOf(AppUpdates updates, String label) => updateRows(updates)
     .map((row) => row.control)
     .whereType<ActionSetting>()
     .singleWhere((action) => action.label == label);
+
+/// The App page's update row whose action is labelled [label].
+SettingRow rowWith(AppUpdates updates, String label) =>
+    updateRows(updates).singleWhere(
+      (row) => switch (row.control) {
+        ActionSetting(label: final l) => l == label,
+        _ => false,
+      },
+    );
 
 /// Presses the update row's [label] action and waits until what it
 /// started has settled.

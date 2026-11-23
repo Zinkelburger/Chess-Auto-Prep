@@ -39,7 +39,8 @@ A full page (no board), capped at `playersPageWidth`.
   games.` with `Try again` (the counts from before stay), and a failed save
   (`Could not save.`, plus what the disk says, such as `The disk is full.`)
   with `Retry save` / `Discard failed edit and reload` (or `Try again` for a
-  failed load).
+  failed load). A failed save stays on screen, through reloads, until one of
+  those settles it.
 - **Person row** — name and rating; accounts by site and `US Chess <id>` (or
   `No online accounts`); notes (two lines); linked studies as chips (× unlinks);
   saved-research suggestions (`PlayerLookup`, see Data); the saved-games line
@@ -67,7 +68,8 @@ from the pane's `+`.
 - **`As White` / `As Black`**, `Search games`, the game count beside a
   `Filters` fold (`Filters (n)` when some are on).
 - **`Positions` / `Games` / `Findings`** switch, pinned while its list scrolls.
-- With nobody chosen: the searchable saved-player list (`PlayerPicker`), or
+- With nobody chosen: the searchable saved-player list (`PlayerPicker`, with
+  `Retry save` for a failed save), or
   `Add player…` and `Players & prep` on first run. After a restart the mode
   opens on the player it was last on (kept in `lastPlace`), the picker only
   when that player has been removed.

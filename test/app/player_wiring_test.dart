@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_store.dart';
 import '../support/study_fixture.dart';
+import '../support/viewer_fixture.dart';
 import '../support/window_fixture.dart';
 
 const _games =
@@ -139,6 +140,74 @@ void main() {
       expect(w.session.source?.path, ref.path);
       expect(w.session.game, 1);
     });
+  });
+
+  test('a new prep study refuses a file linked to another player', () async {
+    final players = w.parts.players;
+    final directory = players.directory;
+    final bea = Player.create('Bea');
+    await directory.save(bea);
+    final ref = studyRef('Prep – Alex');
+    w.store.documents[ref] = Opened(
+      twoChapterStudy,
+      scriptedRevision(twoChapterStudy),
+    );
+    // The fixture's studies folder is outside the scripted Documents root.
+    (w.parts.env.fileImport as ScriptedImport).copyTo = ref.path;
+    w.viewerPicker.answer = ref.path;
+    await players.linkStudy(bea);
+    final linked = directory.players.singleWhere((p) => p.id == bea.id);
+    expect(linked.studies.single.path, ref.path);
+
+    await players.openStudy(player);
+
+    final alex = directory.players.singleWhere((p) => p.id == player.id);
+    expect(alex.text('prep_file'), isEmpty);
+    expect(w.requests.status, contains('already exist'));
+  });
+
+  test('a player can append a line to their own linked prep study', () async {
+    final players = w.parts.players;
+    final ref = studyRef('Prep – Alex');
+    w.store.documents[ref] = Opened(
+      twoChapterStudy,
+      scriptedRevision(twoChapterStudy),
+    );
+    (w.parts.env.fileImport as ScriptedImport).copyTo = ref.path;
+    w.viewerPicker.answer = ref.path;
+    await players.linkStudy(player);
+    await players.analysis.select(stored());
+    await w.requests.analysisBoard();
+    w.session.playMove('e2e4');
+    w.session.playMove('c7c5');
+
+    await players.saveLine();
+
+    expect(stored().text('prep_file'), ref.path);
+    expect(stored().studies.single.path, ref.path);
+    expect(w.session.source?.path, ref.path);
+    expect(w.session.chapter!.lines, hasLength(3));
+    expect(w.session.tree!.children.first.children.first.san, 'c5');
+  });
+
+  test('a group study does not adopt a file a player linked', () async {
+    final directory = w.parts.players.directory;
+    final group = PlayerGroup.create('Club').member(player.id);
+    await directory.saveGroup(group);
+    final ref = studyRef('Prep – Club');
+    w.store.documents[ref] = Opened(
+      twoChapterStudy,
+      scriptedRevision(twoChapterStudy),
+    );
+    expect(
+      await directory.save(player.withStudy(ref.path), expected: player),
+      isTrue,
+    );
+
+    await w.parts.players.openGroupStudy(group);
+
+    expect((await store.read()).groups.single.study, isEmpty);
+    expect(w.requests.status, contains('already exists'));
   });
 
   test('a group study that could not be made is not linked', () async {

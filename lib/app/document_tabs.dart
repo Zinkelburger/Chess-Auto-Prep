@@ -183,26 +183,41 @@ final class DocumentTabs {
     final side = page.side;
     final draft = page.draft;
     final from = requests.here;
+    // The user going to another mode meanwhile keeps them there.
+    final choice = requests.modeChoice;
     _selecting = id;
+    // Whether the tab's document came up, so it may take its mode.
+    var done = true;
     try {
       if (page.source case final source?) {
-        final result = switch (mode) {
-          _ when page.viewedFile => await requests.openFile(
+        final opening = switch (mode) {
+          _ when page.viewedFile => requests.openFile(
             source,
             game: page.game,
             keepPlace: true,
           ),
           // Handed to the viewer, it comes back among its games, as then.
-          Mode.pgnViewer when page.game != null => await requests.readInViewer(
+          Mode.pgnViewer when page.game != null => requests.readInViewer(
             source,
             game: page.game,
           ),
-          _ => await requests.open(source, game: page.game),
+          _ => requests.open(source, game: page.game),
         };
-        if (_disposed || result is! RequestDone || session.source != source) {
+        // The pick's own request, which anything the user asks next
+        // overtakes.
+        final asked = requests.navigation;
+        final result = await opening;
+        // A newer request (another game, another file) wins over the tab.
+        if (_disposed || asked.overtaken || session.source != source) return;
+        done = result is RequestDone;
+        // The tab's game up before the user chose another mode keeps its
+        // edits and place, even though the window stays where they went.
+        if (!done && session.game != page.game) return;
+        if (draft != null &&
+            !await _restore(page, source, draft, wanted: () => asked.current)) {
           return;
         }
-        if (draft != null && !await _restore(page, source, draft)) return;
+        if (!asked.current) return;
       } else if (page.board case final board?) {
         final result = await requests.analysisBoard(page: board);
         if (_disposed || result is! RequestDone) return;
@@ -210,7 +225,7 @@ final class DocumentTabs {
     } finally {
       if (_selecting == id) _selecting = null;
     }
-    requests.switchTo(mode, from: from);
+    if (done && choice.current) requests.switchTo(mode, from: from);
     session.cursor.goTo(cursor);
     if (session.orientation != side) session.flip();
   }
@@ -228,19 +243,21 @@ final class DocumentTabs {
   /// whether the tab may carry on. A draft of a file that changed since is
   /// not put back over it when its checkpoint holds it: the keeper offers it
   /// as a copy.
+  /// [wanted] answers false once something newer took the tab's place.
   Future<bool> _restore(
     _DocumentPage page,
     ChapterRef source,
-    RetainedDraft draft,
-  ) async {
+    RetainedDraft draft, {
+    bool Function()? wanted,
+  }) async {
+    bool stays() =>
+        !_disposed && session.source == source && (wanted?.call() ?? true);
     if (draft.revision != session.persistedRevision &&
         (await drafts?.keeps(source.path, draft) ?? false)) {
       page.draft = null;
-      return !_disposed && session.source == source;
+      return stays();
     }
-    if (_disposed || session.source != source || session.hasHeldEdits) {
-      return false;
-    }
+    if (!stays() || session.hasHeldEdits) return false;
     session.restoreDraft(draft);
     return true;
   }

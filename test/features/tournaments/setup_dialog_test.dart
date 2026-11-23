@@ -143,6 +143,7 @@ void main() {
     Future<Map<String, Object?>> started({
       TournamentConfig? previous,
       String? preset,
+      String? title,
     }) async {
       final config = tournamentSetup(
         context,
@@ -151,6 +152,7 @@ void main() {
         previous: previous,
       );
       await tester.pumpAndSettle();
+      if (title != null) expect(find.text(title), findsOneWidget);
       if (previous == null) {
         await tester.enterText(
           find.widgetWithText(TextField, 'Name'),
@@ -167,6 +169,7 @@ void main() {
     }
 
     final again = await started(
+      title: 'Configure next run',
       previous: TournamentConfig({
         'name': 'Earlier run',
         'timeControl': {
@@ -179,9 +182,52 @@ void main() {
     );
     expect(again['baseMs'], 60000);
     expect(again['movesPerSession'], 0);
-    final blitz = await started(preset: 'Blitz');
+    final blitz = await started(preset: 'Blitz', title: 'New tournament');
     expect(blitz['movesPerSession'], isNull);
     final classical = await started(preset: 'Classical');
     expect(classical['movesPerSession'], 40);
+  });
+
+  testWidgets('a run keeps at least two engines, and Remove takes the seat '
+      'it is beside', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: const Scaffold(body: Text('host')),
+      ),
+    );
+    final config = tournamentSetup(
+      tester.element(find.text('host')),
+      engines: const [],
+      position: Fen.initial,
+    );
+    await tester.pumpAndSettle();
+    bool removable(int seat) =>
+        tester
+            .widget<IconButton>(
+              find.ancestor(
+                of: find.byTooltip('Remove engine $seat'),
+                matching: find.byType(IconButton),
+              ),
+            )
+            .onPressed !=
+        null;
+    expect(removable(1) || removable(2), isFalse);
+
+    await tester.tap(find.text('Add engine'));
+    await tester.pumpAndSettle();
+    expect(removable(1) && removable(2) && removable(3), isTrue);
+    await tester.tap(find.byTooltip('Remove engine 1'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Remove engine 3'), findsNothing);
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), 'Pair');
+    await tester.tap(find.text('Start new run'));
+    await tester.pumpAndSettle();
+    expect((await config)!.engines.map((e) => e.name), [
+      'Stockfish B',
+      'Stockfish',
+    ]);
   });
 }

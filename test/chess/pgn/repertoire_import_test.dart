@@ -2,8 +2,10 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter.dart';
+import 'package:chess_auto_prep/chess/pgn/chapter_edits.dart';
 import 'package:chess_auto_prep/chess/pgn/chapter_sections.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/chess/pgn/games_written.dart';
 import 'package:chess_auto_prep/chess/pgn/line_id_pins.dart';
 import 'package:chess_auto_prep/chess/pgn/pgn_reader.dart';
 import 'package:chess_auto_prep/chess/pgn/repertoire_import.dart';
@@ -11,6 +13,8 @@ import 'package:chess_auto_prep/chess/training/sitting.dart';
 import 'package:chess_auto_prep/chess/training/training_line.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/study_fixture.dart' show twoChapterStudy;
 
 GameTree line(String moves) =>
     readGame('[Event "x"]\n[Result "*"]\n\n$moves *\n').tree!;
@@ -200,6 +204,78 @@ void main() {
     );
   });
 
+  test('each imported study chapter trains from its declared side', () {
+    // Three of the four main lines end on White's move.
+    final read = imported('''
+$twoChapterStudy
+[Event "Endgames: Bishop endings"]
+[StudyName "Endgames"]
+[ChapterName "Bishop endings"]
+[Orientation "white"]
+
+1. e4 c5 2. Nf3 *
+
+[Event "Endgames: Knight endings"]
+[StudyName "Endgames"]
+[ChapterName "Knight endings"]
+[Orientation "black"]
+
+1. d4 Nf6 2. c4 *
+''');
+    final file = parseChapter(
+      name: 'Endgames',
+      text: courseText(read, created: created),
+    );
+    for (final (title, side) in const [
+      ('Rook endings', Side.white),
+      ('Pawn endings', Side.black),
+      ('Bishop endings', Side.white),
+      ('Knight endings', Side.black),
+    ]) {
+      final chapter = sectionView(file, title).chapter;
+      final line = trainingLines(chapter, source: 'Endgames.pgn').single;
+      expect(line.side, side, reason: title);
+    }
+  });
+
+  for (final (side, moves, tagged) in const [
+    (Side.black, '1. e4 c5', 4),
+    (Side.white, '1. e4 c5 2. Nf3', 4),
+    (Side.white, '1. e4 c5 2. Nf3', 3),
+  ]) {
+    test('a ${side.name} study with $tagged tagged chapters keeps '
+        'its builder side and trains new branches', () {
+      final games = [
+        for (var i = 0; i < 4; i++)
+          '[Event "Openings: Chapter $i"]\n'
+              '[ChapterName "Chapter $i"]\n'
+              '${i < tagged ? '[Orientation "${side.name}"]\n' : ''}'
+              '\n$moves *\n',
+      ];
+      final file = parseChapter(
+        name: 'Openings',
+        text: courseText(imported(games.join('\n')), created: created),
+      );
+      final view = sectionView(file, 'Chapter 0');
+      expect(view.chapter.side, side);
+      final added =
+          addMove(view.chapter, at: const NodePath.root(), uci: 'd2d4')
+              as MoveAdded;
+      final saved = spliced(
+        view,
+        added.chapter,
+        GamesArranged.of(added.written, before: view.places.length),
+      )!;
+      final reopened = parseChapter(
+        name: file.name,
+        text: writeChapter(saved.file),
+      );
+      final lines = trainingLines(reopened, source: 'Openings.pgn');
+      expect(lines.map((line) => line.game), [0, 1, 2, 3, 4]);
+      expect(lines.map((line) => line.side), everyElement(side));
+    });
+  }
+
   test('a Chessable course is one chapter per title in the player header', () {
     final read = imported('''
 [Event "?"]
@@ -339,6 +415,19 @@ void main() {
       expect(imported(black.toString()).side, Side.black);
     },
   );
+
+  test('one chapter naming a side does not outvote lines plainly played '
+      'for the other', () {
+    final buffer = StringBuffer(
+      '[Event "x"]\n[Orientation "white"]\n[Result "*"]\n\n1. e4 e5 *\n\n',
+    );
+    for (final first in ['e4', 'd4', 'c4', 'Nf3', 'g3', 'b3', 'f4', 'Nc3']) {
+      buffer.write('[Event "x"]\n[Result "*"]\n\n1. $first c5 *\n\n');
+    }
+    final read = imported(buffer.toString());
+    expect(read.side, isNull);
+    expect(read.chapters.single.text, isNot(contains('// Color:')));
+  });
 
   test('a handful of lines is not enough to guess a side from', () {
     final read = imported(

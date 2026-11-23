@@ -44,6 +44,27 @@ void main() {
 
   TrainerReady ready() => app.parts.training.lines.state as TrainerReady;
 
+  test(
+    'a viewer edit through a linked collection keeps the original tags',
+    () async {
+      final club = disk.ref('collections/Club.pgn');
+      await disk.put(club, oneGame('1. e4'));
+      final link = Link(disk.ref('repertoires/Club').path);
+      await link.create(p.dirname(club.path));
+      final ref = ChapterRef.at(p.join(link.path, 'Club.pgn'));
+      final session = app.parts.session;
+      await session.open(ref, game: 0);
+      session.holdsEdits = true;
+      session.cursor.toEnd();
+      session.playMove('e7e5');
+      session.keepHeld();
+      await app.parts.saver.flush();
+
+      expect(await File(club.path).readAsString(), oneGame('1. e4 e5'));
+    },
+    skip: Platform.isWindows ? 'symlink privileges not assumed' : false,
+  );
+
   for (final replacement in ['changed moves', 'same bytes, different file']) {
     test(
       'trainer refuses stale source after $replacement; reopening recovers',

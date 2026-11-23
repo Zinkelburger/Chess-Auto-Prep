@@ -334,6 +334,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Waiting for the browser…'), findsOneWidget);
     expect(find.text('Cancel'), findsOneWidget);
+    // The browser took the page, so there is no link to copy.
+    expect(find.text('Copy link'), findsNothing);
     expect(find.text('Personal access token'), findsNothing);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
