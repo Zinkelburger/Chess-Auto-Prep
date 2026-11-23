@@ -85,19 +85,22 @@ ImportRead readImport(String text, {required DateTime created}) {
   var lines = 0;
   // A study names each chapter's side; one `// Color:` line for the file
   // would train every chapter from one side, so it is written only when
-  // they agree, and the moves are read only when no chapter names one.
+  // they agree. The lines that name none are read for theirs, and a side
+  // they plainly play against the named one leaves the file asking.
   final named = {
     for (final game in games)
       if (game.hasMoves) ?game.side,
   };
+  final fromMoves = inferredRepertoireSide([
+    for (final game in games)
+      if (game.hasMoves && !game.isComplete && game.side == null)
+        game.read.tree!,
+  ]);
   final side =
       statedSide(document.preamble) ??
       switch (named.length) {
-        0 => inferredRepertoireSide([
-          for (final game in games)
-            if (game.hasMoves && !game.isComplete) game.read.tree!,
-        ]),
-        1 => named.single,
+        0 => fromMoves,
+        1 when fromMoves == null || fromMoves == named.single => named.single,
         _ => null,
       };
   for (final group in grouping.groups) {

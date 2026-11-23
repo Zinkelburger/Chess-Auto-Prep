@@ -112,7 +112,12 @@ final class Players extends ChangeNotifier {
     );
     try {
       await obligation.run();
-      await _read();
+      // The save landed; a read that fails now is a failed load.
+      try {
+        await _read();
+      } on Object catch (e) {
+        _loadFailed(e);
+      }
       return true;
     } on PlayerConflict catch (e) {
       // Replaying an edit of a row that changed can never land, so it is

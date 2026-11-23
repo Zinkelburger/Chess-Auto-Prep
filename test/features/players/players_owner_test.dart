@@ -164,6 +164,25 @@ void main() {
     },
   );
 
+  test('a save that landed is not called failed when the list cannot be '
+      'read back', () async {
+    final flaky = _FailOnce(files);
+    final saving = Players(flaky, pending);
+    addTearDown(saving.dispose);
+    await saving.load();
+    final a = saving.players.firstWhere((p) => p.name == 'A');
+    flaky.failReads = true;
+    expect(await saving.save(a.edited({'rating': 1}), expected: a), isTrue);
+    expect(saving.needsRetry, isFalse);
+    expect(saving.error, startsWith('Could not load players'));
+    expect(
+      (await files.read()).players
+          .firstWhere((p) => p.name == 'A')
+          .text('rating'),
+      '1',
+    );
+  });
+
   test('reloads that keep failing behind a failed save say so once', () async {
     final flaky = _FailOnce(files);
     final failing = Players(flaky, pending);

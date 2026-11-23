@@ -264,6 +264,31 @@ void main() {
     expect(w.session.commentAt(cursor), 'Parked note');
   });
 
+  test('a viewer tab still on its way does not put its game back over '
+      'another game the user picked in the same file', () async {
+    final games = collectionRef('Games');
+    w.store.documents[games] = store.Opened(
+      threeGameFile,
+      scriptedRevision(threeGameFile),
+    );
+    await w.requests.openFile(games, game: 1);
+    w.session.holdsEdits = true;
+    w.session.setComment(const NodePath.root(), 'Parked note');
+    await w.requests.newAnalysisBoard();
+    final gate = Completer<void>();
+    w.recent.beforeSave = gate.future;
+    final selecting = w.requests.documents.select(games);
+    await pumpEventQueue();
+    expect(w.session.source, games);
+    final picking = w.requests.openFile(games, game: 2);
+    gate.complete();
+    await selecting;
+    expect(await picking, isA<RequestDone>());
+    expect(w.session.game, 2);
+    expect(w.session.hasHeldEdits, isFalse);
+    expect(w.session.commentAt(const NodePath.root()), isNot('Parked note'));
+  });
+
   test(
     'restoring a Study tab cannot cancel a newer viewer file choice',
     () async {

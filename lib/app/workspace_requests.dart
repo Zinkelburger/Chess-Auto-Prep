@@ -418,8 +418,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     ChapterRef ref, {
     int? game,
   }) async {
-    // A mode the user chose since the request began is where they stay.
-    bool dropped() => ticket.overtaken || (_sinceChoice?.overtaken ?? false);
+    bool dropped() => ticket.overtaken || _modeChosenSince;
     if (dropped()) return const RequestDropped();
     Go? left;
     if (ref != _session.source || game != _session.game) {
@@ -498,6 +497,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     final result = await opening;
     if (ticket.overtaken) return const RequestDropped();
     if (result is! RequestDone) return result;
+    if (_modeChosenSince) return const RequestDropped();
     // Commit navigation only after the document was accepted, but keep the
     // departure captured before the read so Back returns to the original file.
     _remember(from);
@@ -784,7 +784,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (!await _session.showAnalysisBoard(board) || ticket.overtaken) {
       return const RequestDropped();
     }
-    if (!_keepBoard.contains(_mode)) {
+    if (!_keepBoard.contains(_mode) && !_modeChosenSince) {
       _remember(from);
       documents.carry(Mode.repertoires);
       _mode = Mode.repertoires;
@@ -974,6 +974,9 @@ final class WorkspaceRequests extends ChangeNotifier {
     _asked.cancel();
     _session.cancelOpening();
   }
+
+  /// Whether the user chose a mode, to stay in, since a request began.
+  bool get _modeChosenSince => _sinceChoice?.overtaken ?? false;
 
   Ticket _nextRequest() {
     cancelPending();

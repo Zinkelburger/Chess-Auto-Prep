@@ -55,6 +55,21 @@ void main() {
     expect(cleared.tree.nodeAt(at)!.nags, [2]);
   });
 
+  test('a glyph reaches every game showing the same glyphs, whatever '
+      'order its file wrote them in', () {
+    final before = parseChapter(
+      name: 'Shared',
+      text:
+          '[Event "A"]\n[Result "*"]\n\n1. d4 d5 \$14 \$16 2. c4 *\n\n'
+          '[Event "B"]\n[Result "*"]\n\n1. d4 d5 \$16 \$14 2. Nf3 *\n',
+    );
+    final after =
+        (setGlyph(before, at: NodePath.of([0, 0]), nag: 1) as CommentWritten)
+            .chapter;
+    expect(after.lines[0].text, contains(r'$1 '));
+    expect(after.lines[1].text, contains(r'$1 '));
+  });
+
   test('a drawish position is a position glyph', () {
     expect(isPositionGlyph(10), isTrue);
     expect(isPositionGlyph(1), isFalse);

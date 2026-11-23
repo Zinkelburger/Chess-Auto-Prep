@@ -4,11 +4,13 @@ import 'package:chess_auto_prep/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/chess/pv_text.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/workspace/analysis/engine_analysis.dart';
 import 'package:chess_auto_prep/workspace/document/collection_analysis.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';
+import '../support/scripted_store.dart';
 import '../support/session_fixture.dart';
 
 void main() {
@@ -64,6 +66,28 @@ void main() {
     expect(await analysis.show(startEditing: true), isTrue);
     expect(analysis.editing.value, isFalse);
   });
+
+  test(
+    'each kept game comes back on the Read or Edit it was left on',
+    () async {
+      final other = chapterRef('KID', 'Other');
+      fixture.store.documents[other] = Opened(
+        blackChapter,
+        scriptedRevision(blackChapter),
+      );
+      expect(await analysis.show(), isTrue);
+      analysis.editing.value = true;
+      await fixture.session.open(other);
+      expect(await analysis.show(), isTrue);
+      expect(analysis.editing.value, isFalse);
+      await fixture.session.open(fixture.ref);
+      expect(await analysis.show(), isTrue);
+      expect(analysis.editing.value, isTrue);
+      await fixture.session.open(other);
+      expect(await analysis.show(startEditing: true), isTrue);
+      expect(analysis.editing.value, isFalse);
+    },
+  );
 
   test('is not shown while part of the game is hidden', () async {
     fixture.session.showOnlyTo(NodePath.of([0]));

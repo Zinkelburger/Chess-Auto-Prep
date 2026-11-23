@@ -40,8 +40,9 @@ final class CollectionAnalysis extends ChangeNotifier {
 
   /// Read or Edit on this scratch board, apart from the source's: turning
   /// it on here must not write what the source holds. A new copy starts as
-  /// the source was.
+  /// the source was; a kept one comes back as it was left.
   final editing = ValueNotifier(false);
+  final _editingOf = <Object, bool>{};
   Object? _key;
   final _shows = Latest();
   bool _disposed = false;
@@ -84,7 +85,8 @@ final class CollectionAnalysis extends ChangeNotifier {
         session.playMove(move.uci);
       }
     }
-    if (created) editing.value = startEditing;
+    if (_key case final shown? when active) _editingOf[shown] = editing.value;
+    editing.value = created ? startEditing : _editingOf[key] ?? startEditing;
     _key = key;
     active = true;
     sourceEngine.pause(this, 'Analysis tab is on the board');
@@ -123,6 +125,7 @@ final class CollectionAnalysis extends ChangeNotifier {
   void hide() {
     _shows.cancel();
     if (!active) return;
+    if (_key case final shown?) _editingOf[shown] = editing.value;
     // The same page is reused on return; capture even if no other page is shown.
     session.snapshot();
     session.analysisPage

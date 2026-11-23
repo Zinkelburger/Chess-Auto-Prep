@@ -416,6 +416,19 @@ $twoChapterStudy
     },
   );
 
+  test('one chapter naming a side does not outvote lines plainly played '
+      'for the other', () {
+    final buffer = StringBuffer(
+      '[Event "x"]\n[Orientation "white"]\n[Result "*"]\n\n1. e4 e5 *\n\n',
+    );
+    for (final first in ['e4', 'd4', 'c4', 'Nf3', 'g3', 'b3', 'f4', 'Nc3']) {
+      buffer.write('[Event "x"]\n[Result "*"]\n\n1. $first c5 *\n\n');
+    }
+    final read = imported(buffer.toString());
+    expect(read.side, isNull);
+    expect(read.chapters.single.text, isNot(contains('// Color:')));
+  });
+
   test('a handful of lines is not enough to guess a side from', () {
     final read = imported(
       '[Event "x"]\n\n1. e4 e5 *\n\n[Event "y"]\n\n1. d4 d5 *\n',

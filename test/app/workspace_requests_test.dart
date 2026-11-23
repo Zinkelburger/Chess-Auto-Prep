@@ -141,6 +141,19 @@ void main() {
       expect(w.session.cursor.value, NodePath.of([0, 1]));
     });
 
+    test('a file read for the builder leaves the user in a mode they chose '
+        'meanwhile', () async {
+      w.requests.switchTo(Mode.databases);
+      w.store.hold = true;
+      final reading = w.requests.readInBuilder(kid, ['c5']);
+      await pumpEventQueue();
+      expect(w.store.waiting, greaterThan(0));
+      w.requests.switchTo(Mode.players);
+      w.store.releaseAll();
+      expect(await reading, isA<RequestDropped>());
+      expect(w.requests.mode, Mode.players);
+    });
+
     test('a chapter that cannot open goes nowhere', () async {
       w.store.documents.clear();
       expect(await w.requests.openAt(kid, ['c5']), isA<RequestRefused>());
@@ -618,6 +631,21 @@ void main() {
       expect(w.store.creates, isEmpty);
     });
 
+    test('a paste from a mode without a board leaves the user in a mode '
+        'they chose meanwhile', () async {
+      w.requests.switchTo(Mode.databases);
+      final gate = Completer<void>();
+      input
+        ..clipboardText = '1.e4 c5'
+        ..beforeClipboard = gate.future;
+      final pasting = w.requests.paste();
+      await pumpEventQueue();
+      w.requests.switchTo(Mode.players);
+      gate.complete();
+      expect(await pasting, isA<RequestDone>());
+      expect(w.requests.mode, Mode.players);
+    });
+
     test('a new empty tab preserves a pasted position with no moves', () async {
       const position = Fen('7k/8/8/8/8/8/8/K7 w - - 0 1');
       input.clipboardText = position.value;
@@ -926,6 +954,7 @@ final class _Input implements WindowInput {
   Side? side;
   Completer<Side?>? holdSide;
   String? clipboardText;
+  Future<void>? beforeClipboard;
   final sidesAsked = <String>[];
 
   @override
@@ -935,7 +964,10 @@ final class _Input implements WindowInput {
   }
 
   @override
-  Future<String?> clipboard() async => clipboardText;
+  Future<String?> clipboard() async {
+    if (beforeClipboard case final gate?) await gate;
+    return clipboardText;
+  }
 
   StudyPick? study;
   final chaptersAsked = <String?>[];

@@ -125,8 +125,8 @@ CommentResult setGlyph(
     at,
     (node) => _glyphed(node, nag, position: position),
     holds: group.isEmpty
-        ? (node) => shown.isNotEmpty && _sameNags(node.nags, shown)
-        : (node) => _sameNags(node.nags.where(inGroup).toList(), group),
+        ? (node) => shown.isNotEmpty && _sameGlyphs(node.nags, shown)
+        : (node) => _sameGlyphs(node.nags.where(inGroup).toList(), group),
   );
 }
 
@@ -148,6 +148,11 @@ MoveNode _glyphed(MoveNode node, int? nag, {required bool position}) {
 
 bool _sameNags(List<int> a, List<int> b) =>
     a.length == b.length && a.indexed.every((e) => b[e.$1] == e.$2);
+
+/// Whether [a] and [b] show the same glyphs, in whatever order the file
+/// wrote them.
+bool _sameGlyphs(List<int> a, List<int> b) =>
+    _sameNags([...a]..sort(), [...b]..sort());
 
 /// [node] with [comment] in place of the one it had; the same node when it
 /// already has those words.
