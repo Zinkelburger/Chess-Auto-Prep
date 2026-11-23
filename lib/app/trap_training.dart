@@ -113,12 +113,8 @@ final class TrapTraining {
     final made = await publishDraft(
       target,
       documents: documents,
-      textFor: (name) => draftHeading(
-        name: name,
-        side: chapter.side,
-        rootMoves: readHeading(chapter.preamble).rootMoves,
-        created: _now(),
-      ),
+      textFor: (name) =>
+          emptyDraftText(name: name, source: chapter, created: _now()),
     );
     if (session.source != source) return;
     final draft = switch (made) {

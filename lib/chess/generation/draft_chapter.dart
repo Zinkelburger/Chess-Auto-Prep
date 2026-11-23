@@ -127,6 +127,45 @@ String draftHeading({
     '${rootLine(rootMoves)}'
     '// Created on ${created.toString().split('.').first}\n\n';
 
+/// A new draft with no moves that starts where [source] does. A chapter
+/// whose games bring their own `[FEN]` starts somewhere its heading cannot
+/// say, so the draft is given one game of no moves from that position; a
+/// draft from the start of the game would refuse every line of the chapter.
+String emptyDraftText({
+  required String name,
+  required Chapter source,
+  required DateTime created,
+}) {
+  final root = source.tree.rootFen;
+  final heading = readHeading(source.preamble);
+  final headingRoot = heading.rootFen;
+  final preamble = draftHeading(
+    name: name,
+    side: source.side,
+    rootMoves: headingRoot.position == root.position
+        ? heading.rootMoves
+        : const [],
+    created: created,
+  );
+  if (headingRoot == root) return preamble;
+  final white = source.side == Side.white;
+  final tags = [
+    const PgnTag('Event', 'Repertoire Line'),
+    PgnTag('White', white ? 'Me' : 'Training'),
+    PgnTag('Black', white ? 'Training' : 'Me'),
+    const PgnTag('Result', '*'),
+    PgnTag('FEN', root.value),
+    const PgnTag('SetUp', '1'),
+  ];
+  final game = writeGameText(
+    tags,
+    GameTree(rootFen: root),
+    terminator: '*',
+    separator: '\n',
+  );
+  return '$preamble$game\n';
+}
+
 /// [sans], played from [chapter]'s start, added to it as one edit — one
 /// undo, and the cursor stays where it is. The moves it already holds are
 /// followed and the rest written as the board writes a move ([addMove]),
