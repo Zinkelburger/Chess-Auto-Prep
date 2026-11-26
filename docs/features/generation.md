@@ -40,9 +40,12 @@ search.
   button that turns the board (as F does; held while running), then what will
   run (`Maia 2200 · best 4, then 1`, with `· both sides` when asked), or
   progress with how much of the depth under way is done (`Depth 3 of 8 (40%)
-  · 95 positions`), the outcome (`Finished depth 8 · 412 positions`, `Stopped
-  at depth 3 · … · ChessDB stopped answering`), or the failure in the error
-  colour. At its end: `Finish depth N` while a search with no depth runs;
+  · 95 positions`), the outcome (`Finished depth 8 · 412 positions`, `Paused
+  at depth 5 · …` after Pause, `Stopped at depth 3 · … · ChessDB stopped
+  answering` when something else ended it), or the failure in the error
+  colour. Where the line is too narrow for all of it the count of positions
+  is left out (`Finished depth 8`) and resting on the line says the rest. At
+  its end: `Finish depth N` while a search with no depth runs;
   `N found` after a run that found positions (opens the Positions list).
 - **Table** — at our move `Your move`, at theirs `Their reply`, then
   `Played`, `Value`, `Engine`, all from White's side. `Value` is the move's
@@ -62,13 +65,16 @@ search.
 - **Table states** — `Press ▶ Expectimax to evaluate moves from this
   position.`, `Evaluating the first moves…`, `The game is over here.`,
   `Not reached yet.` / `The search stopped before this position.`,
-  `No saved results here yet.`, with `Go to where it started` when that line
-  is still in the document; where a search with other settings covers the
+  `No saved results here yet.`, or `This position is outside the last
+  search.` with `Go to where it started` when that line is in the document;
+  where a search with other settings covers the
   board, `The results here are from a search with other settings. Expectimax
   searches again with these.`
 - **Foot** — `Make lines` (`Write the best moves as lines in a draft chapter
   beside this one, traps marked ?`), then `8 lines in Main (draft)` with
-  `Open`. Save failures show `Retry save` / `Discard tree save` and
+  `Open`. After a search of the analysis board in the Repertoire builder,
+  which has no chapter to draft beside, the foot offers `Save to
+  repertoire…` instead. Save failures show `Retry save` / `Discard tree save` and
   `Discard draft save`.
 - **Gear** — `Method`: `Maia practical` | `ChessDB mainline`. For Maia
   practical: `Maia rating` (hidden when Maia is never asked), `Fall back to
@@ -120,7 +126,9 @@ leaves the search running.
 **Resume / Deeper** — `Resume` shows where a tree with the same settings
 covers the board (in memory, else the newest saved tree for this board) and
 continues from the board; `Deeper` shows where that tree already reaches the
-asked depth and raises `Depth` by one. A saved tree that cannot be read is
+asked depth and raises `Depth` by one; replies rarer than `Search replies
+met once in` are valued where they stand at any depth and never hold
+`Deeper` back. A saved tree that cannot be read is
 passed over for an older match → `No saved search is available for this
 board.`
 
@@ -143,8 +151,9 @@ when chosen, one request at a time, at most 1,000 per run; misses fall back to
 Stockfish and an outage hands the rest of the run to Stockfish. Remote scores
 never enter `eval_cache.db`.
 
-**Make lines** — on a writable repertoire chapter, for its side, after a run →
-a draft chapter `<chapter> (draft)` (then `(draft 2)`…; a `/` in a course
+**Make lines** — on a writable repertoire chapter, for its side, after a run
+(started there, or on the analysis board since saved as that chapter and
+still holding the line searched) → a draft chapter `<chapter> (draft)` (then `(draft 2)`…; a `/` in a course
 section's name becomes `_`) beside it: one game
 per line the search answered, at most 100, the lines that start with the same
 reply together and the reply games take most often first; near-copies fold

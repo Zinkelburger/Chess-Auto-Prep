@@ -392,7 +392,8 @@ current board, not the old root, with its retained values. Otherwise it loads a
 saved tree starting at the board (after restarting the app), and when none fits
 it starts afresh there. Rating, evaluation source, reply source, engine depth,
 Later moves and reply floor must match to reuse an interactive tree. The status
-line says only how far it got: `Stopped at depth N · X positions`. Interactive
+line says only how far it got: `Paused at depth N · X positions` after Pause,
+`Stopped at depth N · …` when something else ended it. Interactive
 trees saved before the root was shortlisted (no `v2_root_moves`) are refused;
 start a new search. Raising First move, or starting from a deeper node of an
 earlier search, evaluates only the root moves that are missing and keeps the

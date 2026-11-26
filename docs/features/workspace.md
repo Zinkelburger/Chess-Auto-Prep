@@ -225,7 +225,8 @@ made while the copy is still on its way is not taken, so it never lands on
 the source. While that tab is up, paste and set-up fill it instead. In
 the builder `Save to repertoire…` and in Study `Add game to study…` ask where,
 then a chapter name; `Save to repertoire…` also offers `New repertoire…`,
-which asks its name and makes the board's lines its first chapter. Closing the window forgets analysis boards.
+which asks its name and makes the board's lines its first chapter; the chapter
+opens at the move the board was on. Closing the window forgets analysis boards.
 
 **Edit position** — Actions ▸ `Edit position…` → the
 board editor (`Edit position`) on the board's position, same way up:

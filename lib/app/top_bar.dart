@@ -97,19 +97,32 @@ class TopBar extends StatelessWidget {
           const SizedBox(width: Space.s),
           _ActionsMenu(actions: actions, changes: actionsChange),
           const SizedBox(width: Space.l),
-          Expanded(child: status ?? const SizedBox.shrink()),
-          const SizedBox(width: Space.s),
-          if (activity != null)
-            Flexible(
-              child: TextButton(
-                onPressed: onActivity,
-                child: Text(
-                  '$activity · running',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+          // The running job's name takes at most half the middle and the
+          // sentence the rest, so the gear after them never moves.
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, middle) => Row(
+                children: [
+                  Expanded(child: status ?? const SizedBox.shrink()),
+                  const SizedBox(width: Space.s),
+                  if (activity != null)
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: middle.maxWidth / 2,
+                      ),
+                      child: TextButton(
+                        onPressed: onActivity,
+                        child: Text(
+                          '$activity · running',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
+          ),
           ToolButton(
             icon: AppIcons.settings,
             tooltip: AppKey.settings.tip('Settings'),

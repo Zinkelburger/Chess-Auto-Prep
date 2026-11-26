@@ -109,6 +109,8 @@ class SearchResults extends StatelessWidget {
             otherSettings
                 ? 'The results here are from a search with other settings. '
                       '$_run searches again with these.'
+                : canGo
+                ? 'This position is outside the last search.'
                 : 'No saved results here yet. Start $_run from this board.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
@@ -133,18 +135,37 @@ class SearchResults extends StatelessWidget {
 /// Under a finished search on a repertoire chapter: the way to turn it
 /// into lines, or what became of that. Nothing when neither applies.
 class SearchLinesRow extends StatelessWidget {
-  const SearchLinesRow({super.key, required this.fill, this.onOpenChapter});
+  const SearchLinesRow({
+    super.key,
+    required this.fill,
+    this.onOpenChapter,
+    this.onSaveBoard,
+  });
 
   final FillGaps fill;
 
   /// Opens the draft the lines were written to.
   final ValueChanged<ChapterRef>? onOpenChapter;
 
-  /// Whether [fill] has a lines row to show.
-  static bool shows(FillGaps fill) =>
+  /// Saves the analysis board into a repertoire, where the lines of the
+  /// search made on it can be written; null where the board is not one.
+  final VoidCallback? onSaveBoard;
+
+  /// Whether [fill] has a lines row to show: lines made or to make, or,
+  /// with [savesBoard], a finished search of a board that has no chapter to
+  /// make them in yet.
+  static bool shows(FillGaps fill, {bool savesBoard = false}) =>
       fill.lines is LinesWritten ||
       fill.canMakeLines ||
-      fill.lines is LinesWriting;
+      fill.lines is LinesWriting ||
+      _needsChapter(fill, savesBoard: savesBoard);
+
+  static bool _needsChapter(FillGaps fill, {required bool savesBoard}) =>
+      savesBoard &&
+      fill.state is FillDone &&
+      fill.found != null &&
+      !fill.canMakeLines &&
+      fill.lines == null;
 
   @override
   Widget build(BuildContext context) {
@@ -163,6 +184,8 @@ class SearchLinesRow extends StatelessWidget {
         ),
         child: lines is LinesWritten
             ? _written(theme, lines)
+            : _needsChapter(fill, savesBoard: onSaveBoard != null)
+            ? _saveBoard()
             : _makeLines(theme, lines),
       ),
     );
@@ -188,6 +211,19 @@ class SearchLinesRow extends StatelessWidget {
       ],
     );
   }
+
+  Widget _saveBoard() => Align(
+    alignment: Alignment.centerRight,
+    child: Tooltip(
+      message:
+          'Save the board as a repertoire chapter; the lines of this '
+          'search are made there',
+      child: OutlinedButton(
+        onPressed: onSaveBoard,
+        child: const Text('Save to repertoire…'),
+      ),
+    ),
+  );
 
   Widget _makeLines(ThemeData theme, LinesState? lines) => Row(
     children: [

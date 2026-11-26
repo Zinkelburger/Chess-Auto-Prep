@@ -325,15 +325,31 @@ int nodesIn(SearchNode node) => switch (node) {
 /// than that is left unexpanded or cut off at a horizon, and none at that
 /// depth is left unscored by a search stopped before reaching it, so going
 /// on with the same depth would add nothing.
-bool searchedTo(SearchNode node, int plies) => switch (node) {
+///
+/// A position games reach less often than [replyFloor] is valued where it
+/// stands at any depth, so it counts as searched; [reach] is how often
+/// games get to [node] from where the search started, as the search counts
+/// it: our own moves as certain, each reply by its share.
+bool searchedTo(
+  SearchNode node,
+  int plies, {
+  double replyFloor = 0,
+  double reach = 1,
+}) => switch (node) {
   _ when plies <= 0 => node is! FrontierNode || node.evaluated,
   TerminalNode() => true,
-  HorizonNode() || FrontierNode() => false,
+  HorizonNode() => reach < replyFloor,
+  FrontierNode() => false,
   OurNode(:final candidates) => candidates.every(
-    (c) => searchedTo(c.child, plies - 1),
+    (c) => searchedTo(c.child, plies - 1, replyFloor: replyFloor, reach: reach),
   ),
   OpponentNode(:final replies) => replies.every(
-    (r) => searchedTo(r.child, plies - 1),
+    (r) => searchedTo(
+      r.child,
+      plies - 1,
+      replyFloor: replyFloor,
+      reach: reach * r.probability,
+    ),
   ),
 };
 

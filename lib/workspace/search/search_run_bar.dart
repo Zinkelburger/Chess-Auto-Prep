@@ -213,7 +213,7 @@ class SearchRunBar extends StatelessWidget {
     if (resumable &&
         depth != null &&
         depth < ExpectimaxOptions.maxDepth &&
-        searchedTo(node!, depth)) {
+        searchedTo(node!, depth, replyFloor: request.replyFloor)) {
       return Tooltip(
         message: 'Searched $depth half-moves deep here; search ${depth + 1}',
         child: FilledButton.icon(

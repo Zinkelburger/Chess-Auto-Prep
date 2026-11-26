@@ -97,6 +97,17 @@ void main() {
     expect(did, ['activity']);
   });
 
+  testWidgets('the gear keeps its place while something runs', (tester) async {
+    await bar(tester);
+    final gear = tester.getRect(find.byTooltip('Settings (Ctrl+,)'));
+    await bar(tester, activity: 'Expectimax search');
+    expect(tester.getRect(find.byTooltip('Settings (Ctrl+,)')), gear);
+    expect(
+      tester.getRect(find.text('Expectimax search · running')).right,
+      lessThan(gear.left),
+    );
+  });
+
   testWidgets('the mode menu ticks the mode on, and lines every name up', (
     tester,
   ) async {

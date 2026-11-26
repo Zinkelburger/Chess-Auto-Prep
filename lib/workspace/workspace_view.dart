@@ -458,6 +458,7 @@ class _TabBody extends StatelessWidget {
         session: workspace.session,
         settings: workspace.settings,
         onOpenChapter: hooks.onOpenChapter,
+        onSaveBoard: hooks.onSaveBoard,
         onShowPositions: hooks.onShowPositions,
         onTogglePositions: hooks.onTogglePositions,
       ),

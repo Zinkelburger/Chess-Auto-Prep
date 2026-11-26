@@ -642,6 +642,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
           _requests.openExplorerGame(game, source: source, ply: ply),
         ),
         onOpenChapter: (ref) => unawaited(_requests.readInBuilder(ref, [])),
+        onSaveBoard: _inspecting || _requests.mode != Mode.repertoires
+            ? null
+            : () => unawaited(
+                saveBoardToRepertoire(context, _doors, _docs.library),
+              ),
         onShowPositions: _columns.showPositions,
         onTogglePositions: _columns.togglePositions,
         // The chapter a book move was found in: in the builder, at the

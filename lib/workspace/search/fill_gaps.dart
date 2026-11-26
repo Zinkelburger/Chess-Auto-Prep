@@ -293,15 +293,43 @@ final class FillGaps extends ChangeNotifier {
       _session.chapter != null &&
       _session.shownTo == null;
 
-  /// Whether the last run can be written as lines: it was started on a
-  /// repertoire chapter this app may write, for the chapter's side, and
-  /// is over.
+  /// Whether the last run can be written as lines: it is over, and there
+  /// is a chapter to draft them beside ([_draftsBeside]).
   bool get canMakeLines =>
       !_disposed &&
       _state is FillDone &&
-      _found?.chapter != null &&
+      _draftsBeside != null &&
       _lines is! LinesWriting &&
       _lines is! LinesWritten;
+
+  /// The chapter the last run's lines are drafted beside: the repertoire
+  /// chapter it was started on, for the chapter's side, when this app may
+  /// write it. A run started anywhere else takes the chapter now on the
+  /// board when that holds the line the run started from, as an analysis
+  /// board saved into a repertoire after its search does.
+  (Chapter, ChapterRef)? get _draftsBeside {
+    final found = _found;
+    if (found == null) return null;
+    if (found.chapter case final own?) return own;
+    final target = found.target;
+    final chapter = _session.chapter;
+    final source = _session.source;
+    if (chapter == null ||
+        source == null ||
+        chapter.game != null ||
+        chapter.side != target.side ||
+        _session.orientation != target.side ||
+        _session.readOnly != null ||
+        chapter.tree.rootFen != target.rootFen) {
+      return null;
+    }
+    final line = chapter.tree.lineTo(target.cursor);
+    if (line.length != target.sans.length) return null;
+    for (var i = 0; i < line.length; i++) {
+      if (line[i].san != target.sans[i]) return null;
+    }
+    return (chapter, source);
+  }
 
   /// Starts a run, or answers why it did not: the one sentence the screen
   /// shows. Null when it started.
@@ -771,7 +799,7 @@ final class FillGaps extends ChangeNotifier {
   /// was when the run started: what it already plays is left out.
   Future<void> makeLines() async {
     final found = _found;
-    final drafting = found?.chapter;
+    final drafting = _draftsBeside;
     if (found == null || drafting == null || !canMakeLines) return;
     final (chapter, source) = drafting;
     _lines = const LinesWriting();

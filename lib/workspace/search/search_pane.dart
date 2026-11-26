@@ -49,6 +49,7 @@ class SearchPane extends StatefulWidget {
     required this.session,
     required this.settings,
     this.onOpenChapter,
+    this.onSaveBoard,
     this.onShowPositions,
     this.onTogglePositions,
   });
@@ -62,6 +63,10 @@ class SearchPane extends StatefulWidget {
 
   /// Opens the draft the lines were written to.
   final ValueChanged<ChapterRef>? onOpenChapter;
+
+  /// Saves the analysis board into a repertoire: offered after a search of
+  /// one, whose lines are made in the chapter it becomes.
+  final VoidCallback? onSaveBoard;
 
   /// Shows the Positions, where what a search found is listed.
   final VoidCallback? onShowPositions;
@@ -191,6 +196,11 @@ class _SearchPaneState extends State<SearchPane>
     widget.session.playMove(uci);
   }
 
+  /// The way to a chapter for the lines of a search made on the analysis
+  /// board; null on any other board.
+  VoidCallback? get _saveBoard =>
+      widget.session.isScratch ? widget.onSaveBoard : null;
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: Listenable.merge([
@@ -284,8 +294,12 @@ class _SearchPaneState extends State<SearchPane>
             ],
           ),
         ),
-      if (SearchLinesRow.shows(widget.fill))
-        SearchLinesRow(fill: widget.fill, onOpenChapter: widget.onOpenChapter),
+      if (SearchLinesRow.shows(widget.fill, savesBoard: _saveBoard != null))
+        SearchLinesRow(
+          fill: widget.fill,
+          onOpenChapter: widget.onOpenChapter,
+          onSaveBoard: _saveBoard,
+        ),
       if (widget.fill.canDiscardDraft)
         TextButton(
           onPressed: widget.fill.discardDraftSave,

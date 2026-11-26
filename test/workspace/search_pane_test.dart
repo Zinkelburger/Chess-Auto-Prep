@@ -71,24 +71,93 @@ void main() {
     fixture.dispose();
   });
 
-  Future<void> pump(WidgetTester tester, {VoidCallback? onShowPositions}) =>
-      tester.pumpWidget(
-        MaterialApp(
-          theme: darkTheme(),
-          home: Scaffold(
-            body: SizedBox(
-              width: 560,
-              height: 480,
-              child: SearchPane(
-                fill: fill,
-                session: fixture.session,
-                settings: settings,
-                onShowPositions: onShowPositions,
-              ),
-            ),
+  Future<void> pump(
+    WidgetTester tester, {
+    VoidCallback? onShowPositions,
+    VoidCallback? onSaveBoard,
+    double width = 560,
+  }) => tester.pumpWidget(
+    MaterialApp(
+      theme: darkTheme(),
+      home: Scaffold(
+        body: SizedBox(
+          width: width,
+          height: 480,
+          child: SearchPane(
+            fill: fill,
+            session: fixture.session,
+            settings: settings,
+            onShowPositions: onShowPositions,
+            onSaveBoard: onSaveBoard,
           ),
         ),
-      );
+      ),
+    ),
+  );
+
+  /// A chapter of [side] that starts where the analysis board does.
+  Future<void> openChapter(String side, {String fen = kingAndPawn}) async {
+    fixture.externalEdit(
+      '// Color: $side\n[Event "Main"]\n[Result "*"]\n[FEN "$fen"]\n'
+      '[SetUp "1"]\n\n*',
+    );
+    await fixture.session.open(fixture.ref);
+  }
+
+  testWidgets('a pane too narrow for the count says the outcome without it', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.runAsync(
+      () => fill.start(const FillRequest(elo: 2200, depthPlies: 2)),
+    );
+    await tester.pump();
+    final whole = tester.widget<Text>(find.textContaining('Finished depth 2'));
+    expect(whole.data, matches(r'^Finished depth 2 · \d+ positions$'));
+    await pump(tester, width: 250);
+    expect(find.text('Finished depth 2'), findsOneWidget);
+    expect(find.byTooltip(whole.data!), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a search of the analysis board offers to save the board, and '
+      'its lines are made in the chapter that becomes', (tester) async {
+    var saved = 0;
+    await pump(tester, onSaveBoard: () => saved++);
+    expect(find.text('Save to repertoire…'), findsNothing);
+    await tester.runAsync(
+      () => fill.start(const FillRequest(elo: 2200, depthPlies: 2)),
+    );
+    await tester.pump();
+    expect(fill.canMakeLines, isFalse);
+    expect(find.text('Make lines'), findsNothing);
+    await tester.tap(find.text('Save to repertoire…'));
+    expect(saved, 1);
+    // Saved: the same line, now a chapter of the side searched.
+    await tester.runAsync(() => openChapter('White'));
+    await tester.pump();
+    expect(fill.canMakeLines, isTrue);
+    expect(find.text('Save to repertoire…'), findsNothing);
+    expect(find.text('Make lines'), findsOneWidget);
+  });
+
+  testWidgets('a board search makes no lines in a chapter of the other side '
+      'or of another start', (tester) async {
+    await pump(tester, onSaveBoard: () {});
+    await tester.runAsync(
+      () => fill.start(const FillRequest(elo: 2200, depthPlies: 2)),
+    );
+    await tester.runAsync(() => openChapter('Black'));
+    await tester.pump();
+    expect(fill.canMakeLines, isFalse);
+    await tester.runAsync(
+      () => openChapter('White', fen: '4k3/8/8/8/8/8/3P4/4K3 w - - 0 1'),
+    );
+    await tester.pump();
+    expect(fill.canMakeLines, isFalse);
+    expect(find.text('Make lines'), findsNothing);
+    expect(find.text('Save to repertoire…'), findsNothing);
+  });
 
   testWidgets('the bar shows the Positions beside the gear', (tester) async {
     var shown = 0;
@@ -199,6 +268,7 @@ void main() {
     await tester.runAsync(() => run);
     await tester.pump();
     expect(fill.running, isFalse);
+    expect(find.textContaining('Stopped at depth'), findsNothing);
     expect(
       tester.getRect(find.byType(FilledButton)),
       button,

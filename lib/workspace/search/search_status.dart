@@ -45,11 +45,14 @@ class SearchStatusLine extends StatelessWidget {
     final theme = Theme.of(context);
     final state = fill.state;
     final problem = this.problem;
-    final (words, error) = switch (state) {
-      _ when problem != null => (problem, true),
-      FillIdle() => (_summary, false),
+    // What is said, what is said when that does not fit, and whether it
+    // is a problem. The short wording drops the count, never the reason.
+    final (words, brief, error) = switch (state) {
+      _ when problem != null => (problem, problem, true),
+      FillIdle() => (_summary, _summary, false),
       FillRunning(:final lastPly?, :final nodes, stopping: false) => (
         'Pausing after depth $lastPly · ${_positions(nodes)}',
+        'Pausing after depth $lastPly',
         false,
       ),
       FillRunning(
@@ -59,29 +62,26 @@ class SearchStatusLine extends StatelessWidget {
         :final stopping,
         :final levelShare,
       ) =>
-        (
-          '${stopping ? 'Pausing at depth' : 'Depth'} $depth'
+        () {
+          final progress =
+              '${stopping ? 'Pausing at depth' : 'Depth'} $depth'
               '${of == null || stopping ? '' : ' of $of'}'
-              '${levelShare == null || stopping ? '' : ' (${(levelShare * 100).floor()}%)'}'
-              ' · ${_positions(nodes)}',
-          false,
-        ),
-      FillDone(
-        :final depth,
-        :final nodes,
-        :final complete,
-        :final sourceLost,
-        :final stoppedBy,
-      ) =>
-        (
-          '${complete ? 'Finished depth' : 'Stopped at depth'} $depth · '
-              '${_positions(nodes)}'
-              '${sourceLost ? ' · ChessDB stopped answering' : ''}'
-              '${stoppedBy == null ? '' : ' · $stoppedBy'}${_findsWords()}',
-          false,
-        ),
-      FillFailed(:final reason) => (reason, true),
+              '${levelShare == null || stopping ? '' : ' (${(levelShare * 100).floor()}%)'}';
+          return ('$progress · ${_positions(nodes)}', progress, false);
+        }(),
+      FillDone(:final depth, :final nodes) => () {
+        final outcome = '${_ended(state)} $depth';
+        final rest =
+            '${state.sourceLost ? ' · ChessDB stopped answering' : ''}'
+            '${state.stoppedBy == null ? '' : ' · ${state.stoppedBy}'}'
+            '${_findsWords()}';
+        return ('$outcome · ${_positions(nodes)}$rest', '$outcome$rest', false);
+      }(),
+      FillFailed(:final reason) => (reason, reason, true),
     };
+    final style = theme.textTheme.bodySmall?.copyWith(
+      color: error ? theme.colorScheme.error : null,
+    );
     return SizedBox(
       height: searchStatusHeight,
       child: Padding(
@@ -94,13 +94,13 @@ class SearchStatusLine extends StatelessWidget {
             Expanded(
               child: Tooltip(
                 message: words,
-                child: Text(
-                  words,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: error ? theme.colorScheme.error : null,
+                child: LayoutBuilder(
+                  builder: (context, room) => Text(
+                    _fits(context, words, style, room.maxWidth) ? words : brief,
+                    style: style,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -109,6 +109,33 @@ class SearchStatusLine extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// How a run that is over ended: at its depth, by the player's Pause, or
+  /// cut short by something else.
+  static String _ended(FillDone done) {
+    if (done.complete) return 'Finished depth';
+    final paused =
+        !done.budgetReached && !done.sourceLost && done.stoppedBy == null;
+    return paused ? 'Paused at depth' : 'Stopped at depth';
+  }
+
+  /// Whether [words] can be read whole in [width] on the one line.
+  static bool _fits(
+    BuildContext context,
+    String words,
+    TextStyle? style,
+    double width,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(text: words, style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final fits = painter.width <= width;
+    painter.dispose();
+    return fits;
   }
 
   /// What the next search will be.

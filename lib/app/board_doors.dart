@@ -178,7 +178,7 @@ List<AppAction> boardActions(
     if (scratch && requests.mode == Mode.repertoires)
       AppAction(
         'Save to repertoire…',
-        () => unawaited(_toRepertoire(context, doors, library)),
+        () => unawaited(saveBoardToRepertoire(context, doors, library)),
         group: 'Document',
       ),
     if (scratch && requests.mode == Mode.study)
@@ -190,7 +190,9 @@ List<AppAction> boardActions(
   ];
 }
 
-Future<void> _toRepertoire(
+/// Saves the analysis board as a chapter of a repertoire the user picks or
+/// names, and opens it at the move the board was on.
+Future<void> saveBoardToRepertoire(
   BuildContext context,
   BoardDoors doors,
   Library library,
@@ -198,6 +200,11 @@ Future<void> _toRepertoire(
   final session = doors.workspace.session;
   if (!session.isScratch) return;
   final board = session.snapshot();
+  final at = session.cursor.value;
+  final line = [
+    if (board != null)
+      for (final move in board.tree.lineTo(at)) move.san,
+  ];
   final into = await showChoiceDialog<_SaveInto>(
     context,
     title: 'Save to repertoire',
@@ -229,11 +236,17 @@ Future<void> _toRepertoire(
     requests.say('Could not save to repertoire because the board changed.');
     return;
   }
-  switch (into) {
-    case _NewRepertoire():
-      await requests.saveBoardAsRepertoire(name);
-    case _Existing(:final folder):
-      await requests.saveBoardToRepertoire(folder, name);
+  final saved = await switch (into) {
+    _NewRepertoire() => requests.saveBoardAsRepertoire(name),
+    _Existing(:final folder) => requests.saveBoardToRepertoire(folder, name),
+  };
+  // The chapter opens at its start; the board was somewhere in it.
+  final tree = session.tree;
+  if (saved is! RequestDone || session.isScratch || tree == null) return;
+  final now = [for (final move in tree.lineTo(at)) move.san];
+  if (now.length == line.length &&
+      Iterable<int>.generate(line.length).every((i) => now[i] == line[i])) {
+    session.cursor.goTo(at);
   }
 }
 

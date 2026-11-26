@@ -38,6 +38,7 @@ final class WorkspaceHooks {
     this.onExplorerLogin,
     this.onDownloadTwic,
     this.onOpenChapter,
+    this.onSaveBoard,
     this.onShowPositions,
     this.onTogglePositions,
     this.onOpenPlace,
@@ -109,6 +110,9 @@ final class WorkspaceHooks {
 
   /// Opens a chapter in the builder: the draft a search's lines went to.
   final ValueChanged<ChapterRef>? onOpenChapter;
+
+  /// Saves the analysis board into a repertoire, in the mode that has them.
+  final VoidCallback? onSaveBoard;
 
   /// Shows the Positions in the list column: where a search's finds are.
   final VoidCallback? onShowPositions;
