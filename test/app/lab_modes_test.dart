@@ -19,6 +19,7 @@ void main() {
       lab: lab,
       engine: LabEngine(
         lab: lab,
+        cores: 2,
         startEngine: () async => throw StateError('not started here'),
       ),
       picker: ScriptedPicker(),

@@ -1,8 +1,8 @@
 // The Bughouse boards: the engine's arrows and drop rings, the wheel, a
 // seat's clock without a name, and the last move after a transposition.
-import 'package:chess_auto_prep/chess/bughouse/hivemind.dart';
+import 'package:chess_auto_prep/chess/bughouse/hypebeast.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
-import 'package:chess_auto_prep/engines/hivemind_engine.dart';
+import 'package:chess_auto_prep/engines/hypebeast_engine.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_lab.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_screen.dart';
 import 'package:chess_auto_prep/features/bughouse/lab_engine.dart';
@@ -18,16 +18,16 @@ import '../../support/scripted_bughouse.dart';
 
 void main() {
   late BughouseLab lab;
-  late ScriptedHivemind hivemind;
+  late ScriptedHypeBeast hypebeast;
   late LabEngine engine;
 
   void build() {
     lab = BughouseLab();
-    hivemind = ScriptedHivemind();
+    hypebeast = ScriptedHypeBeast();
     engine = LabEngine(
       lab: lab,
-      passes: const [800],
-      startEngine: () async => HivemindStarted(hivemind),
+      cores: 4,
+      startEngine: () async => HypeBeastStarted(hypebeast),
     );
     addTearDown(() {
       engine.dispose();
@@ -49,23 +49,28 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// A + B's search answers [lines], each a first move and its score.
+  /// Board 1's search answers [lines], each a first move and its score
+  /// from the side to move (none for an unscored move).
   Future<void> engineSays(
     WidgetTester tester,
-    List<(String, int)> lines,
+    List<(String, int?)> lines,
   ) async {
-    hivemind.answer = (question) => question.team == Team.ab
-        ? HivemindSearched(
-            best: JointMove(lines.first.$1, null),
-            lines: [
-              for (final (i, (uci, cp)) in lines.indexed)
-                JointLine(
-                  rank: i + 1,
-                  cp: cp,
-                  nodes: 800,
-                  pv: [JointMove(uci, null)],
-                ),
-            ],
+    hypebeast.answer = (question) => question.board == BoardNumber.one
+        ? HypeBeastSearched(
+            decision: SeatDecision(lines.first.$1),
+            report: SeatReport(
+              lines: [
+                for (final (i, (uci, cp)) in lines.indexed)
+                  SeatLine(
+                    multipv: i + 1,
+                    depth: 12,
+                    cp: cp,
+                    nodes: 800,
+                    pv: [uci],
+                  ),
+              ],
+              nodes: 800,
+            ),
           )
         : firstMoves(question);
     engine
@@ -91,6 +96,18 @@ void main() {
         .engine;
     expect(arrows.map((a) => a.to), [Square.e4, Square.d4]);
     expect(arrows.map((a) => a.colour), [engineBestArrow, engineOtherArrow]);
+    // Ten centipawns behind is all but level: an alternative's full width.
+    expect(arrows.last.width, 12);
+  });
+
+  testWidgets('a move without a score draws no arrow', (tester) async {
+    build();
+    await pump(tester);
+    await engineSays(tester, const [('e2e4', 200), ('d2d4', null)]);
+    final arrows = tester
+        .widget<BoardArrows>(find.byType(BoardArrows).first)
+        .engine;
+    expect(arrows.map((a) => a.to), [Square.e4]);
   });
 
   testWidgets('the best drop is ringed in the best arrow\'s colour', (

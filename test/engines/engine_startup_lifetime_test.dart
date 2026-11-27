@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/chess/fen.dart';
 import 'package:chess_auto_prep/engines/engine.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
-import 'package:chess_auto_prep/engines/hivemind_engine.dart';
+import 'package:chess_auto_prep/engines/hypebeast_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -14,7 +14,7 @@ void main() {
   late File announced;
   late EngineSupervisor supervisor;
   Future<EngineStart>? starting;
-  Future<HivemindStart>? bughouseStarting;
+  Future<HypeBeastStart>? bughouseStarting;
 
   setUp(() async {
     root = await Directory.systemTemp.createTemp('v2-startup-lifetime-');
@@ -145,37 +145,35 @@ for line in sys.stdin:
     expect(await starting, isA<StartFailed>());
     expect(await announced.exists(), isFalse);
   }, skip: !Platform.isLinux);
-  test('dispose owns Hivemind through its native handshake', () async {
+  test('dispose owns HypeBeast through its native handshake', () async {
     await writeEngine();
-    final model = await File(p.join(root.path, 'model')).writeAsString('model');
-    bughouseStarting = supervisor.startHivemind((
+    final net = await File(p.join(root.path, 'net')).writeAsString('net');
+    bughouseStarting = supervisor.startHypeBeast((
       executable: executable.path,
-      model: model.path,
+      net: net.path,
       directory: root.path,
-    ), cores: 1);
+    ));
     final child = await pid();
     await supervisor.dispose();
-    expect(await bughouseStarting, isA<HivemindStartFailed>());
+    expect(await bughouseStarting, isA<HypeBeastStartFailed>());
     expect(await Directory('/proc/$child').exists(), isFalse);
     expect(supervisor.pids, isEmpty);
   }, skip: !Platform.isLinux);
 
   test(
-    'dispose during Hivemind hashing prevents a later native spawn',
+    'dispose during HypeBeast hashing prevents a later native spawn',
     () async {
       await writeEngine();
-      final model = await File(
-        p.join(root.path, 'model'),
-      ).writeAsString('model');
-      bughouseStarting = supervisor.startHivemind((
+      final net = await File(p.join(root.path, 'net')).writeAsString('net');
+      bughouseStarting = supervisor.startHypeBeast((
         executable: executable.path,
-        model: model.path,
+        net: net.path,
         directory: root.path,
-      ), cores: 1);
+      ));
       await supervisor.dispose();
       expect(
         await bughouseStarting!.timeout(Duration.zero),
-        isA<HivemindStartFailed>(),
+        isA<HypeBeastStartFailed>(),
       );
       expect(await announced.exists(), isFalse);
     },

@@ -50,7 +50,7 @@ and is quarantined if unreadable; *derived* may be discarded and rebuilt.
 | Dismissed findings | Support `audit_dismissed.db` | SQLite, keyed by kind, position and move | Kept |
 | Player reports | Support `player-reports/<key>.json` | Fingerprint-keyed JSON | Derived |
 | Kept versions | Support `backups/` | [Recovery files](#recovery-files) | Kept |
-| Engines | Support: Stockfish binary, `bughouse/` (Hivemind) | Installed from the bundle | Derived |
+| Engines | Support: Stockfish binary, `bughouse/` (HypeBeast and its net) | Installed from the bundle | Derived |
 | Logs | Support `logs/app.log` | Text, one line per entry | Derived |
 
 The databases the app writes use WAL. A `master_games.db` SQLite reports as

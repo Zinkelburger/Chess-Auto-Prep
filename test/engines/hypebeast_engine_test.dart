@@ -14,13 +14,13 @@ const _net = '/engines/bughouse-cd8cceab93fe.nnue';
 /// the line naming its net at the start of a search, then the lines the
 /// test gives each `go` and their `bestmove`.
 final class AnsweringProcess implements UciProcess {
-  AnsweringProcess({this.silent = false, this.net = _NetSays.loaded});
+  AnsweringProcess({this.silent = false, this.net = NetSays.loaded});
 
   /// Says nothing at all, as a binary that never reaches `main`.
   final bool silent;
 
   /// What the engine says of its net at its first search.
-  final _NetSays net;
+  final NetSays net;
   final sent = <String>[];
   final _out = StreamController<String>();
   bool killed = false;
@@ -48,14 +48,14 @@ final class AnsweringProcess implements UciProcess {
     } else if (line.startsWith('go') && !_checked) {
       _checked = true;
       switch (net) {
-        case _NetSays.loaded:
+        case NetSays.loaded:
           say('info string NNUE evaluation using $_net enabled');
           say('info depth 1 seldepth 1 multipv 1 score cp 92 nodes 20 pv d2d4');
           say('bestmove (d2d4,pass)');
-        case _NetSays.classical:
+        case NetSays.classical:
           say('info string classical evaluation enabled');
           say('bestmove (e2e3,pass)');
-        case _NetSays.unreadable:
+        case NetSays.unreadable:
           say(
             'info string ERROR: The option is set to true, but the network '
             'file $_net was not loaded successfully.',
@@ -91,7 +91,7 @@ final class AnsweringProcess implements UciProcess {
       sent.skipWhile((l) => l != 'go nodes 1').skip(1).toList();
 }
 
-enum _NetSays { loaded, classical, unreadable }
+enum NetSays { loaded, classical, unreadable }
 
 /// Lines of a real v1.1.1 search of board 1 for Black, coordinated.
 const coordinatedSearch = [
@@ -177,7 +177,7 @@ void main() {
   });
 
   test('a net the engine cannot read fails the start in words', () async {
-    final process = AnsweringProcess(net: _NetSays.unreadable);
+    final process = AnsweringProcess(net: NetSays.unreadable);
     await expectLater(
       HypeBeastProcess.start(process, net: _net),
       throwsA(
@@ -193,7 +193,7 @@ void main() {
 
   test('a net taken for another variant\'s, so classical evaluation, fails '
       'the start', () async {
-    final process = AnsweringProcess(net: _NetSays.classical);
+    final process = AnsweringProcess(net: NetSays.classical);
     await expectLater(
       HypeBeastProcess.start(process, net: _net),
       throwsA(

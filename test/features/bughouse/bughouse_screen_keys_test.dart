@@ -1,6 +1,6 @@
 // The Bughouse screen's ↓ and ↑: the next and the previous game of the file
 // open.
-import 'package:chess_auto_prep/engines/hivemind_engine.dart';
+import 'package:chess_auto_prep/engines/hypebeast_engine.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_lab.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_screen.dart';
 import 'package:chess_auto_prep/features/bughouse/lab_engine.dart';
@@ -16,8 +16,8 @@ void main() {
     final lab = BughouseLab();
     final engine = LabEngine(
       lab: lab,
-      passes: const [800],
-      startEngine: () async => HivemindStarted(ScriptedHivemind()),
+      cores: 4,
+      startEngine: () async => HypeBeastStarted(ScriptedHypeBeast()),
     );
     addTearDown(() {
       engine.dispose();

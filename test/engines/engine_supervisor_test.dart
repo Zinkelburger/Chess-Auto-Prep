@@ -3,9 +3,9 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/diagnostics/log.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
-import 'package:chess_auto_prep/engines/hivemind_engine.dart';
-import 'package:chess_auto_prep/engines/hivemind_install.dart'
-    show HivemindFiles;
+import 'package:chess_auto_prep/engines/hypebeast_engine.dart';
+import 'package:chess_auto_prep/engines/hypebeast_install.dart'
+    show HypeBeastFiles;
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -112,18 +112,18 @@ void main() {
       final engines = EngineSupervisor(
         closingPatience: const Duration(milliseconds: 200),
       );
-      final start = engines.startHivemind((
+      final start = engines.startHypeBeast((
         executable: fifo,
-        model: p.join(dir.path, 'model'),
+        net: p.join(dir.path, 'net'),
         directory: dir.path,
-      ), cores: 1);
+      ));
       addTearDown(() async {
         // Lets the blocked read end, and the start with it, so nothing
         // outlives the test.
         await Process.run('timeout', ['5', 'sh', '-c', ': > "\$0"', fifo]);
         expect(
           await start.timeout(const Duration(seconds: 5)),
-          isA<HivemindStartFailed>(),
+          isA<HypeBeastStartFailed>(),
         );
         await dir.delete(recursive: true);
       });
@@ -177,54 +177,35 @@ void main() {
 
   test('a bughouse engine that failed to start and outlives its kill still '
       'answers that it did not start', () async {
-    final dir = await Directory.systemTemp.createTemp('v2-hivemind-');
+    final dir = await Directory.systemTemp.createTemp('hypebeast-');
     addTearDown(() => dir.delete(recursive: true));
-    final HivemindFiles files = (
-      executable: p.join(dir.path, 'hivemind'),
-      model: p.join(dir.path, 'model'),
+    final HypeBeastFiles files = (
+      executable: p.join(dir.path, 'hypebeast'),
+      net: p.join(dir.path, 'net'),
       directory: dir.path,
     );
     await File(files.executable).writeAsString('');
-    await File(files.model).writeAsString('');
+    await File(files.net).writeAsString('');
     final engines = EngineSupervisor(
       startProcess: (_, _, {workingDirectory, environment}) async =>
           StuckProcess(),
     );
     // The kill waits five seconds and the exit code one more.
     final start = await engines
-        .startHivemind(
-          files,
-          cores: 1,
-          patience: const Duration(milliseconds: 100),
-        )
+        .startHypeBeast(files, patience: const Duration(milliseconds: 100))
         .timeout(const Duration(seconds: 10));
     expect(
-      (start as HivemindStartFailed).reason,
+      (start as HypeBeastStartFailed).reason,
       startsWith('The bughouse engine did not start.'),
     );
   }, timeout: const Timeout(Duration(seconds: 30)));
 
-  test('a CPU list names every CPU of its ranges and each one alone', () {
-    expect(cpuList('0-3,8,10-11'), [0, 1, 2, 3, 8, 10, 11]);
-    expect(cpuList(' 5 '), [5]);
-    expect(cpuList('2-2'), [2]);
+  test('a Windows loader failure is said in words; another exit is not', () {
+    expect(engineExitReason(-1073741515), contains('0xC0000135'));
+    expect(engineExitReason(0xC000001D), contains('instruction'));
+    expect(engineExitReason(1), isNull);
+    expect(engineExitReason(null), isNull);
   });
-
-  test('an engine held to one core runs on the first CPU it may use', () async {
-    final sleeper = await Process.start('sleep', ['5']);
-    addTearDown(sleeper.kill);
-    final status = await File('/proc/self/status').readAsString();
-    final allowed = RegExp(
-      r'^Cpus_allowed_list:\s*(.+)$',
-      multiLine: true,
-    ).firstMatch(status)!.group(1)!;
-    await limitCores(sleeper.pid, 1);
-    final held = RegExp(
-      r'^Cpus_allowed_list:\s*(.+)$',
-      multiLine: true,
-    ).firstMatch(await File('/proc/${sleeper.pid}/status').readAsString());
-    expect(held!.group(1), '${cpuList(allowed).first}');
-  }, skip: !Platform.isLinux || !File('/usr/bin/taskset').existsSync());
 
   test('an engine that answers only after the app began closing is let go, not '
       'kept', () async {

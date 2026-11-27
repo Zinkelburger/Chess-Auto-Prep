@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:chess_auto_prep/app/mode.dart';
-import 'package:chess_auto_prep/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/storage/pgn_file_import.dart';
 import 'package:chess_auto_prep/storage/pgn_file_picker.dart';
@@ -79,7 +78,6 @@ void main() {
     await toBughouse(tester);
     expect(find.byType(Chessboard), findsOneWidget);
     // With one board the clock cases name the colours.
-    expect(find.text('White may sit'), findsOneWidget);
     // Until the pointer is over the hand its + and − are hidden.
     await tester.tap(
       find.byTooltip('One more knight for Black'),
@@ -98,13 +96,12 @@ void main() {
     expect(w.bughouse.starts, 0);
   });
 
-  testWidgets('two boards show both, the sit chips, and drop across', (
+  testWidgets('two boards show both, and drop across', (
     tester,
   ) async {
     await toBughouse(tester);
     await twoBoards(tester);
     expect(find.byType(Chessboard), findsNWidgets(2));
-    expect(find.text('A + B may sit'), findsOneWidget);
     w.lab
       ..play(BoardNumber.one, 'e2e4')
       ..play(BoardNumber.one, 'd7d5')
@@ -138,19 +135,17 @@ void main() {
     expect(w.lab.line.moves, isEmpty);
   });
 
-  testWidgets('one board: the engine searches board 1 with its partner board '
-      'held still, and a line plays', (tester) async {
+  testWidgets('one board: the engine searches board 1 alone with the partner '
+      'board as it stands, and a line plays', (tester) async {
     await toBughouse(tester);
     await engineOn(tester);
-    final asked = w.bughouse.engine.asked;
-    final own = asked.firstWhere((q) => q.team == Team.ab);
-    expect(own.mustMove, MustMove.one);
-    expect(own.maySit, isFalse);
-    // C + D get the partner board's move, so both teams are searched.
-    final other = asked.firstWhere((q) => q.team == Team.cd);
-    expect(other.position.turn(BoardNumber.two), Side.white);
-    expect(find.text('0.00'), findsWidgets);
-    expect(find.textContaining('nodes'), findsOneWidget);
+    final asked = w.bughouse.engine.asked.single;
+    expect(asked.board, BoardNumber.one);
+    expect(asked.coordination, isFalse);
+    expect(asked.position, w.lab.position);
+    // White's −2.00 is A + B's: the bar and the first row say it.
+    expect(find.text('-2.00'), findsNWidgets(2));
+    expect(find.text('HypeBeast · 200 nodes'), findsOneWidget);
     await tester.tap(find.text('1. Na3'));
     await tester.pumpAndSettle();
     expect(w.lab.line.of(BoardNumber.one).single.san, 'Na3');
@@ -180,15 +175,18 @@ void main() {
     expect(w.lab.line.moves.single.san, 'Na3');
   });
 
-  testWidgets('the sit chips decide who may sit', (tester) async {
+  testWidgets('two boards: each board is searched with the coordinator', (
+    tester,
+  ) async {
     await toBughouse(tester);
     await twoBoards(tester);
-    await tester.tap(find.text('A + B may sit'));
-    await tester.pumpAndSettle();
     await engineOn(tester);
     final asked = w.bughouse.engine.asked;
-    expect(asked.firstWhere((q) => q.team == Team.ab).maySit, isTrue);
-    expect(asked.firstWhere((q) => q.team == Team.cd).maySit, isFalse);
+    expect(asked.map((q) => (q.board, q.coordination)), [
+      (BoardNumber.one, true),
+      (BoardNumber.two, true),
+    ]);
+    expect(asked.first.played?.moves, isEmpty);
   });
 
   testWidgets('an engine that will not start is said beside its switch', (
@@ -232,9 +230,12 @@ void main() {
     expect(first.gone, isTrue, reason: 'quit while the window closes');
     w.parts.resumeAfterClose();
     await tester.pumpAndSettle();
+    expect(w.analysis.pausedFor, isNotNull, reason: 'Bughouse is still up');
+    // The table's search is remembered; a new table starts a new engine.
+    w.lab.play(BoardNumber.one, 'e2e4');
+    await tester.pumpAndSettle();
     expect(w.bughouse.engine, isNot(same(first)));
     expect(w.bughouse.engine.gone, isFalse);
-    expect(w.analysis.pausedFor, isNotNull, reason: 'Bughouse is still up');
   });
 
   testWidgets('a launch that reopens on Bughouse pauses Stockfish there', (
@@ -322,13 +323,13 @@ void main() {
     testWidgets('puts a file\'s moves on the boards', (tester) async {
       await toBughouse(tester);
       files().picked['/games/playout.bpgn'] = const PickedText(
-        '[Event "Hivemind playout"]\n\n1A. e4 1B. d4 1a. e5 *\n',
+        '[Event "Arena playout"]\n\n1A. e4 1B. d4 1a. e5 *\n',
       );
       await open(tester, '/games/playout.bpgn');
       expect(picker().offered.single, bpgnExtensions);
       expect(
         w.lab.movesText,
-        '[Event "Hivemind playout"]\n\n1A. e4 1B. d4 1a. e5',
+        '[Event "Arena playout"]\n\n1A. e4 1B. d4 1a. e5',
       );
       // A game opens on both boards at its first move; → plays it through.
       expect(w.lab.single, isFalse);

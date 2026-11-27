@@ -41,7 +41,7 @@ lib/
   diagnostics/      the log facade
   chess/            pure Dart: PGN, positions, generation, training, tournaments
   storage/          files, SQLite, settings, credentials, revisions, recovery, backups
-  engines/          supervised UCI/Hivemind/Maia processes and finite jobs
+  engines/          supervised UCI/HypeBeast/Maia processes and finite jobs
   net/              Lichess, chess.com, ChessDB, GitHub and other clients; login sockets
   workspace/        the one workspace: its view, keys, tabs and pane layout, over
     document/       session, saver, drafts, undo and where board content lands
@@ -71,7 +71,7 @@ test/               mirrors lib/; test/support/ holds fixtures and scripted port
 
 `dart:io` is allowed only in `storage/`, `engines/`, `net/` (the Lichess login
 listens on a loopback port) and `app/`. Files are written only in `storage/`;
-the Stockfish and Hivemind installers in `engines/` are the named exceptions.
+the Stockfish and HypeBeast installers in `engines/` are the named exceptions.
 A widget file outside `app/` never imports `dart:io` or `net/`. From
 `storage/` and `engines/` a widget takes value types (`ChapterRef`, `Score`,
 `EngineLine`), never an adapter or a process.

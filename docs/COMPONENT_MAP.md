@@ -13,7 +13,7 @@ and release builds. Use [the architecture contracts](ARCHITECTURE.md),
 - [`app/app.dart`](../lib/app/app.dart) owns the Flutter app lifetime.
   [`app/environment.dart`](../lib/app/environment.dart) wires filesystem,
   engine and network boundaries; the native engine launches (Stockfish,
-  Hivemind, Maia) are in [`app/native_engines.dart`](../lib/app/native_engines.dart)
+  HypeBeast, Maia) are in [`app/native_engines.dart`](../lib/app/native_engines.dart)
   and the desktop's browser, file manager, full screen and updates in
   [`app/native_desktop.dart`](../lib/app/native_desktop.dart). App
   composition passes concrete owners.
@@ -177,7 +177,7 @@ Bughouse mode is offered when its engine assets are present.
   become one typeable box (`ChoiceField`).
 - Engine tournaments use the shared supervisor, retryable checkpoints, saved
   history, ratings/crosstables and viewer handoff. Bughouse keeps its own one- or
-  two-board screen with + and − on every hand and live Hivemind lines.
+  two-board screen with + and − on every hand and live HypeBeast lines.
 - Text fields leave the typing area blank until the user enters a value.
   `SearchField` keeps its magnifier, clear action, accessible name and hover
   help; `ChoiceField` uses persistent labels. New-name dialogs start empty,

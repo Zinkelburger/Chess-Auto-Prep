@@ -1,7 +1,6 @@
-// The column beside the Bughouse boards: the sit chips' words, the game row
-// of a game without tags, and the score in the engine bar.
-import 'package:chess_auto_prep/chess/bughouse/hivemind.dart';
-import 'package:chess_auto_prep/engines/hivemind_engine.dart';
+// The column beside the Bughouse boards: the game row of a game without
+// tags, and the score and search size in the engine bar.
+import 'package:chess_auto_prep/engines/hypebeast_engine.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_lab.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_screen.dart';
 import 'package:chess_auto_prep/features/bughouse/lab_engine.dart';
@@ -20,8 +19,8 @@ void main() {
     lab = BughouseLab();
     engine = LabEngine(
       lab: lab,
-      passes: const [800],
-      startEngine: () async => HivemindStarted(ScriptedHivemind()),
+      cores: 4,
+      startEngine: () async => HypeBeastStarted(ScriptedHypeBeast()),
     );
     addTearDown(() {
       engine.dispose();
@@ -43,24 +42,22 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('with one board the sit chips name the colours, with two the '
-      'teams', (tester) async {
+  testWidgets('the bar names HypeBeast and the size of the search', (
+    tester,
+  ) async {
     build();
     await pump(tester);
-    expect(find.text('White may sit'), findsOneWidget);
-    expect(
-      find.byTooltip('White is up on the clock, so can wait rather than move'),
-      findsOneWidget,
-    );
-    expect(
-      find.byTooltip('Black is up on the clock, so can wait rather than move'),
-      findsOneWidget,
-    );
+    expect(find.text('HypeBeast'), findsOneWidget);
+    engine
+      ..open()
+      ..toggle();
+    await tester.pumpAndSettle();
+    expect(find.text('HypeBeast · 200 nodes'), findsOneWidget);
     lab.showBoards(LabBoards.two);
     await tester.pumpAndSettle();
-    expect(find.text(ClockCase.abMaySit.label), findsOneWidget);
-    expect(find.byTooltip(ClockCase.abMaySit.hint), findsOneWidget);
-    expect(find.byTooltip(ClockCase.cdMaySit.hint), findsOneWidget);
+    expect(find.text('HypeBeast · 400 nodes'), findsOneWidget);
+    // Two boards: the bar's score is both boards' added, and says so.
+    expect(find.byTooltip(scoreHint(single: false)), findsOneWidget);
   });
 
   testWidgets('a file whose first game has no tags still steps through its '

@@ -1,6 +1,6 @@
 # Bughouse
 
-A bughouse analysis board with Hivemind, the two-board engine. The player
+A bughouse analysis board with HypeBeast, the bughouse engine. The player
 moves pieces on one board, or on both boards of a game. They put any piece in
 any hand with + and −, and switch the engine on to see its score and lines.
 They open a BPGN file, a FICS archive or an arena match, and play its games
@@ -9,10 +9,13 @@ through with the players' names and clocks beside the boards.
 Code: `lib/features/bughouse/` (`BughouseLab` table owner, `LabEngine`, screen,
 boards, hands, engine lines and panel), plus `lib/chess/bughouse/` (table, line,
 FEN reading, BPGN reading and writing, a game's tags and clocks, crazyhouse
-PGN, engine-line steps, Hivemind score scale), `lib/engines/hivemind_engine.dart`,
-`lib/engines/hivemind_install.dart`, `lib/app/bughouse_view.dart` (`BughouseView`),
+PGN, engine-line steps, and `hypebeast.dart`: the engine's lines, coordinator
+report, rows and scores read back), `lib/engines/hypebeast_engine.dart`,
+`lib/engines/hypebeast_install.dart`, `lib/app/bughouse_view.dart` (`BughouseView`),
 the shared board editor `lib/workspace/board/board_editor.dart` and
-`lib/app/self_test.dart`. Engine internals: [Hivemind](../HIVEMIND.md).
+`lib/app/self_test.dart`. The engine is
+[HypeBeast](https://github.com/Zinkelburger/HypeBeast), a Fairy-Stockfish fork
+that plays one seat of a bughouse table knowing the other board.
 
 ## Screen
 
@@ -49,49 +52,52 @@ panel on the right: 440–640 px beside board 1 alone, 440–480 px beside both.
 - **Arrows** — while the engine is on, each board shows its best moves as
   lila's analysis board does: the first in lila's pale blue (15/64 of a
   square wide), the others in pale grey, 12/64 wide when level with it down
-  to 2/64, and none once a move is 0.2 behind (half the difference in
-  Hivemind's Q). A drop is a ring on its square in the same colour, with
+  to 2/64, and none once a move is 0.2 behind (half the difference in lila's
+  winning chances of the two scores, a mate counting as the whole chance)
+  or has no score. A drop is a ring on its square in the same colour, with
   the piece inside at 0.8 of a square (60% opaque for the first, 40% for
   the others), as lila draws crazyhouse drops. A
   right-drag draws an arrow and a right-click a circle, green, or red with
   Shift, blue with Alt, yellow with Ctrl; a left click or a new position
   takes them away.
 - **Panel** — `1 board` | `2 boards`, and `Edit position…` at the right of that
-  row. Under it, in the same compact segments, who may sit: `A + B may sit`
-  | `C + D may sit`, or with one board `White may sit` | `Black may sit`
-  (the default is C + D, Black). Hivemind has no case where neither may:
-  its one clock input says whether the searched team may sit, and its
-  search gives the other team the opposite. The tooltips explain each.
+  row.
 - **Engine bar** — a switch (`Turn engine on`), the score in 18 px mono,
-  then `Hivemind · 12,400 nodes` (the size of the search the rows come from,
-  both teams' together with two boards), or why the engine stopped, in the
-  error colour. While the engine searches, a 2 px bar under it fills towards
-  the size the search rests at. With two boards the engine is told the game
-  that led to the table (`position fen … moves 1e2e4 …`), so it sees a
-  position that came up before and offers no move after a threefold
-  repetition; a table set up by FEN, or one whose hands were edited on the
-  way, is asked about as it stands.
-- **Lines** — each board's three best moves for the player on move there,
-  one row each: in the panel with one board, under the board (below its
-  bottom hand) with two. A row is its score, then the
-  move in bold and that board's moves after it, up to eight (`1. d4 d5 2.
-  Nf3`); a row whose choice is to wait there starts with a muted `sit`.
-  The engine ranks joint actions over both boards, so a team on move on
-  both repeats one board's move across its lines; the rows are the three
-  moves it visited most on that board (from 16 lines asked), each with its
-  most-visited line, best-scoring first. The engine's own choice is not
-  pinned on top, so rows swap as the scores move during a live search.
-  Each move is its own token, as in the workspace's engine lines.
-  Rows are 28 px, clip what does not fit, and keep their place and size
-  whether the engine is on or off or a move is hovered; an empty row is
-  blank. Scores are A + B's, on Hivemind's scale (tooltip `+ is good for A +
-  B: White on board 1, Black on board 2. Hivemind’s scale, not pawns.`, with
-  one board `+ is good for White on board 1 (A + B). Hivemind’s scale, not
-  pawns.`).
+  then `HypeBeast · 1,240,000 nodes` (the size of the searches the rows come
+  from, both boards' together with two boards), or why the engine stopped,
+  in the error colour. The score is A + B's in pawns: with one board, the
+  first row's (tooltip `+ is good for White on board 1 (A + B). In pawns.`);
+  with two, both boards' first rows added, since a team's winning chances
+  follow the plain sum of its two boards' scores, with a forced mate on
+  either board shown as the mate (two mates: the quicker), and before both
+  boards have reported, the one that has (tooltip `+ is good for A + B:
+  White on board 1, Black on board 2. Both boards’ scores added, in
+  pawns.`). While the engine searches, a 2 px bar under it fills as the
+  search's ten seconds go. The engine is told the game that led to the table
+  (`position fen … moves 1e2e4 …`), so it knows a position that came up
+  before; a table set up by FEN, or one whose hands were edited on the way,
+  is asked about as it stands.
+- **Lines** — up to three rows per board for the player on move there: in
+  the panel with one board, under the board (below its bottom hand) with
+  two. A row is its score, then the move in bold and that board's moves
+  after it, up to eight (`1. d4 d5 2. Nf3`). With one board the rows are the
+  engine's three best lines of board 1, each whole. With two, while the
+  engine searches, a board has one row, its main line; once the search ends,
+  the engine's decision comes first (as the main line when it is the main
+  line's move), then the other moves its coordinator compared across the
+  boards, best first, each a row of that one move with the coordinator's
+  score; a move it compared without scoring shows a muted `—`. A decision
+  to wait there is a row of its own, a muted `sit` without a score. Each
+  move is its own token, as in the workspace's engine lines. Rows are 28 px,
+  clip what does not fit, and keep their place and size whether the engine
+  is on or off or a move is hovered; an empty row is blank. Each row's score
+  is its own board's, A + B's in pawns (`+0.25`, `-1.40`, `#3`, `#-2`),
+  converted from the side to move there; the tooltip says whose side `+`
+  is.
 - **Problem line** — one fixed line saying why a move, step or paste was
   refused.
 - **Game row** — only with a game read from a BPGN that has tags: who won
-  and how, then the event, round and date (`A + B won · checkmate · Hivemind
+  and how, then the event, round and date (`A + B won · checkmate · Bughouse
   Arena · Round 3`), cut short where the panel ends and whole on hover. When
   the file holds several games the row starts with `‹ [n] of N ›`, the
   viewer's game counter: the arrows step a game, a number typed and Enter
@@ -164,9 +170,8 @@ leaves. Resting on one of its moves for
 80 ms floats a 200 px board under it: the board that move is on, after it,
 with the move highlighted and both hands. A new table takes the floated board
 away; the search's next report on the same table keeps it.
-**Play a line** — clicking a move plays the line up to and including it: with
-one board, board 1's moves; with two, every move of both boards before it in
-order. All or nothing: `That line no longer fits the position.` Clicking the
+**Play a line** — clicking a move plays its board's line up to and including
+it. All or nothing: `That line no longer fits the position.` Clicking the
 row outside its moves plays its move on that board; a `sit` row plays
 nothing. Actions ▸ `Play best move` plays the first row's move on the board
 last used. The right button
@@ -188,31 +193,29 @@ hand edit a comment where it was made, `{ +P +B }`. Lichess imports it by
 crazyhouse rules, where a piece taken stays in the taker's hand and an edit is
 only a comment, so its import stops at a drop of a piece from a hand edit.
 With two boards it is BPGN moves without a game's tags or clocks.
-**Engine switch** (or Actions ▸ `Engine on`) — Hivemind runs only while the switch
-is on and the mode is on screen. Each team searched gets one continuous search
-on its own engine process; the two processes share the mode's cores. The
-score, rows and node count follow the search about four times a second, the
-first within about a second of a position, and the search rests at 30,000
-nodes until the table changes. One board: the team on move on board 1 must
-move there unless the clock choice lets it sit, and the partner board stands as it is (the
-desktop Hivemind lacks the website's
-`tools/bughouse_web/patches/frozen-board.patch`, so its search may still weigh
-partner-board moves). The partner board is given the other team's turn, so
-that team can be searched, to 8,000 nodes, for the score's zero; until its
-first report the score is the shown team's own. Two boards: each team with a
-move is searched, and may sit as the clock choice says. A new position,
-board count or clock cuts the searches short. Finished searches are remembered for the
-session. Leaving the mode quits the engines. An engine build that cannot
-report while it searches is asked in passes of 800, 4,000 and 20,000 nodes on
-one process, the rows changing as each pass ends.
-**Actions menu** — `Engine on` / `Engine off`, `Play best move`, `New game` (start position, clock kept),
+**Engine switch** (or Actions ▸ `Engine on`) — HypeBeast runs only while the
+switch is on and the mode is on screen. One board: one engine process
+searches board 1 for its side to move, on that board alone (`Coordination`
+off) with three lines; the partner board is passed as the table has it.
+Two boards: each board with a legal move gets its own process, searching
+it for its side to move with the coordinator on, which first searches the
+partner board and then weighs what the moves send across. Each search runs
+for ten seconds (`go movetime 10000`), the score, rows and node count
+following it as it reports, then rests until the table changes. The
+processes share the machine's cores but one, and hold a 128 MB hash table
+each between searches. No clocks are sent, so the engine never sits by its
+clock rules. A new position, board count or switch cuts the searches short
+and drops their answers. Finished searches are remembered for the session
+(by table, moves played, board count and board). Leaving the mode quits the
+engines.
+**Actions menu** — `Engine on` / `Engine off`, `Play best move`, `New game` (start position),
 `Flip board(s)`, `Copy dual FEN`, `Paste FEN or dual FEN` (one board's FEN
 sets board 1 and starts board 2 afresh), `Copy moves`, `Paste moves`. A FEN
 is copied and saved as Lichess writes one, the hand a ninth rank after the
 board (`…/RNB1K2R/PNpnb w KQkq - 0 10`, a bare `/` when both hands are
 empty), and a dual FEN is two of them joined by `|`. A paste, a set-up box
 or a BPGN file takes that or the bracket form (`…/RNB1K2R[PNpnb] w …`);
-Hivemind is still sent brackets. Moves
+the engine is sent brackets. Moves
 are each board's line without its variations, as BPGN movetext in played order (`1A. e4 1B. d4 1a. e5`), after
 `[SetUpDualFEN "…"]` for a set-up start; a hand edit is a comment where it
 was made, `{ Hands edited on board 1: +2n }`, and pastes back. A game read
@@ -238,24 +241,39 @@ paste commands are refused here with
 
 ## Data
 
-- **Engine** — `hivemind` (~3.7 MB, release `engine-v0.2.0` of the
-  Zinkelburger/hivemind fork; Windows builds the same revision itself), ONNX
-  Runtime (~28 MB) and `hivemind.onnx` (~54 MB) from `assets/bughouse/`. They are installed into
-  `<support>/bughouse/` and checked against `manifest.json` (size, SHA-256)
-  before every launch; a mismatch is rewritten via a `.part` file. Windows:
-  the VC++ DLLs from `data/bughouse-runtime/` are copied the same way, the
-  engine's PATH is its folder plus System32, and exits `0xC0000135`,
-  `0xC000007B` and `0xC000001D` are explained. Options: half the machine's
-  cores, `Hash` 256, `BatchSize` 8. `--self-test-bughouse=<report.json>`
-  installs, starts and queries the engine as the mode does, and exits 0 on
-  success. `tools/windows_self_test.ps1` and
-  `.github/workflows/windows-check.yml` (pushes to `windows-check`, Server
+- **Engine** — `hypebeast-linux`, `hypebeast-windows.exe` or
+  `hypebeast-macos` (about 1.5 MB, a static build of the HypeBeast release
+  pinned in `tools/assets.lock.json`) and Fairy-Stockfish's bughouse net
+  `bughouse-cd8cceab93fe.nnue` (58 MB; the engine takes a net for the
+  variant its file name starts with) from `assets/bughouse/`. They are
+  installed into `<support>/bughouse/` and checked against `manifest.json`
+  (size, SHA-256) before every launch; a mismatch is rewritten via a `.part`
+  file. Hivemind, the engine the folder held before, is removed from it by
+  its files' names. Each process is started with `HypeBeast`, `EvalFile`
+  (the installed net) and `Hash` 128, then proves its net with a one-node
+  search: the engine names the net it evaluates with at a search's start,
+  prints `info string ERROR` and exits when the file does not load, and
+  falls back to a classical evaluation when it does not take the file for a
+  bughouse net; the last two are a start failure (`The bughouse engine did
+  not start: its net did not load.`). Each search sets `Threads`, `Seat`
+  (`Ablack`: the board and the colour to move there), `Team`, `Coordination`
+  and `MultiPV` when they change. Windows explains the loader exits
+  `0xC0000135`, `0xC000007B`, `0xC000001D` and `0xC0000005`.
+  `--self-test-bughouse=<report.json>` installs, starts and queries the
+  engine as the mode does, and exits 0 on success. `tools/windows_self_test.ps1`
+  and `.github/workflows/windows-check.yml` (pushes to `windows-check`, Server
   2022 and 2025) run it.
-- **Score** — Hivemind prints `180·tan(1.56·Q)`. The mode re-centres in Q with
-  offset `(q_A+B + q_C+D) / 2` from both teams' latest reports, or none when
-  one team was not searched or has not reported yet. The right to sit stays
-  in the score: a level opening reads about +2.3 when A + B may sit and
-  −2.3 when C + D may. It is not pawns.
+- **Score** — the engine scores in centipawns, or plies to mate, from the
+  side to move on the board searched. The mode shows pawns from A + B's
+  side: kept for A or B on move, sign changed for C or D. With the
+  coordinator, a compared move's score is its `S` (with what it sends the
+  partner board), else its `L` (its board alone), from `info string
+  hb_coord`. A search stopped mid-iteration prints a last line cut short;
+  the engine's closing `info depth … score …` names the depth it stands by,
+  and that depth's line is shown. HypeBeast v1.1.1 prints MultiPV lines
+  2–3 of a one-board search without searching them (`score cp 0`,
+  `seldepth` 1 or 2); while the main line is deeper than that they are
+  dropped, so that release shows one line on one board.
 - **BPGN** — a file is split into games where a tag follows movetext. Read
   from a game: `WhiteA`, `BlackA`, `WhiteB`, `BlackB` (A, C, D and B) and
   their `…Elo`, `TimeControl` (`120+0` or `120`, the seconds each clock

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:chess_auto_prep/app/environment.dart';
 import 'package:chess_auto_prep/chess/bughouse/hypebeast.dart';
-import 'package:chess_auto_prep/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/engines/engine.dart';
 import 'package:chess_auto_prep/engines/hypebeast_engine.dart';
 

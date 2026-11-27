@@ -11,7 +11,7 @@ ceremony. Read and update the affected section, not every document.
 | `docs/ARCHITECTURE.md` | Contracts every change follows: layers, ownership, writes, recovery, engines, UI |
 | `docs/DATA_INTEGRITY.md` | Every store, its format and its recovery files |
 | `docs/ALGORITHM.md` | Expectimax and tree-generation detail (app, C builder, MCP) |
-| `docs/HIVEMIND.md` | The bughouse engine end to end |
+| `docs/HIVEMIND.md` | Hivemind, the engine behind the bughouse MCP server and the arena |
 | `docs/ENGINE_TOURNAMENT.md`, `docs/OPPONENT_PREP.md`, `docs/BROADCAST_GAMES.md` | MCP and command-line tools for tournaments, players and broadcast collections |
 | `docs/SCID_FORMAT_FINDINGS.md`, `docs/MUTATION_TESTING.md` | Scid format reference; the mutation-testing harness |
 | `DESIGN.md`, `PRODUCT.md` | Visual and copy specification; product purpose and principles |

@@ -440,7 +440,7 @@ void main() {
     // tools/bughouse_arena/match.py write_bpgn: tags, then every move with
     // its clock, the engine's score and the game time in a comment.
     lab.pasteMoves(
-      '[Event "Hivemind Arena"]\n[Round "1"]\n'
+      '[Event "Bughouse Arena"]\n[Round "1"]\n'
       '[WhiteA "hb-v4"]\n[BlackA "hm-n1500"]\n'
       '[WhiteB "hm-n1500"]\n[BlackB "hb-v4"]\n'
       '[TimeControl "120"]\n[Opening "1e2e4 1d7d5"]\n'
@@ -464,7 +464,7 @@ void main() {
     expect(lab.game!.name(Seat.c), 'hm-n1500');
     expect(
       lab.movesText,
-      '[Event "Hivemind Arena"]\n[Round "1"]\n'
+      '[Event "Bughouse Arena"]\n[Round "1"]\n'
       '[WhiteA "hb-v4"]\n[BlackA "hm-n1500"]\n'
       '[WhiteB "hm-n1500"]\n[BlackB "hb-v4"]\n'
       '[TimeControl "120"]\n[Opening "1e2e4 1d7d5"]\n'

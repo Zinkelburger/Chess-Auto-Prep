@@ -1,6 +1,6 @@
-import 'package:chess_auto_prep/chess/bughouse/hivemind.dart';
+import 'package:chess_auto_prep/chess/bughouse/hypebeast.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
-import 'package:chess_auto_prep/engines/hivemind_engine.dart';
+import 'package:chess_auto_prep/engines/hypebeast_engine.dart';
 import 'package:chess_auto_prep/features/bughouse/board_moves.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_lab.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_screen.dart';
@@ -23,18 +23,18 @@ import '../../support/scripted_bughouse.dart';
 /// move tokens with their floating boards, and the right-button menus.
 void main() {
   late BughouseLab lab;
-  late ScriptedHivemind hivemind;
+  late ScriptedHypeBeast hypebeast;
   late LabEngine engine;
 
   // Made inside each test, in its fake time: a future made outside it
   // would complete where the test's pumps never reach.
   void build() {
     lab = BughouseLab();
-    hivemind = ScriptedHivemind();
+    hypebeast = ScriptedHypeBeast();
     engine = LabEngine(
       lab: lab,
-      passes: const [800],
-      startEngine: () async => HivemindStarted(hivemind),
+      cores: 4,
+      startEngine: () async => HypeBeastStarted(hypebeast),
     );
     addTearDown(() {
       engine.dispose();
@@ -56,16 +56,22 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// [team] answers with [pv]; the other team as the script does.
+  /// [board]'s search answers with [pv]; the other board as the script
+  /// does.
   Future<void> engineSays(
     WidgetTester tester,
-    List<JointMove> pv, {
-    Team team = Team.ab,
+    List<String> pv, {
+    BoardNumber board = BoardNumber.one,
   }) async {
-    hivemind.answer = (question) => question.team == team
-        ? HivemindSearched(
-            best: pv.first,
-            lines: [JointLine(rank: 1, cp: -200, nodes: 800, pv: pv)],
+    hypebeast.answer = (question) => question.board == board
+        ? HypeBeastSearched(
+            decision: SeatDecision(pv.first),
+            report: SeatReport(
+              lines: [
+                SeatLine(multipv: 1, depth: 12, cp: -200, nodes: 800, pv: pv),
+              ],
+              nodes: 800,
+            ),
           )
         : firstMoves(question);
     engine
@@ -378,11 +384,7 @@ void main() {
         'plays the line up to it; the row never changes size', (tester) async {
       build();
       await pump(tester);
-      await engineSays(tester, const [
-        JointMove('e2e4', null),
-        JointMove('e7e5', null),
-        JointMove('g1f3', null),
-      ]);
+      await engineSays(tester, const ['e2e4', 'e7e5', 'g1f3']);
       expect(find.text('1. e4'), findsOneWidget);
       // One board's moves are one game: nothing parts them.
       expect(find.text(' · '), findsNothing);
@@ -415,10 +417,7 @@ void main() {
         for (final e in find.byType(BoardMoves).evaluate()) e.widget,
       ];
       expect(before, hasLength(2));
-      await engineSays(tester, const [
-        JointMove('e2e4', null),
-        JointMove('e7e5', null),
-      ]);
+      await engineSays(tester, const ['e2e4', 'e7e5']);
       expect(engine.on, isTrue);
       final after = [
         for (final e in find.byType(BoardMoves).evaluate()) e.widget,
@@ -429,23 +428,18 @@ void main() {
     });
 
     testWidgets('two boards: each board\'s lines are under it; a move '
-        'floats its board and plays both boards up to it', (tester) async {
+        'floats its board and plays its board up to it', (tester) async {
       build();
       lab.showBoards(LabBoards.two);
       await pump(tester);
-      // C + D: D d4 on board 2; A e4, C e5 on board 1; then B d5.
-      await engineSays(tester, team: Team.cd, const [
-        JointMove(null, 'd2d4'),
-        JointMove('e2e4', null),
-        JointMove('e7e5', null),
-        JointMove(null, 'd7d5'),
-      ]);
+      // D's d4 on board 2, then B's d5.
+      await engineSays(tester, board: BoardNumber.two, const ['d2d4', 'd7d5']);
       final board2 = tester.getRect(find.byType(Chessboard).at(1));
       final d4 = find.text('1. d4');
       expect(tester.getTopLeft(d4).dx, greaterThanOrEqualTo(board2.left));
       expect(tester.getTopLeft(d4).dy, greaterThan(board2.bottom));
-      // Board 2's line shows board 2's moves only.
-      expect(find.text('e5'), findsNothing);
+      // Board 1's rows are its own: the script's first moves there.
+      expect(find.text('1. Na3'), findsOneWidget);
       final pointer = await mouse(tester);
       await pointer.moveTo(tester.getCenter(find.text('d5')));
       await tester.pump(previewDelay * 2);
@@ -458,7 +452,8 @@ void main() {
       expect(preview.orientation, Side.black);
       await tester.tap(find.text('d5'));
       await tester.pumpAndSettle();
-      expect(lab.line.moves.map((m) => m.san), ['d4', 'e4', 'e5', 'd5']);
+      expect(lab.line.moves.map((m) => m.san), ['d4', 'd5']);
+      expect(lab.line.of(BoardNumber.one), isEmpty);
     });
 
     testWidgets('two boards: both move lists are in the panel, board 1\'s '
@@ -490,7 +485,7 @@ void main() {
       build();
       lab.showBoards(LabBoards.two);
       await pump(tester);
-      await engineSays(tester, team: Team.cd, const [JointMove(null, 'g1f3')]);
+      await engineSays(tester, board: BoardNumber.two, const ['g1f3']);
       final arrows = tester.widgetList<BoardArrows>(find.byType(BoardArrows));
       expect(arrows.last.engine.first.to, Square.f3);
       expect(arrows.last.engine.first.colour, engineBestArrow);
@@ -546,10 +541,7 @@ void main() {
       build();
       final copied = copies(tester);
       await pump(tester);
-      await engineSays(tester, const [
-        JointMove('e2e4', null),
-        JointMove('e7e5', null),
-      ]);
+      await engineSays(tester, const ['e2e4', 'e7e5']);
       await rightClick(tester, find.text('1. e4'));
       await tester.tap(find.text('Copy line PGN'));
       await tester.pumpAndSettle();

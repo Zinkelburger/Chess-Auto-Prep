@@ -138,8 +138,8 @@ copy diagnostics. Try again.` It reads no account preferences or chess data
 and drops recognisable credential lines.
 
 **View licences** — Flutter's licence page with every Dart package plus the
-bundled components in `lib/app/bundled_licences.dart` (Stockfish, Hivemind,
-Maia 3, ONNX Runtime and its notices, Inter, Source Code Pro, Noto Sans
+bundled components in `lib/app/bundled_licences.dart` (Stockfish, HypeBeast
+and its bughouse net, Maia 3, ONNX Runtime and its notices, Inter, Source Code Pro, Noto Sans
 Symbols 2, cburnett pieces, lichess opening names). A licence file that cannot
 be read is logged and left out.
 
