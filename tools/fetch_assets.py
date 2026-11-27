@@ -74,10 +74,12 @@ import re
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
+import zlib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -339,17 +341,48 @@ def save_lock(lock: dict) -> None:
     LOCKFILE.write_text(json.dumps(lock, indent=2, sort_keys=True) + "\n")
 
 
+# A temporary name older than this was left by a fetch that died.
+STALE_TEMP_SECONDS = 3600
+
+
 def write_replacing(path: Path, data: bytes) -> None:
     """Write `path` through a temporary name and rename it into place.
 
     The rename also matters in agent worktrees, whose ignored assets are
     symlinks into the main checkout: writing *through* one would change the
     main checkout's file, while a rename replaces only the link.
+
+    The temporary name is this process's own (`.<name>.<random>.tmp`, which
+    git ignores), so two fetches never write one file, and one that fails is
+    removed. Ones an hour old, left by a fetch that died, are swept first:
+    the folders they sit in are bundled into the app whole.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_bytes(data)
-    tmp.replace(path)
+    sweep_stale_temps(path)
+    fd, name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    tmp = Path(name)
+    try:
+        with os.fdopen(fd, "wb") as out:
+            out.write(data)
+        tmp.replace(path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+def sweep_stale_temps(path: Path, now: float | None = None) -> list[Path]:
+    """Remove the temporary copies of `path` older than STALE_TEMP_SECONDS
+    (and the fixed `<name>.tmp` older versions wrote); returns them."""
+    now = time.time() if now is None else now
+    swept = []
+    for old in [*path.parent.glob(f".{path.name}.*.tmp"), path.with_name(path.name + ".tmp")]:
+        try:
+            if old.is_file() and now - old.stat().st_mtime > STALE_TEMP_SECONDS:
+                old.unlink()
+                swept.append(old)
+        except OSError:
+            continue
+    return swept
 
 
 def _stream(url: str, dest: Path) -> str:
@@ -790,26 +823,46 @@ def download_from_mirror(base: str, dest: Path, td: Path) -> None:
     print(f"  downloading {base}net.json")
     listing = td / "net.json"
     _stream(f"{base}net.json", listing)
-    try:
-        manifest = json.loads(listing.read_text())
-        chunks = manifest["chunks"]
-    except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise DownloadError(f"{base}net.json is not a net manifest") from exc
-    if manifest.get("name") != BUGHOUSE_NETWORK["name"]:
-        raise DownloadError(f"{base}net.json describes {manifest.get('name')!r}")
+    chunks = read_mirror_listing(listing.read_bytes(), base)
     packed = bytearray()
-    for chunk in chunks:
+    for name, sha in chunks:
         part = td / "part.bin"
-        print(f"  downloading {base}{chunk['file']}")
-        _stream(f"{base}{chunk['file']}", part)
+        print(f"  downloading {base}{name}")
+        _stream(f"{base}{name}", part)
         data = part.read_bytes()
-        if hashlib.sha256(data).hexdigest() != chunk["sha256"]:
-            raise DownloadError(f"{chunk['file']} does not match {base}net.json")
+        if hashlib.sha256(data).hexdigest() != sha:
+            raise DownloadError(f"{name} does not match {base}net.json")
         packed += data
     try:
         dest.write_bytes(gzip.decompress(bytes(packed)))
-    except (OSError, EOFError) as exc:
+    except (OSError, EOFError, zlib.error) as exc:
         raise DownloadError(f"the parts at {base} are not one gzip stream") from exc
+
+
+def read_mirror_listing(raw: bytes, base: str) -> list[tuple[str, str]]:
+    """The parts `net.json` lists, as (file name, sha256), or DownloadError
+    for anything that is not the pinned net's listing: not JSON, another
+    net, or a part without a plain file name and a hash."""
+    try:
+        manifest = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise DownloadError(f"{base}net.json is not a net manifest") from exc
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("chunks"), list):
+        raise DownloadError(f"{base}net.json is not a net manifest")
+    if manifest.get("name") != BUGHOUSE_NETWORK["name"]:
+        raise DownloadError(f"{base}net.json describes {manifest.get('name')!r}")
+    chunks = []
+    for chunk in manifest["chunks"]:
+        name = chunk.get("file") if isinstance(chunk, dict) else None
+        sha = chunk.get("sha256") if isinstance(chunk, dict) else None
+        if (not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9._-]+", name)
+                or name.startswith(".")
+                or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{64}", sha)):
+            raise DownloadError(f"{base}net.json lists a part it does not name or hash")
+        chunks.append((name, sha))
+    if not chunks:
+        raise DownloadError(f"{base}net.json lists no parts")
+    return chunks
 
 
 def fetch_bughouse_network(lock: dict, force: bool) -> None:

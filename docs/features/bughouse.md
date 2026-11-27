@@ -86,13 +86,21 @@ panel on the right: 440–640 px beside board 1 alone, 440–480 px beside both.
   after it, up to eight (`1. d4 d5 2. Nf3`). With one board the rows are the
   engine's three best lines of board 1, each whole. With two, while the
   engine searches, a board has one row, its main line; once the search ends,
-  the engine's decision comes first (with the engine's own score and line
-  for it when its coordinator reports one, else as the main line when it
-  is the main line's move), then the other moves its coordinator compared
-  across the boards, best first, each a row of that one move with the
-  coordinator's score; a move it compared without scoring shows a muted
-  `—`. A decision
-  to wait there is a row of its own, a muted `sit` without a score. Each
+  the engine's decision comes first, then the other moves its coordinator
+  compared across the boards, best first, each a row of that one move (the
+  main line for the main line's move); a move it compared without scoring
+  shows a muted `—`. A board's rows share one scale: when the coordinator
+  scored the decision, every row has the coordinator's score, the
+  decision's too; otherwise the decision has the engine's own score and
+  line for it when its coordinator reports one, else the main line's when
+  it is the main line's move. The coordinator's scores stop at ±20 pawns:
+  one there reads `>+20` or `<-20`, unless the move's line knows a mate,
+  which reads as the mate. A decision to wait there is a row of its own,
+  first, a muted `sit` without a score; on hover it says why
+  (`HypeBeast would wait here: A is mated whatever it plays.`, `…: every
+  move hands C + D a piece that mates.`, `…: A’s partner B has a forced
+  mate.`, `…: A’s partner B is about to send a piece A needs.`, or
+  `HypeBeast would wait here.`). Each
   move is its own token, as in the workspace's engine lines. Rows are 28 px,
   clip what does not fit, and keep their place and size whether the engine
   is on or off or a move is hovered; an empty row is blank. Each row's score
@@ -208,11 +216,19 @@ partner board and then weighs what the moves send across. Each search runs
 for ten seconds (`go movetime 10000`), the score, rows and node count
 following it as it reports, then rests until the table changes. The
 processes share the machine's cores but one, and hold a 128 MB hash table
-each between searches. No clocks are sent, so the engine never sits by its
-clock rules. A new position, board count or switch cuts the searches short
-and drops their answers. Finished searches are remembered for the session
-(by table, moves played, board count and board). Leaving the mode quits the
-engines.
+each between searches. With two boards and a clock beside every hand (a
+game read from a BPGN), each search is also sent the four clocks the hands
+show, so the engine may sit by its rules for sitting, which need all four;
+otherwise none are sent and it never sits by them. A process that was sent
+clocks is quit and a fresh one started before a search without them, since
+the engine cannot be told to forget its clocks. A new position, board
+count or switch cuts the searches short and drops their answers. A search
+in which the engine reports an error (`info string hb_error`, as for a move
+of the game it cannot play), or that sits without searching where there are
+moves, turns the switch off and says so (`Analysis failed: The bughouse
+engine could not play the moves that led here.`). Finished searches are
+remembered for the session (by table, moves played, board count, board and
+clocks). Leaving the mode quits the engines.
 **Actions menu** — `Engine on` / `Engine off`, `Play best move`, `New game` (start position),
 `Flip board(s)`, `Copy dual FEN`, `Paste FEN or dual FEN` (one board's FEN
 sets board 1 and starts board 2 afresh), `Copy moves`, `Paste moves`. A FEN
@@ -254,15 +270,23 @@ paste commands are refused here with
   installed into `<support>/bughouse/` and checked against `manifest.json`
   (size, SHA-256) before every launch; a mismatch is rewritten via a `.part`
   file. Hivemind, the engine the folder held before, is removed from it by
-  its files' names. Each process is started with `HypeBeast`, `EvalFile`
-  (the installed net) and `Hash` 128, then proves its net with a one-node
+  its files' names. Each process is started in that folder with
+  `HypeBeast`, `EvalFile` (the net's file name there, not its whole path:
+  UCI's `setoption` runs spaces together, and a Windows build may open a
+  file only by a narrow path) and `Hash` 128, then proves its net with a
+  one-node
   search: the engine names the net it evaluates with at a search's start,
   prints `info string ERROR` and exits when the file does not load, and
   falls back to a classical evaluation when it does not take the file for a
   bughouse net; the last two are a start failure (`The bughouse engine did
   not start: its net did not load.`). Each search sets `Threads`, `Seat`
   (`Ablack`: the board and the colour to move there), `Team`, `Coordination`
-  and `MultiPV` when they change. Windows explains the loader exits
+  and `MultiPV` when they change. A search with clocks first sends
+  `ucinewgame` (a hold, a wait and their timer belong to one turn of one
+  game; it also empties the hash table, 30–140 ms with 128 MB), then
+  `Clocks` (milliseconds of A, C, D and B: board 1's White and Black, then
+  board 2's) and `TimeAdvantage`: whether the seat's team is ahead, A + B
+  when A has more time than D, C + D when C has more than B. Windows explains the loader exits
   `0xC0000135`, `0xC000007B`, `0xC000001D` and `0xC0000005`.
   `--self-test-bughouse=<report.json>` installs, starts and queries the
   engine as the mode does, and exits 0 on success. `tools/windows_self_test.ps1`
@@ -276,10 +300,15 @@ paste commands are refused here with
   hb_coord`; the decision's own score and line are `hb_coord`'s
   `decision_line` (engine versions after v1.1.2; without it the decision is
   scored as above). A board's main search score is `hb_summary`'s
-  `main_score_cp`, a mate written as 100000 less its plies. One board's rows are the last block of lines all searched at
-  line 1's depth (a line one or more depths behind is from an earlier
-  iteration), sorted by score; a stopped search's last block, which the
-  unfinished iteration left uneven, gives way to the block before it. The
+  `main_score_cp`, a mate written as 100000 less its plies. One board's
+  rows are the last block of lines all searched at line 1's depth (a line
+  one or more depths behind is from an earlier iteration), sorted by score;
+  a stopped search's last block, which the unfinished iteration left
+  uneven, gives way to the block before it. A search that ended on time
+  can still print a level last block with a line cut short under a
+  provisional score; its closing line without a pv names the depth it
+  completed, and the rows (and two boards' main line) are then the last
+  level block at that depth or less. The
   bundle check (`tools/test_bughouse_engine.py run`) keeps out a build that
   does not search every line.
 - **BPGN** — a file is split into games where a tag follows movetext. Read

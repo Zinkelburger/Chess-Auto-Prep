@@ -228,6 +228,57 @@ void main() {
       expect(report.lines.map((l) => l.depth), [2, 2, 2]);
     });
 
+    test('a search ended on time: a level last block with a line cut short '
+        'gives way, at the closing line, to the depth it completed', () {
+      // v1.1.2, seat Ablack, MultiPV 3, two seconds: line 3 of depth 14 is
+      // cut to two moves with a provisional score.
+      const lines = [
+        'info depth 13 seldepth 17 multipv 1 score cp -113 nodes 400736 '
+            'pv e8f7 d1f3 f7e8 c4d5',
+        'info depth 13 seldepth 17 multipv 2 score cp -137 nodes 400736 '
+            'pv d8h4 c4d5 c8g4 d1e1',
+        'info depth 13 seldepth 19 multipv 3 score cp -315 nodes 400736 '
+            'pv d8d7 f7h8 d5f4 e1g1',
+        'info depth 14 seldepth 23 multipv 1 score cp -115 nodes 568025 '
+            'pv e8f7 d1f3 f7e8 c4d5',
+        'info depth 14 seldepth 17 multipv 2 score cp -138 nodes 568025 '
+            'pv d8h4 c4d5 c8g4 d1e1',
+        'info depth 14 seldepth 21 multipv 3 score cp -323 nodes 568025 '
+            'pv d8d7 f7h8',
+        'info depth 13 score cp -113 nodes 568025 time 2007',
+      ];
+      // Still searching: the last level block.
+      expect(read(lines.take(6)).lines.map((l) => (l.depth, l.cp)), [
+        (14, -115),
+        (14, -138),
+        (14, -323),
+      ]);
+      final closed = read(lines);
+      expect(closed.lines.map((l) => (l.depth, l.cp, l.pv.length)), [
+        (13, -113, 4),
+        (13, -137, 4),
+        (13, -315, 4),
+      ]);
+      expect(closed.nodes, 568025);
+      // A closing line at the depth shown, or deeper, keeps it.
+      expect(
+        read([
+          ...lines.take(6),
+          'info depth 14 score cp -115 nodes 9',
+        ]).lines.map((l) => l.depth),
+        [14, 14, 14],
+      );
+    });
+
+    test('an hb_error is kept for the search\'s answer', () {
+      final report = read([
+        'info string hb_error position illegal move 1e2e5',
+        'info depth 0 nodes 0 time 1',
+      ]);
+      expect(report.error, 'position illegal move 1e2e5');
+      expect(read(_coordinated).error, isNull);
+    });
+
     test('a block with a line behind line 1\'s depth is not shown', () {
       final report = read([
         'info depth 8 seldepth 9 multipv 1 score cp 30 nodes 5 pv e2e4',
@@ -279,10 +330,13 @@ void main() {
       'coordinated: each main line, the report and the whole search size',
       () {
         final report = read(_coordinated);
-        expect(report.main!.depth, 18);
-        expect(report.main!.pv, ['e7e6']);
+        // The closing line says depth 17 was the last one completed.
+        expect(report.main!.depth, 17);
+        expect(report.main!.pv, ['e7e6', 'b1c3', 'e6d5', 'd2d4', 'g8f6']);
         expect(report.coordination!.candidates, hasLength(5));
         expect(report.nodes, 1126201);
+        // While it still searched, the depth-18 line, cut to one move.
+        expect(read(_coordinated.take(3)).main!.depth, 18);
       },
     );
 
@@ -365,8 +419,10 @@ void main() {
         decision: const SeatDecision('e7e6'),
         count: 5,
       );
+      // One scale: the coordinator's S for every row, the decision's too,
+      // which keeps the main line's moves.
       expect(rows.map((r) => (r.move, r.cp, r.pv.length)), [
-        ('e7e6', 292, 1),
+        ('e7e6', 176, 5),
         ('g8f6', 157, 1),
         ('c7c6', 98, 1),
         ('d8d5', 66, 1),
@@ -384,7 +440,8 @@ void main() {
     });
 
     test('a decision other than the main line\'s move takes its score from '
-        'the coordinator; the main line follows as a candidate', () {
+        'the coordinator; the main line follows as a candidate, on the same '
+        'scale', () {
       final rows = seatRows(
         read(_coordinated),
         coordinated: true,
@@ -393,7 +450,7 @@ void main() {
       );
       expect(rows.map((r) => (r.move, r.cp, r.pv.length)), [
         ('g8f6', 157, 1),
-        ('e7e6', 292, 1),
+        ('e7e6', 176, 5),
         ('c7c6', 98, 1),
       ]);
     });
@@ -426,9 +483,11 @@ void main() {
         decision: const SeatDecision('g8f6'),
         count: 3,
       );
+      // g8f6, unscored by the coordinator, has the engine's own score;
+      // e7e6 the coordinator's.
       expect(rows.map((r) => (r.move, r.cp, r.pv.join(' '))), [
         ('g8f6', 171, 'g8f6 b1c3 e7e6'),
-        ('e7e6', 292, 'e7e6'),
+        ('e7e6', 176, 'e7e6'),
       ]);
       final kept = read([
         ..._coordinated.take(4),
@@ -466,6 +525,54 @@ void main() {
         count: 3,
       );
       expect(rows.single.move, isNull);
+    });
+  });
+
+  group('the coordinator\'s clipped scores', () {
+    test('a score at its limit is a bound, on the row and in A + B\'s '
+        'score', () {
+      final report = read([
+        'info depth 9 seldepth 9 multipv 1 score mate 3 nodes 9 pv d1h5 g7g6',
+        'info string hb_coord {"reason":"kept_main","candidates":['
+            '{"move":"d1h5","L":2000,"S":2000},{"move":"f1c4","L":-2000}]}',
+      ]);
+      final rows = seatRows(
+        report,
+        coordinated: true,
+        decision: const SeatDecision('d1h5'),
+        count: 3,
+      );
+      // The main line's mate says more than the coordinator's limit.
+      expect(rows.map((r) => (r.move, r.cp, r.mate, r.clipped)), [
+        ('d1h5', null, 3, false),
+        ('f1c4', -2000, null, true),
+      ]);
+      expect(
+        TableScore.forSeat(cp: 2000, team: Team.ab, clipped: true).text,
+        '>+20',
+      );
+      expect(
+        TableScore.forSeat(cp: 2000, team: Team.cd, clipped: true).text,
+        '<-20',
+      );
+      // A mate stays a mate.
+      expect(
+        TableScore.forSeat(mate: 3, team: Team.ab, clipped: true).text,
+        '#3',
+      );
+    });
+
+    test('a sum with a bound in it is a bound when they lean one way', () {
+      const bound = TableScore(cp: 2000, clipped: true);
+      expect(TableScore.sum(const [bound, TableScore(cp: -350)]).text, '>+16');
+      expect(
+        TableScore.sum(const [bound, TableScore(cp: -2000, clipped: true)]),
+        const TableScore(cp: 0),
+      );
+      expect(
+        TableScore.sum(const [bound, TableScore(cp: -2500)]).text,
+        '-5.00',
+      );
     });
   });
 
@@ -519,7 +626,7 @@ void main() {
 
   group('arrow shifts', () {
     SeatRow row(int? cp, {int? mate}) =>
-        (move: 'e2e4', cp: cp, mate: mate, pv: const ['e2e4']);
+        (move: 'e2e4', cp: cp, mate: mate, pv: const ['e2e4'], clipped: false);
 
     test('half the difference in lila\'s winning chances', () {
       final shifts = rowShifts([row(100), row(100), row(-100), row(null)]);

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:chess_auto_prep/chess/bughouse/bpgn_moves.dart';
 import 'package:chess_auto_prep/chess/bughouse/hypebeast.dart';
 import 'package:chess_auto_prep/chess/bughouse/pv_steps.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
@@ -17,10 +18,12 @@ import 'package:path/path.dart' as p;
 final _env = Platform.environment;
 final _bin = _env['HYPEBEAST_BIN'] ?? '';
 final _net = _env['HYPEBEAST_NET'] ?? '';
+
+/// Started in the net's folder, as the install starts it in its own.
 final HypeBeastFiles _files = (
   executable: p.absolute(_bin),
   net: p.absolute(_net),
-  directory: p.dirname(p.absolute(_bin)),
+  directory: p.dirname(p.absolute(_net)),
 );
 final Object _skip = _bin.isEmpty || _net.isEmpty
     ? 'set HYPEBEAST_BIN and HYPEBEAST_NET to run the real engine'
@@ -57,12 +60,14 @@ HypeBeastQuestion _ask(
   int lines = 3,
   ({TablePosition root, List<String> moves})? played,
   HypeBeastBudget budget = const TimeBudget(Duration(milliseconds: 1500)),
+  TableClocks? clocks,
 }) => (
   position: position,
   played: played,
   board: board,
   lines: lines,
   coordination: coordination,
+  clocks: clocks,
   threads: 2,
   budget: budget,
 );
@@ -74,7 +79,8 @@ void main() {
       final engines = EngineSupervisor();
       addTearDown(engines.dispose);
       final engine = await _start(engines);
-      expect(engine.provenance['net'], _files.net);
+      // Told the net by its name in the folder it runs in.
+      expect(engine.provenance['net'], p.basename(_files.net));
       final reports = <SeatReport>[];
       final answer =
           await engine.search(
@@ -159,6 +165,72 @@ void main() {
   );
 
   test(
+    'with all four clocks the engine sits where the hold race set says it '
+    'should, and says why; without them it moves',
+    () async {
+      // HypeBeast's openings/hold_race_set.json item 4: A is mated in one
+      // whatever it plays, its partner B is not lost, and A leads D on the
+      // clock. Its moves and clocks as a BPGN.
+      final read =
+          readTableLineText(
+                File(
+                  'test/fixtures/bughouse/hypebeast_hold.bpgn',
+                ).readAsStringSync(),
+              )
+              as PastedLine;
+      final line = read.line;
+      final table = (line.replay() as LineReplayed).position;
+      final clocks = TableClocks(
+        a: line.clock(Seat.a)!,
+        b: line.clock(Seat.b)!,
+        c: line.clock(Seat.c)!,
+        d: line.clock(Seat.d)!,
+      );
+      expect(clocks.option, '78226,73129,73259,78096');
+      expect(table.mover(BoardNumber.one), Seat.a);
+      final engines = EngineSupervisor();
+      addTearDown(engines.dispose);
+      final engine = await _start(engines);
+      final played = (root: line.root, moves: line.engineMoves!);
+      final sat =
+          await engine.search(
+                _ask(
+                  table,
+                  BoardNumber.one,
+                  coordination: true,
+                  played: played,
+                  clocks: clocks,
+                  budget: const TimeBudget(Duration(seconds: 4)),
+                ),
+              )
+              as HypeBeastSearched;
+      expect(sat.decision!.sits, isTrue);
+      expect(sat.report.reason, 'hold_mated');
+      expect(sat.report.mainScore?.mate, -1);
+      expect(sat.report.summary['wait'], isNot('skip_no_clocks'));
+      expect(engine.clocked, isTrue);
+
+      // A fresh process, never given clocks, plays its longest defence.
+      final fresh = await _start(engines);
+      final moved =
+          await fresh.search(
+                _ask(
+                  table,
+                  BoardNumber.one,
+                  coordination: true,
+                  played: played,
+                  budget: const TimeBudget(Duration(seconds: 2)),
+                ),
+              )
+              as HypeBeastSearched;
+      expect(moved.decision!.sits, isFalse);
+      expect(moved.report.summary['wait'], 'skip_no_clocks');
+    },
+    skip: _skip,
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+
+  test(
     'a promoted piece and a full hand in the table\'s FEN are read',
     () async {
       final engines = EngineSupervisor();
@@ -186,19 +258,61 @@ void main() {
   );
 
   test(
+    'installed in a folder whose path has two spaces running and a letter '
+    'outside ASCII, the engine still loads its net',
+    () async {
+      final root = await Directory.systemTemp.createTemp('hypebeast-path');
+      addTearDown(() => root.delete(recursive: true));
+      final folder = Directory(p.join(root.path, 'Chess  Auto Prép', 'bug'))
+        ..createSync(recursive: true);
+      final executable = File(
+        _files.executable,
+      ).copySync(p.join(folder.path, p.basename(_files.executable)));
+      Link(p.join(folder.path, HypeBeastInstall.net)).createSync(_files.net);
+      final engines = EngineSupervisor();
+      addTearDown(engines.dispose);
+      final start = await engines.startHypeBeast((
+        executable: executable.path,
+        net: p.join(folder.path, HypeBeastInstall.net),
+        directory: folder.path,
+      ));
+      if (start case HypeBeastStartFailed(:final reason)) fail(reason);
+      final engine = (start as HypeBeastStarted).engine;
+      expect(engine.provenance['net'], HypeBeastInstall.net);
+      final answer =
+          await engine.search(
+                _ask(
+                  TablePosition.initial,
+                  BoardNumber.one,
+                  budget: const NodeBudget(5000),
+                ),
+              )
+              as HypeBeastSearched;
+      expect(answer.decision?.move, isNotNull);
+    },
+    skip: _skip,
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+
+  test(
     'a net that does not load is a start failure, not a weaker engine',
     () async {
       final dir = await Directory.systemTemp.createTemp('hypebeast-net');
       addTearDown(() => dir.delete(recursive: true));
       final engines = EngineSupervisor();
       addTearDown(engines.dispose);
+      // Installed together, as the app installs them: the engine also looks
+      // for a net beside itself, which must be the damaged one.
+      final executable = File(
+        _files.executable,
+      ).copySync(p.join(dir.path, p.basename(_files.executable))).path;
       // A damaged net with the right name: the engine says so and exits.
       final damaged = File(p.join(dir.path, HypeBeastInstall.net))
         ..writeAsBytesSync(List.filled(4096, 7));
       final broken = await engines.startHypeBeast((
-        executable: _files.executable,
+        executable: executable,
         net: damaged.path,
-        directory: _files.directory,
+        directory: dir.path,
       ));
       expect(
         (broken as HypeBeastStartFailed).reason,
@@ -208,9 +322,9 @@ void main() {
       final renamed = Link(p.join(dir.path, 'other.nnue'))
         ..createSync(_files.net);
       final classical = await engines.startHypeBeast((
-        executable: _files.executable,
+        executable: executable,
         net: renamed.path,
-        directory: _files.directory,
+        directory: dir.path,
       ));
       expect(
         (classical as HypeBeastStartFailed).reason,

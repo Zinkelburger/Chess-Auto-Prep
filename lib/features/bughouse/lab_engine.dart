@@ -63,12 +63,14 @@ final class LinesStopped extends LabLines {
 }
 
 /// One of a board's rows: the move as UCI — null when the player would
-/// rather sit there — A + B's score for it (empty when the engine did not
-/// score it), that board's line from [table], the table it was searched
-/// on, and how far it falls behind the board's first row, 0 to 1, for the
-/// width of its arrow (1 for a row without a score).
+/// rather sit there, with the engine's [reason] for it (`hold_mated`, …;
+/// null on a move's row) — A + B's score for it (empty when the engine did
+/// not score it), that board's line from [table], the table it was
+/// searched on, and how far it falls behind the board's first row, 0 to 1,
+/// for the width of its arrow (1 for a row without a score).
 typedef EngineRow = ({
   String? move,
+  String? reason,
   TableScore score,
   List<String> pv,
   TablePosition table,
@@ -89,7 +91,10 @@ const labLineCount = 3;
 /// Two boards: each board with a legal move is searched for its side to
 /// move, on its own engine process, with the coordinator looking across to
 /// the partner board. The game that led to the table is sent with it, so
-/// the engine knows a position that came up before.
+/// the engine knows a position that came up before, and so are the four
+/// clocks when the table on screen shows all of them, so the engine may
+/// sit. A process that was given clocks is replaced before a search
+/// without them: the engine cannot be told to forget its clocks.
 ///
 /// Each search runs for [labSearchTime], shown as it reports, and rests
 /// until the table changes. The engine processes share the machine's cores
@@ -120,7 +125,7 @@ final class LabEngine extends ChangeNotifier {
   bool _disposed = false;
 
   /// What the lines were last asked for; a hover or a flip changes nothing.
-  (TablePosition, LabBoards)? _asked;
+  _Asked? _asked;
 
   /// The engine's runs: everything that makes its work stale overtakes
   /// the one under way.
@@ -194,7 +199,7 @@ final class LabEngine extends ChangeNotifier {
 
   void _labChanged() {
     if (!_on || !_open) return;
-    final asked = (lab.position, lab.boards);
+    final asked = (lab.position, lab.boards, _clocks());
     if (asked == _asked) return;
     _asked = asked;
     _cancelRuns();
@@ -204,12 +209,21 @@ final class LabEngine extends ChangeNotifier {
     unawaited(_analyse(run, asked));
   }
 
-  Future<void> _analyse(Ticket run, (TablePosition, LabBoards) asked) async {
-    final (position, boards) = asked;
+  /// The four clocks the boards show, for the engine to sit by: with two
+  /// boards, when every seat has one.
+  TableClocks? _clocks() {
+    if (lab.single) return null;
+    final [a, b, c, d] = [for (final seat in Seat.values) lab.timeLeft(seat)];
+    if (a == null || b == null || c == null || d == null) return null;
+    return TableClocks(a: a, b: b, c: c, d: d);
+  }
+
+  Future<void> _analyse(Ticket run, _Asked asked) async {
+    final (position, boards, clocks) = asked;
     bool wanted() => _on && _open && run.current;
     final questions = boards == LabBoards.one
         ? _oneBoard(position)
-        : _twoBoards(position);
+        : _twoBoards(position, clocks);
     if (questions.isEmpty) {
       _set(LinesOn(position: position, boards: boards, thinking: false));
       return;
@@ -288,11 +302,17 @@ final class LabEngine extends ChangeNotifier {
     Stopwatch clock,
     void Function(_Found found) update,
   ) async {
-    final engine = await _acquire(seat);
+    final start = await _acquire(seat, clocked: question.clocks != null);
     if (!wanted()) return;
-    if (engine == null) {
-      _stopped(_startFailure ?? 'The bughouse engine did not start.');
-      return;
+    final HypeBeast engine;
+    switch (start) {
+      case HypeBeastStarted(engine: final started):
+        engine = started;
+      case HypeBeastStartFailed(:final reason):
+        _stopped(reason);
+        return;
+      case null:
+        return;
     }
     await _busy[seat];
     if (!wanted()) return;
@@ -322,11 +342,13 @@ final class LabEngine extends ChangeNotifier {
         played: _played(position),
         board: BoardNumber.one,
         coordinated: false,
+        clocks: null,
       ),
   ];
 
-  /// Each board with a move to make, for its side to move, coordinated.
-  List<_Question> _twoBoards(TablePosition position) => [
+  /// Each board with a move to make, for its side to move, coordinated,
+  /// with the table's [clocks] when it has all four.
+  List<_Question> _twoBoards(TablePosition position, TableClocks? clocks) => [
     for (final board in BoardNumber.values)
       if (position.legalMoves(board).isNotEmpty)
         (
@@ -334,6 +356,7 @@ final class LabEngine extends ChangeNotifier {
           played: _played(position),
           board: board,
           coordinated: true,
+          clocks: clocks,
         ),
   ];
 
@@ -350,6 +373,7 @@ final class LabEngine extends ChangeNotifier {
     board: question.board,
     lines: question.coordinated ? 1 : labLineCount,
     coordination: question.coordinated,
+    clocks: question.clocks,
     threads: threads,
     budget: TimeBudget(searchTime),
   );
@@ -365,6 +389,7 @@ final class LabEngine extends ChangeNotifier {
     question.played?.moves.join(' '),
     boards,
     question.board,
+    question.clocks?.option,
   );
 
   /// [found]'s rows for [question]'s board, A + B's side.
@@ -385,7 +410,13 @@ final class LabEngine extends ChangeNotifier {
       for (final (i, row) in rows.indexed)
         (
           move: row.move,
-          score: TableScore.forSeat(cp: row.cp, mate: row.mate, team: team),
+          reason: row.move == null ? found.report.reason : null,
+          score: TableScore.forSeat(
+            cp: row.cp,
+            mate: row.mate,
+            team: team,
+            clipped: row.clipped,
+          ),
           pv: row.pv,
           table: question.table,
           shift: shifts[i],
@@ -428,20 +459,33 @@ final class LabEngine extends ChangeNotifier {
     if (rowsOn(board).firstOrNull?.move case final uci?) lab.play(board, uci);
   }
 
-  String? _startFailure;
-
   /// Engine [seat], started the first time it is needed and again after
-  /// it went away; null when it will not start.
-  Future<HypeBeast?> _acquire(int seat) async {
+  /// it went away, or why it did not start; null when nobody is asking any
+  /// more. One that was given clocks is quit and another started for a
+  /// search without them ([clocked] false), since it cannot forget them. A
+  /// start that throws is a start that failed, and the next one tries
+  /// again.
+  Future<HypeBeastStart?> _acquire(int seat, {required bool clocked}) async {
     final running = _engines[seat];
-    if (running != null) return running;
+    if (running != null && running.clocked && !clocked) {
+      _engines[seat] = null;
+      _busy[seat] = running.quit();
+    } else if (running != null) {
+      return HypeBeastStarted(running);
+    }
     final starting = _starting[seat] ??= _startEngine();
-    final start = await starting;
-    if (identical(_starting[seat], starting)) _starting[seat] = null;
+    HypeBeastStart start;
+    try {
+      start = await starting;
+    } on Object catch (error, stack) {
+      log.e('start the bughouse engine', '$error\n$stack');
+      start = const HypeBeastStartFailed('The bughouse engine did not start.');
+    } finally {
+      if (identical(_starting[seat], starting)) _starting[seat] = null;
+    }
     switch (start) {
-      case HypeBeastStartFailed(:final reason):
-        _startFailure = reason;
-        return null;
+      case HypeBeastStartFailed():
+        return start;
       case HypeBeastStarted(:final engine):
         // Left or gone while it started: nobody is asking any more.
         if (_disposed || !_open) {
@@ -449,11 +493,10 @@ final class LabEngine extends ChangeNotifier {
           return null;
         }
         // Two waiting on one start share its engine.
-        if (_engines[seat] case final other?) return other;
-        _startFailure = null;
+        if (_engines[seat] case final other?) return HypeBeastStarted(other);
         _engines[seat] = engine;
         unawaited(engine.exited.then((_) => _lost(seat, engine)));
-        return engine;
+        return start;
     }
   }
 
@@ -493,7 +536,13 @@ final class LabEngine extends ChangeNotifier {
 /// Searches kept for the session before the memory starts over.
 const _rememberedSearches = 4000;
 
-typedef _SearchKey = (String, String?, LabBoards, BoardNumber);
+/// A search: the table, the moves that led to it, the board count, the
+/// board, and the clocks sent with it.
+typedef _SearchKey = (String, String?, LabBoards, BoardNumber, String?);
+
+/// What the engine is asked about: the table, how many boards, and the
+/// four clocks when there are all four.
+typedef _Asked = (TablePosition, LabBoards, TableClocks?);
 
 /// What a board's search has shown, its decision, and whether it ended.
 typedef _Found = ({SeatReport report, SeatDecision? decision, bool done});
@@ -504,4 +553,5 @@ typedef _Question = ({
   ({TablePosition root, List<String> moves})? played,
   BoardNumber board,
   bool coordinated,
+  TableClocks? clocks,
 });

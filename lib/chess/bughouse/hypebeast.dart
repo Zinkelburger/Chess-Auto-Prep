@@ -256,12 +256,18 @@ final class SeatReport {
     this.coordination,
     this.nodes = 0,
     this.summary = const {},
+    this.error,
   });
 
   final List<SeatLine> lines;
   final Coordination? coordination;
   final int nodes;
   final Map<String, String> summary;
+
+  /// What the engine said went wrong (`info string hb_error …`), without
+  /// its `hb_error`: `position illegal move …`. A search that printed one
+  /// answered something other than the question asked.
+  final String? error;
 
   SeatLine? get main => lines.where((line) => line.multipv == 1).firstOrNull;
 
@@ -289,14 +295,23 @@ final class SeatReport {
 ///   iteration did not reach keep the previous depth's score under the new
 ///   depth's number, or the previous depth's), and the block before it
 ///   stays; [seatRows] sorts the lines by score.
+/// - A search that ends on time may still print a level last block with a
+///   line cut short under a provisional score (an aspiration window widened,
+///   printed without a bound). The engine's closing line without a pv
+///   (`info depth 13 score cp -113 …`) names the depth it completed: the
+///   lines shown are then the last level block at that depth or less.
+/// - An `info string hb_error …` is kept as [SeatReport.error].
 final class SeatReader {
-  /// The block being printed, and the last one shown.
+  /// The block being printed, the last one shown, and every level block
+  /// shown before it, for the closing line to go back to.
   var _block = <int, SeatLine>{};
   var _shown = <int, SeatLine>{};
+  final _levels = <Map<int, SeatLine>>[];
   Coordination? _coordination;
   int _nodes = 0;
   int? _totalNodes;
   Map<String, String> _summary = const {};
+  String? _error;
 
   SeatReport get report => SeatReport(
     lines: List.unmodifiable(
@@ -305,6 +320,7 @@ final class SeatReader {
     coordination: _coordination,
     nodes: _totalNodes ?? _nodes,
     summary: _summary,
+    error: _error,
   );
 
   /// Reads [line]; true when the report changed.
@@ -314,8 +330,7 @@ final class SeatReader {
     if (info == null) return false;
     final grew = info.nodes > _nodes;
     if (grew) _nodes = info.nodes;
-    // The closing `info depth … nodes …` without a pv only counts nodes.
-    if (info.pv.isEmpty) return grew;
+    if (info.pv.isEmpty) return _closed(info.depth) || grew;
     if (info.bound && info.multipv == 1) return grew;
     if (info.multipv == 1) {
       _block = {1: info};
@@ -326,6 +341,19 @@ final class SeatReader {
     final level = depth != null && _block.values.every((l) => l.depth == depth);
     if (!level || _block.length < _shown.length) return grew;
     _shown = Map.of(_block);
+    _levels.add(_shown);
+    return true;
+  }
+
+  /// The closing line: the search completed [depth]. True when the lines
+  /// shown went back to a block at that depth.
+  bool _closed(int depth) {
+    final kept = _levels.lastWhere(
+      (block) => block[1]!.depth <= depth,
+      orElse: () => _shown,
+    );
+    if (identical(kept, _shown)) return false;
+    _shown = kept;
     return true;
   }
 
@@ -339,6 +367,9 @@ final class SeatReader {
         if (coordination == null) return false;
         _coordination = coordination;
         return true;
+      case 'hb_error':
+        _error ??= body;
+        return true;
       case 'hb_summary':
         _summary = Map.unmodifiable(parseSummary(body));
         _totalNodes =
@@ -351,29 +382,50 @@ final class SeatReader {
 
 /// One row the mode shows for a board: the move ([move] null for a sit),
 /// its score from the side to move (none when the engine did not score
-/// it), and the board's moves from it on.
-typedef SeatRow = ({String? move, int? cp, int? mate, List<String> pv});
+/// it), and the board's moves from it on. [clipped] when the score is the
+/// coordinator's and sits at its ±2000 limit: the move is at least that
+/// good, or that bad.
+typedef SeatRow = ({
+  String? move,
+  int? cp,
+  int? mate,
+  List<String> pv,
+  bool clipped,
+});
+
+/// The coordinator's scores stop at this many centipawns either way.
+const coordinatorClip = 2000;
 
 /// The rows for a seat's search, at most [count].
 ///
 /// Searched alone ([coordinated] false): the lines best first by score for
 /// the side to move (a mate for it first, the quicker the better; one
-/// against it last), each with its whole line. With the coordinator: while it searches, the main
-/// line; once [decision] is known, the decision first (a sit as a row of
-/// its own, with no score), then the other moves the coordinator compared,
-/// best first by `S`, else `L`, then those it did not score. The decision
-/// is shown with the engine's own line for it when the coordinator gave one
-/// ([Coordination.decisionLine]). Otherwise a move that is the main line's
-/// first is shown as the main line, and any other as a row of that one move
-/// with the coordinator's score.
+/// against it last), each with its whole line.
+///
+/// With the coordinator: while it searches, the main line; once [decision]
+/// is known, the decision first (a sit as a row of its own, with no score),
+/// then the other moves the coordinator compared, best first by `S`, else
+/// `L`, then those it did not score. One board's rows share one scale: when
+/// the coordinator scored the decision, every row has the coordinator's
+/// score, the decision's too. A row's line is the engine's own line for
+/// the decision ([Coordination.decisionLine]) when it gave one, the main
+/// line for the main line's move, else that one move; a score at the
+/// coordinator's limit gives way to a mate that line knows. A decision the
+/// coordinator did not score has the score of the engine's line for it,
+/// or of the main line when it is the main line's move.
 List<SeatRow> seatRows(
   SeatReport report, {
   required bool coordinated,
   SeatDecision? decision,
   required int count,
 }) {
-  SeatRow rowOf(SeatLine line) =>
-      (move: line.pv.first, cp: line.cp, mate: line.mate, pv: line.pv);
+  SeatRow rowOf(SeatLine line) => (
+    move: line.pv.first,
+    cp: line.cp,
+    mate: line.mate,
+    pv: line.pv,
+    clipped: false,
+  );
   if (!coordinated) {
     final lines = report.lines.where((line) => line.pv.isNotEmpty).toList()
       ..sort((a, b) {
@@ -385,25 +437,50 @@ List<SeatRow> seatRows(
   final main = report.main;
   if (decision == null) return [if (main != null) rowOf(main)];
   final candidates = report.coordination?.candidates ?? const <Candidate>[];
-  SeatRow lineOf(String move, int? score) => main?.pv.first == move
-      ? rowOf(main!)
-      : (move: move, cp: score, mate: null, pv: [move]);
+  final decided = report.coordination?.decisionLine;
+  List<String> lineFor(String move) => decided?.move == move
+      ? decided!.pv
+      : main?.pv.first == move
+      ? main!.pv
+      : [move];
+  int? mateFor(String move) => decided?.move == move
+      ? decided!.mate
+      : main?.pv.first == move
+      ? main!.mate
+      : null;
+  SeatRow compared(String move, int? score) {
+    if (score == null && main?.pv.first == move) return rowOf(main!);
+    final clipped = score != null && score.abs() >= coordinatorClip;
+    // A mate the engine's line knows says more than the limit.
+    final mate = clipped ? mateFor(move) : null;
+    return (
+      move: move,
+      cp: mate == null ? score : null,
+      mate: mate,
+      pv: lineFor(move),
+      clipped: clipped && mate == null,
+    );
+  }
+
   final scored = candidates.where((c) => c.score != null).toList()
     ..sort((a, b) => b.score!.compareTo(a.score!));
-  final decided = report.coordination?.decisionLine;
   final rows = <SeatRow>[
     switch (decision.move) {
-      null => (move: null, cp: null, mate: null, pv: const []),
-      final move when decided != null && decided.move == move => (
-        move: move,
-        cp: decided.cp,
-        mate: decided.mate,
-        pv: decided.pv,
-      ),
-      final move => lineOf(
-        move,
-        candidates.where((c) => c.move == move).firstOrNull?.score,
-      ),
+      null => (move: null, cp: null, mate: null, pv: const [], clipped: false),
+      final move => switch (candidates
+          .where((c) => c.move == move)
+          .firstOrNull
+          ?.score) {
+        final score? => compared(move, score),
+        null when decided != null && decided.move == move => (
+          move: move,
+          cp: decided.cp,
+          mate: decided.mate,
+          pv: decided.pv,
+          clipped: false,
+        ),
+        null => compared(move, null),
+      },
     },
   ];
   for (final candidate in [
@@ -412,7 +489,7 @@ List<SeatRow> seatRows(
   ]) {
     if (rows.length >= count) break;
     if (rows.any((row) => row.move == candidate.move)) continue;
-    rows.add(lineOf(candidate.move, candidate.score));
+    rows.add(compared(candidate.move, candidate.score));
   }
   return rows.take(count).toList();
 }
@@ -462,49 +539,75 @@ List<double> rowShifts(List<SeatRow> rows) {
 /// A score in pawns from A + B's side — White on board 1, Black on board 2
 /// — or plies to mate, + when A + B mate; empty when there is none.
 final class TableScore {
-  const TableScore({this.cp, this.mate});
+  const TableScore({this.cp, this.mate, this.clipped = false});
 
   /// A score read from the side to move on [board], whose seat is of
-  /// [team]: the sign changes for C + D.
-  factory TableScore.forSeat({int? cp, int? mate, required Team team}) {
+  /// [team]: the sign changes for C + D. [clipped] as [TableScore.clipped].
+  factory TableScore.forSeat({
+    int? cp,
+    int? mate,
+    required Team team,
+    bool clipped = false,
+  }) {
     final sign = team == Team.ab ? 1 : -1;
     return TableScore(
       cp: cp == null ? null : sign * cp,
       mate: mate == null ? null : sign * mate,
+      clipped: clipped && cp != null,
     );
   }
 
   /// The two boards' scores together: the team's chances follow the plain
   /// sum of both boards' scores, with forced mates apart, so a mate on
   /// either board is the score (of two, the quicker); otherwise the
-  /// centipawns add. Empty when none of [scores] holds anything.
+  /// centipawns add. A sum with a clipped score in it is itself only a
+  /// bound, when all its clipped scores lean the same way; leaning both
+  /// ways it is the plain sum. Empty when none of [scores] holds anything.
   factory TableScore.sum(Iterable<TableScore> scores) {
     final mates = [for (final score in scores) ?score.mate]
       ..sort((a, b) => a.abs().compareTo(b.abs()));
     if (mates.isNotEmpty) return TableScore(mate: mates.first);
     final cps = [for (final score in scores) ?score.cp];
     if (cps.isEmpty) return const TableScore();
-    return TableScore(cp: cps.fold<int>(0, (sum, cp) => sum + cp));
+    final leans = {
+      for (final score in scores)
+        if (score.clipped) score.cp!.sign,
+    };
+    final sum = cps.fold<int>(0, (sum, cp) => sum + cp);
+    return TableScore(
+      cp: sum,
+      clipped: leans.length == 1 && leans.single == sum.sign,
+    );
   }
 
   final int? cp;
   final int? mate;
 
+  /// Whether [cp] is only a bound: the coordinator's scores stop at ±20
+  /// pawns, so one there is at least that much.
+  final bool clipped;
+
   bool get isEmpty => cp == null && mate == null;
 
-  /// `+0.25`, `-1.40`, `#3`, `#-2`, or `—` when there is nothing.
+  /// `+0.25`, `-1.40`, `#3`, `#-2`, a bound as whole pawns (`>+20`,
+  /// `<-20`), or `—` when there is nothing.
   String get text => switch ((cp, mate)) {
     (_, final int mate) => mate >= 0 ? '#$mate' : '#-${-mate}',
+    (final int cp, _) when clipped =>
+      cp > 0 ? '>+${cp ~/ 100}' : '<-${-cp ~/ 100}',
     (final int cp, _) => _pawns(cp),
     _ => '—',
   };
 
   @override
   bool operator ==(Object other) =>
-      other is TableScore && other.cp == cp && other.mate == mate;
+      other is TableScore &&
+      other.cp == cp &&
+      other.mate == mate &&
+      other.clipped == clipped;
 
   @override
-  int get hashCode => Object.hash(cp, mate);
+  int get hashCode => Object.hash(cp, mate, clipped);
 
   @override
   String toString() => text;
@@ -514,6 +617,46 @@ String _pawns(int cp) {
   if (cp == 0) return '0.00';
   final text = (cp.abs() / 100).toStringAsFixed(2);
   return cp > 0 ? '+$text' : '-$text';
+}
+
+/// What each seat's clock reads, for the engine's sitting rules, which
+/// need all four.
+final class TableClocks {
+  const TableClocks({
+    required this.a,
+    required this.b,
+    required this.c,
+    required this.d,
+  });
+
+  final Duration a;
+  final Duration b;
+  final Duration c;
+  final Duration d;
+
+  /// The engine's `Clocks` option: milliseconds for White and Black on
+  /// board A, then on board B — seats A, C, D and B.
+  String get option =>
+      [a, c, d, b].map((clock) => clock.inMilliseconds).join(',');
+
+  /// Whether [team] is ahead on time as the engine and the arena count it:
+  /// its player on board 1 against the same colour on board 2, A against
+  /// D for A + B, C against B for C + D.
+  bool ahead(Team team) => team == Team.ab ? a > d : c > b;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TableClocks &&
+      other.a == a &&
+      other.b == b &&
+      other.c == c &&
+      other.d == d;
+
+  @override
+  int get hashCode => Object.hash(a, b, c, d);
+
+  @override
+  String toString() => option;
 }
 
 /// The engine's `Seat` and `Team` options for searching [board] of

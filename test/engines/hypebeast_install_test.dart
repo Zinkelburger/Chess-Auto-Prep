@@ -23,6 +23,9 @@ final class Bundle {
   final lies = <String, Map<String, Object>>{};
   bool withManifest = true;
 
+  /// What the manifest asset holds instead of the manifest.
+  List<int>? manifestBytes;
+
   String get manifest => jsonEncode({
     for (final name in HypeBeastInstall.installedNames)
       name: lies[name] ?? _record(files[name]!),
@@ -36,7 +39,8 @@ final class Bundle {
   Future<Uint8List?> read(String asset) async {
     reads.add(asset);
     if (asset == 'assets/bughouse/manifest.json') {
-      return withManifest ? utf8.encode(manifest) : null;
+      if (!withManifest) return null;
+      return Uint8List.fromList(manifestBytes ?? utf8.encode(manifest));
     }
     final name = p.basenameWithoutExtension(asset);
     final bytes = files[name];
@@ -138,6 +142,14 @@ void main() {
     );
     bundle.withManifest = true;
     bundle.lies[_net] = {'bytes': -1, 'sha256': 'nope'};
+    expect(
+      (await install.locate() as HypeBeastMissing).reason,
+      contains('manifest is damaged'),
+    );
+  });
+
+  test('a manifest that is not text is damaged, not a crash', () async {
+    bundle.manifestBytes = [0x7b, 0xff, 0xfe, 0x7d];
     expect(
       (await install.locate() as HypeBeastMissing).reason,
       contains('manifest is damaged'),

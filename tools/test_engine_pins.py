@@ -18,6 +18,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
 import fetch_assets  # noqa: E402
+import test_bughouse_engine  # noqa: E402
 import package_macos_stockfish  # noqa: E402
 
 ENGINE = b'\x7fELF stockfish' * 1000
@@ -242,6 +243,92 @@ class BughouseFetchTest(unittest.TestCase):
         self.assertIn('hivemind.onnx', (main / 'manifest.json').read_text())
         self.assertEqual(set(json.loads((self.assets / 'manifest.json').read_text())),
                          {'hypebeast-linux', fetch_assets.BUGHOUSE_NETWORK['name']})
+
+
+    def test_a_write_uses_its_own_temporary_name_and_sweeps_stale_ones(self):
+        dest = self.assets / 'hypebeast-linux.gz'
+        stale = self.assets / '.hypebeast-linux.gz.dead1234.tmp'
+        old_fixed = self.assets / 'hypebeast-linux.gz.tmp'
+        fresh = self.assets / '.hypebeast-linux.gz.alive567.tmp'
+        for path in (stale, old_fixed, fresh):
+            path.write_bytes(b'partial')
+        hour_ago = fetch_assets.time.time() - fetch_assets.STALE_TEMP_SECONDS - 5
+        os.utime(stale, (hour_ago, hour_ago))
+        os.utime(old_fixed, (hour_ago, hour_ago))
+        fetch_assets.write_replacing(dest, b'engine')
+        self.assertEqual(dest.read_bytes(), b'engine')
+        self.assertFalse(stale.exists())
+        self.assertFalse(old_fixed.exists())
+        self.assertTrue(fresh.exists(), 'another fetch may still be writing it')
+
+    def test_a_failed_write_leaves_no_temporary_file(self):
+        dest = self.assets / 'hypebeast-linux.gz'
+        with mock.patch.object(Path, 'replace', side_effect=OSError('disk full')):
+            with self.assertRaises(OSError):
+                fetch_assets.write_replacing(dest, b'engine')
+        self.assertEqual(list(self.assets.glob('*.tmp')) + list(self.assets.glob('.*.tmp')), [])
+
+    def test_a_bad_mirror_listing_is_a_download_failure_not_a_traceback(self):
+        name = fetch_assets.BUGHOUSE_NETWORK['name']
+        good = {'name': name, 'chunks': [{'file': 'net-0.bin', 'sha256': 'a' * 64}]}
+        self.assertEqual(fetch_assets.read_mirror_listing(json.dumps(good).encode(), 'b/'),
+                         [('net-0.bin', 'a' * 64)])
+        for raw in (b'\xff\xfe', b'[1, 2]', b'{"name": "x"}',
+                    json.dumps({'name': 'other.nnue', 'chunks': []}).encode(),
+                    json.dumps({'name': name, 'chunks': ['net-0.bin']}).encode(),
+                    json.dumps({'name': name, 'chunks': [{'file': '../x', 'sha256': 'a' * 64}]}).encode(),
+                    json.dumps({'name': name, 'chunks': [{'file': 'n.bin', 'sha256': 7}]}).encode(),
+                    json.dumps({'name': name, 'chunks': []}).encode()):
+            with self.subTest(raw=raw):
+                with self.assertRaises(fetch_assets.DownloadError):
+                    fetch_assets.read_mirror_listing(raw, 'b/')
+
+    def test_mirror_parts_that_are_not_gzip_are_a_download_failure(self):
+        name = fetch_assets.BUGHOUSE_NETWORK['name']
+        part = b'not gzip at all'
+        listing = json.dumps({'name': name, 'chunks': [
+            {'file': 'net-0.bin', 'sha256': hashlib.sha256(part).hexdigest()}]}).encode()
+
+        def stream(url, dest):
+            dest.write_bytes(listing if url.endswith('net.json') else part)
+            return 'application/octet-stream'
+
+        with mock.patch.object(fetch_assets, '_stream', stream), \
+                contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaises(fetch_assets.DownloadError):
+                fetch_assets.download_from_mirror('b/', self.root / 'net', self.root)
+
+
+class BughouseDepsTest(unittest.TestCase):
+    """`deps` proves a binary or fails: one it could not check is no proof."""
+
+    def deps(self, notes, all_=False):
+        def audit(name):
+            note = notes[name]
+            if isinstance(note, Exception):
+                raise note
+            return note
+        args = mock.Mock(all=all_)
+        with mock.patch.object(test_bughouse_engine, 'audit_target', audit), \
+                mock.patch.object(test_bughouse_engine, 'host_target', lambda: 'bughouse-macos-x86_64'), \
+                mock.patch.object(test_bughouse_engine, 'TARGETS', {n: {} for n in notes}), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            return test_bughouse_engine.cmd_deps(args)
+
+    def test_the_host_platform_must_be_checked(self):
+        self.assertEqual(self.deps({'bughouse-macos-x86_64': ['x86_64: links only /usr/lib/libSystem.B.dylib']}), 0)
+        # The other architecture's build, or nothing fetched: not proven.
+        self.assertEqual(self.deps({'bughouse-macos-x86_64': [
+            'skipped: assets/bughouse/hypebeast-macos.gz holds the bughouse-macos-arm64 build']}), 1)
+        self.assertEqual(self.deps({'bughouse-macos-x86_64': [
+            'skipped: assets/bughouse/hypebeast-macos.gz not fetched']}), 1)
+
+    def test_all_passes_over_platforms_not_fetched_but_needs_one(self):
+        self.assertEqual(self.deps({'bughouse-linux': ['static: no loader, no shared libraries'],
+                                    'bughouse-windows': ['skipped: not fetched']}, all_=True), 0)
+        self.assertEqual(self.deps({'bughouse-linux': ['skipped: not fetched']}, all_=True), 1)
+        self.assertEqual(self.deps({'bughouse-linux': test_bughouse_engine.Failure('dynamic')},
+                                   all_=True), 1)
 
 
 class MacPackagingTest(unittest.TestCase):

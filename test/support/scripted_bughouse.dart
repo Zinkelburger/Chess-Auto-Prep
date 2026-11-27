@@ -17,6 +17,9 @@ final class ScriptedHypeBeast implements HypeBeast {
     'engine_name': 'Scripted HypeBeast',
   };
   final asked = <HypeBeastQuestion>[];
+
+  @override
+  bool get clocked => asked.any((question) => question.clocks != null);
   HypeBeastAnswer Function(HypeBeastQuestion question) answer = firstMoves;
   bool hold = false;
   int stops = 0;

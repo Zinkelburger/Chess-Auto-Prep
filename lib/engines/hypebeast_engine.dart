@@ -51,12 +51,16 @@ final class TimeBudget extends HypeBeastBudget {
 /// [position] (`1e2e4 2d7d5`), when moves alone led there. The engine is
 /// then told the game rather than the position, which is how it knows a
 /// position that came up before; null asks about the position alone.
+///
+/// [clocks], when the table has all four, are sent with it: the engine's
+/// rules for sitting need them. Without them it never sits by those rules.
 typedef HypeBeastQuestion = ({
   TablePosition position,
   ({TablePosition root, List<String> moves})? played,
   BoardNumber board,
   int lines,
   bool coordination,
+  TableClocks? clocks,
   int threads,
   HypeBeastBudget budget,
 });
@@ -105,6 +109,11 @@ typedef HypeBeastReports = void Function(SeatReport report);
 abstract interface class HypeBeast {
   /// Identity of the actual binary and net and the startup options.
   Map<String, Object?> get provenance;
+
+  /// Whether a question with clocks was asked. The engine keeps the last
+  /// clocks it was given — UCI cannot set its `Clocks` back to empty — so
+  /// a question without clocks needs another process.
+  bool get clocked;
 
   /// Searches [question], handing [onReport] what the search shows each
   /// time it changes. Questions are answered one at a time, in the order
@@ -193,6 +202,9 @@ final class HypeBeastProcess implements HypeBeast, EngineProcess {
 
   /// Each option's value as last sent, so an unchanged one is not sent.
   final _options = <String, String>{};
+
+  @override
+  bool get clocked => _options.containsKey('Clocks');
   ({String token, Completer<void> done})? _awaited;
   _Collecting? _collecting;
 
@@ -236,6 +248,7 @@ final class HypeBeastProcess implements HypeBeast, EngineProcess {
       });
       final collecting = _collecting = _Collecting(
         board: question.board,
+        canMove: question.position.legalMoves(question.board).isNotEmpty,
         budget: question.budget,
         onReport: onReport,
       );
@@ -258,8 +271,23 @@ final class HypeBeastProcess implements HypeBeast, EngineProcess {
   }
 
   /// Sends the seat's options that changed, then waits for `readyok`.
+  ///
+  /// With clocks, the engine first forgets the game it was in
+  /// (`ucinewgame`): a hold, a wait or its timer belongs to one turn of one
+  /// game, and the table asked about may be any other. That also empties
+  /// its hash table (30–140 ms with 128 MB). Then the clocks, and whether
+  /// the seat's team is ahead on time, which the engine also works out
+  /// from the clocks and warns about when the two disagree.
   Future<void> _configure(HypeBeastQuestion question) async {
     final seat = seatOptions(question.position, question.board);
+    if (question.clocks case final clocks?) {
+      _send('ucinewgame');
+      _set('Clocks', clocks.option);
+      _set(
+        'TimeAdvantage',
+        '${clocks.ahead(question.position.mover(question.board).team)}',
+      );
+    }
     _set('Threads', '${question.threads < 1 ? 1 : question.threads}');
     _set('Seat', seat.seat);
     _set('Team', seat.team);
@@ -386,12 +414,20 @@ const _gone = 'The bughouse engine stopped.';
 /// The output of one search, read as it comes and handed on each time what
 /// it shows changes; the answer is what it shows at `bestmove`.
 final class _Collecting {
-  _Collecting({required this.board, required this.budget, this.onReport}) {
+  _Collecting({
+    required this.board,
+    required this.canMove,
+    required this.budget,
+    this.onReport,
+  }) {
     _watch(budget.patience);
     if (budget is TimeBudget) _deadline = Timer(budget.patience, _timedOut);
   }
 
   final BoardNumber board;
+
+  /// Whether the side to move has a legal move on [board].
+  final bool canMove;
 
   /// The search limit and how long it may make no progress before it is
   /// wedged.
@@ -435,14 +471,34 @@ final class _Collecting {
     if (!done.isCompleted) done.completeError(TimeoutException(null));
   }
 
+  /// The answer at `bestmove`. An engine that reported an error
+  /// (`info string hb_error …`, as for a move of the game it cannot play)
+  /// answered something other than the question, and so did one that sits
+  /// without searching a node where there are moves to make: both fail.
   void finish(String bestmove) {
     if (done.isCompleted) return;
-    done.complete(
-      HypeBeastSearched(
-        decision: parseBestMove(bestmove, board),
-        report: _reader.report,
-      ),
-    );
+    final report = _reader.report;
+    final decision = parseBestMove(bestmove, board);
+    if (report.error case final error?) {
+      log.e('search on the bughouse engine', 'hb_error $error; $bestmove');
+      done.complete(
+        HypeBeastFailed(
+          error.startsWith('position')
+              ? 'The bughouse engine could not play the moves that led here.'
+              : 'The bughouse engine reported an error.',
+        ),
+      );
+    } else if (decision != null &&
+        decision.sits &&
+        report.nodes == 0 &&
+        canMove) {
+      log.e('search on the bughouse engine', 'sat without searching');
+      done.complete(
+        const HypeBeastFailed('The bughouse engine did not search the table.'),
+      );
+    } else {
+      done.complete(HypeBeastSearched(decision: decision, report: report));
+    }
   }
 
   void fail(EngineFailure failure) {

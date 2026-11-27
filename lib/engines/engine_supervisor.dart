@@ -229,7 +229,9 @@ final class EngineSupervisor {
       try {
         engine = await HypeBeastProcess.start(
           process,
-          net: files.net,
+          // From the folder it runs in: the net's name alone when it is
+          // there, as installed, whatever the folder's own path holds.
+          net: p.relative(files.net, from: files.directory),
           options: const {'Hash': '$hypeBeastHashMb', 'Threads': '1'},
           provenance: identity,
           patience: patience,

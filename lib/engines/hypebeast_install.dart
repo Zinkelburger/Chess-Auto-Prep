@@ -9,7 +9,9 @@ import 'package:path/path.dart' as p;
 import '../diagnostics/log.dart';
 
 /// Where the installed engine and its net are, and the folder they are in:
-/// the engine is started there.
+/// the engine is started there and told the net by its name in it, not by
+/// its whole path (UCI's `setoption` runs spaces together, and a Windows
+/// build may open a file only by a narrow path).
 typedef HypeBeastFiles = ({String executable, String net, String directory});
 
 sealed class HypeBeastLocation {
@@ -116,7 +118,7 @@ final class HypeBeastInstall {
     if (bytes == null) {
       return const HypeBeastMissing('This build has no bughouse engine.');
     }
-    final manifest = _Manifest.read(utf8.decode(bytes), installedNames);
+    final manifest = _Manifest.read(bytes, installedNames);
     if (manifest == null) {
       log.e('read $_assets/manifest.json', 'a file has no size or SHA-256');
       return const HypeBeastMissing(
@@ -259,10 +261,10 @@ final class _Manifest {
 
   /// The records for [names] in [json], or null when one is missing or
   /// malformed.
-  static _Manifest? read(String json, List<String> names) {
+  static _Manifest? read(Uint8List bytes, List<String> names) {
     final Object? raw;
     try {
-      raw = jsonDecode(json);
+      raw = jsonDecode(utf8.decode(bytes));
     } on FormatException {
       return null;
     }

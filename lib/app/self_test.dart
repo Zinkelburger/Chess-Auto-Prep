@@ -55,6 +55,7 @@ Future<Never> runBughouseSelfTest({
           board: BoardNumber.one,
           lines: 1,
           coordination: true,
+          clocks: null,
           threads: 2,
           budget: const NodeBudget(20000),
         ));

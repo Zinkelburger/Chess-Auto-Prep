@@ -272,6 +272,113 @@ void main() {
     expect(shown().score.text, '+0.50');
   });
 
+  group('clocks', () {
+    /// Every seat has moved once, its clock noted after the move.
+    const game = '''
+[WhiteA "a"]
+[BlackA "c"]
+[WhiteB "d"]
+[BlackB "b"]
+[TimeControl "120+0"]
+
+1A. e4 {118.500} 1B. d4 {117.000} 1a. e5 {116.200} 1b. d5 {115.900} *
+''';
+    const clocks = TableClocks(
+      a: Duration(milliseconds: 118500),
+      b: Duration(milliseconds: 115900),
+      c: Duration(milliseconds: 116200),
+      d: Duration(milliseconds: 117000),
+    );
+
+    test(
+      'two boards with all four clocks: every search is sent them',
+      () async {
+        lab.pasteMoves(game);
+        expect(lab.boards, LabBoards.two);
+        await on();
+        expect(hypebeast.asked.map((q) => (q.board, q.clocks)), [
+          (BoardNumber.one, clocks),
+          (BoardNumber.two, clocks),
+        ]);
+        expect(clocks.option, '118500,116200,117000,115900');
+      },
+    );
+
+    test('one board, or a table without all four clocks, sends none', () async {
+      lab.pasteMoves(game);
+      lab.showBoards(LabBoards.one);
+      await on();
+      expect(hypebeast.asked.single.clocks, isNull);
+
+      // Only A and D have moved, in a game that does not say how long the
+      // clocks started with: B's and C's are unknown.
+      hypebeast.asked.clear();
+      lab
+        ..pasteMoves('1A. e4 {118.500} 1B. d4 {117.000} *')
+        ..showBoards(LabBoards.two);
+      await settle();
+      expect(hypebeast.asked.map((q) => q.clocks), [null, null]);
+    });
+
+    test('the clocks are part of what is remembered', () async {
+      lab.pasteMoves(game);
+      await on();
+      expect(hypebeast.asked, hasLength(2));
+      // The same table, reached with other clocks, is searched again.
+      lab.pasteMoves(game.replaceAll('118.500', '60.000'));
+      await settle();
+      expect(hypebeast.asked, hasLength(4));
+      expect(
+        hypebeast.asked.last.clocks?.a,
+        const Duration(milliseconds: 60000),
+      );
+      // Back to the first clocks: from memory.
+      lab.pasteMoves(game);
+      await settle();
+      expect(hypebeast.asked, hasLength(4));
+    });
+
+    test('a process that was given clocks is replaced before a search '
+        'without them', () async {
+      final started = <ScriptedHypeBeast>[];
+      final fresh = LabEngine(
+        lab: lab,
+        cores: 9,
+        startEngine: () async {
+          final engine = ScriptedHypeBeast();
+          started.add(engine);
+          return HypeBeastStarted(engine);
+        },
+      );
+      addTearDown(fresh.dispose);
+      lab.pasteMoves(game);
+      fresh
+        ..open()
+        ..toggle();
+      await settle();
+      expect(started, hasLength(2));
+      expect(started.every((e) => e.clocked && !e.gone), isTrue);
+
+      // Board 1 alone: no clocks, so engine 0 is quit and another started.
+      lab.showBoards(LabBoards.one);
+      await settle();
+      expect(started, hasLength(3));
+      expect(started[0].gone, isTrue);
+      expect(started[1].gone, isFalse);
+      expect(started[2].asked.single.clocks, isNull);
+      expect((fresh.lines as LinesOn).rows[BoardNumber.one], hasLength(3));
+
+      // Clocks again, on a new table: the unclocked process takes them.
+      lab
+        ..showBoards(LabBoards.two)
+        ..play(BoardNumber.one, 'g1f3');
+      await settle();
+      expect(started, hasLength(3));
+      expect(started[2].asked.last.clocks, clocks);
+      expect(started[2].clocked, isTrue);
+    });
+  });
+
   test('a mate on either board is the table\'s score', () async {
     lab.showBoards(LabBoards.two);
     hypebeast.answer = (question) => question.board == BoardNumber.two
@@ -341,6 +448,70 @@ void main() {
       expect((engine.lines as LinesStopped).reason, 'No engine here.');
     },
   );
+
+  test('a start that throws is a start that failed, and the next one tries '
+      'again', () async {
+    var throwing = true;
+    final flaky = LabEngine(
+      lab: lab,
+      cores: 9,
+      startEngine: () async {
+        starts++;
+        if (throwing) throw const FormatException('bad manifest');
+        return HypeBeastStarted(hypebeast);
+      },
+    );
+    addTearDown(flaky.dispose);
+    flaky
+      ..open()
+      ..toggle();
+    await settle();
+    expect(flaky.on, isFalse);
+    expect(
+      (flaky.lines as LinesStopped).reason,
+      'The bughouse engine did not start.',
+    );
+    throwing = false;
+    flaky.toggle();
+    await settle();
+    expect(starts, 2);
+    expect((flaky.lines as LinesOn).rows[BoardNumber.one], hasLength(3));
+  });
+
+  test('a search the engine reports an error in turns the switch off and '
+      'is not remembered', () async {
+    HypeBeastAnswer Function(HypeBeastQuestion) answer = (_) =>
+        const HypeBeastFailed(
+          'The bughouse engine could not play the moves that led here.',
+        );
+    final engines = <ScriptedHypeBeast>[];
+    final refusing = LabEngine(
+      lab: lab,
+      cores: 9,
+      startEngine: () async {
+        final started = ScriptedHypeBeast()..answer = answer;
+        engines.add(started);
+        return HypeBeastStarted(started);
+      },
+    );
+    addTearDown(refusing.dispose);
+    refusing
+      ..open()
+      ..toggle();
+    await settle();
+    expect(
+      (refusing.lines as LinesStopped).reason,
+      'Analysis failed: The bughouse engine could not play the moves that '
+      'led here.',
+    );
+    answer = firstMoves;
+    refusing.toggle();
+    await settle();
+    // Asked again, by a new process, rather than answered from memory.
+    expect(engines, hasLength(2));
+    expect(engines.last.asked, hasLength(1));
+    expect((refusing.lines as LinesOn).rows[BoardNumber.one], hasLength(3));
+  });
 
   test('an engine that fails mid-search turns the switch off', () async {
     hypebeast.hold = true;

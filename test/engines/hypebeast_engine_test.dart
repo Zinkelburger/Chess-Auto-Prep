@@ -29,6 +29,17 @@ final class AnsweringProcess implements UciProcess {
   /// What the next `go` prints; left unset, the search never ends.
   List<String>? next;
 
+  /// While set, `isready` waits for [ready].
+  bool holdReady = false;
+  int _readyOwed = 0;
+
+  /// Answers every `isready` held.
+  void ready() {
+    for (; _readyOwed > 0; _readyOwed--) {
+      say('readyok');
+    }
+  }
+
   @override
   int get pid => 4343;
 
@@ -44,7 +55,11 @@ final class AnsweringProcess implements UciProcess {
       say('option name Seat type combo default Awhite var Awhite var Ablack');
       say('uciok');
     } else if (line == 'isready') {
-      say('readyok');
+      if (holdReady) {
+        _readyOwed++;
+      } else {
+        say('readyok');
+      }
     } else if (line.startsWith('go') && !_checked) {
       _checked = true;
       switch (net) {
@@ -128,12 +143,14 @@ HypeBeastQuestion question({
   int threads = 4,
   HypeBeastBudget budget = const NodeBudget(2000),
   ({TablePosition root, List<String> moves})? played,
+  TableClocks? clocks,
 }) => (
   position: position ?? TablePosition.initial,
   played: played,
   board: board,
   lines: lines,
   coordination: coordination,
+  clocks: clocks,
   threads: threads,
   budget: budget,
 );
@@ -224,6 +241,53 @@ void main() {
       'position fen ${_afterE4.dualFen}',
       'go nodes 2000',
     ]);
+  });
+
+  test('with clocks: a new game first, then the four clocks and whether the '
+      'seat\'s team is ahead, before the table', () async {
+    final (engine, process) = await started();
+    expect(engine.clocked, isFalse);
+    process.next = coordinatedSearch;
+    const clocks = TableClocks(
+      a: Duration(milliseconds: 78226),
+      c: Duration(milliseconds: 73129),
+      d: Duration(milliseconds: 73259),
+      b: Duration(milliseconds: 78096),
+    );
+    // C, Black on board 1, is on move: C + D is ahead when C has more time
+    // than B, which it has not.
+    await engine.search(
+      question(position: _afterE4, coordination: true, clocks: clocks),
+    );
+    expect(engine.clocked, isTrue);
+    final asked = process.asked;
+    expect(asked.first, 'ucinewgame');
+    expect(
+      asked,
+      contains('setoption name Clocks value 78226,73129,73259,78096'),
+    );
+    expect(asked, contains('setoption name TimeAdvantage value false'));
+    expect(
+      asked.indexOf('isready'),
+      greaterThan(asked.indexOf('setoption name TimeAdvantage value false')),
+    );
+    expect(asked.last, 'go nodes 2000');
+
+    // A, on move at the start, is ahead of D: A + B has the time advantage.
+    process.sent.clear();
+    process.next = coordinatedSearch;
+    await engine.search(question(coordination: true, clocks: clocks));
+    expect(process.sent.first, 'ucinewgame');
+    expect(process.sent, contains('setoption name TimeAdvantage value true'));
+    // The same clocks are not sent again.
+    expect(process.sent.where((l) => l.contains('name Clocks')), isEmpty);
+
+    // A search without clocks sends none, but the engine still holds them.
+    process.sent.clear();
+    process.next = coordinatedSearch;
+    await engine.search(question(coordination: true));
+    expect(process.sent, isNot(contains('ucinewgame')));
+    expect(engine.clocked, isTrue);
   });
 
   test('alone, the board gets every line asked', () async {
@@ -317,6 +381,40 @@ void main() {
     expect(answer.report.lines, isEmpty);
   });
 
+  test('an error the engine reports fails the search in words', () async {
+    final (engine, process) = await started();
+    process.next = [
+      'info string hb_error position illegal move 1e2e5',
+      'info depth 0 nodes 0 time 1',
+      'bestmove (pass,pass)',
+    ];
+    final answer = await engine.search(question(coordination: true));
+    expect(
+      (answer as HypeBeastFailed).reason,
+      'The bughouse engine could not play the moves that led here.',
+    );
+    process.next = [
+      'info string hb_error illegal_decision reason=x using_fallback',
+      'info depth 9 score cp 3 nodes 900 time 10',
+      'bestmove (e2e4,pass)',
+    ];
+    expect(
+      (await engine.search(question(coordination: true)) as HypeBeastFailed)
+          .reason,
+      'The bughouse engine reported an error.',
+    );
+  });
+
+  test('a sit without a node searched, where there are moves, fails', () async {
+    final (engine, process) = await started();
+    process.next = ['bestmove (pass,pass)'];
+    final answer = await engine.search(question(coordination: true));
+    expect(
+      (answer as HypeBeastFailed).reason,
+      'The bughouse engine did not search the table.',
+    );
+  });
+
   test('a sit is a decision to pass', () async {
     final (engine, process) = await started();
     process.next = ['info depth 0 nodes 40 time 1', 'bestmove (pass,pass)'];
@@ -353,6 +451,23 @@ void main() {
       expect(answer.report.main!.cp, 92);
     },
   );
+
+  test('stop while the engine is still getting ready cuts the search as '
+      'soon as it starts', () async {
+    final (engine, process) = await started();
+    process.holdReady = true;
+    process.next = aloneSearch;
+    final answer = engine.search(question());
+    await Future<void>.delayed(Duration.zero);
+    expect(process.sent.last, 'isready');
+    engine.stop();
+    expect(process.sent.last, 'isready', reason: 'nothing to stop yet');
+    process.ready();
+    final found = await answer as HypeBeastSearched;
+    final go = process.sent.indexOf('go nodes 2000');
+    expect(process.sent.sublist(go), ['go nodes 2000', 'stop']);
+    expect(found.decision, const SeatDecision('e2e4'));
+  });
 
   test('an engine that dies mid-search fails the search in words', () async {
     final (engine, process) = await started();

@@ -293,19 +293,31 @@ def audit_target(name: str) -> list[str]:
 
 
 def cmd_deps(args) -> int:
+    """Without --all the host's platform is asked for, and a binary that is
+    not there, or is another architecture's, fails: it was not proven. With
+    --all, platforms not fetched are passed over, but at least one must be
+    checked."""
     names = sorted(TARGETS) if args.all else [host_target()]
     problems = 0
+    checked = 0
     for name in names:
         print(f"[deps] {name}")
         try:
             notes = audit_target(name)
             for note in notes:
                 print(f"       {note}")
-            if not any(n.startswith("skipped") for n in notes):
+            if any(n.startswith("skipped") for n in notes):
+                if not args.all:
+                    raise Failure("the binary for this platform could not be checked")
+            else:
+                checked += 1
                 print("       ok — needs nothing but the operating system")
         except Failure as exc:
             print(f"  FAIL {name}: {exc}", file=sys.stderr)
             problems += 1
+    if not problems and not checked:
+        print("  FAIL: no platform's binary was fetched to check", file=sys.stderr)
+        problems += 1
     return 1 if problems else 0
 
 

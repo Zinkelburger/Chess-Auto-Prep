@@ -39,6 +39,31 @@ String rowScoreHint({required bool single}) => single
     ? scoreHint(single: true)
     : '+ is good for A + B: White on board 1, Black on board 2. In pawns.';
 
+/// Why the engine would sit, on a `sit` row's tooltip: its [reason]
+/// (`hb_summary`'s) in a sentence about [seat], the player on move.
+String sitHint(String? reason, Seat seat) {
+  final me = seat.letter;
+  final partner = switch (seat) {
+    Seat.a => Seat.b,
+    Seat.b => Seat.a,
+    Seat.c => Seat.d,
+    Seat.d => Seat.c,
+  }.letter;
+  return switch (reason) {
+    'stall_deny' =>
+      'HypeBeast would wait here: every move hands '
+          '${seat.team.other.label} a piece that mates.',
+    'hold_mated' =>
+      'HypeBeast would wait here: $me is mated whatever it plays.',
+    'hold_partner_mate' =>
+      'HypeBeast would wait here: $me’s partner $partner has a forced mate.',
+    'voluntary_wait' =>
+      'HypeBeast would wait here: $me’s partner $partner is about to send '
+          'a piece $me needs.',
+    _ => 'HypeBeast would wait here.',
+  };
+}
+
 /// One board's rows for the player on move there, as lila's engine lines:
 /// a row per move, its score, then the moves of that board that follow,
 /// each its own token. Resting on a move floats the board it is on after
@@ -149,7 +174,9 @@ class _BoardLineRowsState extends State<BoardLineRows> {
       score: row.score.text,
       scored: !row.score.isEmpty,
       scoreHint: rowScoreHint(single: lab.single),
-      sits: move == null,
+      sitHint: move == null
+          ? sitHint(row.reason, row.table.mover(board))
+          : null,
       steps: steps,
       onEnter: () => lab.preview.value = move == null ? null : {board: move},
       onExit: () {
@@ -176,14 +203,14 @@ class _BoardLineRowsState extends State<BoardLineRows> {
 
 /// One engine line: the score in a mono gutter, then its moves, clipped to
 /// the row, the first in bold: the move the row is about. A row that sits
-/// says so first, muted. Pointing at the row draws its move on the board; a
-/// click outside the moves plays it.
+/// says so first, muted, and why on hover. Pointing at the row draws its
+/// move on the board; a click outside the moves plays it.
 class _LineRow extends StatelessWidget {
   const _LineRow({
     required this.score,
     required this.scored,
     required this.scoreHint,
-    required this.sits,
+    required this.sitHint,
     required this.steps,
     required this.onEnter,
     required this.onExit,
@@ -200,8 +227,9 @@ class _LineRow extends StatelessWidget {
   final bool scored;
   final String scoreHint;
 
-  /// Whether the row's choice is to sit on its board rather than move.
-  final bool sits;
+  /// Why the row's choice is to sit on its board rather than move; null
+  /// for a move.
+  final String? sitHint;
   final List<PvStep> steps;
   final VoidCallback onEnter;
   final VoidCallback onExit;
@@ -215,9 +243,9 @@ class _LineRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final tokens = <Widget>[
-      if (sits)
+      if (sitHint case final why?)
         Tooltip(
-          message: 'Sit: wait here rather than move',
+          message: why,
           waitDuration: previewDelay,
           child: SizedBox(
             height: engineRowHeight,

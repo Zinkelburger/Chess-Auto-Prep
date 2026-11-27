@@ -57,6 +57,7 @@ void main() {
     BoardNumber board = BoardNumber.one,
     SeatDecision? decision,
     List<Candidate> candidates = const [],
+    String? reason,
   }) async {
     hypebeast.answer = (question) => question.board == board
         ? HypeBeastSearched(
@@ -66,8 +67,9 @@ void main() {
                 if (pv.isNotEmpty)
                   SeatLine(multipv: 1, depth: 12, cp: -200, nodes: 800, pv: pv),
               ],
-              coordination: Coordination('kept_main', candidates),
+              coordination: Coordination(reason ?? 'kept_main', candidates),
               nodes: 800,
+              summary: {'reason': ?reason},
             ),
           )
         : firstMoves(question);
@@ -77,14 +79,40 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  const sit = 'Sit: wait here rather than move';
+  test('why it would sit, in a sentence about the player on move', () {
+    expect(
+      sitHint('stall_deny', Seat.a),
+      'HypeBeast would wait here: every move hands C + D a piece that mates.',
+    );
+    expect(
+      sitHint('stall_deny', Seat.d),
+      'HypeBeast would wait here: every move hands A + B a piece that mates.',
+    );
+    expect(
+      sitHint('hold_mated', Seat.c),
+      'HypeBeast would wait here: C is mated whatever it plays.',
+    );
+    expect(
+      sitHint('hold_partner_mate', Seat.b),
+      'HypeBeast would wait here: B’s partner A has a forced mate.',
+    );
+    expect(
+      sitHint('voluntary_wait', Seat.d),
+      'HypeBeast would wait here: D’s partner C is about to send a piece D '
+      'needs.',
+    );
+    expect(sitHint('fallback', Seat.a), 'HypeBeast would wait here.');
+    expect(sitHint(null, Seat.a), 'HypeBeast would wait here.');
+  });
+
+  const sit = 'HypeBeast would wait here: A is mated whatever it plays.';
 
   testWidgets('a row that moves does not say sit', (tester) async {
     build();
     await pump(tester);
     await engineSays(tester, const ['e2e4', 'e7e5']);
     expect(find.text('1. e4'), findsOneWidget);
-    expect(find.byTooltip(sit), findsNothing);
+    expect(find.text('sit'), findsNothing);
   });
 
   testWidgets('a row that sits on its board says so first', (tester) async {
@@ -102,10 +130,15 @@ void main() {
       const [],
       decision: const SeatDecision(null),
       candidates: const [Candidate('e2e4', l: 30, s: 20)],
+      reason: 'hold_mated',
     );
     final board2 = tester.getRect(find.byType(BoardLineRows).at(1));
     final said = tester.getRect(find.byTooltip(sit));
     expect(said.right, lessThan(board2.left), reason: 'under board 1');
+    expect(find.text('sit'), findsOneWidget);
+    // The sit row comes first, the move it compared after it.
+    final row = tester.getRect(find.text('sit'));
+    expect(row.top, lessThan(tester.getRect(find.text('1. e4').first).top));
   });
 
   testWidgets('a move the engine compared without a score reads a dash', (
@@ -119,7 +152,10 @@ void main() {
       const ['e2e4', 'e7e5'],
       candidates: const [Candidate('e2e4', l: 30, s: 20), Candidate('d2d4')],
     );
-    expect(find.text('-2.00'), findsOneWidget);
+    // One scale: the coordinator's S for the decision too, not the main
+    // line's −2.00.
+    expect(find.text('+0.20'), findsOneWidget);
+    expect(find.text('-2.00'), findsNothing);
     final dash = tester.widget<Text>(find.text('—'));
     expect(dash.style?.color, isNotNull, reason: 'muted');
     expect(find.text('1. d4'), findsOneWidget);

@@ -200,6 +200,44 @@ void main() {
     );
   }, timeout: const Timeout(Duration(seconds: 30)));
 
+  test('the bughouse engine runs in its folder and is told its net by name '
+      'there, whatever the folder\'s path holds', () async {
+    final root = await Directory.systemTemp.createTemp('hypebeast-');
+    addTearDown(() => root.delete(recursive: true));
+    final dir = Directory(p.join(root.path, 'Chess  Auto Prép'))..createSync();
+    final heard = p.join(root.path, 'heard');
+    final script = File(p.join(dir.path, 'hypebeast'))
+      ..writeAsStringSync('''#!/bin/sh
+while read -r line; do
+  echo "\$line" >> "$heard"
+  case "\$line" in
+    uci) echo "id name Fairy-Stockfish"; echo "uciok" ;;
+    isready) echo "readyok" ;;
+    go*) echo "info string NNUE evaluation using \$(pwd)/net enabled";
+         echo "bestmove (e2e4,pass)" ;;
+    quit) exit 0 ;;
+  esac
+done
+''');
+    await Process.run('chmod', ['+x', script.path]);
+    File(p.join(dir.path, 'net')).writeAsStringSync('net');
+    final engines = EngineSupervisor();
+    addTearDown(engines.dispose);
+    final start = await engines.startHypeBeast((
+      executable: script.path,
+      net: p.join(dir.path, 'net'),
+      directory: dir.path,
+    ));
+    expect(start, isA<HypeBeastStarted>());
+    final lines = File(heard).readAsLinesSync();
+    expect(lines, contains('setoption name EvalFile value net'));
+    // The engine said it reads the net in the folder it was started in.
+    expect(
+      (start as HypeBeastStarted).engine.provenance['net'],
+      p.join(dir.path, 'net'),
+    );
+  }, skip: !Platform.isLinux);
+
   test('a Windows loader failure is said in words; another exit is not', () {
     expect(engineExitReason(-1073741515), contains('0xC0000135'));
     expect(engineExitReason(0xC000001D), contains('instruction'));
