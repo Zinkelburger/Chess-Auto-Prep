@@ -6,7 +6,7 @@
  * pressing a move plays the line up to it. When the engine waits for the
  * player (a phone's first download) or has failed, one button starts it.
  * Screen readers hear the evaluation once a search ends, not every update.
- * Fairy-Stockfish on the bughouse board and Stockfish on the PGN page both use it;
+ * HypeBeast on the bughouse board and Stockfish on the PGN page both use it;
  * the small board shows the hands where the page has places for them.
  */
 import { Chessground } from '@lichess-org/chessground';

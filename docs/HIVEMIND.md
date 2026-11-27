@@ -3,8 +3,9 @@
 The bughouse engine behind the app's Bughouse mode and the `bughouse` MCP
 server. `tools/bughouse_web/` also builds it for the browser (one board, the
 partner board held still, on the GPU through WebGPU), but no website page
-loads that build: the site's `/bughouse` board runs Lichess's crazyhouse
-Fairy-Stockfish. This document
+loads that build: the site's `/bughouse` board runs
+[HypeBeast](https://github.com/Zinkelburger/HypeBeast), a bughouse engine
+that plays one board knowing the other. This document
 is the one place that explains *how it works* rather than how to call it:
 what the network sees, what the search does with it, and — the question that
 sends everyone here — **why the evaluation sits near 0.00 when one side is

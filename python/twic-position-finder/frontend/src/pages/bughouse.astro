@@ -172,9 +172,18 @@ const icon = {
         <button type="button" class="btn btn-outline btn-sm" id="ch-pgn-copy">Copy PGN</button>
         <button type="button" class="btn btn-outline btn-sm" id="ch-pgn-import" disabled>Import PGN</button>
       </div>
+      <p class="ch-foot" id="ch-foot">
+        <a class="link-ext" href="https://github.com/Zinkelburger/HypeBeast#how-it-works" target="_blank" rel="noopener">How HypeBeast works ↗</a>
+      </p>
     </section>
   </div>
 </Base>
+
+<style>
+  /* What the engine is, under FEN and PGN: below the first screen, so the board and engine lines never move. The site's navigation already leads to the other bughouse pages. */
+  .ch-foot { margin: 4px 0 0; }
+  .ch[data-mode="editor"] .ch-foot { display: none; }
+</style>
 
 <script>
   import { BughouseApp } from '../analysis/app';
