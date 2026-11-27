@@ -26,8 +26,10 @@ def main():
     for name, expected in build["bridge_sha256"].items():
         if digest((Path(__file__).parent / name).read_bytes()) != expected:
             raise SystemExit(f"The compiled engine is stale after changes to {name}. Rebuild it first.")
-    lock = json.loads((ROOT / "tools/assets.lock.json").read_text())["bughouse-network"]
-    asset = ROOT / "assets/bughouse/hivemind.onnx.gz"
+    lock = json.loads((ROOT / "tools/assets.lock.json").read_text())["hivemind-network"]
+    # The tool-only Hivemind fetch's place (fetch_assets.py --only hivemind),
+    # never the app's assets/bughouse/, which pubspec.yaml bundles.
+    asset = ROOT / "tools/hivemind-engine/hivemind.onnx.gz"
     data = asset.read_bytes() if asset.exists() else b""
     if digest(data) != lock["source_sha256"]:
         print("Downloading pinned Hivemind network for the static website…", flush=True)
@@ -61,7 +63,9 @@ def main():
                                       "wdl": "wdl_out", "movesLeft": "moves_left"},
     }
     (PUBLIC / "model.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    for name in ["HIVEMIND_LICENSE.txt", "ONNXRUNTIME_LICENSE.txt", "ONNXRUNTIME_THIRD_PARTY_NOTICES.txt"]:
+    # The app no longer ships Hivemind, so its notice is kept beside this script.
+    shutil.copyfile(Path(__file__).parent / "HIVEMIND_LICENSE.txt", PUBLIC / "HIVEMIND_LICENSE.txt")
+    for name in ["ONNXRUNTIME_LICENSE.txt", "ONNXRUNTIME_THIRD_PARTY_NOTICES.txt"]:
         shutil.copyfile(ROOT / "assets/licenses" / name, PUBLIC / name)
     shutil.copyfile(ROOT / "LICENSE", PUBLIC / "CHESS_AUTO_PREP_LICENSE.txt")
     for path in PUBLIC.iterdir():

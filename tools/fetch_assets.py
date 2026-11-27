@@ -7,43 +7,54 @@ just before someone launches the app in development:
 
 * Stockfish, one gzipped binary in `assets/executables/`, from the official
   Stockfish release.
-* Hivemind, the bughouse engine: the binary, the ONNX Runtime it links
-  against and the FP32 network, each gzipped in `assets/bughouse/`, plus a
-  manifest of uncompressed sizes and SHA-256 values the app uses to spot a
-  stale or corrupt extraction. Hivemind's own release is a ~2 GB Linux/NVIDIA
-  TensorRT bundle, so the portable CPU builds come from a fork that publishes
-  them per platform: https://github.com/Zinkelburger/hivemind/releases
+* HypeBeast, the bughouse engine (a Fairy-Stockfish fork,
+  https://github.com/Zinkelburger/HypeBeast): one static binary per platform
+  from its pinned release, and Fairy-Stockfish's bughouse network
+  `bughouse-cd8cceab93fe.nnue`, each gzipped in `assets/bughouse/`, plus a
+  manifest of uncompressed sizes and SHA-256 values the app checks before
+  every launch. No runtime library ships beside it.
+
+One more family is fetched only when asked for, and never into the app:
+
+* Hivemind (`--only hivemind`), the ONNX engine the bughouse MCP server and
+  the arena's `hivemind` player still run, into the git-ignored
+  `tools/hivemind-engine/`. The app does not bundle or read it.
 
 Run this from the repo root as a build prerequisite. CMake and the macOS
 Assemble script do it for you; Release CI fetches one target per job.
 
-    python3 tools/fetch_assets.py                  # host Stockfish + bughouse (~120 MB)
+    python3 tools/fetch_assets.py                  # host Stockfish + bughouse (~90 MB)
     python3 tools/fetch_assets.py --check          # verify host assets; non-zero if missing
     python3 tools/fetch_assets.py --force          # re-download and overwrite
     python3 tools/fetch_assets.py --only stockfish # one engine, host platform
     python3 tools/fetch_assets.py --only bughouse-windows
-    python3 tools/fetch_assets.py --hivemind ~/Projects/hivemind   # pack a local engine build
+    python3 tools/fetch_assets.py --only hivemind  # tool-only Hivemind, host platform
+    python3 tools/fetch_assets.py --hypebeast ~/Projects/HypeBeast  # pack a local engine build
 
 Default is the current OS/arch so a Linux checkout does not pull Windows and
 macOS engines. macOS ships two app downloads (Apple Silicon vs Intel); the
 Stockfish targets share one universal binary in `stockfish-macos.gz`, and the
-two bughouse targets write the same pair of destinations from their own
-architecture's archive.
+two bughouse targets write their own architecture's binary to the same
+`hypebeast-macos.gz`.
 
 Everything is pinned in `tools/assets.lock.json`. Tracking "latest" would make
 builds non-reproducible and let an upstream release break the app with no
-commit to point at. To upgrade: bump the tag, run with --force on each
-platform, verify the app still starts and commit the regenerated lockfile
-together.
+commit to point at. To upgrade HypeBeast: change HYPEBEAST_TAG, run with
+--only for each bughouse target (each binary is checked against the release's
+own SHA256SUMS.txt), verify the app still starts and commit the regenerated
+lockfile together.
 
 IMPORTANT: assets/bughouse/.gitkeep and assets/executables/.gitkeep are
 tracked on purpose. pubspec.yaml declares both directories as assets, and
 Flutter treats a *missing* asset directory as a printed warning rather than a
 build failure -- so without them a release builds green and ships no engine.
+pubspec.yaml bundles *everything* in assets/bughouse/, which is why a fetch
+removes the Hivemind files older checkouts left there and --check fails while
+any remain.
 
-Hivemind is Copyright (c) 2026 aminwoo and distributed under the MIT License.
-The complete notice shipped in the app is assets/licenses/HIVEMIND_LICENSE.txt.
-Upstream source: https://github.com/aminwoo/hivemind
+HypeBeast is GPL-3.0-or-later (a Fairy-Stockfish fork); the notice shipped in
+the app is under assets/licenses/. The network is credited on
+https://fairy-stockfish.github.io/nnue/ to "belzedar_ in discord".
 
 Standard library only, so CI needs no pip install step.
 """
@@ -53,12 +64,13 @@ from __future__ import annotations
 import argparse
 import gzip
 import hashlib
+import html
 import io
 import json
 import os
 import pathlib
 import platform
-import shutil
+import re
 import sys
 import tarfile
 import tempfile
@@ -70,6 +82,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LOCKFILE = REPO_ROOT / "tools" / "assets.lock.json"
+USER_AGENT = "chess-auto-prep-fetch"
 
 # --- Stockfish -------------------------------------------------------------
 
@@ -107,57 +120,125 @@ STOCKFISH_TARGETS = {
 # tensor contract, and known provenance live in tools/maia_model.lock.json. See
 # "Regenerating the Maia model" in README.md.
 
-# --- Bughouse (Hivemind) ---------------------------------------------------
+# --- Bughouse (HypeBeast) --------------------------------------------------
 
 BUGHOUSE_ASSETS = REPO_ROOT / "assets" / "bughouse"
 BUGHOUSE_MANIFEST = BUGHOUSE_ASSETS / "manifest.json"
 
-BUGHOUSE_TAG = "engine-v0.2.0"
-BUGHOUSE_BASE = (
-    f"https://github.com/Zinkelburger/hivemind/releases/download/{BUGHOUSE_TAG}"
+HYPEBEAST_REPO = "https://github.com/Zinkelburger/HypeBeast"
+# The one place the engine release is named; the app's licence notice points
+# at the same tag.
+HYPEBEAST_TAG = "v1.1.1"
+HYPEBEAST_BASE = f"{HYPEBEAST_REPO}/releases/download/{HYPEBEAST_TAG}"
+HYPEBEAST_RELEASE_PAGE = f"{HYPEBEAST_REPO}/releases/tag/{HYPEBEAST_TAG}"
+
+# Release assets are bare binaries, not archives. `modern` rather than `bmi2`
+# so the app runs on any x86-64 CPU it otherwise supports. The Linux binaries
+# are static and the Windows ones MinGW builds with only Windows' own DLLs
+# imported; tools/test_bughouse_engine.py deps proves both.
+BUGHOUSE_TARGETS = {
+    "bughouse-linux": {
+        "asset": "hypebeast-linux-x86-64-modern",
+        "dest": "assets/bughouse/hypebeast-linux.gz",
+    },
+    "bughouse-windows": {
+        "asset": "hypebeast-windows-x86-64-modern.exe",
+        "dest": "assets/bughouse/hypebeast-windows.exe.gz",
+    },
+    "bughouse-macos-arm64": {
+        "asset": "hypebeast-macos-apple-silicon",
+        "dest": "assets/bughouse/hypebeast-macos.gz",
+    },
+    "bughouse-macos-x86_64": {
+        "asset": "hypebeast-macos-x86-64-modern",
+        "dest": "assets/bughouse/hypebeast-macos.gz",
+    },
+}
+
+# Fairy-Stockfish matches a net to its variant by the file name's prefix, so
+# the name is kept exactly. Its official location is a Google Drive link on
+# https://fairy-stockfish.github.io/nnue/; the owner's site serves the same
+# bytes in gzipped parts (tools/prepare_hypebeast_web.py), used only when the
+# Drive download fails. Both are held to the same SHA-256.
+BUGHOUSE_NETWORK = {
+    "key": "bughouse-network",
+    "name": "bughouse-cd8cceab93fe.nnue",
+    "sha256": "cd8cceab93fed185b79932414d1a0823f40e15a09ca9776ceab7c9c5272ddc13",
+    "url": "https://drive.google.com/u/0/uc?id=1qZVSzm5G_KRc33YCqmsPM6Ayxo3CI4ME&export=download",
+    "mirror": "https://chessautoprep.com/hypebeast-engine/",
+    "dest": "assets/bughouse/bughouse-cd8cceab93fe.nnue.gz",
+}
+
+# What older checkouts left in assets/bughouse/: the Hivemind engine, its ONNX
+# Runtime under every name it shipped with, its network and the Windows
+# corresponding-source archive. Only these exact names are ever removed.
+STALE_BUGHOUSE_FILES = (
+    "hivemind-linux.gz",
+    "hivemind-macos.gz",
+    "hivemind-windows.exe.gz",
+    "hivemind-windows-source.tar.gz",
+    "hivemind.onnx.gz",
+    "hivemind_ort.dll.gz",
+    "onnxruntime.dll.gz",
+    "libonnxruntime.so.1.gz",
+    "libonnxruntime.dylib.gz",
 )
+
+# --- Hivemind, for the tools only ------------------------------------------
+
+# Git-ignored, outside assets/ so pubspec.yaml can never bundle it.
+# tools/mcp/bughouse/paths.py reads it; so does the arena through that module.
+HIVEMIND_ASSETS = REPO_ROOT / "tools" / "hivemind-engine"
+HIVEMIND_TAG = "engine-v0.2.0"
+HIVEMIND_BASE = (
+    f"https://github.com/Zinkelburger/hivemind/releases/download/{HIVEMIND_TAG}"
+)
+HIVEMIND_RELEASE_PAGE = "https://github.com/Zinkelburger/hivemind/releases"
 
 # The engine archives are flat: the binary and the runtime side by side, which
 # is the layout the RPATH baked into the binary ($ORIGIN / @loader_path) and
 # Windows' next-to-the-exe DLL search both resolve against.
-BUGHOUSE_TARGETS = {
-    "bughouse-linux": {
+HIVEMIND_TARGETS = {
+    "hivemind-linux": {
         "archive": "hivemind-linux-x64.tar.gz",
-        "engine": ("hivemind", "assets/bughouse/hivemind-linux.gz"),
-        "runtime": ("libonnxruntime.so.1", "assets/bughouse/libonnxruntime.so.1.gz"),
+        "engine": ("hivemind", "tools/hivemind-engine/hivemind-linux.gz"),
+        "runtime": ("libonnxruntime.so.1", "tools/hivemind-engine/libonnxruntime.so.1.gz"),
     },
-    "bughouse-windows": {
+    "hivemind-windows": {
         "archive": "hivemind-windows-x64.zip",
-        "engine": ("hivemind.exe", "assets/bughouse/hivemind-windows.exe.gz"),
-        "runtime": ("onnxruntime.dll", "assets/bughouse/hivemind_ort.dll.gz"),
+        "engine": ("hivemind.exe", "tools/hivemind-engine/hivemind-windows.exe.gz"),
+        "runtime": ("onnxruntime.dll", "tools/hivemind-engine/onnxruntime.dll.gz"),
     },
-    "bughouse-macos-arm64": {
+    "hivemind-macos-arm64": {
         "archive": "hivemind-macos-arm64.tar.gz",
-        "engine": ("hivemind", "assets/bughouse/hivemind-macos.gz"),
-        "runtime": ("libonnxruntime.dylib", "assets/bughouse/libonnxruntime.dylib.gz"),
+        "engine": ("hivemind", "tools/hivemind-engine/hivemind-macos.gz"),
+        "runtime": ("libonnxruntime.dylib", "tools/hivemind-engine/libonnxruntime.dylib.gz"),
     },
-    "bughouse-macos-x86_64": {
+    "hivemind-macos-x86_64": {
         "archive": "hivemind-macos-x86_64.tar.gz",
-        "engine": ("hivemind", "assets/bughouse/hivemind-macos.gz"),
-        "runtime": ("libonnxruntime.dylib", "assets/bughouse/libonnxruntime.dylib.gz"),
+        "engine": ("hivemind", "tools/hivemind-engine/hivemind-macos.gz"),
+        "runtime": ("libonnxruntime.dylib", "tools/hivemind-engine/libonnxruntime.dylib.gz"),
     },
 }
 
-# Architecture independent, so it is one asset shared by every bughouse target.
-# Published already gzipped: it is the largest single thing here and
-# re-compressing 54 MB in four release jobs buys nothing.
-BUGHOUSE_NETWORK = {
-    "key": "bughouse-network",
+# Architecture independent and published already gzipped.
+HIVEMIND_NETWORK = {
+    "key": "hivemind-network",
     "asset": "hivemind-network-fp32.onnx.gz",
-    "dest": "assets/bughouse/hivemind.onnx.gz",
+    "dest": "tools/hivemind-engine/hivemind.onnx.gz",
 }
 
 # `--only` accepts a concrete target or one of these, meaning "that engine for
-# the host platform".
-FAMILIES = ("stockfish", "bughouse")
+# the host platform". The default fetch is stockfish + bughouse; hivemind is
+# only fetched when named.
+FAMILIES = ("stockfish", "bughouse", "hivemind")
 
 
 # --- Shared helpers --------------------------------------------------------
+
+
+class DownloadError(Exception):
+    """A download that did not produce the file it was meant to."""
 
 
 def human(n: int) -> str:
@@ -177,7 +258,7 @@ def payload_sha256(path: Path) -> str:
 
     The container is not reproducible: gzip output depends on the zlib the
     machine happens to have, so the same upstream binary recompressed on CI and
-    on a developer laptop gives two different `output_sha256` values for byte-
+    on a developer laptop gives two different container hashes for byte-
     identical contents. Hashing the payload is the check that actually answers
     "is this the file we pinned", and it is the one `--check` can be trusted
     on after a fetch has rewritten the lock in the same run.
@@ -221,6 +302,10 @@ def bughouse_host_target() -> str:
     return f"bughouse-{_host_suffix()}"
 
 
+def hivemind_host_target() -> str:
+    return f"hivemind-{_host_suffix()}"
+
+
 def host_targets() -> list[str]:
     """Everything the app bundles on the machine running this script."""
     return [stockfish_host_target(), bughouse_host_target()]
@@ -230,12 +315,15 @@ def resolve_targets(only: list[str] | None) -> list[str]:
     """Expand `--only` values: a family name means that engine for the host."""
     if not only:
         return host_targets()
+    family = {
+        "stockfish": stockfish_host_target,
+        "bughouse": bughouse_host_target,
+        "hivemind": hivemind_host_target,
+    }
     out: list[str] = []
     for name in only:
-        if name == "stockfish":
-            name = stockfish_host_target()
-        elif name == "bughouse":
-            name = bughouse_host_target()
+        if name in family:
+            name = family[name]()
         if name not in out:
             out.append(name)
     return out
@@ -250,12 +338,27 @@ def save_lock(lock: dict) -> None:
     LOCKFILE.write_text(json.dumps(lock, indent=2, sort_keys=True) + "\n")
 
 
-def download(url: str, dest: Path, release_page: str) -> None:
-    """Stream `url` to `dest`, with progress on a tty."""
-    print(f"  downloading {url}")
-    req = urllib.request.Request(url, headers={"User-Agent": "chess-auto-prep-fetch"})
+def write_replacing(path: Path, data: bytes) -> None:
+    """Write `path` through a temporary name and rename it into place.
+
+    The rename also matters in agent worktrees, whose ignored assets are
+    symlinks into the main checkout: writing *through* one would change the
+    main checkout's file, while a rename replaces only the link.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(data)
+    tmp.replace(path)
+
+
+def _stream(url: str, dest: Path) -> str:
+    """Stream `url` to `dest`, with progress on a tty. Returns the media type.
+
+    Raises DownloadError for any HTTP or network failure.
+    """
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
-        with urllib.request.urlopen(req) as resp, dest.open("wb") as out:
+        with urllib.request.urlopen(req, timeout=300) as resp, dest.open("wb") as out:
             total = int(resp.headers.get("Content-Length") or 0)
             got = 0
             while chunk := resp.read(1 << 20):
@@ -268,13 +371,27 @@ def download(url: str, dest: Path, release_page: str) -> None:
                         end="",
                         file=sys.stderr,
                     )
+            media_type = resp.headers.get_content_type()
     except urllib.error.HTTPError as exc:
+        raise DownloadError(f"{url}: HTTP {exc.code} {exc.reason}") from exc
+    except (urllib.error.URLError, OSError) as exc:
+        raise DownloadError(f"{url}: {exc}") from exc
+    finally:
+        if sys.stderr.isatty():
+            print(file=sys.stderr)
+    return media_type
+
+
+def download(url: str, dest: Path, release_page: str) -> None:
+    """Stream `url` to `dest`; a failure ends the run naming the release page."""
+    print(f"  downloading {url}")
+    try:
+        _stream(url, dest)
+    except DownloadError as exc:
         raise SystemExit(
-            f"\nERROR: {url}\n  HTTP {exc.code} {exc.reason}\n"
+            f"\nERROR: {exc}\n"
             f"  The pinned release may not have this asset. See {release_page}"
         ) from exc
-    if sys.stderr.isatty():
-        print(file=sys.stderr)
 
 
 def read_member(archive: Path, name: str) -> bytes:
@@ -329,29 +446,29 @@ def write_gz(payload: bytes, dest: Path) -> None:
 
     The app calls `gzip.decode` on the raw asset bytes, so this must be a plain
     gzip stream of the bare file -- never a tar.gz. mtime is pinned to 0 so
-    repeated runs produce byte-identical output and the lockfile hash stays
-    meaningful.
+    repeated runs on one machine produce byte-identical output.
     """
-    dest.parent.mkdir(parents=True, exist_ok=True)
     buf = io.BytesIO()
     with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=9, mtime=0) as gz:
         gz.write(payload)
-    tmp = dest.with_suffix(dest.suffix + ".tmp")
-    tmp.write_bytes(buf.getvalue())
-    tmp.replace(dest)
+    write_replacing(dest, buf.getvalue())
 
 
-def dest_is_current(key: str, dest: Path, lock: dict) -> bool:
+def dest_is_current(key: str, dest: Path, lock: dict, url: str | None = None) -> bool:
     """True if `dest` exists and matches the lockfile when it has an entry.
 
     The pinned payload decides when there is one. A different container is
     not a different file: recompressing on a machine with another zlib
     changes the gzip bytes and nothing else, and treating that as staleness
-    re-downloaded 43 MB on every single run.
+    re-downloaded 43 MB on every single run. When `url` is given, an entry
+    pinned for another URL (a bumped release tag) is stale whatever the file.
     """
     if not dest.exists():
         return False
     entry = lock.get(key, {})
+    if url is not None and entry.get("url") not in (None, url):
+        print(f"[stale] {key}: assets.lock.json pins {entry.get('url')}")
+        return False
     wanted_payload = entry.get("payload_sha256")
     if wanted_payload:
         try:
@@ -397,6 +514,35 @@ def verify_source(name: str, archive: Path, lock: dict, url: str | None = None) 
             "trusting it, then remove its source_sha256 from the lock."
         )
     return digest
+
+
+def check_gz(key: str, path: Path, lock: dict) -> bool:
+    """`--check` for one gzipped asset: present, the pinned payload, the size."""
+    rel = path.relative_to(REPO_ROOT)
+    if not path.exists():
+        print(f"[MISS] {key}: {rel}")
+        return False
+    entry = lock.get(key, {})
+    wanted_payload = entry.get("payload_sha256")
+    try:
+        if wanted_payload:
+            # The payload, not the container: this is the only hash here that
+            # a fetch in the same job cannot have made true by writing it.
+            if payload_sha256(path) != wanted_payload:
+                print(f"[HASH] {key}: {rel} is not the file assets.lock.json pins")
+                return False
+        elif entry.get("output_sha256") and sha256_file(path) != entry["output_sha256"]:
+            print(f"[HASH] {key}: {rel} does not match assets.lock.json")
+            return False
+        expected_size = entry.get("uncompressed_bytes")
+        if expected_size is not None and gunzipped_size(path) != expected_size:
+            print(f"[SIZE] {key}: {rel} does not unpack to {expected_size} bytes")
+            return False
+    except (OSError, EOFError, gzip.BadGzipFile):
+        print(f"[BAD ] {key}: {rel} is not a gzip stream")
+        return False
+    print(f"[ok  ] {key}: {rel} ({human(path.stat().st_size)})")
+    return True
 
 
 # --- Stockfish -------------------------------------------------------------
@@ -458,17 +604,17 @@ def check_stockfish(names: list[str], lock: dict) -> list[str]:
     return problems
 
 
-# --- Bughouse (Hivemind) ---------------------------------------------------
+# --- Bughouse (HypeBeast) --------------------------------------------------
 
 
 def manifest_key(dest: str) -> str:
     """The manifest key for an asset: the name it is extracted under.
 
-    Keyed by filename rather than by role ("engine"/"runtime"), because a
-    checkout can hold more than one platform's pair — fetch Linux then Windows
-    and a role-keyed manifest describes only whichever ran last, so the app's
-    size check deletes and re-extracts the other one on every single launch
-    without ever converging.
+    Keyed by filename rather than by role ("engine"/"network"), because a
+    checkout can hold more than one platform's engine — fetch Linux then
+    Windows and a role-keyed manifest describes only whichever ran last, so
+    the app's size check deletes and re-extracts the other one on every single
+    launch without ever converging.
     """
     name = pathlib.PurePosixPath(dest).name
     return name[:-3] if name.endswith(".gz") else name
@@ -478,12 +624,18 @@ def manifest_entry(size: int, sha256: str) -> dict[str, object]:
     return {"bytes": size, "sha256": sha256}
 
 
+def known_manifest_keys() -> set[str]:
+    return {manifest_key(BUGHOUSE_NETWORK["dest"])} | {
+        manifest_key(spec["dest"]) for spec in BUGHOUSE_TARGETS.values()
+    }
+
+
 def write_manifest(entries: dict[str, dict[str, object]]) -> None:
     """Record uncompressed sizes and hashes by extracted filename.
 
     The app compares each extracted file against these to notice a half-written,
     corrupted or superseded extraction. Merging matters because the network is
-    fetched independently of the platform pair, and because a checkout may hold
+    fetched independently of the engine, and because a checkout may hold
     several platforms at once.
     """
     current: dict[str, dict[str, object]] = {}
@@ -493,68 +645,365 @@ def write_manifest(entries: dict[str, dict[str, object]]) -> None:
             current = {
                 key: value for key, value in decoded.items() if isinstance(value, dict)
             }
-        except (json.JSONDecodeError, AttributeError):
+        except (json.JSONDecodeError, AttributeError, OSError):
             pass
     current.update(entries)
-    # Drop anything that is not an asset we ship, so a manifest left behind by
-    # an older, role-keyed version of this script heals itself on the next run
-    # instead of carrying two spellings of the same size forever.
-    known = {manifest_key(BUGHOUSE_NETWORK["dest"])} | {
-        manifest_key(spec[role][1])
-        for spec in BUGHOUSE_TARGETS.values()
-        for role in ("engine", "runtime")
-    }
+    # Drop anything that is not an asset we ship, so the Hivemind entries an
+    # older checkout's manifest holds heal away on the next run.
+    known = known_manifest_keys()
     current = {k: v for k, v in current.items() if k in known}
-    BUGHOUSE_MANIFEST.parent.mkdir(parents=True, exist_ok=True)
-    BUGHOUSE_MANIFEST.write_text(json.dumps(current, indent=2, sort_keys=True) + "\n")
+    write_replacing(
+        BUGHOUSE_MANIFEST,
+        (json.dumps(current, indent=2, sort_keys=True) + "\n").encode(),
+    )
+
+
+def stale_bughouse_files() -> list[Path]:
+    """Hivemind files an older checkout left where the app bundle is made."""
+    return [
+        BUGHOUSE_ASSETS / name
+        for name in STALE_BUGHOUSE_FILES
+        if (BUGHOUSE_ASSETS / name).is_symlink() or (BUGHOUSE_ASSETS / name).exists()
+    ]
+
+
+def remove_stale_bughouse() -> None:
+    # unlink() removes a worktree's symlink, never the main checkout's file.
+    for path in stale_bughouse_files():
+        path.unlink()
+        print(f"[del]  {path.relative_to(REPO_ROOT)} (Hivemind, no longer bundled)")
+
+
+_RELEASE_SUMS: dict[str, dict[str, str]] = {}
+
+
+def release_sums(base: str) -> dict[str, str]:
+    """The release's own SHA256SUMS.txt, fetched once per run.
+
+    The lock pins what was fetched before; this is what pins the first fetch
+    after a tag bump, when the lock has nothing for the new URLs yet.
+    """
+    if base not in _RELEASE_SUMS:
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "SHA256SUMS.txt"
+            download(f"{base}/SHA256SUMS.txt", path, HYPEBEAST_RELEASE_PAGE)
+            sums: dict[str, str] = {}
+            for line in path.read_text().splitlines():
+                parts = line.split()
+                if len(parts) == 2 and re.fullmatch(r"[0-9a-f]{64}", parts[0]):
+                    sums[parts[1].lstrip("*")] = parts[0]
+        _RELEASE_SUMS[base] = sums
+    return _RELEASE_SUMS[base]
+
+
+def fetch_bughouse(name: str, lock: dict, force: bool) -> None:
+    """Fetch one platform's HypeBeast binary (the network is separate)."""
+    spec = BUGHOUSE_TARGETS[name]
+    rel = spec["dest"]
+    dest = REPO_ROOT / rel
+    url = f"{HYPEBEAST_BASE}/{spec['asset']}"
+
+    if name in lock and dest_is_current(name, dest, lock, url) and not force:
+        # Still rewrite the manifest: the two macOS targets share one
+        # destination, so "the file is already right" does not imply the
+        # manifest describes *this* file.
+        print(f"[ok]   {name}: {rel} present ({human(dest.stat().st_size)})")
+        write_manifest(
+            {
+                manifest_key(rel): manifest_entry(
+                    lock[name]["uncompressed_bytes"], lock[name]["payload_sha256"]
+                )
+            }
+        )
+        return
+
+    print(f"[get]  {name} -> {rel}")
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td) / spec["asset"]
+        download(url, tmp, HYPEBEAST_RELEASE_PAGE)
+        digest = verify_source(name, tmp, lock, url)
+        published = release_sums(HYPEBEAST_BASE).get(spec["asset"])
+        if published != digest:
+            raise SystemExit(
+                f"ERROR: {spec['asset']} does not match the release's SHA256SUMS.txt\n"
+                f"  published {published}\n  got       {digest}\n"
+                f"  See {HYPEBEAST_RELEASE_PAGE}"
+            )
+        binary = tmp.read_bytes()
+
+    write_gz(binary, dest)
+    write_manifest({manifest_key(rel): manifest_entry(len(binary), digest)})
+    # The asset is the bare binary, so what was downloaded is what the app
+    # unpacks: the source hash and the payload hash are the same value.
+    lock[name] = {
+        "url": url,
+        "source_sha256": digest,
+        "payload_sha256": digest,
+        "uncompressed_bytes": len(binary),
+    }
+    print(f"       wrote {rel} ({human(dest.stat().st_size)})")
+
+
+def _drive_confirm_url(page: str) -> str | None:
+    """The real download URL behind Google Drive's "can't scan" page.
+
+    Drive answers a large file with an HTML page holding a form whose hidden
+    fields (id, export, confirm, uuid) make the actual download; submitting it
+    is what clicking "Download anyway" does.
+    """
+    form = re.search(r'<form[^>]*id="download-form"[^>]*>(.*?)</form>', page, re.S)
+    if form is None:
+        return None
+    action = re.search(r'action="([^"]+)"', form.group(0))
+    if action is None:
+        return None
+    fields = {
+        html.unescape(n): html.unescape(v)
+        for n, v in re.findall(
+            r'<input[^>]*type="hidden"[^>]*name="([^"]+)"[^>]*value="([^"]*)"',
+            form.group(1),
+        )
+    }
+    if not fields:
+        return None
+    return f"{html.unescape(action.group(1))}?{urllib.parse.urlencode(fields)}"
+
+
+def download_from_drive(url: str, dest: Path) -> None:
+    """Download a public Google Drive file unattended, through its warning page."""
+    for _ in range(3):
+        print(f"  downloading {url}")
+        media_type = _stream(url, dest)
+        if media_type != "text/html":
+            return
+        page = dest.read_text(errors="replace")
+        follow = _drive_confirm_url(page)
+        if follow is None:
+            raise DownloadError("Google Drive answered with a page that has no download form")
+        url = follow
+    raise DownloadError("Google Drive kept answering with a page instead of the file")
+
+
+def download_from_mirror(base: str, dest: Path, td: Path) -> None:
+    """Reassemble the net from the site's gzipped parts (net.json + net-*.bin)."""
+    print(f"  downloading {base}net.json")
+    listing = td / "net.json"
+    _stream(f"{base}net.json", listing)
+    try:
+        manifest = json.loads(listing.read_text())
+        chunks = manifest["chunks"]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise DownloadError(f"{base}net.json is not a net manifest") from exc
+    if manifest.get("name") != BUGHOUSE_NETWORK["name"]:
+        raise DownloadError(f"{base}net.json describes {manifest.get('name')!r}")
+    packed = bytearray()
+    for chunk in chunks:
+        part = td / "part.bin"
+        print(f"  downloading {base}{chunk['file']}")
+        _stream(f"{base}{chunk['file']}", part)
+        data = part.read_bytes()
+        if hashlib.sha256(data).hexdigest() != chunk["sha256"]:
+            raise DownloadError(f"{chunk['file']} does not match {base}net.json")
+        packed += data
+    try:
+        dest.write_bytes(gzip.decompress(bytes(packed)))
+    except (OSError, EOFError) as exc:
+        raise DownloadError(f"the parts at {base} are not one gzip stream") from exc
 
 
 def fetch_bughouse_network(lock: dict, force: bool) -> None:
     key = BUGHOUSE_NETWORK["key"]
     rel = BUGHOUSE_NETWORK["dest"]
     dest = REPO_ROOT / rel
-    if dest_is_current(key, dest, lock) and not force:
+    pinned = BUGHOUSE_NETWORK["sha256"]
+    if key in lock and dest_is_current(key, dest, lock) and not force:
         print(f"[ok]   {key}: {rel} present ({human(dest.stat().st_size)})")
-        write_manifest(
-            {manifest_key(rel): manifest_entry(gunzipped_size(dest), payload_sha256(dest))}
-        )
+        write_manifest({manifest_key(rel): manifest_entry(gunzipped_size(dest), pinned)})
         return
 
-    url = f"{BUGHOUSE_BASE}/{BUGHOUSE_NETWORK['asset']}"
     print(f"[get]  {key} -> {rel}")
     with tempfile.TemporaryDirectory() as td:
-        tmp = Path(td) / BUGHOUSE_NETWORK["asset"]
-        download(url, tmp, "https://github.com/Zinkelburger/hivemind/releases")
+        tmp = Path(td) / BUGHOUSE_NETWORK["name"]
+        sources = (
+            ("Google Drive", lambda: download_from_drive(BUGHOUSE_NETWORK["url"], tmp)),
+            ("the chessautoprep.com copy",
+             lambda: download_from_mirror(BUGHOUSE_NETWORK["mirror"], tmp, Path(td))),
+        )
+        failures = []
+        for label, fetch in sources:
+            try:
+                fetch()
+            except DownloadError as exc:
+                failures.append(f"{label}: {exc}")
+                print(f"  {label} failed: {exc}")
+                continue
+            digest = sha256_file(tmp)
+            if digest == pinned:
+                break
+            failures.append(f"{label}: got {digest}, not the pinned net")
+            print(f"  {label} gave a different file ({digest[:12]}…)")
+        else:
+            raise SystemExit(
+                f"ERROR: could not download {BUGHOUSE_NETWORK['name']}\n  "
+                + "\n  ".join(failures)
+            )
+        payload = tmp.read_bytes()
+
+    write_gz(payload, dest)
+    write_manifest({manifest_key(rel): manifest_entry(len(payload), pinned)})
+    lock[key] = {
+        "url": BUGHOUSE_NETWORK["url"],
+        "source_sha256": pinned,
+        "payload_sha256": pinned,
+        "uncompressed_bytes": len(payload),
+    }
+    print(f"       wrote {rel} ({human(dest.stat().st_size)})")
+
+
+def install_from_build(checkout: Path) -> int:
+    """Pack a local HypeBeast build instead of downloading a release.
+
+    What you want while working on the engine itself: the binary its makefile
+    leaves in engine/src/ and the net from its nets/ folder, written where and
+    how a downloaded release would be.
+    """
+    root = checkout.expanduser().resolve()
+    candidates = [root / "engine" / "src" / "stockfish.exe", root / "engine" / "src" / "stockfish"]
+    binary_path = next((p for p in candidates if p.is_file()), None)
+    if binary_path is None:
+        raise SystemExit(
+            f"ERROR: no engine build in {root / 'engine' / 'src'}.\n"
+            "  Build it first: make -j4 build ARCH=x86-64-modern (in engine/src)."
+        )
+    network = root / "nets" / BUGHOUSE_NETWORK["name"]
+    if not network.is_file():
+        raise SystemExit(f"ERROR: {network} not found.")
+    payload = network.read_bytes()
+    if hashlib.sha256(payload).hexdigest() != BUGHOUSE_NETWORK["sha256"]:
+        raise SystemExit(f"ERROR: {network} is not the pinned bughouse network.")
+    binary = binary_path.read_bytes()
+
+    BUGHOUSE_ASSETS.mkdir(parents=True, exist_ok=True)
+    remove_stale_bughouse()
+    engine_dest = BUGHOUSE_TARGETS[bughouse_host_target()]["dest"]
+    write_gz(binary, REPO_ROOT / engine_dest)
+    write_gz(payload, REPO_ROOT / BUGHOUSE_NETWORK["dest"])
+    write_manifest(
+        {
+            manifest_key(engine_dest): manifest_entry(
+                len(binary), hashlib.sha256(binary).hexdigest()
+            ),
+            manifest_key(BUGHOUSE_NETWORK["dest"]): manifest_entry(
+                len(payload), BUGHOUSE_NETWORK["sha256"]
+            ),
+        }
+    )
+    print(f"Installed {binary_path} and {network.name} into {BUGHOUSE_ASSETS}")
+    print("Note: a local build is not the pinned release, so --check reports "
+          "it as stale; fetch again to go back to the release.")
+    return 0
+
+
+def check_bughouse(names: list[str], lock: dict) -> list[str]:
+    problems: list[str] = []
+    paths: list[tuple[str, Path]] = [
+        (BUGHOUSE_NETWORK["key"], REPO_ROOT / BUGHOUSE_NETWORK["dest"])
+    ]
+    paths += [(n, REPO_ROOT / BUGHOUSE_TARGETS[n]["dest"]) for n in names]
+    for key, path in paths:
+        if not check_gz(key, path, lock):
+            problems.append(key)
+
+    for path in stale_bughouse_files():
+        print(
+            f"[OLD ] {path.relative_to(REPO_ROOT)}: a Hivemind file the app "
+            "would bundle; a fetch removes it"
+        )
+        problems.append(path.name)
+
+    manifest_rel = BUGHOUSE_MANIFEST.relative_to(REPO_ROOT)
+    if not BUGHOUSE_MANIFEST.exists():
+        print(f"[MISS] manifest: {manifest_rel}")
+        problems.append("manifest")
+        return problems
+    try:
+        manifest = json.loads(BUGHOUSE_MANIFEST.read_text())
+    except (json.JSONDecodeError, OSError):
+        manifest = None
+    if not isinstance(manifest, dict):
+        print(f"[BAD ] manifest: {manifest_rel} is not a JSON object")
+        problems.append("manifest")
+        return problems
+    wanted = {manifest_key(BUGHOUSE_NETWORK["dest"]): lock.get(BUGHOUSE_NETWORK["key"], {})}
+    for n in names:
+        wanted[manifest_key(BUGHOUSE_TARGETS[n]["dest"])] = lock.get(n, {})
+    missing = set(wanted) - set(manifest)
+    if missing:
+        print(f"[BAD ] manifest: missing {', '.join(sorted(missing))}")
+        problems.append("manifest")
+        return problems
+    malformed = [
+        name
+        for name in wanted
+        if not isinstance(manifest.get(name), dict)
+        or not isinstance(manifest[name].get("bytes"), int)
+        or not isinstance(manifest[name].get("sha256"), str)
+        or len(manifest[name]["sha256"]) != 64
+    ]
+    if malformed:
+        print(f"[BAD ] manifest: invalid integrity record for {', '.join(sorted(malformed))}")
+        problems.append("manifest")
+        return problems
+    # The app trusts the manifest, not the lock: it must describe the pinned files.
+    differs = [
+        name
+        for name, entry in wanted.items()
+        if entry.get("payload_sha256")
+        and (manifest[name]["sha256"], manifest[name]["bytes"])
+        != (entry["payload_sha256"], entry.get("uncompressed_bytes"))
+    ]
+    if differs:
+        print(f"[BAD ] manifest: does not describe the pinned {', '.join(sorted(differs))}")
+        problems.append("manifest")
+        return problems
+    print(f"[ok  ] manifest: {manifest_rel}")
+    return problems
+
+
+# --- Hivemind, for the tools only ------------------------------------------
+
+
+def fetch_hivemind_network(lock: dict, force: bool) -> None:
+    key = HIVEMIND_NETWORK["key"]
+    rel = HIVEMIND_NETWORK["dest"]
+    dest = REPO_ROOT / rel
+    if dest_is_current(key, dest, lock) and not force:
+        print(f"[ok]   {key}: {rel} present ({human(dest.stat().st_size)})")
+        return
+
+    url = f"{HIVEMIND_BASE}/{HIVEMIND_NETWORK['asset']}"
+    print(f"[get]  {key} -> {rel}")
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td) / HIVEMIND_NETWORK["asset"]
+        download(url, tmp, HIVEMIND_RELEASE_PAGE)
         digest = verify_source(key, tmp, lock, url)
         # Already gzipped upstream; pass it through rather than recompressing.
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(tmp, dest)
+        write_replacing(dest, tmp.read_bytes())
 
-    size = gunzipped_size(dest)
-    write_manifest({manifest_key(rel): manifest_entry(size, payload_sha256(dest))})
     lock[key] = {
         "url": url,
         "source_sha256": digest,
         "output_sha256": sha256_file(dest),
         "payload_sha256": payload_sha256(dest),
         "output_bytes": dest.stat().st_size,
-        "uncompressed_bytes": size,
+        "uncompressed_bytes": gunzipped_size(dest),
     }
     print(f"       wrote {rel} ({human(dest.stat().st_size)})")
 
 
-def fetch_bughouse(name: str, lock: dict, force: bool) -> None:
-    """Fetch one platform's engine + runtime pair (the network is separate)."""
-    windows_engine = None
-    if name == "bughouse-windows":
-        from bughouse_windows import HERE, verified_engine
-        windows_engine = verified_engine()
-        BUGHOUSE_ASSETS.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(
-            HERE / "hivemind-source.tar.gz",
-            BUGHOUSE_ASSETS / "hivemind-windows-source.tar.gz",
-        )
-    spec = BUGHOUSE_TARGETS[name]
+def fetch_hivemind(name: str, lock: dict, force: bool) -> None:
+    """Fetch one platform's Hivemind engine + ONNX Runtime pair."""
+    spec = HIVEMIND_TARGETS[name]
     engine_member, engine_dest = spec["engine"]
     runtime_member, runtime_dest = spec["runtime"]
     engine_path = REPO_ROOT / engine_dest
@@ -565,248 +1014,77 @@ def fetch_bughouse(name: str, lock: dict, force: bool) -> None:
         and f"{name}:runtime" in lock
         and dest_is_current(f"{name}:engine", engine_path, lock)
         and dest_is_current(f"{name}:runtime", runtime_path, lock)
-        and (windows_engine is None or lock[f"{name}:engine"].get("payload_sha256")
-             == hashlib.sha256(windows_engine).hexdigest())
     )
     if fresh and not force:
-        # Still rewrite the manifest. The platform pair and the network are
-        # fetched independently, and the two macOS targets share one pair of
-        # destinations, so "the files are already right" does not imply the
-        # manifest describes *these* files.
         print(f"[ok]   {name}: {engine_dest} + {runtime_dest} present")
-        write_manifest(
-            {
-                manifest_key(engine_dest): manifest_entry(
-                    lock[f"{name}:engine"]["uncompressed_bytes"],
-                    lock[f"{name}:engine"]["payload_sha256"],
-                ),
-                manifest_key(runtime_dest): manifest_entry(
-                    lock[f"{name}:runtime"]["uncompressed_bytes"],
-                    lock[f"{name}:runtime"]["payload_sha256"],
-                ),
-            }
-        )
         return
 
-    url = f"{BUGHOUSE_BASE}/{spec['archive']}"
+    url = f"{HIVEMIND_BASE}/{spec['archive']}"
     print(f"[get]  {name} -> {engine_dest} + {runtime_dest}")
     with tempfile.TemporaryDirectory() as td:
         # Keep the upstream filename: read_member dispatches on the suffix, so
         # a generic temp name would send the Windows zip down the tar path.
         tmp = Path(td) / os.path.basename(urllib.parse.urlparse(url).path)
-        download(url, tmp, "https://github.com/Zinkelburger/hivemind/releases")
+        download(url, tmp, HIVEMIND_RELEASE_PAGE)
         digest = verify_source(name, tmp, lock, url)
         engine_bytes = read_member(tmp, engine_member)
         runtime_bytes = read_member(tmp, runtime_member)
 
-    if windows_engine is not None:
-        engine_bytes = windows_engine
+    for role, payload in (("engine", engine_bytes), ("runtime", runtime_bytes)):
+        pinned = lock.get(f"{name}:{role}", {}).get("payload_sha256")
+        if pinned and lock.get(name, {}).get("url") == url \
+                and hashlib.sha256(payload).hexdigest() != pinned:
+            raise SystemExit(f"ERROR: the {role} inside {spec['archive']} is not the pinned one")
 
     write_gz(engine_bytes, engine_path)
     write_gz(runtime_bytes, runtime_path)
-    write_manifest(
-        {
-            manifest_key(engine_dest): manifest_entry(
-                len(engine_bytes), hashlib.sha256(engine_bytes).hexdigest()
-            ),
-            manifest_key(runtime_dest): manifest_entry(
-                len(runtime_bytes), hashlib.sha256(runtime_bytes).hexdigest()
-            ),
-        }
-    )
 
     lock[name] = {"url": url, "source_sha256": digest}
-    lock[f"{name}:engine"] = {
-        "output_sha256": sha256_file(engine_path),
-        "payload_sha256": hashlib.sha256(engine_bytes).hexdigest(),
-        "output_bytes": engine_path.stat().st_size,
-        "uncompressed_bytes": len(engine_bytes),
-    }
-    if windows_engine is not None:
-        lock[f"{name}:engine"]["build_manifest"] = "tools/bughouse_windows/build.json"
-    lock[f"{name}:runtime"] = {
-        "output_sha256": sha256_file(runtime_path),
-        "payload_sha256": hashlib.sha256(runtime_bytes).hexdigest(),
-        "output_bytes": runtime_path.stat().st_size,
-        "uncompressed_bytes": len(runtime_bytes),
-    }
+    for role, path, payload in (
+        ("engine", engine_path, engine_bytes),
+        ("runtime", runtime_path, runtime_bytes),
+    ):
+        lock[f"{name}:{role}"] = {
+            "output_sha256": sha256_file(path),
+            "payload_sha256": hashlib.sha256(payload).hexdigest(),
+            "output_bytes": path.stat().st_size,
+            "uncompressed_bytes": len(payload),
+        }
     print(
         f"       wrote {engine_dest} ({human(engine_path.stat().st_size)})"
         f" + {runtime_dest} ({human(runtime_path.stat().st_size)})"
     )
 
 
-def install_from_build(checkout: Path, build: str) -> int:
-    """Package a local Hivemind build instead of downloading a release.
-
-    What you want while working on the engine itself. Delegates the staging to
-    the engine repo's own tools/package_engine.py so the layout can only be
-    defined in one place, then feeds the result through the same extraction
-    path a downloaded archive takes.
-    """
-    import subprocess
-
-    root = checkout.expanduser()
-    packer = root / "tools" / "package_engine.py"
-    if not packer.is_file():
-        raise SystemExit(
-            f"ERROR: {packer} not found.\n"
-            "  Needs a Hivemind checkout with the portable build support "
-            "(the portable-desktop-builds work)."
-        )
-
-    slug = {
-        "linux": "linux-x64",
-        "windows": "windows-x64",
-        "macos-arm64": "macos-arm64",
-        "macos-x86_64": "macos-x86_64",
-    }[_host_suffix()]
-
-    print(f"Packaging local build in {root} as {slug}")
-    result = subprocess.run(
-        [sys.executable, str(packer), "--build", build, "--target", slug],
-        cwd=root,
-    )
-    if result.returncode != 0:
-        return result.returncode
-
-    suffix = ".zip" if slug == "windows-x64" else ".tar.gz"
-    archive = root / "dist" / f"hivemind-{slug}{suffix}"
-    if not archive.is_file():
-        raise SystemExit(f"ERROR: {archive} was not produced")
-
-    spec = BUGHOUSE_TARGETS[bughouse_host_target()]
-    engine_member, engine_dest = spec["engine"]
-    runtime_member, runtime_dest = spec["runtime"]
-
-    engine_bytes = read_member(archive, engine_member)
-    runtime_bytes = read_member(archive, runtime_member)
-    write_gz(engine_bytes, REPO_ROOT / engine_dest)
-    write_gz(runtime_bytes, REPO_ROOT / runtime_dest)
-
-    network = root / "engine" / "models" / "hivemind-fp32.onnx"
-    if not network.is_file():
-        raise SystemExit(
-            f"ERROR: {network} not found. Convert one first:\n"
-            "  python3 engine/scripts/convert_onnx_fp32.py "
-            "engine/models/hivemind.onnx engine/models/hivemind-fp32.onnx"
-        )
-    payload = network.read_bytes()
-    write_gz(payload, REPO_ROOT / BUGHOUSE_NETWORK["dest"])
-
-    write_manifest(
-        {
-            manifest_key(engine_dest): manifest_entry(
-                len(engine_bytes), hashlib.sha256(engine_bytes).hexdigest()
-            ),
-            manifest_key(runtime_dest): manifest_entry(
-                len(runtime_bytes), hashlib.sha256(runtime_bytes).hexdigest()
-            ),
-            manifest_key(BUGHOUSE_NETWORK["dest"]): manifest_entry(
-                len(payload), hashlib.sha256(payload).hexdigest()
-            ),
-        }
-    )
-    total = sum(f.stat().st_size for f in BUGHOUSE_ASSETS.glob("*.gz"))
-    print(f"\nInstalled a local build into {BUGHOUSE_ASSETS} ({human(total)})")
-    print("Note: a local build is tuned for this machine and is not "
-          "redistributable — release builds come from the engine CI.")
-    return 0
-
-
-def check_bughouse(names: list[str], lock: dict) -> list[str]:
+def check_hivemind(names: list[str], lock: dict) -> list[str]:
     problems: list[str] = []
-    if "bughouse-windows" in names:
-        from bughouse_windows import HERE, verified_engine
-        engine = verified_engine()
-        if hashlib.sha256(engine).hexdigest() != lock.get(
-            "bughouse-windows:engine", {}
-        ).get("payload_sha256"):
-            problems.append("Windows engine lock is stale; fetch the rebuilt engine")
-        source = BUGHOUSE_ASSETS / "hivemind-windows-source.tar.gz"
-        if not source.exists() or sha256_file(source) != sha256_file(HERE / "hivemind-source.tar.gz"):
-            problems.append("Windows corresponding-source archive missing or stale")
-    paths: list[tuple[str, Path]] = [
-        (BUGHOUSE_NETWORK["key"], REPO_ROOT / BUGHOUSE_NETWORK["dest"])
-    ]
+    paths = [(HIVEMIND_NETWORK["key"], REPO_ROOT / HIVEMIND_NETWORK["dest"])]
     for n in names:
-        paths.append((f"{n}:engine", REPO_ROOT / BUGHOUSE_TARGETS[n]["engine"][1]))
-        paths.append((f"{n}:runtime", REPO_ROOT / BUGHOUSE_TARGETS[n]["runtime"][1]))
-
+        paths.append((f"{n}:engine", REPO_ROOT / HIVEMIND_TARGETS[n]["engine"][1]))
+        paths.append((f"{n}:runtime", REPO_ROOT / HIVEMIND_TARGETS[n]["runtime"][1]))
     for key, path in paths:
-        rel = path.relative_to(REPO_ROOT)
-        if not path.exists():
-            print(f"[MISS] {key}: {rel}")
+        if not check_gz(key, path, lock):
             problems.append(key)
-            continue
-        entry = lock.get(key, {})
-        wanted_payload = entry.get("payload_sha256")
-        if wanted_payload:
-            # The payload, not the container: this is the only hash here that
-            # a fetch in the same job cannot have made true by writing it.
-            if payload_sha256(path) != wanted_payload:
-                print(f"[HASH] {key}: {rel} is not the file assets.lock.json pins")
-                problems.append(key)
-                continue
-        elif entry.get("output_sha256") and sha256_file(path) != entry["output_sha256"]:
-            print(f"[HASH] {key}: {rel} does not match assets.lock.json")
-            problems.append(key)
-            continue
-        expected_size = entry.get("uncompressed_bytes")
-        if expected_size is not None and gunzipped_size(path) != expected_size:
-            print(f"[SIZE] {key}: {rel} does not unpack to {expected_size} bytes")
-            problems.append(key)
-            continue
-        print(f"[ok  ] {key}: {rel} ({human(path.stat().st_size)})")
-
-    manifest_rel = BUGHOUSE_MANIFEST.relative_to(REPO_ROOT)
-    if not BUGHOUSE_MANIFEST.exists():
-        print(f"[MISS] manifest: {manifest_rel}")
-        problems.append("manifest")
-    else:
-        manifest = json.loads(BUGHOUSE_MANIFEST.read_text())
-        wanted = {manifest_key(BUGHOUSE_NETWORK["dest"])}
-        for n in names:
-            wanted.add(manifest_key(BUGHOUSE_TARGETS[n]["engine"][1]))
-            wanted.add(manifest_key(BUGHOUSE_TARGETS[n]["runtime"][1]))
-        missing = wanted - set(manifest)
-        if missing:
-            print(f"[BAD ] manifest: missing {', '.join(sorted(missing))}")
-            problems.append("manifest")
-        else:
-            malformed = [
-                name
-                for name in wanted
-                if not isinstance(manifest.get(name), dict)
-                or not isinstance(manifest[name].get("bytes"), int)
-                or not isinstance(manifest[name].get("sha256"), str)
-                or len(manifest[name]["sha256"]) != 64
-            ]
-            if malformed:
-                print(
-                    f"[BAD ] manifest: invalid integrity record for "
-                    f"{', '.join(sorted(malformed))}"
-                )
-                problems.append("manifest")
-            else:
-                print(f"[ok  ] manifest: {manifest_rel}")
     return problems
 
 
 # --- Entry point -----------------------------------------------------------
 
 
-def split_targets(names: list[str]) -> tuple[list[str], list[str]]:
+def split_targets(names: list[str]) -> tuple[list[str], list[str], list[str]]:
     stockfish = [n for n in names if n in STOCKFISH_TARGETS]
     bughouse = [n for n in names if n in BUGHOUSE_TARGETS]
-    return stockfish, bughouse
+    hivemind = [n for n in names if n in HIVEMIND_TARGETS]
+    return stockfish, bughouse, hivemind
 
 
 def check(names: list[str], lock: dict, only: list[str] | None) -> int:
-    stockfish, bughouse = split_targets(names)
+    stockfish, bughouse, hivemind = split_targets(names)
     problems = check_stockfish(stockfish, lock)
     if bughouse:
         problems += check_bughouse(bughouse, lock)
+    if hivemind:
+        problems += check_hivemind(hivemind, lock)
     if problems:
         rerun = "python3 tools/fetch_assets.py"
         if only:
@@ -828,18 +1106,20 @@ def main() -> int:
     ap.add_argument(
         "--only",
         action="append",
-        choices=sorted(STOCKFISH_TARGETS) + sorted(BUGHOUSE_TARGETS) + list(FAMILIES),
+        choices=sorted(STOCKFISH_TARGETS)
+        + sorted(BUGHOUSE_TARGETS)
+        + sorted(HIVEMIND_TARGETS)
+        + list(FAMILIES),
         help="a target, or an engine name for the host platform (repeatable; "
-        "default: both engines for the host)",
+        "default: stockfish and bughouse for the host; hivemind only when named)",
     )
-    ap.add_argument("--hivemind", type=Path, metavar="CHECKOUT",
-                    help="package a local Hivemind build instead of downloading")
-    ap.add_argument("--build", default="engine/build-ort",
-                    help="build directory inside the checkout (with --hivemind)")
+    ap.add_argument("--hypebeast", type=Path, metavar="CHECKOUT",
+                    help="pack a local HypeBeast build (engine/src, nets/) "
+                    "instead of downloading")
     args = ap.parse_args()
 
-    if args.hivemind:
-        return install_from_build(args.hivemind, args.build)
+    if args.hypebeast:
+        return install_from_build(args.hypebeast)
 
     names = resolve_targets(args.only)
     lock = load_lock()
@@ -848,14 +1128,20 @@ def main() -> int:
         return check(names, lock, args.only)
 
     before = json.dumps(lock, sort_keys=True)
-    stockfish, bughouse = split_targets(names)
+    stockfish, bughouse, hivemind = split_targets(names)
     for n in stockfish:
         fetch_stockfish(n, lock, args.force)
     if bughouse:
         BUGHOUSE_ASSETS.mkdir(parents=True, exist_ok=True)
+        remove_stale_bughouse()
         for n in bughouse:
             fetch_bughouse(n, lock, args.force)
         fetch_bughouse_network(lock, args.force)
+    if hivemind:
+        HIVEMIND_ASSETS.mkdir(parents=True, exist_ok=True)
+        for n in hivemind:
+            fetch_hivemind(n, lock, args.force)
+        fetch_hivemind_network(lock, args.force)
     if json.dumps(lock, sort_keys=True) != before:
         save_lock(lock)
         print(f"\nUpdated {LOCKFILE.relative_to(REPO_ROOT)} -- commit it.")
