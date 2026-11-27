@@ -4,7 +4,7 @@ Flutter desktop app for Linux, Windows and macOS: chess preparation,
 repertoires, training, player analysis and studies.
 
 `lib/main.dart` boots the one app; production code is under `lib/`, tests
-under `test/`. What each mode does, and the owner's decisions about it, is in
+under `test/`. What each mode does is in
 [the mode specs](docs/features/README.md). An older app was deleted on
 2026-09-30; do not restore its code or treat its behaviour as a requirement.
 

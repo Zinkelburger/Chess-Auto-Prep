@@ -180,21 +180,3 @@ be read is logged and left out.
   `install-requested` marker and the `reopen` marker sit beside the payload.
 - Every board, engine job, explorer, search and trainer reads `Settings`
   through the one `SettingsStore`.
-
-## Owner decisions
-
-- Shape: search box, list of places, rows; kept compact (owner, 2026-09-21:
-  "Option A is just so overwhelming to look at… make B compact"). A row exists
-  only when something reads it.
-- The gear at the right end of the top bar and Ctrl+, are the ways in; the
-  mode menu lists modes only (owner, 2026-09-22).
-- The app is dark only: no Light/System theme and no Appearance row (owner,
-  2026-09-22).
-- No dropdowns: choices are side-by-side buttons or typeable choice fields,
-  numbers are typeable steppers; one CPU-cores knob, not cores plus threads
-  (owner, 2026-09-06).
-- The engine pane's gear and the Expectimax tab's gear edit the same values as
-  their Settings places; copy is shared (`EngineSettingCopy`,
-  `SearchSettingCopy`).
-- Updates come from GitHub Releases only; `Update now` reopens the app on the
-  new version.

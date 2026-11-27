@@ -137,12 +137,3 @@ instead of failing on SQLite's lock.
   `tools/chesscom_events.py` collect broadcast PGNs, and
   `tools/master_import_pgn.dart` (run through `scripts/ci.sh test`) builds a
   database in this format from PGN files with the same importer.
-
-## Owner decisions
-
-- One master database file; no second book or migration (owner, 2026-09-28:
-  "have one thing that makes sense, don't keep 2 files").
-- Deferred, possibly not worth building (owner, 2026-09-28): Lichess
-  evaluation and ChessDB dump stores, broadcast collections in the app, Scid
-  export, automatic TWIC checks, a first-run download prompt, waiting on a
-  download during a build, and rebuilding an old database's classical index.

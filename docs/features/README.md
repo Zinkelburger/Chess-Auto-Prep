@@ -2,9 +2,9 @@
 
 One file per mode, written as behaviour: what is on the screen, what the user
 can do, what data it touches and what can go wrong. Each describes the app as
-it is now and names the code it lives in. The owner corrects these files; an
-explicit owner decision in a spec or in the current task outranks everything
-else here.
+it is now and names the code it lives in. A spec records what is, not what
+must stay: a change is judged on whether it makes the app better to use, and
+the spec is rewritten to match.
 
 | Mode or area | Spec |
 |---|---|
@@ -45,9 +45,6 @@ the sentence the user sees.
 ## Data
 Files and tables read and written, formats, what must survive a round trip,
 and which other modes read the same data.
-
-## Owner decisions
-Binding product decisions, dated, written as rules.
 ```
 
 A spec describes what the app does. Do not list things it does not do: that

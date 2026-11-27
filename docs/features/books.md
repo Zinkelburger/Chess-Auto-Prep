@@ -88,12 +88,3 @@ names the place.
 - Read by: the explorer's `Book` source, My games, the PGN Viewer's
   `My books` tab, the Repertoire trainer's book scope, Player analysis's
   `My book` tab.
-
-## Owner decisions
-
-- **One book in use** (2026-09-23): a book is a named set of repertoires and
-  chapters for one event; exactly one is in use at a time and every reader of
-  "the book" reads it. Until one is chosen (and after `Stop using`) the book
-  is every repertoire, `All repertoires`, so nothing that reads the book
-  waits for a book to be made (2026-11-09). One book holds both colours; each chapter says its side.
-- **No designated per-colour book paths** (2026-09-23): books replace them.

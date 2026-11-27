@@ -191,17 +191,3 @@ and the card's tabs.
   `myGameSpeeds` (all four). Usernames and last-download dates are the shared
   preferences `lichess_username` / `chesscom_username`.
 - Network and offline rules: [Architecture](../ARCHITECTURE.md).
-
-## Owner decisions
-
-- 2026-09-22: Tactics is "set up my accounts & play tactics" in the shared
-  three-pane workspace; no repertoire-builder options, no extra views. Analyze
-  opens a tab with the engine, never another mode.
-- 2026-09-22: the book check, opening review and games list belong to
-  [My games](my-games.md), not here.
-- 2026-09-27: accepting other winning moves is opt-in; the stored answer is
-  never changed by it, and an unchecked answer is never graded wrong.
-- 2026-10-01: one filled button at a time — `Play` in the column, `Next` on
-  the Puzzle tab; filters fold open inline under the count they change, not in
-  a dialog.
-- Usernames only: no password, OAuth or login to fetch games.

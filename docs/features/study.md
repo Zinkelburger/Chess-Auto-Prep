@@ -177,18 +177,3 @@ content that cannot be safely rewritten. Undo and recovery use the shared
 storage system ([architecture](../ARCHITECTURE.md)). Training progress for
 study lines goes to the same files as the repertoire trainer
 ([trainer.md](trainer.md)); Players links prep and group studies by path.
-
-## Owner decisions
-
-- Studies use Lichess's export format (2026-09-04): chapter tags as Lichess
-  writes them, root comments kept, orientation per chapter; quiz markers are
-  `[%tstart]` / `[%tend]` comment tokens.
-- Study practice is line practice through the shared trainer, not Lichess
-  interactive-lesson authoring. Lichess collaboration, member permissions,
-  chat and publication/discovery are out of scope for this local editor.
-- Study and the PGN Viewer are one card with `Read | Edit`; Study opens on
-  Edit (owner, 2026-10-24: "unify them as much as possible").
-- A study goes to and comes back from the user's own Lichess account in one
-  step each way, clear and trivially usable (owner, 2026-10-24: "downloading/
-  uploading a study from this program to lichess"). A new study made there is
-  private.

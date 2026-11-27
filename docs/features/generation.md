@@ -226,32 +226,3 @@ the chapter's draft and trained there.
   more than the piece taking it), their only move, practical (≥ 30 cp worse for the engine, ≥ 0.02 better in expected
   score); a line whose own moves give up more than 300 cp is left out
   (`lib/chess/generation/finds.dart`, `traps.dart`).
-
-## Owner decisions
-
-- **A search gets the values; lines are asked for** (2026-09-23). No launch
-  dialog; `Make lines` is a separate step after a run.
-- **Explore, don't prune** (2026-09-23): the finds are kept globally and
-  browsed in the Positions column, not per run. The shortlist of our moves
-  (`First move` / `Later moves`) replaced exhaustive search on 2026-09-27; see
-  ALGORITHM.md.
-- **A run never writes into the chapter** (2026-09-21): it writes a draft
-  chapter beside it; deleting the draft discards the run; near-copies fold
-  into their host (the line-diversity bar).
-- **One button, one bar** (2026-10-01): Expectimax/Pause/Resume/Deeper in one
-  place; the side is a flip button, never a White/Black switch.
-- **Both sides on request** (2026-11-10): one press searches the board's
-  side; `Other side too` adds the second tree and its column (it was three
-  quarters of a default run). Status, Positions, traps and `Make lines`
-  belong to the board's side.
-- **Deep and narrow by default** (2026-11-10): four of our moves compared
-  where the search starts, one after it, so a run reaches the moves where
-  opponents go wrong instead of spending itself on the first two.
-- **A search stays where it was started** (2026-11-10): browsing its results
-  never restarts it.
-- **The chapter's moves are kept** (2026-11-10): a search of a chapter plays
-  what the chapter plays, and a draft answers each position with one move.
-- **Replies from Maia or a database, one source per position** (2026-10-01),
-  with Maia as fallback under N games.
-- **Nothing is computed while browsing** (2026-08-21): stored values only;
-  a missing one reads `not in tree`.

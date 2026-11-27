@@ -274,24 +274,3 @@ paste commands are refused here with
   The arena writes each clock rounded to tenths (`[%clk 0:01:00.0]`).
 - Nothing is saved. Leaving the mode keeps the table for the session; quitting
   the app loses it. No database is read or written.
-
-## Owner decisions
-
-- One board and two boards, both with + and − on every hand; no precomputed
-  book, FICS archive, expectimax or matches in the app (owner, 2026-10-16).
-- One engine, behind a switch (2026-09-23).
-- Who may sit is the only clock question, with one board too, so lines can
-  be found with the opponent allowed to sit. Two choices, as Hivemind has
-  them, styled like the board count; only the chosen case is searched and
-  scored (2026-10-17).
-- Two-board lines are per board, under their board, not per team; engine
-  arrows and drawn shapes as on lila's analysis board (2026-10-17).
-- With two boards the move lists are in the panel, side by side, so the
-  boards get the height (2026-10-17).
-- No engine settings rows: Hivemind takes half the cores, 256 MB, batch 8
-  (2026-09-23).
-- The engine behaves like Stockfish elsewhere: switched on, its score, lines
-  and node count update as it searches, with no visible passes (2026-10-17).
-- No eval bar and no filler empty states (DESIGN.md).
-- Variations as in the workspace's move list, each board its own tree;
-  engine drops drawn as on lila's crazyhouse board (2026-10-24).

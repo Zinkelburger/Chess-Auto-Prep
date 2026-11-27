@@ -6,7 +6,7 @@ ceremony. Read and update the affected section, not every document.
 
 | Document | Role |
 |---|---|
-| `docs/features/*.md` | One spec per mode: screen, actions, data, owner decisions |
+| `docs/features/*.md` | One spec per mode: screen, actions, data |
 | `docs/COMPONENT_MAP.md` | Where components live, public APIs and data flows |
 | `docs/ARCHITECTURE.md` | Contracts every change follows: layers, ownership, writes, recovery, engines, UI |
 | `docs/DATA_INTEGRITY.md` | Every store, its format and its recovery files |

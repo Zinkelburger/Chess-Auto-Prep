@@ -108,14 +108,3 @@ Repertoire builder at that position. Clicking a book move's file name (`Open
   (`bookEntryPlies`) before a game counts as in the book. Two hundred games
   per account is where an opening leak starts to repeat; twenty gave one game
   per entry.
-
-## Owner decisions
-
-- 2026-09-22: the book check is its own mode ("its own view… to have the user
-  check what they played compared to their book"), not a block inside
-  Tactics.
-- 2026-09-23: games are read against the one opening book in use app-wide
-  (Books), shown and switched with the book chip wherever a book is read.
-- 2026-11-09: until a book is chosen the book is every repertoire (`All
-  repertoires` on the chip), so the mode compares games without a book being
-  made first. This replaces the 2026-09-23 default of no book.

@@ -146,15 +146,3 @@ on training: the trainer follows the workspace's own saves and reads the scope
 again after anything else. A chapter that cannot be read is left out of a
 repertoire or book scope. Chapter/line moves retain progress through the
 shared document mutation workflow.
-
-## Owner decisions
-
-- The trainer is its own mode, **Repertoire trainer** (2026-09-25), as well as
-  the Train tab in Repertoire builder and Study.
-- Reviews are graded automatically from mistakes, as Chessable does: clean is
-  Good, any miss is Again (2026-09-25). **Rate difficulty myself** (off by
-  default) brings back Again/Hard/Good/Easy with the automatic grade filled.
-- The four CSV/JSONL files are the source of truth; the PGN header schedule
-  mirror is not written or read.
-- Studies keep their own editing workflow; training a study never converts it
-  to a repertoire.

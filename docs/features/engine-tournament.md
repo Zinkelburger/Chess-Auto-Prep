@@ -156,15 +156,3 @@ called "<id>" under Documents/engine_tournaments.`
   to a private name before reading, deleted after, ignored after 24 hours.
 - Registered engines with an executable also appear in Settings as the analysis
   engine (`lib/engines/analysis_launch.dart`).
-
-## Owner decisions
-
-- The mode exists by owner decision (2026-09-27), with a native file picker
-  for engines, the name following the file then `id name`, specific test
-  failures with the engine's first 40 output lines, one-click time presets
-  above the custom fields, and the run header's time control and format.
-- Games stay plain PGN that the PGN Viewer opens; the app, the headless runner
-  and the MCP tools share one implementation and one folder.
-- Unsettled (no ruling yet): whether fields above two engines keep both
-  formats, whether rating statistics should always show, and whether stopped
-  runs should resume.

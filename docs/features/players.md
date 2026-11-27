@@ -230,27 +230,3 @@ No chapter for that colour in the book: `Your book has no white repertoire to ch
   source fingerprint, colour, filters and engine settings.
 - Prep and group studies are ordinary Study files under `Documents/studies/`;
   Study, the Trainer and the PGN Viewer read them.
-
-## Owner decisions
-
-- (2026-09-27) Two modes over one shared directory; groups (events) live inside
-  Players & prep, not a mode of their own. Player analysis works on the shared
-  board and tabs.
-- (2026-10-01) Players & prep is one dense list with one filled button; a row
-  shows only `Analyze games` and the prep study button, the rest in `⋯`.
-- (2026-10-01) Player analysis has one `⋯`, no settings dialogs: filters and
-  engine settings fold open in the column with every control named.
-- Edits go through a validated Save dialog; notes do not save per keystroke.
-- An unconfirmed account candidate never becomes a download identity until the
-  user presses `Use account`.
-- A person's games are one corpus across accounts, PGN files and old sets;
-  `Get games` only adds.
-- Findings say what they are: a reply missing from the games is a coverage gap,
-  not a refutation; practical chances are a one-reply-layer Maia estimate with
-  unprobed replies assumed to be perfect defence.
-- Remote entry lists are not fetched; open the page and paste its table.
-- Prep and group studies are trained and edited with the ordinary Study and
-  Trainer tools, never player-specific ones. A group study is seeded once and
-  never regenerated.
-- Deleting a person's games never touches linked PGN files or a download
-  another reader shares.
