@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/app/bundled_licences.dart';
@@ -33,6 +34,33 @@ void main() {
           );
       expect(listed, isTrue, reason: '$asset is not a pubspec asset');
     }
+  });
+
+  test('the HypeBeast notice names the source of the release the app '
+      'fetches', () {
+    // tools/assets.lock.json pins every bughouse binary to one release tag
+    // (tools/fetch_assets.py's HYPEBEAST_TAG); the notice must point at the
+    // source of that tag, so the two move together.
+    final lock =
+        jsonDecode(File('tools/assets.lock.json').readAsStringSync())
+            as Map<String, Object?>;
+    final tags = {
+      for (final MapEntry(:key, :value) in lock.entries)
+        if (key.startsWith('bughouse-') &&
+            value is Map<String, Object?> &&
+            value['url'] is String)
+          ?RegExp(
+            r'github\.com/Zinkelburger/HypeBeast/releases/download/([^/]+)/',
+          ).firstMatch(value['url']! as String)?[1],
+    };
+    expect(tags, hasLength(1), reason: 'one HypeBeast release: $tags');
+    final notice = File(
+      'assets/licenses/HYPEBEAST_LICENSE.txt',
+    ).readAsStringSync();
+    final named = RegExp(
+      r'github\.com/Zinkelburger/HypeBeast/tree/(\S+)',
+    ).allMatches(notice).map((m) => m[1]).toSet();
+    expect(named, {tags.single});
   });
 
   test('the engines, the model and the fonts are all on the page', () {

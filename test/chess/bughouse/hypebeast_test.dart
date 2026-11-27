@@ -11,6 +11,20 @@ final _alone = File(
   'test/fixtures/bughouse/hypebeast_v112_alone.txt',
 ).readAsLinesSync();
 
+/// HypeBeast v1.1.2 deciding to sit, as it printed it: the hold race set's
+/// mated-in-one hold (`openings/hold_race_set.json` item 4 in the engine
+/// repository, seat `Awhite`, all four clocks given, ten seconds), its
+/// forecast, chance, price and draw reports left out.
+final _sit = File(
+  'test/fixtures/bughouse/hypebeast_v112_sit.txt',
+).readAsLinesSync();
+
+/// HypeBeast v1.1.2's coordinator on board 1 for White over ten seconds, as
+/// it printed it, the same reports and its `currmove` lines left out.
+final _coordinatedV112 = File(
+  'test/fixtures/bughouse/hypebeast_v112_coordinated.txt',
+).readAsLinesSync();
+
 /// The coordinator searching board 1 for Black (seat `Ablack`), as v1.1.1
 /// printed it, its other reports shortened.
 const _coordinated = [
@@ -106,6 +120,70 @@ void main() {
         'main_depth': '17',
         'reason': 'kept_main',
       });
+    });
+
+    test('hb_summary: a value with spaces does not hide the reason', () {
+      final summary = parseSummary(
+        _sit.firstWhere((l) => l.startsWith('info string hb_summary ')),
+      );
+      expect(summary['reason'], 'hold_mated');
+      expect(summary['decision'], 'pass');
+      expect(summary['main_score_cp'], '-99998');
+    });
+
+    test(
+      'hb_summary scores: centipawns, or a mate as 100000 less its plies',
+      () {
+        expect(parseSummaryScore('1553'), (cp: 1553, mate: null));
+        expect(parseSummaryScore('-37'), (cp: -37, mate: null));
+        // Mated in two plies is mate in −1; mating in one ply, three or four
+        // is mate in 1, 2 and 2, as an info line counts it.
+        expect(parseSummaryScore('-99998'), (cp: null, mate: -1));
+        expect(parseSummaryScore('-99996'), (cp: null, mate: -2));
+        expect(parseSummaryScore('99999'), (cp: null, mate: 1));
+        expect(parseSummaryScore('99997'), (cp: null, mate: 2));
+        expect(parseSummaryScore('99996'), (cp: null, mate: 2));
+        expect(parseSummaryScore('none'), isNull);
+        expect(parseSummaryScore(null), isNull);
+      },
+    );
+
+    test('decision_line: the engine\'s score and line for its decision', () {
+      final c = parseCoordination(
+        '{"reason":"override","candidates":[{"move":"c8g4","L":250,"S":null}],'
+        '"decision_line":{"move":"c8g4","cp":296,"depth":18,'
+        '"pv":["c8g4","f1e2","g4e2"]}}',
+      )!;
+      final line = c.decisionLine!;
+      expect(
+        (line.move, line.cp, line.mate, line.depth),
+        ('c8g4', 296, null, 18),
+      );
+      expect(line.pv, ['c8g4', 'f1e2', 'g4e2']);
+      final mate = parseCoordination(
+        '{"reason":"team_win_main","decision_line":{"move":"Q@h7","mate":2,'
+        '"depth":9,"pv":["Q@h7","g8h7"]}}',
+      )!;
+      expect(mate.decisionLine?.mate, 2);
+      expect(mate.decisionLine?.cp, isNull);
+    });
+
+    test('decision_line: one without a score, or whose line starts with '
+        'another move, is read as far as it holds', () {
+      expect(
+        parseCoordination(
+          '{"reason":"x","decision_line":{"move":"e2e4","depth":3}}',
+        )!.decisionLine,
+        isNull,
+      );
+      expect(
+        parseCoordination(
+          '{"reason":"x","decision_line":{"move":"e2e4","cp":5,"pv":["d2d4"]}}',
+        )!.decisionLine?.pv,
+        ['e2e4'],
+      );
+      // v1.1.2 prints none.
+      expect(read(_coordinatedV112).coordination!.decisionLine, isNull);
     });
   });
 
@@ -207,6 +285,31 @@ void main() {
         expect(report.nodes, 1126201);
       },
     );
+
+    test('v1.1.2 coordinated: the summary\'s main score and reason', () {
+      final report = read(_coordinatedV112);
+      expect(report.mainScore, (cp: 1553, mate: null));
+      expect(report.reason, 'kept_main');
+      expect(report.summary['decision'], 'd4f6');
+      expect(report.nodes, 1872437);
+      expect(report.coordination!.candidates.map((c) => c.move), [
+        'd4f6',
+        'd4c3',
+        'g2b7',
+        'd4a4',
+      ]);
+    });
+
+    test('v1.1.2 sitting: no candidates, a mate against it, and why', () {
+      final report = read(_sit);
+      expect(parseBestMove(_sit.last, BoardNumber.one)!.sits, isTrue);
+      expect(report.coordination!.candidates, isEmpty);
+      expect(report.coordination!.reason, 'hold_mated');
+      expect(report.reason, 'hold_mated');
+      expect(report.mainScore, (cp: null, mate: -1));
+      expect(report.main!.mate, -1);
+      expect(report.summary['wait'], 'skip_partner_not_on_turn');
+    });
   });
 
   group('rows', () {
@@ -306,6 +409,53 @@ void main() {
       expect(rows.first.cp, isNull);
       expect(rows.first.pv, isEmpty);
       expect(rows.skip(1).map((r) => r.move), ['e7e6', 'g8f6']);
+    });
+
+    test('the decision with the coordinator\'s own line: its score and its '
+        'line, whether or not it is the main line\'s move', () {
+      final report = read([
+        ..._coordinated.take(4),
+        'info string hb_coord {"reason":"world_switch","candidates":['
+            '{"move":"e7e6","L":262,"S":176},{"move":"g8f6","L":null,"S":null}],'
+            '"decision_line":{"move":"g8f6","cp":171,"depth":16,'
+            '"pv":["g8f6","b1c3","e7e6"]}}',
+      ]);
+      final rows = seatRows(
+        report,
+        coordinated: true,
+        decision: const SeatDecision('g8f6'),
+        count: 3,
+      );
+      expect(rows.map((r) => (r.move, r.cp, r.pv.join(' '))), [
+        ('g8f6', 171, 'g8f6 b1c3 e7e6'),
+        ('e7e6', 292, 'e7e6'),
+      ]);
+      final kept = read([
+        ..._coordinated.take(4),
+        'info string hb_coord {"reason":"kept_main","candidates":[],'
+            '"decision_line":{"move":"e7e6","mate":-4,"depth":18,'
+            '"pv":["e7e6","d5e6"]}}',
+      ]);
+      final row = seatRows(
+        kept,
+        coordinated: true,
+        decision: const SeatDecision('e7e6'),
+        count: 3,
+      ).single;
+      expect((row.move, row.cp, row.mate), ('e7e6', null, -4));
+      expect(row.pv, ['e7e6', 'd5e6']);
+    });
+
+    test('the real sit: one row, sitting, without a score', () {
+      final rows = seatRows(
+        read(_sit),
+        coordinated: true,
+        decision: parseBestMove(_sit.last, BoardNumber.one),
+        count: 3,
+      );
+      final row = rows.single;
+      expect((row.move, row.cp, row.mate), (null, null, null));
+      expect(row.pv, isEmpty);
     });
 
     test('a sit with nothing compared is the only row', () {

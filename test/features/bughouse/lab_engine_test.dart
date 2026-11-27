@@ -189,6 +189,89 @@ void main() {
     expect(lab.line.of(BoardNumber.one), isEmpty);
   });
 
+  test('a decision without a score stands for its board at the main '
+      'search\'s score, so the bar keeps both boards', () async {
+    lab.showBoards(LabBoards.two);
+    hypebeast.answer = (question) {
+      if (question.board != BoardNumber.one) return firstMoves(question);
+      // A decides Nf3, which its coordinator did not score; its main search
+      // ended at −2.70 for A.
+      return const HypeBeastSearched(
+        decision: SeatDecision('g1f3'),
+        report: SeatReport(
+          lines: [
+            SeatLine(multipv: 1, depth: 12, cp: -200, nodes: 90, pv: ['b1a3']),
+          ],
+          coordination: Coordination('world_switch', [
+            Candidate('b1a3', l: -200, s: -210),
+            Candidate('g1f3'),
+          ]),
+          nodes: 90,
+          summary: {'main_score_cp': '-270', 'reason': 'world_switch'},
+        ),
+      );
+    };
+    await on();
+    final rows = shown().rows[BoardNumber.one]!;
+    expect(rows.first.move, 'g1f3');
+    expect(rows.first.score.isEmpty, isTrue);
+    // −2.70 on board 1 and D's −2.00 (+2.00 for A + B) on board 2.
+    expect(shown().score.text, '-0.70');
+  });
+
+  test('a sit stands for its board at the main search\'s score', () async {
+    lab.showBoards(LabBoards.two);
+    hypebeast.answer = (question) => question.board == BoardNumber.one
+        ? const HypeBeastSearched(
+            decision: SeatDecision(null),
+            report: SeatReport(
+              coordination: Coordination('hold_mated', []),
+              nodes: 90,
+              summary: {'main_score_cp': '-99998', 'reason': 'hold_mated'},
+            ),
+          )
+        : firstMoves(question);
+    await on();
+    expect(shown().rows[BoardNumber.one]!.single.move, isNull);
+    // A is mated in one whatever it plays: C + D's mate.
+    expect(shown().score.text, '#-1');
+  });
+
+  test('the coordinator\'s own line for its decision is the first row, with '
+      'its score; without one the row is as before', () async {
+    lab.showBoards(LabBoards.two);
+    hypebeast.answer = (question) {
+      if (question.board != BoardNumber.one) return firstMoves(question);
+      return const HypeBeastSearched(
+        decision: SeatDecision('g1f3'),
+        report: SeatReport(
+          lines: [
+            SeatLine(multipv: 1, depth: 12, cp: -200, nodes: 90, pv: ['b1a3']),
+          ],
+          coordination: Coordination(
+            'world_switch',
+            [Candidate('b1a3', l: -200, s: -210), Candidate('g1f3')],
+            decisionLine: (
+              move: 'g1f3',
+              cp: -150,
+              mate: null,
+              depth: 14,
+              pv: ['g1f3', 'g8f6', 'b1c3'],
+            ),
+          ),
+          nodes: 90,
+          summary: {'main_score_cp': '-270'},
+        ),
+      );
+    };
+    await on();
+    final first = shown().rows[BoardNumber.one]!.first;
+    expect(first.move, 'g1f3');
+    expect(first.score.text, '-1.50');
+    expect(first.pv, ['g1f3', 'g8f6', 'b1c3']);
+    expect(shown().score.text, '+0.50');
+  });
+
   test('a mate on either board is the table\'s score', () async {
     lab.showBoards(LabBoards.two);
     hypebeast.answer = (question) => question.board == BoardNumber.two

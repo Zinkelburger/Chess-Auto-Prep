@@ -1,6 +1,6 @@
 HypeBeast bughouse engine
 https://github.com/Zinkelburger/HypeBeast
-Source: https://github.com/Zinkelburger/HypeBeast/tree/v1.1.1 (the engine is
+Source: https://github.com/Zinkelburger/HypeBeast/tree/v1.1.2 (the engine is
 under engine/)
 
 HypeBeast is Fairy-Stockfish with changes for playing one seat of a bughouse

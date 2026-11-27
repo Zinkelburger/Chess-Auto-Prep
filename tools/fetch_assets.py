@@ -126,8 +126,9 @@ BUGHOUSE_ASSETS = REPO_ROOT / "assets" / "bughouse"
 BUGHOUSE_MANIFEST = BUGHOUSE_ASSETS / "manifest.json"
 
 HYPEBEAST_REPO = "https://github.com/Zinkelburger/HypeBeast"
-# The one place the engine release is named; the app's licence notice points
-# at the same tag.
+# The one place the engine release is named; the app's licence notice
+# (assets/licenses/HYPEBEAST_LICENSE.txt) points at the same tag, and
+# test/app/bundled_licences_test.dart fails when the two disagree.
 HYPEBEAST_TAG = "v1.1.2"
 HYPEBEAST_BASE = f"{HYPEBEAST_REPO}/releases/download/{HYPEBEAST_TAG}"
 HYPEBEAST_RELEASE_PAGE = f"{HYPEBEAST_REPO}/releases/tag/{HYPEBEAST_TAG}"

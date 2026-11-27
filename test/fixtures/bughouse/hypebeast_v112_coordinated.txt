@@ -1,0 +1,38 @@
+info string hb_values {"board":"B","source":"partner","stm":"w","depth":3,"base":315,"white":{"Q":291,"R":40,"B":-78,"N":-61,"P":-274},"black":{"Q":900,"R":890,"B":766,"N":872,"P":558}}
+info string NNUE evaluation using /engine/bughouse-cd8cceab93fe.nnue enabled
+info depth 1 seldepth 1 multipv 1 score cp 713 nodes 743 nps 724 hashfull 0 tbhits 0 time 1026 pv d4f6
+info depth 2 seldepth 2 multipv 1 score cp 852 nodes 908 nps 884 hashfull 0 tbhits 0 time 1026 pv d4d3 d6d5
+info depth 3 seldepth 3 multipv 1 score cp 575 nodes 2793 nps 2695 hashfull 0 tbhits 0 time 1036 pv d4c3 d6d5 c3e3 f8e7
+info depth 4 seldepth 4 multipv 1 score cp 572 nodes 4971 nps 4729 hashfull 0 tbhits 0 time 1051 pv d4c3 f8e7 c3e3 c8e6
+info depth 5 seldepth 5 multipv 1 score cp 762 nodes 7775 nps 7327 hashfull 0 tbhits 0 time 1061 pv d4f6 g7f6 b1c3
+info depth 6 seldepth 6 multipv 1 score cp 762 nodes 8884 nps 8318 hashfull 0 tbhits 0 time 1068 pv d4f6 g7f6 b1c3
+info depth 7 seldepth 7 multipv 1 score cp 762 nodes 9597 nps 8952 hashfull 0 tbhits 0 time 1072 pv d4f6 g7f6 b1c3
+info depth 8 seldepth 8 multipv 1 score cp 871 nodes 10465 nps 9743 hashfull 0 tbhits 0 time 1074 pv d4f6 g7f6 b1c3 f8e7
+info depth 9 seldepth 10 multipv 1 score cp 866 nodes 15253 nps 13878 hashfull 0 tbhits 0 time 1099 pv d4f6 g7f6 b1c3 f8g7 c1d2
+info depth 10 seldepth 11 multipv 1 score cp 998 nodes 17809 nps 16000 hashfull 0 tbhits 0 time 1113 pv d4f6 g7f6 b1c3 f8g7 c3d5
+info depth 11 seldepth 11 multipv 1 score cp 1051 nodes 35773 nps 29835 hashfull 0 tbhits 0 time 1199 pv d4f6 g7f6
+info depth 12 seldepth 14 multipv 1 score cp 1103 nodes 44418 nps 35619 hashfull 0 tbhits 0 time 1247 pv d4f6 g7f6
+info depth 13 seldepth 14 multipv 1 score cp 1237 nodes 62584 nps 46530 hashfull 1 tbhits 0 time 1345 pv d4f6 d8a5
+info depth 14 seldepth 12 multipv 1 score cp 1302 nodes 133191 nps 78072 hashfull 3 tbhits 0 time 1706 pv d4f6 d8f6 N@c7 e8d7 c7a8 f8e7
+info depth 15 seldepth 14 multipv 1 score cp 1349 nodes 221689 nps 103884 hashfull 8 tbhits 0 time 2134 pv d4f6 g7f6
+info depth 16 seldepth 12 multipv 1 score cp 1423 nodes 314832 nps 127669 hashfull 13 tbhits 0 time 2466 pv d4f6 g7f6
+info depth 17 seldepth 16 multipv 1 score cp 1477 nodes 488906 nps 161515 hashfull 22 tbhits 0 time 3027 pv d4f6 d8f6 N@c7 e8d7 c7a8 f6g6
+info depth 18 seldepth 14 multipv 1 score cp 1485 lowerbound nodes 627799 nps 182393 hashfull 29 tbhits 0 time 3442 pv d4f6
+info depth 18 seldepth 14 multipv 1 score cp 1493 lowerbound nodes 700081 nps 193019 hashfull 33 tbhits 0 time 3627 pv d4f6
+info depth 18 seldepth 14 multipv 1 score cp 1506 lowerbound nodes 720375 nps 195541 hashfull 33 tbhits 0 time 3684 pv d4f6
+info depth 18 seldepth 14 multipv 1 score cp 1524 lowerbound nodes 779152 nps 202587 hashfull 35 tbhits 0 time 3846 pv d4f6
+info depth 18 seldepth 14 multipv 1 score cp 1548 lowerbound nodes 899516 nps 213712 hashfull 40 tbhits 0 time 4209 pv d4f6
+info depth 18 seldepth 14 multipv 1 score cp 1581 lowerbound nodes 910732 nps 214896 hashfull 41 tbhits 0 time 4238 pv d4f6
+info depth 18 seldepth 14 multipv 1 score cp 1520 nodes 920526 nps 215126 hashfull 41 tbhits 0 time 4279 pv d4f6 d8f6 N@c7 e8d8 c7a8 g7g5
+info depth 19 seldepth 14 multipv 1 score cp 1528 lowerbound nodes 964867 nps 218394 hashfull 44 tbhits 0 time 4418 pv d4f6
+info depth 19 seldepth 14 multipv 1 score cp 1536 lowerbound nodes 1114049 nps 223749 hashfull 53 tbhits 0 time 4979 pv d4f6
+info depth 19 seldepth 24 multipv 1 score cp 1549 lowerbound nodes 1199292 nps 225050 hashfull 60 tbhits 0 time 5329 pv d4f6
+info depth 19 seldepth 24 multipv 1 score cp 1566 lowerbound nodes 1221412 nps 226607 hashfull 61 tbhits 0 time 5390 pv d4f6
+info depth 19 seldepth 24 multipv 1 score cp 1591 lowerbound nodes 1263438 nps 229966 hashfull 63 tbhits 0 time 5494 pv d4f6
+info depth 19 seldepth 24 multipv 1 score cp 1553 nodes 1275042 nps 230776 hashfull 64 tbhits 0 time 5525 pv d4f6 d8f6 N@c7 e8d8 c7a8 d8d7
+info depth 20 seldepth 15 multipv 1 score cp 1561 lowerbound nodes 1346955 nps 235976 hashfull 66 tbhits 0 time 5708 pv d4f6
+info depth 20 seldepth 15 multipv 1 score cp 1561 nodes 1381255 nps 237983 hashfull 67 tbhits 0 time 5804 pv d4f6
+info string hb_coord {"reason":"kept_main","partner_base":-315,"partner_probes":{"N":872,"P":558},"delivery_options":3,"worlds":[{"arrival":"none","p":0.267758,"best":"","depth":11,"scored":true,"values":{"d4f6":1550,"d4c3":1208,"g2b7":445,"d4a4":1058}},{"arrival":"-B","p":0.732242,"best":"d4a4","depth":12,"scored":true,"values":{"d4f6":821,"d4c3":580,"g2b7":345,"d4a4":628}}],"common_depth":11,"candidates":[{"move":"d4f6","source":"main","delivery":"N","mating":false,"blocking":false,"enemy_donor":false,"friendly_scenarios":0,"enemy_captures":0,"L":1550,"R":0,"F":0,"S":991,"E":0.729382,"tier":0,"probe_fatal":false,"exposed":"","scenarios":[]},{"move":"d4c3","source":"root","delivery":"","mating":false,"blocking":false,"enemy_donor":false,"friendly_scenarios":0,"enemy_captures":0,"L":1208,"R":0,"F":0,"S":734,"E":0.675575,"tier":0,"probe_fatal":false,"exposed":"","scenarios":[]},{"move":"g2b7","source":"delivery","delivery":"P","mating":false,"blocking":false,"enemy_donor":false,"friendly_scenarios":0,"enemy_captures":0,"L":445,"R":0,"F":0,"S":372,"E":0.591843,"tier":0,"probe_fatal":false,"exposed":"","scenarios":[]},{"move":"d4a4","source":"world","delivery":"","mating":false,"blocking":false,"enemy_donor":false,"friendly_scenarios":0,"enemy_captures":0,"L":1058,"R":0,"F":0,"S":736,"E":0.676207,"tier":0,"probe_fatal":false,"exposed":"","scenarios":[]}]}
+info depth 19 score cp 1553 nodes 1872437 time 9817
+info string hb_summary budget_ms=10000 budget_nodes=0 chance=forecast chance_nodes_compare=103908 chance_nodes_main=901602 chance_total_compare=243073 chance_total_main=1381258 common_depth=11 coord=1 coord_reason=kept_main decision=d4f6 deliveries=1 exposed=0 fallback=N@a3 legal=117 main_depth=19 main_exact=1 main_score_cp=1553 main_status=ok override=0 p_none=27 prices=1 reason=kept_main seat=Awhite team=white used_fallback=0 verdict=none wait=skip_no_clocks worlds=2 worlds_scored=1 main_nodes=1381258 child_requests=17 child_searches=17 child_exact=17 discovery_nodes=52949 probe_nodes=195157 compare_nodes=243073 child_ms=3747 clear_ms=76 total_nodes=1872437 elapsed_ms=9817
+bestmove (d4f6,pass)

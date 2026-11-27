@@ -117,18 +117,32 @@ final class Candidate {
   int? get score => s ?? l;
 }
 
-/// The coordinator's report: why it chose as it did and the moves it
-/// compared, in the order it printed them.
+/// The engine's own score and line for the move it decided on, from the
+/// searching side: centipawns, or moves to mate ([mate], + when the side
+/// searching mates), how deep, and the line from the move on.
+typedef DecisionLine = ({
+  String move,
+  int? cp,
+  int? mate,
+  int depth,
+  List<String> pv,
+});
+
+/// The coordinator's report: why it chose as it did, the moves it compared
+/// in the order it printed them, and — from engine versions after v1.1.2 —
+/// its own line for the move it decided on.
 final class Coordination {
-  const Coordination(this.reason, this.candidates);
+  const Coordination(this.reason, this.candidates, {this.decisionLine});
 
   final String reason;
   final List<Candidate> candidates;
+  final DecisionLine? decisionLine;
 }
 
 /// The JSON of an `info string hb_coord` line, or null when it does not
-/// read. A report without candidates (a mate the team wins outright) has
-/// an empty list.
+/// read. A report without candidates (a mate the team wins outright, or a
+/// seat that sits) has an empty list. Its `decision_line`, when there is
+/// one that reads, is [Coordination.decisionLine].
 Coordination? parseCoordination(String json) {
   final Object? raw;
   try {
@@ -146,15 +160,52 @@ Coordination? parseCoordination(String json) {
           if (candidate case {'move': final String move})
             Candidate(move, l: score(candidate['L']), s: score(candidate['S'])),
     ]),
+    decisionLine: switch (raw['decision_line']) {
+      {'move': final String move} && final Map<String, Object?> line
+          when move.isNotEmpty &&
+              (score(line['cp']) != null || score(line['mate']) != null) =>
+        (
+          move: move,
+          cp: score(line['mate']) == null ? score(line['cp']) : null,
+          mate: score(line['mate']),
+          depth: score(line['depth']) ?? 0,
+          pv: List<String>.unmodifiable(switch (line['pv']) {
+            final List<Object?> pv when pv.firstOrNull == move =>
+              pv.whereType<String>(),
+            _ => [move],
+          }),
+        ),
+      _ => null,
+    },
   );
 }
 
-/// The `key=value` pairs of an `info string hb_summary` line.
+/// The `key=value` pairs of an `info string hb_summary` line. A value the
+/// engine writes with spaces in it (`hold=partner_cp=209 mated_plies=2 …`)
+/// is cut at its first space and its other words read as pairs of their
+/// own; the summary's keys come in alphabetical order, so a key written
+/// twice that way keeps the engine's own value when it comes later.
 Map<String, String> parseSummary(String text) => {
   for (final pair in text.trim().split(RegExp(r'\s+')))
     if (pair.indexOf('=') case final at when at > 0)
       pair.substring(0, at): pair.substring(at + 1),
 };
+
+/// A score as `hb_summary` writes it (`main_score_cp`): centipawns from the
+/// searching side, or a mate as 100000 less the plies to it (negative when
+/// the side searching is mated). Read as centipawns or moves to mate, as
+/// an `info` line has it; null for `none` or a value that does not read.
+({int? cp, int? mate})? parseSummaryScore(String? text) {
+  final value = int.tryParse(text ?? '');
+  if (value == null) return null;
+  if (value.abs() < _summaryMate) return (cp: value, mate: null);
+  final plies = 100000 - value.abs();
+  return (cp: null, mate: value > 0 ? (plies + 1) ~/ 2 : -(plies ~/ 2));
+}
+
+/// Where `hb_summary`'s mates start: centipawn scores stay far below it
+/// (the engine's largest is about 15000), its mates above 99000.
+const _summaryMate = 50000;
 
 /// What a seat chose on its board: a move, or to sit ([move] null).
 final class SeatDecision {
@@ -197,15 +248,32 @@ SeatDecision? parseBestMove(String line, BoardNumber board) {
 }
 
 /// What a search has shown so far: its lines by MultiPV rank, the
-/// coordinator's report once printed, and the size of the search.
+/// coordinator's report once printed, the size of the search, and the
+/// engine's summary of its decision (`hb_summary`, just before `bestmove`).
 final class SeatReport {
-  const SeatReport({this.lines = const [], this.coordination, this.nodes = 0});
+  const SeatReport({
+    this.lines = const [],
+    this.coordination,
+    this.nodes = 0,
+    this.summary = const {},
+  });
 
   final List<SeatLine> lines;
   final Coordination? coordination;
   final int nodes;
+  final Map<String, String> summary;
 
   SeatLine? get main => lines.where((line) => line.multipv == 1).firstOrNull;
+
+  /// The score of the engine's main search on its board, from the side to
+  /// move there: the last iteration it completed (`main_score_cp`), which
+  /// stands for the board when the decision has no score of its own. Null
+  /// before the summary, or when the main search did not end exactly.
+  ({int? cp, int? mate})? get mainScore =>
+      parseSummaryScore(summary['main_score_cp']);
+
+  /// Why the engine decided as it did (`hold_mated`, `kept_main`, …).
+  String? get reason => summary['reason'];
 }
 
 /// Reads one search's output line by line into a [SeatReport].
@@ -228,6 +296,7 @@ final class SeatReader {
   Coordination? _coordination;
   int _nodes = 0;
   int? _totalNodes;
+  Map<String, String> _summary = const {};
 
   SeatReport get report => SeatReport(
     lines: List.unmodifiable(
@@ -235,6 +304,7 @@ final class SeatReader {
     ),
     coordination: _coordination,
     nodes: _totalNodes ?? _nodes,
+    summary: _summary,
   );
 
   /// Reads [line]; true when the report changed.
@@ -270,9 +340,9 @@ final class SeatReader {
         _coordination = coordination;
         return true;
       case 'hb_summary':
-        final total = int.tryParse(parseSummary(body)['total_nodes'] ?? '');
-        if (total == null || total == _totalNodes) return false;
-        _totalNodes = total;
+        _summary = Map.unmodifiable(parseSummary(body));
+        _totalNodes =
+            int.tryParse(_summary['total_nodes'] ?? '') ?? _totalNodes;
         return true;
     }
     return false;
@@ -291,9 +361,11 @@ typedef SeatRow = ({String? move, int? cp, int? mate, List<String> pv});
 /// against it last), each with its whole line. With the coordinator: while it searches, the main
 /// line; once [decision] is known, the decision first (a sit as a row of
 /// its own, with no score), then the other moves the coordinator compared,
-/// best first by `S`, else `L`, then those it did not score. A move that is
-/// the main line's first is shown as the main line; any other is a row of
-/// that one move with the coordinator's score.
+/// best first by `S`, else `L`, then those it did not score. The decision
+/// is shown with the engine's own line for it when the coordinator gave one
+/// ([Coordination.decisionLine]). Otherwise a move that is the main line's
+/// first is shown as the main line, and any other as a row of that one move
+/// with the coordinator's score.
 List<SeatRow> seatRows(
   SeatReport report, {
   required bool coordinated,
@@ -318,9 +390,16 @@ List<SeatRow> seatRows(
       : (move: move, cp: score, mate: null, pv: [move]);
   final scored = candidates.where((c) => c.score != null).toList()
     ..sort((a, b) => b.score!.compareTo(a.score!));
+  final decided = report.coordination?.decisionLine;
   final rows = <SeatRow>[
     switch (decision.move) {
       null => (move: null, cp: null, mate: null, pv: const []),
+      final move when decided != null && decided.move == move => (
+        move: move,
+        cp: decided.cp,
+        mate: decided.mate,
+        pv: decided.pv,
+      ),
       final move => lineOf(
         move,
         candidates.where((c) => c.move == move).firstOrNull?.score,

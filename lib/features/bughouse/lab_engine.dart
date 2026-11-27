@@ -37,8 +37,10 @@ final class LinesOn extends LabLines {
   final LabBoards boards;
   final Map<BoardNumber, List<EngineRow>> rows;
 
-  /// A + B's score: with one board, its first row's; with two, both
-  /// boards' first rows added (a mate on either is the score).
+  /// A + B's score: with one board, its first row's; with two, what each
+  /// board stands at added (a mate on either is the score) — its first
+  /// row's score, or its main search's when that row has none — and one
+  /// board's alone until the other has one.
   final TableScore score;
 
   /// The size of the searches the rows come from, both boards' together;
@@ -234,7 +236,11 @@ final class LabEngine extends ChangeNotifier {
           position: position,
           boards: boards,
           rows: rows,
-          score: _score(rows),
+          score: TableScore.sum([
+            for (final question in questions)
+              if (found[question.board] case final f?)
+                ?_standing(position, question, f, rows[question.board]!),
+          ]),
           nodes: found.isEmpty
               ? null
               : found.values.fold<int>(0, (sum, f) => sum + f.report.nodes),
@@ -387,10 +393,26 @@ final class LabEngine extends ChangeNotifier {
     ];
   }
 
-  /// A + B's score: one board's first row, or both boards' added.
-  TableScore _score(Map<BoardNumber, List<EngineRow>> rows) => TableScore.sum([
-    for (final board in rows.values) ?board.firstOrNull?.score,
-  ]);
+  /// What [question]'s board adds to the table's score, A + B's side: its
+  /// first row's score, or — when that row has none (a sit, or a move the
+  /// coordinator chose without scoring it) — the score of the engine's
+  /// main search there. Null while the board has neither.
+  TableScore? _standing(
+    TablePosition position,
+    _Question question,
+    _Found found,
+    List<EngineRow> rows,
+  ) {
+    final first = rows.firstOrNull?.score;
+    if (first != null && !first.isEmpty) return first;
+    final main = found.report.mainScore;
+    if (main == null) return null;
+    return TableScore.forSeat(
+      cp: main.cp,
+      mate: main.mate,
+      team: position.mover(question.board).team,
+    );
+  }
 
   /// The rows on screen for [board], when they are for the table shown.
   List<EngineRow> rowsOn(BoardNumber board) => switch (_lines) {
