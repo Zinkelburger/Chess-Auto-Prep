@@ -18,8 +18,9 @@ on a developer machine or on a CI runner that already has everything:
   run   -- Live. Extract this host's engine and network exactly the way the
            app does (manifest size and SHA-256), start it, and require the
            whole conversation: `uciok`, `readyok`, the network loaded (not
-           Fairy-Stockfish's classical fallback), and a two-board coordinated
-           search that answers a joint `bestmove (move,pass)`.
+           Fairy-Stockfish's classical fallback), a two-board coordinated
+           search that answers a joint `bestmove (move,pass)`, and a one-board
+           MultiPV search whose every line was really searched.
 
     python3 tools/test_bughouse_engine.py            # both, host platform
     python3 tools/test_bughouse_engine.py deps       # static audit only
@@ -353,6 +354,79 @@ def install_like_the_app(target: Path) -> tuple[Path, Path]:
 START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1"
 START_DUAL_FEN = f"{START_FEN}|{START_FEN}"
 
+# Board A after 1.e4 e5 2.Nf3 Nc6 3.Bc4 Nf6 with a pawn in each hand:
+# some thirty legal moves and drops, several close in value.
+MULTIPV = 3
+MULTIPV_DUAL_FEN = (
+    "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R[Pp] w KQkq - 4 4"
+    f"|{START_FEN}"
+)
+
+
+def info_fields(line: str) -> dict[str, str]:
+    """`depth`, `seldepth`, `multipv`, `score` ("cp 72", "mate 3") and `pv`."""
+    words = line.split()
+    fields: dict[str, str] = {}
+    for key in ("depth", "seldepth", "multipv"):
+        if key in words[:-1]:
+            fields[key] = words[words.index(key) + 1]
+    if "score" in words[:-2]:
+        at = words.index("score")
+        fields["score"] = f"{words[at + 1]} {words[at + 2]}"
+        if words[at + 3:at + 4] in (["lowerbound"], ["upperbound"]):
+            fields["bound"] = words[at + 3]
+    if "pv" in words:
+        fields["pv"] = " ".join(words[words.index("pv") + 1:])
+    return fields
+
+
+def multipv_block(lines: list[str]) -> list[str]:
+    """The last complete set of lines 1..MULTIPV before the final one.
+
+    A set starts at each `multipv 1` line; bound lines are skipped, and the
+    final set is left out because a search stopped by its node limit may
+    have cut it short.
+    """
+    blocks: list[list[str]] = []
+    for line in lines:
+        if not line.startswith("info depth"):
+            continue
+        fields = info_fields(line)
+        if "multipv" not in fields or "bound" in fields or "pv" not in fields:
+            continue
+        if fields["multipv"] == "1":
+            blocks.append([])
+        if blocks:
+            blocks[-1].append(line)
+    complete = [b for b in blocks[:-1]
+                if [info_fields(l)["multipv"] for l in b] == [str(i + 1) for i in range(MULTIPV)]]
+    if not complete:
+        fail(f"no complete set of {MULTIPV} lines before the last one")
+    return complete[-1]
+
+
+def check_multipv(block: list[str]) -> None:
+    """Every line was searched: distinct moves, one depth, real scores."""
+    fields = [info_fields(line) for line in block]
+    firsts = [f["pv"].split()[0] for f in fields]
+    if len(set(firsts)) != MULTIPV:
+        fail(f"the {MULTIPV} lines do not start with {MULTIPV} different moves: {firsts}")
+    shallow = [f["multipv"] for f in fields if int(f.get("seldepth", "0")) <= 1]
+    if shallow:
+        fail(f"line(s) {', '.join(shallow)} reached seldepth 1: not searched")
+    # Each iteration searches every line to the same depth; a line left at
+    # an earlier depth was printed again without being searched.
+    stale = [f'{f["multipv"]} (depth {f.get("depth")})' for f in fields[1:]
+             if f.get("depth") != fields[0].get("depth")]
+    if stale:
+        fail(f"line(s) {', '.join(stale)} lag line 1 (depth {fields[0].get('depth')}): "
+             "printed from an earlier iteration, not searched (the HypeBeast "
+             "v1.1.1 MultiPV bug)")
+    if all(f["score"] == "cp 0" for f in fields[1:]):
+        fail(f"lines 2..{MULTIPV} all score cp 0: printed but not searched "
+             "(the HypeBeast v1.1.1 MultiPV bug)")
+
+
 # What Fairy-Stockfish prints at the first search when EvalFile did not load:
 # an unreadable file ends the process after "info string ERROR: ...", a file
 # that is not this net makes HypeBeast fall back to its classical evaluation.
@@ -397,10 +471,10 @@ def cmd_run(args) -> int:
             shown = [l for l in lines if not l.startswith("option ")][-8:] + errors[-4:]
             return ("\n  " + "\n  ".join(shown)) if shown else "\n  the engine printed nothing at all"
 
-        def wait_for(token: str, seconds: float, what: str) -> str:
+        def wait_for(token: str, seconds: float, what: str, start: int = 0) -> str:
             deadline = time.time() + seconds
             while time.time() < deadline:
-                hit = next((l for l in lines if l.startswith(token)), None)
+                hit = next((l for l in lines[start:] if l.startswith(token)), None)
                 if hit is not None:
                     return hit
                 if proc.poll() is not None:
@@ -453,6 +527,25 @@ def cmd_run(args) -> int:
                 fail(f"seat Awhite should move on board A and pass on B: {best}")
             if not any(" nodes " in l for l in lines if l.startswith("info depth")):
                 fail("the search reported no nodes, so nothing was evaluated")
+
+            # The one-board view's several lines: every line searched, not
+            # only the first (v1.1.1 printed lines 2..N without searching them).
+            # A cleared hash, so what the first search left cannot fill
+            # lines the engine did not search itself.
+            mark = len(lines)
+            send("ucinewgame")
+            send("isready")
+            wait_for("readyok", args.timeout, "readyok after ucinewgame", mark)
+            start = len(lines)
+            send("setoption name Coordination value false")
+            send(f"setoption name MultiPV value {MULTIPV}")
+            send("position fen " + MULTIPV_DUAL_FEN)
+            send(f"go nodes {args.multipv_nodes}")
+            best = wait_for("bestmove", args.search_timeout, "the MultiPV bestmove", start)
+            block = multipv_block(lines[start:])
+            for line in block:
+                print(f"       {line[:110]}")
+            check_multipv(block)
         except Failure as exc:
             print(f"  FAIL {exc}", file=sys.stderr)
             return 1
@@ -484,6 +577,7 @@ def main() -> int:
     run.add_argument("--timeout", type=float, default=60.0)
     run.add_argument("--search-timeout", type=float, default=120.0)
     run.add_argument("--nodes", type=int, default=50000)
+    run.add_argument("--multipv-nodes", type=int, default=100000)
     run.add_argument("--install-to", metavar="DIR",
                      help="extract into DIR and keep it, instead of a temp dir")
     run.set_defaults(func=cmd_run)

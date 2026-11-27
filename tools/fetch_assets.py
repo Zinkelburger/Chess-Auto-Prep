@@ -128,7 +128,7 @@ BUGHOUSE_MANIFEST = BUGHOUSE_ASSETS / "manifest.json"
 HYPEBEAST_REPO = "https://github.com/Zinkelburger/HypeBeast"
 # The one place the engine release is named; the app's licence notice points
 # at the same tag.
-HYPEBEAST_TAG = "v1.1.1"
+HYPEBEAST_TAG = "v1.1.2"
 HYPEBEAST_BASE = f"{HYPEBEAST_REPO}/releases/download/{HYPEBEAST_TAG}"
 HYPEBEAST_RELEASE_PAGE = f"{HYPEBEAST_REPO}/releases/tag/{HYPEBEAST_TAG}"
 
