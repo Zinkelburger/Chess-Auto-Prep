@@ -25,7 +25,7 @@ const fics =
 /// What the arena writes now: the opening in the movetext and still in
 /// its tag, each move's clock among its other notes.
 const arena =
-    '[Event "Hivemind Arena"]\n[Round "3"]\n'
+    '[Event "Bughouse Arena"]\n[Round "3"]\n'
     '[WhiteA "hb-v4"]\n[BlackA "hm-n1500"]\n'
     '[WhiteB "hm-n1500"]\n[BlackB "hb-v4"]\n'
     '[TimeControl "120"]\n[Opening "1e2e4 1d7d5"]\n'
@@ -37,7 +37,7 @@ const arena =
 /// What the arena wrote before: the opening only in its tag, the movetext
 /// after it in coordinates, numbered from 1 again.
 const oldArena =
-    '[Event "Hivemind Arena"]\n[Round "1"]\n'
+    '[Event "Bughouse Arena"]\n[Round "1"]\n'
     '[WhiteA "hb-v4"]\n[BlackA "hm-n1500"]\n'
     '[WhiteB "hm-n1500"]\n[BlackB "hb-v4"]\n'
     '[TimeControl "120"]\n'
@@ -100,7 +100,7 @@ void main() {
     expect(game.name(Seat.b), 'hb-v4');
     expect(game.name(Seat.c), 'hm-n1500');
     expect(game.startClock, const Duration(minutes: 2));
-    expect(game.heading, 'A + B won · checkmate · Hivemind Arena · Round 3');
+    expect(game.heading, 'A + B won · checkmate · Bughouse Arena · Round 3');
     // Its moves were read from the movetext, so the tag stays, and a copy
     // keeps it.
     expect(game.tags['Opening'], '1e2e4 1d7d5');
