@@ -3,9 +3,9 @@
 Engine kinds (the first item of an engine spec):
 
 ``hivemind``
-    The team engine the app ships, found the way the bughouse MCP server finds
-    it (tools/mcp/bughouse/paths.py): ``HIVEMIND_BIN`` / ``HIVEMIND_MODEL``,
-    the app's unpacked bundle, or ``assets/bughouse``. It is launched with
+    The ONNX team engine, found the way the bughouse MCP server finds it
+    (tools/mcp/bughouse/paths.py): ``HIVEMIND_BIN`` / ``HIVEMIND_MODEL``, or
+    the tool-only ``fetch_assets.py --only hivemind`` fetch. It is launched with
     ``--model``, takes ``Team``/``TimeAdvantage``, gets the dual-FEN
     ``position`` command and answers a joint ``bestmove (moveA,moveB)``. A
     spec without a kind is a Hivemind spec, as before.
@@ -70,7 +70,7 @@ class EngineError(RuntimeError):
 
 
 def bundled_hivemind():
-    """The shipped engine's files, or EngineError naming the fix."""
+    """Hivemind's files, or EngineError naming the fix."""
     mcp = Path(__file__).resolve().parents[1] / "mcp"
     if str(mcp) not in sys.path:
         sys.path.insert(0, str(mcp))

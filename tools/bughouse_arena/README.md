@@ -28,7 +28,7 @@ the side, and any other `Option=value` is sent with `setoption`.
 
 | Kind | Engine | Files |
 |---|---|---|
-| `hivemind` (or no kind) | the engine the app ships, found as the bughouse MCP server finds it (`HIVEMIND_BIN`/`HIVEMIND_MODEL`, the app's unpacked bundle, or `assets/bughouse`) | `bin=`, `model=`, `lib=` (the ONNX Runtime directory); `--engine PATH` sets `bin=` |
+| `hivemind` (or no kind) | the ONNX team engine, found as the bughouse MCP server finds it (`HIVEMIND_BIN`/`HIVEMIND_MODEL`, or the tool-only `python3 tools/fetch_assets.py --only hivemind` in `tools/hivemind-engine/`) | `bin=`, `model=`, `lib=` (the ONNX Runtime directory); `--engine PATH` sets `bin=` |
 | `hypebeast` | the HypeBeast Fairy-Stockfish fork, sent `HypeBeast=true`; `Coordination=false` gives the ablation (default `true`) | `bin=` (default `$HYPEBEAST_HOME/bin/hypebeast`), `net=` |
 | `fsf` | **unmodified FSF bughouse via UCI snapshot adapter** | `bin=` (default `$HYPEBEAST_HOME/bin/fsf-ref`), `net=` |
 
@@ -272,15 +272,15 @@ the latency.
 ## Pinned Hivemind
 
 The arena's `hivemind` is whatever `tools/mcp/bughouse/paths.py` finds; on
-the measuring machine that is the app's unpacked bundle in
-`~/.local/share/com.example.chess_auto_prep/bughouse/`, which matches
-`tools/assets.lock.json` (release `engine-v0.2.0`):
+the measuring machine that was the app's unpacked bundle when the app still
+shipped Hivemind, and is now the tool-only fetch (`fetch_assets.py --only
+hivemind`). Both match `tools/assets.lock.json` (release `engine-v0.2.0`):
 
 | File | SHA-256 | Lock entry |
 |---|---|---|
-| `hivemind-linux` (3,721,512 bytes) | `2d8c6cdb1183c0ef0105368524bea98e03cace3dd5df0a6a1f0f0a4efa97cfe5` | `bughouse-linux:engine` payload |
-| `hivemind.onnx` (54,415,625 bytes) | `61f74ba7d9a79868b565d51ece450519a4dc6b38d697aabd117fc5b843281a2f` | `bughouse-network` payload (fp32) |
-| `libonnxruntime.so.1` | `5715f06d8992ca8eeeddcce43df3a7d38f97d537052126f558e912cb312460ca` | `bughouse-linux:runtime` payload |
+| `hivemind-linux` (3,721,512 bytes) | `2d8c6cdb1183c0ef0105368524bea98e03cace3dd5df0a6a1f0f0a4efa97cfe5` | `hivemind-linux:engine` payload |
+| `hivemind.onnx` (54,415,625 bytes) | `61f74ba7d9a79868b565d51ece450519a4dc6b38d697aabd117fc5b843281a2f` | `hivemind-network` payload (fp32) |
+| `libonnxruntime.so.1` | `5715f06d8992ca8eeeddcce43df3a7d38f97d537052126f558e912cb312460ca` | `hivemind-linux:runtime` payload |
 
 It reports `Hivemind 1.0`, backend ONNX Runtime (CPU), batch 8, 4 search
 workers and intra-op threads = cores / 4. It has no `PermanentBrain` option
