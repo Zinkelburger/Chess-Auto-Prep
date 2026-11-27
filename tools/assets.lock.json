@@ -1,21 +1,21 @@
 {
   "bughouse-linux": {
-    "payload_sha256": "257e4b91f2b32ebf35c51f0433352b4d54da33e7817b16d5fdd39db4254c0856",
-    "source_sha256": "257e4b91f2b32ebf35c51f0433352b4d54da33e7817b16d5fdd39db4254c0856",
-    "uncompressed_bytes": 3314360,
-    "url": "https://github.com/Zinkelburger/HypeBeast/releases/download/v1.1.1/hypebeast-linux-x86-64-modern"
+    "payload_sha256": "83b867ef87581a1e41f0fac796f24e9eb810169dc20b4a1418c23e71470e03b7",
+    "source_sha256": "83b867ef87581a1e41f0fac796f24e9eb810169dc20b4a1418c23e71470e03b7",
+    "uncompressed_bytes": 3326648,
+    "url": "https://github.com/Zinkelburger/HypeBeast/releases/download/v1.1.2/hypebeast-linux-x86-64-modern"
   },
   "bughouse-macos-arm64": {
-    "payload_sha256": "2cbdc1b6883afe82d1ac3c59210ce27a8858528f7936ba7286f27e942fc2b56c",
-    "source_sha256": "2cbdc1b6883afe82d1ac3c59210ce27a8858528f7936ba7286f27e942fc2b56c",
-    "uncompressed_bytes": 1078304,
-    "url": "https://github.com/Zinkelburger/HypeBeast/releases/download/v1.1.1/hypebeast-macos-apple-silicon"
+    "payload_sha256": "8a028f6bb564f5b841fae045098d97fa9b0cc2588cb31ecac99edb63d8b6e42e",
+    "source_sha256": "8a028f6bb564f5b841fae045098d97fa9b0cc2588cb31ecac99edb63d8b6e42e",
+    "uncompressed_bytes": 1094832,
+    "url": "https://github.com/Zinkelburger/HypeBeast/releases/download/v1.1.2/hypebeast-macos-apple-silicon"
   },
   "bughouse-macos-x86_64": {
-    "payload_sha256": "25e3a212c830ee2617706d81f97df0ee3aa54608b44f9bea13bf8e124cb419d8",
-    "source_sha256": "25e3a212c830ee2617706d81f97df0ee3aa54608b44f9bea13bf8e124cb419d8",
-    "uncompressed_bytes": 1159944,
-    "url": "https://github.com/Zinkelburger/HypeBeast/releases/download/v1.1.1/hypebeast-macos-x86-64-modern"
+    "payload_sha256": "396d46edbd6127de5b767003d02391deaa3fa58597508dcd697e8863de9b2bd6",
+    "source_sha256": "396d46edbd6127de5b767003d02391deaa3fa58597508dcd697e8863de9b2bd6",
+    "uncompressed_bytes": 1176336,
+    "url": "https://github.com/Zinkelburger/HypeBeast/releases/download/v1.1.2/hypebeast-macos-x86-64-modern"
   },
   "bughouse-network": {
     "payload_sha256": "cd8cceab93fed185b79932414d1a0823f40e15a09ca9776ceab7c9c5272ddc13",
@@ -24,10 +24,10 @@
     "url": "https://drive.google.com/u/0/uc?id=1qZVSzm5G_KRc33YCqmsPM6Ayxo3CI4ME&export=download"
   },
   "bughouse-windows": {
-    "payload_sha256": "265ddd7142d5ee1f549bd7ad149bbac9a08f3b71590b78a7fdba3102fb4c1afc",
-    "source_sha256": "265ddd7142d5ee1f549bd7ad149bbac9a08f3b71590b78a7fdba3102fb4c1afc",
-    "uncompressed_bytes": 2469888,
-    "url": "https://github.com/Zinkelburger/HypeBeast/releases/download/v1.1.1/hypebeast-windows-x86-64-modern.exe"
+    "payload_sha256": "449a9f70d8b4fc38767b78a91b6b5ea68deb93ba564d08404c31fff4275b3c4b",
+    "source_sha256": "449a9f70d8b4fc38767b78a91b6b5ea68deb93ba564d08404c31fff4275b3c4b",
+    "uncompressed_bytes": 2476032,
+    "url": "https://github.com/Zinkelburger/HypeBeast/releases/download/v1.1.2/hypebeast-windows-x86-64-modern.exe"
   },
   "hivemind-linux": {
     "source_sha256": "3f99a8d24fc45495704d2a7f1e1622d0215b97a805415f50de4a91ae1f0e2a5a",
