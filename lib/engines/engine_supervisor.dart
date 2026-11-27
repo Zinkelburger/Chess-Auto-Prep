@@ -6,8 +6,8 @@ import 'package:path/path.dart' as p;
 
 import '../diagnostics/log.dart';
 import 'engine.dart';
-import 'hivemind_engine.dart';
-import 'hivemind_install.dart';
+import 'hypebeast_engine.dart';
+import 'hypebeast_install.dart';
 import 'uci_engine.dart';
 import 'uci_process.dart';
 
@@ -190,56 +190,61 @@ final class EngineSupervisor {
     }
   }
 
-  /// Hivemind from its installed [files], limited to [cores] where the
-  /// platform lets a process be held to some of them (Linux).
-  Future<HivemindStart> startHivemind(
-    HivemindFiles files, {
-    required int cores,
+  /// HypeBeast from its installed [files], its net loaded and proved.
+  /// Threads are set per search; the process starts on one.
+  Future<HypeBeastStart> startHypeBeast(
+    HypeBeastFiles files, {
     Duration patience = const Duration(seconds: 90),
   }) => _disposed
-      ? Future.value(const HivemindStartFailed('The app is closing.'))
-      : _own(_startHivemind(files, cores, patience));
+      ? Future.value(const HypeBeastStartFailed('The app is closing.'))
+      : _own(_startHypeBeast(files, patience));
 
-  Future<HivemindStart> _startHivemind(
-    HivemindFiles files,
-    int cores,
+  Future<HypeBeastStart> _startHypeBeast(
+    HypeBeastFiles files,
     Duration patience,
   ) async {
     final SpawnedProcess process;
     final identity = {
       'engine_sha256': await fileSha256(files.executable),
-      'network_sha256': await fileSha256(files.model),
-      'cores': cores,
+      'net_sha256': await fileSha256(files.net),
     };
     try {
-      if (_disposed) return const HivemindStartFailed('The app is closing.');
+      if (_disposed) return const HypeBeastStartFailed('The app is closing.');
       process = await SpawnedProcess.start(
         files.executable,
-        // Named from the engine's own folder: on Windows the support folder
-        // has spaces in it, and a bare file name survives any quoting.
-        arguments: ['--model', p.basename(files.model)],
         workingDirectory: files.directory,
-        environment: hivemindEnvironment(files.directory, Platform.environment),
         startProcess: startProcess,
       );
     } on Object catch (e) {
       log.e('start the bughouse engine', '$e');
-      return HivemindStartFailed('Could not start the bughouse engine: $e');
+      return HypeBeastStartFailed('Could not start the bughouse engine: $e');
     }
     _trackHandshake(process);
     try {
       if (_disposed) {
         await process.kill();
-        return const HivemindStartFailed('The app is closing.');
+        return const HypeBeastStartFailed('The app is closing.');
       }
-      final engine = await HivemindProcess.start(
-        process,
-        options: const {'Hash': '256', 'BatchSize': '8'},
-        provenance: identity,
-        patience: patience,
-      );
+      final HypeBeastProcess? engine;
+      try {
+        engine = await HypeBeastProcess.start(
+          process,
+          net: files.net,
+          options: const {'Hash': '$hypeBeastHashMb', 'Threads': '1'},
+          provenance: identity,
+          patience: patience,
+        );
+      } on EngineFailure catch (failure) {
+        log.e(
+          'start the bughouse engine',
+          '${failure.message} stderr: ${process.recentErrors.join(' ')}',
+        );
+        return HypeBeastStartFailed(
+          'The bughouse engine did not start: ${failure.message}',
+        );
+      }
       if (engine == null) {
-        if (_disposed) return const HivemindStartFailed('The app is closing.');
+        if (_disposed) return const HypeBeastStartFailed('The app is closing.');
         final said = process.recentErrors.join(' ');
         // Killed already, but a process stuck in the kernel may never end:
         // the exit code is worth a second, not the start's answer.
@@ -250,28 +255,25 @@ final class EngineSupervisor {
           'start the bughouse engine',
           'no uciok; exit $code; stderr: $said',
         );
-        return HivemindStartFailed(
+        return HypeBeastStartFailed(
           [
             'The bughouse engine did not start.',
-            ?hivemindExitReason(code),
+            ?engineExitReason(code),
             said,
           ].where((part) => part.isNotEmpty).join(' '),
         );
       }
       if (!_keep(engine, process)) {
         await engine.quit();
-        return const HivemindStartFailed('The app is closing.');
+        return const HypeBeastStartFailed('The app is closing.');
       }
-      await limitCores(process.pid, cores);
-      if (_disposed) {
-        await engine.quit();
-        return const HivemindStartFailed('The app is closing.');
-      }
-      return HivemindStarted(engine);
+      return HypeBeastStarted(engine);
     } on Object catch (error) {
       await process.kill();
       log.e('start the bughouse engine', error);
-      return HivemindStartFailed('Could not start the bughouse engine: $error');
+      return HypeBeastStartFailed(
+        'Could not start the bughouse engine: $error',
+      );
     }
   }
 
@@ -324,6 +326,9 @@ final class EngineSupervisor {
   }
 }
 
+/// The hash table of each bughouse engine process, in MB.
+const hypeBeastHashMb = 128;
+
 final _hashes = <String, ({int size, DateTime modified, String hash})>{};
 
 /// The SHA-256 of the file at [path], recorded with saved bughouse analysis
@@ -348,45 +353,15 @@ Future<String?> fileSha256(String path) async {
   }
 }
 
-/// What Hivemind is started with besides this process's environment: where
-/// its ONNX Runtime library is — beside it, in [directory] — and on Windows a
-/// PATH cut to that folder and the system's, so no stray 32-bit
-/// `MSVCP140.dll` on the user's PATH is loaded ahead of the one it ships.
-Map<String, String> hivemindEnvironment(
-  String directory,
-  Map<String, String> inherited,
-) {
-  if (Platform.isWindows) {
-    final root = inherited['SystemRoot'] ?? r'C:\Windows';
-    // Windows names are case-insensitive but the block is a list: reuse the
-    // spelling the parent has, or two PATHs would race.
-    final key = inherited.keys.firstWhere(
-      (name) => name.toLowerCase() == 'path',
-      orElse: () => 'PATH',
-    );
-    return {
-      key: [directory, p.join(root, 'System32'), root].join(';'),
-    };
-  }
-  final key = Platform.isMacOS ? 'DYLD_LIBRARY_PATH' : 'LD_LIBRARY_PATH';
-  final existing = inherited[key];
-  return {
-    key: existing == null || existing.isEmpty
-        ? directory
-        : '$directory:$existing',
-  };
-}
-
 /// What a Windows loader failure means, in words, for an engine that exited
 /// with [code] before it could say anything; null for any other exit.
-String? hivemindExitReason(int? code) {
+String? engineExitReason(int? code) {
   if (code == null) return null;
   // Windows reports an NTSTATUS as a negative 32-bit exit code.
   final status = code & 0xFFFFFFFF;
   return switch (status) {
     0xC0000135 =>
-      'Windows could not find a library it needs (exit 0xC0000135); '
-          'installing the Microsoft Visual C++ runtime fixes this.',
+      'Windows could not find a library it needs (exit 0xC0000135).',
     0xC000007B => 'Windows refused to load one of its files (exit 0xC000007B).',
     0xC000001D =>
       'This processor lacks an instruction the engine needs '
@@ -395,44 +370,3 @@ String? hivemindExitReason(int? code) {
     _ => null,
   };
 }
-
-/// Holds every thread of [pid] to the first [cores] CPUs this process may
-/// use, on Linux; elsewhere the engine chooses. A failure is a log line:
-/// the engine still runs, on more cores than asked.
-Future<void> limitCores(int pid, int cores) async {
-  if (!Platform.isLinux) return;
-  try {
-    final status = await File('/proc/self/status').readAsString();
-    final allowed = RegExp(
-      r'^Cpus_allowed_list:\s*(.+)$',
-      multiLine: true,
-    ).firstMatch(status)?.group(1);
-    if (allowed == null) return;
-    final cpus = cpuList(allowed);
-    final chosen = cpus.take(cores.clamp(1, cpus.length)).join(',');
-    final result = await Process.run('taskset', [
-      '--all-tasks',
-      '--pid',
-      '--cpu-list',
-      chosen,
-      '$pid',
-    ]);
-    if (result.exitCode != 0) {
-      log.w('limit the bughouse engine to $cores cores', result.stderr);
-    }
-  } on Object catch (error) {
-    log.w('limit the bughouse engine to $cores cores', error);
-  }
-}
-
-/// `0-3,8,10-11` → 0, 1, 2, 3, 8, 10, 11.
-List<int> cpuList(String list) => [
-  for (final part in list.trim().split(','))
-    if (part.split('-') case [final from, ...final rest])
-      for (
-        var cpu = int.parse(from.trim());
-        cpu <= int.parse((rest.isEmpty ? from : rest.first).trim());
-        cpu++
-      )
-        cpu,
-];
