@@ -172,9 +172,20 @@ const icon = {
         <button type="button" class="btn btn-outline btn-sm" id="ch-pgn-copy">Copy PGN</button>
         <button type="button" class="btn btn-outline btn-sm" id="ch-pgn-import" disabled>Import PGN</button>
       </div>
+      <nav class="ch-foot" id="ch-foot" aria-label="More bughouse">
+        <a class="link-ext" href="/bughouse-puzzles">Bughouse Puzzles</a>
+        <a class="link-ext" href="/bughouse-games">Bughouse Games</a>
+        <a class="link-ext" href="https://github.com/Zinkelburger/HypeBeast#how-it-works" target="_blank" rel="noopener">How HypeBeast works ↗</a>
+      </nav>
     </section>
   </div>
 </Base>
+
+<style>
+  /* Links to the other bughouse pages and the engine's source, under FEN and PGN: below the first screen, so the board and engine lines never move. */
+  .ch-foot { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin-top: 4px; }
+  .ch[data-mode="editor"] .ch-foot { display: none; }
+</style>
 
 <script>
   import { BughouseApp } from '../analysis/app';
