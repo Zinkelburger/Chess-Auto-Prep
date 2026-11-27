@@ -135,9 +135,9 @@ tools/experiments/benko_master/
 .claude/settings.local.json
 .claude/RESUME.md
 
-# Bughouse engine bundle: the Hivemind CPU build (engine + ONNX Runtime +
-# FP32 network, ~43 MB gzipped). Downloaded by tools/fetch_assets.py alongside
-# Stockfish rather than tracked.
+# Bughouse engine bundle: HypeBeast (one static binary + the bughouse NNUE,
+# ~30 MB gzipped). Downloaded by tools/fetch_assets.py alongside Stockfish
+# rather than tracked.
 #
 # .gitkeep is tracked on purpose, exactly as it is under assets/executables.
 # pubspec.yaml declares this whole directory as an asset, and a *missing*
@@ -146,6 +146,10 @@ tools/experiments/benko_master/
 # tracked file here, a release would build green and ship with no engine.
 assets/bughouse/*.gz
 assets/bughouse/manifest.json
+
+# Hivemind for the bughouse MCP server and the arena only (never bundled):
+# python3 tools/fetch_assets.py --only hivemind
+tools/hivemind-engine/
 
 # Official Microsoft VC++ prerequisite. Release CI fetches and verifies the
 # pinned package; the 25 MB executable is embedded in the Windows installer,

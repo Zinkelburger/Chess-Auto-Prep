@@ -112,13 +112,13 @@ runs two. Start long sweeps in the background.
 
 ## Where the engine comes from
 
-`paths.locate()` tries `HIVEMIND_BIN`/`HIVEMIND_MODEL`/`HIVEMIND_LIB`, the
-desktop app's support directory, the server's own directory, then unpacks
-`assets/bughouse/*.gz` from the checkout into
-`~/.local/share/chess-prep/bughouse/`. It never writes into the app's
-directory. `python3 tools/fetch_assets.py --only bughouse` downloads the
-bundle; `--hivemind <checkout>` packages a local Hivemind build instead.
-The same engine drives the Bughouse mode in the app; they share only files.
+`paths.locate()` tries `HIVEMIND_BIN`/`HIVEMIND_MODEL`/`HIVEMIND_LIB`, then
+unpacks `tools/hivemind-engine/*.gz` from the checkout into
+`~/.local/share/chess-prep/bughouse/`, then uses the copy already there.
+`python3 tools/fetch_assets.py --only hivemind` downloads it (a tool-only
+fetch, never bundled); for a local Hivemind build set the variables. The
+app's Bughouse mode runs a different engine (HypeBeast) and shares nothing
+with this server.
 
 ## Editing the server
 

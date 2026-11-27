@@ -82,7 +82,6 @@ def main() -> int:
     assert "runs-on: windows-2022" in windows
     assert "Get-AuthenticodeSignature" in windows
     assert "FileVersionRaw" in windows
-    assert "--windows-runtime-from" in windows
 
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)

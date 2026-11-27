@@ -27,6 +27,13 @@ APPROVED: dict[str, tuple[int, str]] = {
         "reproducible engine bundle: support dir, stale stamp delete, "
         ".part write, rename, stamp",
     ),
+    "lib/engines/hypebeast_install.dart": (
+        5,
+        "reproducible bughouse engine bundle: verified .part write, "
+        "rename into place, removal of its own leftover .part and of an "
+        "hour-old one a killed install left, and of the known Hivemind files "
+        "an older version installed in the same folder",
+    ),
     "lib/engines/hivemind_install.dart": (
         4,
         "reproducible bughouse engine bundle: verified .part write, "

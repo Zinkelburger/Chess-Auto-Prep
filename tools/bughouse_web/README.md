@@ -25,12 +25,14 @@ The `prebuild` step runs the puzzle, prep and analysis tests and the Astro
 type check, then `prepare_assets.py` and `tools/prepare_prep_web.py`.
 `prepare_assets.py` checks the committed engine against
 `public/bughouse-engine/build.json` (a stale binary fails the build),
-downloads the checksum-pinned Hivemind network (`tools/assets.lock.json`)
-unless `assets/bughouse/hivemind.onnx.gz` already matches, splits its gzip
+downloads the checksum-pinned Hivemind network (`hivemind-network` in
+`tools/assets.lock.json`) unless `tools/hivemind-engine/hivemind.onnx.gz`
+(the tool-only `fetch_assets.py --only hivemind`) already matches, splits its gzip
 bytes into 16 MiB parts and copies ONNX Runtime Web from the pinned npm
 dependency: the WebGPU (`.jsep`) build for Hivemind and the plain build for
 the Expectimax tab's Maia. It writes `model.json` with every part's checksum,
-the runtime's and the uncompressed model's, and copies the Hivemind, ONNX
+the runtime's and the uncompressed model's, and copies the Hivemind licence
+(kept beside the script, since the app no longer ships Hivemind), the ONNX
 Runtime and app licences beside them. The build fails if any engine asset is
 at or above Pages' 25 MiB file limit.
 

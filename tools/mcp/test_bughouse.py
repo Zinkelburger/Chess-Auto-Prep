@@ -432,7 +432,7 @@ class EngineLocation(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            assets, own, app = root / "assets", root / "own", root / "app"
+            assets, own = root / "assets", root / "own"
             assets.mkdir()
             own.mkdir()
             names = [paths.binary_name(), paths.runtime_name(), "hivemind.onnx"]
@@ -444,8 +444,7 @@ class EngineLocation(unittest.TestCase):
                     out.write(b"new " + name.encode())
             with mock.patch.dict(os.environ, {}, clear=False), \
                     mock.patch.object(paths, "ASSETS", assets), \
-                    mock.patch.object(paths, "OWN_SUPPORT", own), \
-                    mock.patch.object(paths, "APP_SUPPORT", app):
+                    mock.patch.object(paths, "OWN_SUPPORT", own):
                 os.environ.pop("HIVEMIND_BIN", None)
                 os.environ.pop("HIVEMIND_MODEL", None)
                 found = paths.locate()
@@ -454,6 +453,20 @@ class EngineLocation(unittest.TestCase):
             self.assertEqual(
                 (own / paths.binary_name()).read_bytes(), b"new " + paths.binary_name().encode()
             )
+
+
+    def test_the_engine_comes_from_the_tool_only_fetch_not_the_app_bundle(self):
+        # The app bundles HypeBeast from assets/bughouse/; Hivemind is fetched
+        # for the tools alone, by `fetch_assets.py --only hivemind`.
+        sys.path.insert(0, str(REPO / "tools"))
+        import fetch_assets
+
+        self.assertEqual(paths.ASSETS, fetch_assets.HIVEMIND_ASSETS)
+        self.assertNotIn("assets", paths.ASSETS.relative_to(REPO).parts[:1])
+        target = fetch_assets.HIVEMIND_TARGETS[fetch_assets.hivemind_host_target()]
+        fetched = {Path(spec[1]).name[:-3] for spec in (target["engine"], target["runtime"])}
+        fetched.add(Path(fetch_assets.HIVEMIND_NETWORK["dest"]).name[:-3])
+        self.assertEqual(fetched, {paths.binary_name(), paths.runtime_name(), "hivemind.onnx"})
 
 
 # ── With the real engine ───────────────────────────────────────────────────

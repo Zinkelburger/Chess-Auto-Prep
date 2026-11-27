@@ -120,6 +120,130 @@ class FetcherTest(unittest.TestCase):
         self.assertEqual(problems, [])
 
 
+class BughouseLockTest(unittest.TestCase):
+    """The app's bughouse engine is HypeBeast, pinned per platform; Hivemind
+    is pinned for the tools only and never fetched by default."""
+
+    def setUp(self):
+        self.lock = json.loads((ROOT / 'tools/assets.lock.json').read_text())
+
+    def test_every_platform_pins_the_release_binary_it_unpacks(self):
+        for name, spec in fetch_assets.BUGHOUSE_TARGETS.items():
+            with self.subTest(name=name):
+                entry = self.lock[name]
+                self.assertEqual(entry['url'], f'{fetch_assets.HYPEBEAST_BASE}/{spec["asset"]}')
+                self.assertRegex(entry['payload_sha256'], r'^[0-9a-f]{64}$')
+                # A bare binary: what is downloaded is what the app unpacks.
+                self.assertEqual(entry['source_sha256'], entry['payload_sha256'])
+                self.assertNotIn('output_sha256', entry)
+
+    def test_the_network_keeps_the_name_fairy_stockfish_matches_it_by(self):
+        net = fetch_assets.BUGHOUSE_NETWORK
+        self.assertEqual(self.lock[net['key']]['payload_sha256'], net['sha256'])
+        self.assertTrue(net['name'].startswith('bughouse-'))
+        self.assertEqual(net['name'], f'bughouse-{net["sha256"][:12]}.nnue')
+        self.assertEqual(fetch_assets.manifest_key(net['dest']), net['name'])
+
+    def test_hivemind_is_fetched_only_when_named_and_never_into_the_bundle(self):
+        self.assertFalse(any(n.startswith('hivemind') for n in fetch_assets.resolve_targets(None)))
+        self.assertEqual(fetch_assets.resolve_targets(['hivemind']),
+                         [fetch_assets.hivemind_host_target()])
+        for spec in fetch_assets.HIVEMIND_TARGETS.values():
+            for _member, dest in (spec['engine'], spec['runtime']):
+                self.assertTrue(dest.startswith('tools/hivemind-engine/'), dest)
+        for name in fetch_assets.HIVEMIND_TARGETS:
+            self.assertIn(f'{name}:engine', self.lock)
+            self.assertIn(f'{name}:runtime', self.lock)
+        self.assertIn('hivemind-network', self.lock)
+
+
+DRIVE_PAGE = """<!DOCTYPE html><html><head><title>Google Drive - Virus scan warning</title></head>
+<body><form id="download-form" action="https://drive.usercontent.google.com/download" method="get">
+<input type="submit" id="uc-download-link" value="Download anyway"/>
+<input type="hidden" name="id" value="FILEID"><input type="hidden" name="export" value="download">
+<input type="hidden" name="confirm" value="t"><input type="hidden" name="uuid" value="a&amp;b"></form>
+</body></html>"""
+
+
+class BughouseFetchTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.assets = self.root / 'assets/bughouse'
+        self.assets.mkdir(parents=True)
+        for name, value in (('REPO_ROOT', self.root), ('BUGHOUSE_ASSETS', self.assets),
+                            ('BUGHOUSE_MANIFEST', self.assets / 'manifest.json')):
+            patcher = mock.patch.object(fetch_assets, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.engine = b'\x7fELF hypebeast' * 100
+        self.net = b'NNUE bytes' * 100
+        net = fetch_assets.BUGHOUSE_NETWORK
+        self.lock = {
+            'bughouse-linux': {'payload_sha256': hashlib.sha256(self.engine).hexdigest(),
+                               'uncompressed_bytes': len(self.engine)},
+            net['key']: {'payload_sha256': hashlib.sha256(self.net).hexdigest(),
+                         'uncompressed_bytes': len(self.net)},
+        }
+
+    def install(self):
+        fetch_assets.write_gz(self.engine, self.assets / 'hypebeast-linux.gz')
+        fetch_assets.write_gz(self.net, self.root / fetch_assets.BUGHOUSE_NETWORK['dest'])
+        fetch_assets.write_manifest({
+            'hypebeast-linux': fetch_assets.manifest_entry(
+                len(self.engine), hashlib.sha256(self.engine).hexdigest()),
+            fetch_assets.BUGHOUSE_NETWORK['name']: fetch_assets.manifest_entry(
+                len(self.net), hashlib.sha256(self.net).hexdigest()),
+        })
+
+    def problems(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            return fetch_assets.check_bughouse(['bughouse-linux'], self.lock)
+
+    def test_the_drive_warning_page_leads_to_the_download(self):
+        url = fetch_assets._drive_confirm_url(DRIVE_PAGE)
+        self.assertEqual(url, 'https://drive.usercontent.google.com/download'
+                              '?id=FILEID&export=download&confirm=t&uuid=a%26b')
+        self.assertIsNone(fetch_assets._drive_confirm_url('<html>quota exceeded</html>'))
+
+    def test_a_good_install_passes_and_a_wrong_manifest_does_not(self):
+        self.install()
+        self.assertEqual(self.problems(), [])
+        manifest = json.loads((self.assets / 'manifest.json').read_text())
+        manifest['hypebeast-linux']['bytes'] += 1
+        (self.assets / 'manifest.json').write_text(json.dumps(manifest))
+        self.assertEqual(self.problems(), ['manifest'])
+
+    def test_old_hivemind_files_fail_the_check_until_a_fetch_removes_them(self):
+        self.install()
+        kept = self.assets / 'notes.gz'
+        kept.write_bytes(b'not ours')
+        (self.assets / 'hivemind.onnx.gz').write_bytes(b'old')
+        self.assertEqual(self.problems(), ['hivemind.onnx.gz'])
+        with contextlib.redirect_stdout(io.StringIO()):
+            fetch_assets.remove_stale_bughouse()
+        self.assertEqual(self.problems(), [])
+        self.assertTrue(kept.exists(), 'only the known Hivemind names are removed')
+
+    def test_a_worktree_link_is_replaced_never_written_through(self):
+        main = self.root / 'main'
+        main.mkdir()
+        (main / 'manifest.json').write_text('{"hivemind.onnx": {"bytes": 1, "sha256": "x"}}')
+        (main / 'hivemind-linux.gz').write_bytes(b'main checkout engine')
+        (self.assets / 'manifest.json').symlink_to(main / 'manifest.json')
+        (self.assets / 'hivemind-linux.gz').symlink_to(main / 'hivemind-linux.gz')
+        with contextlib.redirect_stdout(io.StringIO()):
+            fetch_assets.remove_stale_bughouse()
+        self.install()
+        self.assertFalse((self.assets / 'manifest.json').is_symlink())
+        self.assertFalse((self.assets / 'hivemind-linux.gz').exists())
+        self.assertEqual((main / 'hivemind-linux.gz').read_bytes(), b'main checkout engine')
+        self.assertIn('hivemind.onnx', (main / 'manifest.json').read_text())
+        self.assertEqual(set(json.loads((self.assets / 'manifest.json').read_text())),
+                         {'hypebeast-linux', fetch_assets.BUGHOUSE_NETWORK['name']})
+
+
 class MacPackagingTest(unittest.TestCase):
     """The Xcode build phase, with codesign stood in: only its check runs."""
 

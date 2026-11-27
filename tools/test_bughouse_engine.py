@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
 # A None here fails the test on its own, so pyright's None checks add nothing.
 # pyright: reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportOptionalIterable=false, reportOptionalOperand=false
-"""Prove the bundled bughouse engine can actually run on this platform.
+"""Prove the bundled bughouse engine (HypeBeast) can actually run on this platform.
 
 Two questions, deliberately separated because only one of them can be answered
 on a developer machine or on a CI runner that already has everything:
 
-  deps  -- Static. For every platform's assets that are present, read the
-           binaries' own import tables and check that nothing they need is
-           left to luck. This is the check that catches the Windows failure a
-           Windows runner cannot: `onnxruntime.dll` imports MSVCP140.dll and
-           friends, which come with the Visual C++ redistributable and are
-           installed on every CI image and on no fresh Windows install.
-           Runs on any host and audits any platform's assets.
+  deps  -- Static. For every platform's binary that is present, read its own
+           headers and require that it needs nothing but the operating system:
+           a Linux binary is static (no loader, no shared library), a Windows
+           binary imports only DLLs every Windows 10/11 has, a macOS binary
+           links only /usr/lib and /System. A hosted runner cannot pretend to
+           be a clean machine -- every image has the Visual C++ runtime -- but
+           it can read what a binary asks for. Pure Python, so it audits any
+           platform's binary on any host.
 
-  run   -- Live. Extract this host's engine exactly the way the app does,
-           start it, and require the whole handshake: banner, backend line,
-           `uciok`, `readyok`, and a real search that returns a joint move.
-           This is the answer to "does the network load on Windows".
+  run   -- Live. Extract this host's engine and network exactly the way the
+           app does (manifest size and SHA-256), start it, and require the
+           whole conversation: `uciok`, `readyok`, the network loaded (not
+           Fairy-Stockfish's classical fallback), and a two-board coordinated
+           search that answers a joint `bestmove (move,pass)`.
 
     python3 tools/test_bughouse_engine.py            # both, host platform
     python3 tools/test_bughouse_engine.py deps       # static audit only
@@ -35,7 +37,6 @@ import gzip
 import hashlib
 import json
 import os
-import platform
 import struct
 import subprocess
 import sys
@@ -49,47 +50,38 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 ASSETS = REPO_ROOT / "assets" / "bughouse"
 
 sys.path.insert(0, str(REPO_ROOT / "tools"))
-from fetch_assets import BUGHOUSE_TARGETS as TARGETS, bughouse_host_target as host_target, manifest_key  # noqa: E402
+from fetch_assets import (  # noqa: E402
+    BUGHOUSE_NETWORK,
+    BUGHOUSE_TARGETS as TARGETS,
+    bughouse_host_target as host_target,
+    manifest_key,
+)
 
-NETWORK = "hivemind.onnx"
-
-# The engine's directory is the first place every platform's loader looks, so
-# a dependency is "covered" when it is one of these, or when the OS itself
-# guarantees it.
-BESIDE_THE_ENGINE = {"hivemind_ort.dll", "libonnxruntime.so.1", "libonnxruntime.dylib"}
-
-# Deployed beside the engine by HivemindInstall (lib/engines/
-# hivemind_install.dart), copied from the app's own directory where
-# windows/CMakeLists.txt puts them. Named here so the audit can say "covered,
-# but only because the app copies it" -- the day that copy is dropped, this
-# list is what the audit is measured against and the Dart test in
-# test/engines/hivemind_install_test.dart is what fails.
-WINDOWS_APP_DEPLOYED_PREFIXES = ("msvcp140", "vcruntime140", "concrt140")
+NETWORK = BUGHOUSE_NETWORK["name"]
 
 # Present on a clean Windows 10/11. The Universal CRT (api-ms-win-crt-*) is
-# part of the OS since Windows 10; the MSVC C++ runtime (MSVCP140 etc.) is
+# part of the OS since Windows 10; the MSVC C++ runtime (MSVCP140 etc.) and
+# MinGW's own DLLs (libstdc++-6, libgcc_s_seh-1, libwinpthread-1) are
 # emphatically not, which is the whole point of this check.
 WINDOWS_SYSTEM_DLLS = {
     "advapi32.dll", "bcrypt.dll", "cfgmgr32.dll", "combase.dll", "crypt32.dll",
-    "d3d12.dll", "dbghelp.dll", "dxgi.dll", "gdi32.dll", "kernel32.dll",
-    "kernelbase.dll", "ktmw32.dll", "mswsock.dll", "ncrypt.dll", "netapi32.dll",
-    "ntdll.dll", "ole32.dll", "oleaut32.dll", "pdh.dll", "powrprof.dll",
-    "psapi.dll", "rpcrt4.dll", "setupapi.dll", "shell32.dll", "shlwapi.dll",
-    "user32.dll", "userenv.dll", "version.dll", "winmm.dll", "ws2_32.dll",
-    "wldap32.dll",
+    "dbghelp.dll", "gdi32.dll", "kernel32.dll", "kernelbase.dll", "ntdll.dll",
+    "ole32.dll", "oleaut32.dll", "powrprof.dll", "psapi.dll", "rpcrt4.dll",
+    "shell32.dll", "shlwapi.dll", "user32.dll", "userenv.dll", "version.dll",
+    "winmm.dll", "ws2_32.dll",
 }
 
-# Present on any glibc Linux desktop the app supports.
-LINUX_SYSTEM_LIBS = {
-    "libc.so.6", "libm.so.6", "libdl.so.2", "libpthread.so.0", "librt.so.1",
-    "libstdc++.so.6", "libgcc_s.so.1", "ld-linux-x86-64.so.2",
-    "libatomic.so.1", "libresolv.so.2",
+# What each target's binary must be built for, so a mixed-up asset (the
+# Intel Mac binary in the Apple Silicon slot) fails here, not on a user's Mac.
+ELF_X86_64 = 62
+PE_AMD64 = 0x8664
+MACHO_CPU = {0x01000007: "x86_64", 0x0100000C: "arm64"}
+TARGET_ARCH = {
+    "bughouse-linux": "x86_64",
+    "bughouse-windows": "x86_64",
+    "bughouse-macos-arm64": "arm64",
+    "bughouse-macos-x86_64": "x86_64",
 }
-
-# The oldest toolchain the released binaries may require, so a build made on a
-# bleeding-edge distro cannot quietly stop running on a supported one.
-MAX_GLIBC = (2, 31)      # Ubuntu 20.04 LTS
-MAX_GLIBCXX = (3, 4, 28)  # ditto
 
 
 class Failure(Exception):
@@ -102,8 +94,10 @@ def fail(message: str) -> NoReturn:
 
 # ------------------------------------------------------------------ binaries
 
-def pe_imports(data: bytes) -> list[str]:
-    """DLL names in a PE file's import directory."""
+def _pe_sections(data: bytes) -> tuple[int, list[tuple[int, int, int]]]:
+    """(offset of the data directories, [(vaddr, size, raw offset)])."""
+    if data[:2] != b"MZ":
+        fail("not a PE file")
     pe = struct.unpack_from("<I", data, 0x3C)[0]
     if data[pe:pe + 4] != b"PE\0\0":
         fail("not a PE file")
@@ -111,14 +105,20 @@ def pe_imports(data: bytes) -> list[str]:
     opt = pe + 24
     magic = struct.unpack_from("<H", data, opt)[0]
     dirs = opt + (112 if magic == 0x20B else 96)
-    imp_rva = struct.unpack_from("<I", data, dirs + 8)[0]
-
     sections = []
     sec_off = opt + struct.unpack_from("<H", data, pe + 20)[0]
     for i in range(nsec):
         o = sec_off + 40 * i
         vsize, vaddr, rsize, raddr = struct.unpack_from("<IIII", data, o + 8)
         sections.append((vaddr, max(vsize, rsize), raddr))
+    return dirs, sections
+
+
+def _pe_names(data: bytes, directory: int, entry_size: int, name_at: int) -> list[str]:
+    dirs, sections = _pe_sections(data)
+    rva = struct.unpack_from("<I", data, dirs + 8 * directory)[0]
+    if rva == 0:
+        return []
 
     def offset(rva: int) -> int:
         for vaddr, size, raddr in sections:
@@ -126,311 +126,265 @@ def pe_imports(data: bytes) -> list[str]:
                 return raddr + (rva - vaddr)
         fail(f"unmapped RVA {rva:#x}")
 
-    names, entry = [], offset(imp_rva)
+    names, entry = [], offset(rva)
     while True:
-        chunk = data[entry:entry + 20]
-        if len(chunk) < 20 or chunk == b"\0" * 20:
+        chunk = data[entry:entry + entry_size]
+        if len(chunk) < entry_size or chunk == b"\0" * entry_size:
             break
-        name_rva = struct.unpack_from("<I", chunk, 12)[0]
+        name_rva = struct.unpack_from("<I", chunk, name_at)[0]
         if name_rva == 0:
             break
         at = offset(name_rva)
         names.append(data[at:data.index(b"\0", at)].decode())
-        entry += 20
+        entry += entry_size
     return names
 
 
-def elf_needed_and_versions(path: Path) -> tuple[list[str], list[str]]:
-    """(DT_NEEDED entries, versioned-symbol tags) via objdump."""
-    out = subprocess.run(
-        ["objdump", "-p", str(path)], capture_output=True, text=True, check=False
-    )
-    if out.returncode != 0:
-        fail(f"objdump failed on {path.name}: {out.stderr.strip()}")
-    needed, versions = [], set()
-    for line in out.stdout.splitlines():
-        parts = line.split()
-        if len(parts) >= 2 and parts[0] == "NEEDED":
-            needed.append(parts[1])
-        for token in parts:
-            if token.startswith(("GLIBC_", "GLIBCXX_", "CXXABI_")):
-                versions.add(token.rstrip(":"))
-    return needed, sorted(versions)
+def pe_imports(data: bytes) -> list[str]:
+    """DLL names in a PE file's import directory."""
+    return _pe_names(data, directory=1, entry_size=20, name_at=12)
 
 
-def macho_dylibs(path: Path) -> list[str]:
-    out = subprocess.run(
-        ["otool", "-L", str(path)], capture_output=True, text=True, check=False
-    )
-    if out.returncode != 0:
-        fail(f"otool failed on {path.name}: {out.stderr.strip()}")
-    return [
-        line.split()[0]
-        for line in out.stdout.splitlines()[1:]
-        if line.strip()
-    ]
+def pe_delay_imports(data: bytes) -> list[str]:
+    """DLL names in a PE file's delay-load import directory."""
+    return _pe_names(data, directory=13, entry_size=32, name_at=4)
 
 
-def version_tuple(tag: str) -> tuple[int, ...]:
-    return tuple(int(p) for p in tag.split("_", 1)[1].split(".") if p.isdigit())
+def pe_machine(data: bytes) -> int:
+    pe = struct.unpack_from("<I", data, 0x3C)[0]
+    return struct.unpack_from("<H", data, pe + 4)[0]
+
+
+def elf_dependencies(data: bytes) -> tuple[int, str | None, list[str]]:
+    """(e_machine, PT_INTERP path or None, DT_NEEDED names) of a 64-bit ELF."""
+    if data[:4] != b"\x7fELF":
+        fail("not an ELF file")
+    if data[4] != 2 or data[5] != 1:
+        fail("not a 64-bit little-endian ELF file")
+    machine = struct.unpack_from("<H", data, 18)[0]
+    phoff = struct.unpack_from("<Q", data, 32)[0]
+    phentsize, phnum = struct.unpack_from("<HH", data, 54)
+    interp, dynamic, loads = None, None, []
+    for i in range(phnum):
+        p_type, _flags, p_offset, p_vaddr, _paddr, p_filesz = struct.unpack_from(
+            "<IIQQQQ", data, phoff + i * phentsize)
+        if p_type == 3:  # PT_INTERP
+            interp = data[p_offset:p_offset + p_filesz].rstrip(b"\0").decode()
+        elif p_type == 2:  # PT_DYNAMIC
+            dynamic = (p_offset, p_filesz)
+        elif p_type == 1:  # PT_LOAD
+            loads.append((p_vaddr, p_filesz, p_offset))
+    needed: list[int] = []
+    strtab = None
+    if dynamic is not None:
+        offset, size = dynamic
+        for at in range(offset, offset + size, 16):
+            tag, value = struct.unpack_from("<qQ", data, at)
+            if tag == 0:
+                break
+            if tag == 1:  # DT_NEEDED
+                needed.append(value)
+            elif tag == 5:  # DT_STRTAB
+                strtab = value
+    names = []
+    for index in needed:
+        file_at = None
+        if strtab is not None:
+            for vaddr, size, offset in loads:
+                if vaddr <= strtab < vaddr + size:
+                    file_at = offset + (strtab - vaddr) + index
+        names.append(
+            data[file_at:data.index(b"\0", file_at)].decode() if file_at is not None
+            else f"<library #{index}>"
+        )
+    return machine, interp, names
+
+
+MACHO_DYLIB_COMMANDS = {
+    0x0C: "LC_LOAD_DYLIB",
+    0x20: "LC_LAZY_LOAD_DYLIB",
+    0x80000018: "LC_LOAD_WEAK_DYLIB",
+    0x8000001F: "LC_REEXPORT_DYLIB",
+    0x80000023: "LC_LOAD_UPWARD_DYLIB",
+}
+
+
+def macho_slices(data: bytes) -> list[tuple[str, list[str]]]:
+    """[(architecture, linked dylib paths)] for a thin or universal Mach-O."""
+    magic = struct.unpack_from(">I", data, 0)[0]
+    if magic in (0xCAFEBABE, 0xCAFEBABF):
+        count = struct.unpack_from(">I", data, 4)[0]
+        wide = magic == 0xCAFEBABF
+        slices = []
+        for i in range(count):
+            if wide:
+                _cpu, _sub, offset, size, _align, _res = struct.unpack_from(">IIQQII", data, 8 + 32 * i)
+            else:
+                _cpu, _sub, offset, size, _align = struct.unpack_from(">IIIII", data, 8 + 20 * i)
+            slices += macho_slices(data[offset:offset + size])
+        return slices
+    if struct.unpack_from("<I", data, 0)[0] != 0xFEEDFACF:
+        fail("not a 64-bit Mach-O file")
+    cpu, _sub, _filetype, ncmds, _sizeofcmds = struct.unpack_from("<iiIII", data, 4)
+    arch = MACHO_CPU.get(cpu & 0xFFFFFFFF, f"cpu {cpu:#x}")
+    dylibs, at = [], 32
+    for _ in range(ncmds):
+        cmd, cmdsize = struct.unpack_from("<II", data, at)
+        if cmd in MACHO_DYLIB_COMMANDS:
+            name_offset = struct.unpack_from("<I", data, at + 8)[0]
+            start = at + name_offset
+            dylibs.append(data[start:data.index(b"\0", start)].decode())
+        at += cmdsize
+    return [(arch, dylibs)]
 
 
 # --------------------------------------------------------------------- deps
 
-INSTALL_DART = REPO_ROOT / "lib/engines/hivemind_install.dart"
-CMAKE_WINDOWS = REPO_ROOT / "windows/CMakeLists.txt"
-
-
-def require_app_deploys(dll: str) -> None:
-    """Check the app really does put `dll` where the engine will find it.
-
-    Two halves have to hold, in two languages, and neither compiler can see the
-    other: windows/CMakeLists.txt deploys the Visual C++ runtime beside
-    chess_auto_prep.exe, and HivemindInstall copies it on from there into the
-    engine's own directory, because a child process resolves its imports
-    against its own directory and not its parent's. Drop either half and the
-    engine dies before `main` on any machine without the redistributable --
-    silently, with no stderr, which is exactly the bug this file exists for.
-    """
-    prefix = next(p for p in WINDOWS_APP_DEPLOYED_PREFIXES if dll.startswith(p))
-    dart = INSTALL_DART.read_text().lower()
-    if f"'{prefix}" not in dart and f'"{prefix}' not in dart:
-        fail(
-            f"{dll} has to be copied beside the engine, but "
-            f"{INSTALL_DART.relative_to(REPO_ROOT)} does not mention '{prefix}'. "
-            "See _isRuntimeDll there."
-        )
-    if "InstallRequiredSystemLibraries" not in CMAKE_WINDOWS.read_text() or "package_bughouse_runtime.py" not in CMAKE_WINDOWS.read_text():
-        fail(
-            f"{dll} has to ship with the app, but "
-            f"{CMAKE_WINDOWS.relative_to(REPO_ROOT)} no longer deploys the "
-            "Visual C++ runtime."
-        )
-
-
-def audit_target(name: str, workdir: Path) -> list[str]:
-    """Check one platform's engine + runtime. Returns human-readable notes."""
-    spec = TARGETS[name]
-    files = {}
-    for role in ("engine", "runtime"):
-        member, dest = spec[role]
-        gz = REPO_ROOT / dest
-        if not gz.exists():
-            return [f"skipped: {gz.relative_to(REPO_ROOT)} not fetched"]
-        out = workdir / manifest_key(dest)
-        out.write_bytes(gzip.decompress(gz.read_bytes()))
-        files[role] = out
-
-    notes = []
-    deployed = {p.name.lower() for p in files.values()} | {
-        n.lower() for n in BESIDE_THE_ENGINE
-    }
-
+def audit_binary(name: str, data: bytes) -> list[str]:
+    """Check one platform's engine needs only the OS. Returns notes."""
+    want = TARGET_ARCH[name]
     if name == "bughouse-windows":
-        if "onnxruntime.dll" in [dll.lower() for dll in pe_imports(files["engine"].read_bytes())]:
-            fail("Windows engine still implicitly imports onnxruntime.dll")
-        for _role, path in files.items():
-            for dll in pe_imports(path.read_bytes()):
-                low = dll.lower()
-                if low.startswith("api-ms-win-"):
-                    continue
-                if low in WINDOWS_SYSTEM_DLLS or low in deployed:
-                    continue
-                if low.startswith(WINDOWS_APP_DEPLOYED_PREFIXES):
-                    require_app_deploys(low)
-                    notes.append(
-                        f"{path.name} needs {dll} — not part of Windows, "
-                        "covered only because the app copies it beside the engine"
-                    )
-                    continue
-                fail(
-                    f"{path.name} imports {dll}, which is neither guaranteed by "
-                    "Windows nor shipped beside the engine. A machine without it "
-                    "sees the engine start and never answer."
-                )
-        return notes
+        if pe_machine(data) != PE_AMD64:
+            fail(f"not an x86-64 Windows binary (machine {pe_machine(data):#x})")
+        dlls = pe_imports(data) + pe_delay_imports(data)
+        for dll in dlls:
+            low = dll.lower()
+            if low.startswith("api-ms-win-") or low in WINDOWS_SYSTEM_DLLS:
+                continue
+            fail(
+                f"imports {dll}, which is not part of Windows. A machine without "
+                "it sees the engine start and never answer."
+            )
+        return ["imports only Windows' own DLLs: " + ", ".join(sorted(dlls, key=str.lower))]
 
     if name.startswith("bughouse-macos"):
-        if platform.system() != "Darwin":
-            return ["skipped: needs otool (macOS host)"]
-        for _role, path in files.items():
-            for dylib in macho_dylibs(path):
-                base = os.path.basename(dylib)
-                if dylib.startswith(("/usr/lib/", "/System/")):
-                    continue
-                if dylib.startswith(("@rpath/", "@loader_path/", "@executable_path/")):
-                    if base.lower() in deployed:
-                        continue
-                fail(f"{path.name} loads {dylib}, which is not shipped beside it")
+        slices = macho_slices(data)
+        archs = [arch for arch, _ in slices]
+        if want not in archs:
+            other = next((t for t, a in TARGET_ARCH.items()
+                          if t.startswith("bughouse-macos") and a in archs), None)
+            if other:
+                return [f"skipped: {TARGETS[name]['dest']} holds the {other} build"]
+            fail(f"has no {want} code (has {', '.join(archs)})")
+        notes = []
+        for arch, dylibs in slices:
+            for dylib in dylibs:
+                if not dylib.startswith(("/usr/lib/", "/System/Library/")):
+                    fail(f"{arch} slice links {dylib}, which is not part of macOS")
+            notes.append(f"{arch}: links only " + ", ".join(dylibs))
         return notes
 
-    # Linux.
-    for _role, path in files.items():
-        needed, versions = elf_needed_and_versions(path)
-        for lib in needed:
-            if lib in LINUX_SYSTEM_LIBS or lib.lower() in deployed:
-                continue
-            fail(f"{path.name} needs {lib}, which is not shipped beside it")
-        for tag in versions:
-            got = version_tuple(tag)
-            ceiling = MAX_GLIBC if tag.startswith("GLIBC_") else (
-                MAX_GLIBCXX if tag.startswith("GLIBCXX_") else None
-            )
-            if ceiling and got > ceiling:
-                fail(
-                    f"{path.name} requires {tag}, newer than the oldest supported "
-                    f"distro provides ({'.'.join(map(str, ceiling))}). It was built "
-                    "on too new a toolchain to redistribute."
-                )
-        notes.append(
-            f"{path.name}: max "
-            + ", ".join(
-                sorted(
-                    {
-                        max((v for v in versions if v.startswith(pre)), default="", key=version_tuple)
-                        for pre in ("GLIBC_", "GLIBCXX_", "CXXABI_")
-                    }
-                    - {""}
-                )
-            )
-        )
-    return notes
+    machine, interp, needed = elf_dependencies(data)
+    if machine != ELF_X86_64:
+        fail(f"not an x86-64 Linux binary (e_machine {machine})")
+    if interp:
+        fail(f"is dynamically linked: needs the loader {interp}")
+    if needed:
+        fail(f"needs shared libraries: {', '.join(needed)}")
+    return ["static: no loader, no shared libraries"]
+
+
+def audit_target(name: str) -> list[str]:
+    gz = REPO_ROOT / TARGETS[name]["dest"]
+    if not gz.exists():
+        return [f"skipped: {gz.relative_to(REPO_ROOT)} not fetched"]
+    return audit_binary(name, gzip.decompress(gz.read_bytes()))
 
 
 def cmd_deps(args) -> int:
     names = sorted(TARGETS) if args.all else [host_target()]
     problems = 0
-    with tempfile.TemporaryDirectory() as td:
-        for name in names:
-            print(f"[deps] {name}")
-            work = Path(td) / name
-            work.mkdir(parents=True, exist_ok=True)
-            try:
-                notes = audit_target(name, work)
-                for note in notes:
-                    print(f"       {note}")
-                if not any(n.startswith("skipped") for n in notes):
-                    print("       ok — every dependency is guaranteed or shipped")
-            except Failure as exc:
-                print(f"  FAIL {exc}", file=sys.stderr)
-                problems += 1
+    for name in names:
+        print(f"[deps] {name}")
+        try:
+            notes = audit_target(name)
+            for note in notes:
+                print(f"       {note}")
+            if not any(n.startswith("skipped") for n in notes):
+                print("       ok — needs nothing but the operating system")
+        except Failure as exc:
+            print(f"  FAIL {name}: {exc}", file=sys.stderr)
+            problems += 1
     return 1 if problems else 0
 
 
 # ---------------------------------------------------------------------- run
 
 def install_like_the_app(target: Path) -> tuple[Path, Path]:
-    """Extract the host engine, runtime and network the way HivemindInstall does.
+    """Extract the host engine and the network the way HypeBeastInstall does.
 
-    Same three files, same names, same size check against manifest.json, so a
-    manifest that does not describe what actually ships fails here rather than
-    on a user's machine.
+    Same two files, same names, same size and SHA-256 check against
+    manifest.json, so a manifest that does not describe what actually ships
+    fails here rather than on a user's machine.
     """
     name = host_target()
-    spec = TARGETS[name]
     manifest = json.loads((ASSETS / "manifest.json").read_text())
     target.mkdir(parents=True, exist_ok=True)
 
-    paths = {}
-    sources = [spec["engine"][1], spec["runtime"][1], "assets/bughouse/hivemind.onnx.gz"]
-    for dest in sources:
+    paths = []
+    for dest in (TARGETS[name]["dest"], BUGHOUSE_NETWORK["dest"]):
         gz = REPO_ROOT / dest
         if not gz.exists():
-            fail(f"{dest} is missing — run: python3 tools/fetch_assets.py")
+            fail(f"{dest} is missing — run: python3 tools/fetch_assets.py --only bughouse")
         out = target / manifest_key(dest)
         payload = gzip.decompress(gz.read_bytes())
-        out.write_bytes(payload)
         record = manifest.get(out.name)
-        if record is None:
+        if not isinstance(record, dict):
             fail(f"manifest.json does not describe {out.name}")
-        expected = record["bytes"] if isinstance(record, dict) else record
-        if expected != len(payload):
+        if record.get("bytes") != len(payload):
             fail(
-                f"{out.name} is {len(payload)} bytes, manifest.json says {expected}. "
+                f"{out.name} is {len(payload)} bytes, manifest.json says {record.get('bytes')}. "
                 "The app deletes and re-extracts on every launch when these differ."
             )
-        if isinstance(record, dict):
-            actual_hash = hashlib.sha256(payload).hexdigest()
-            if record.get("sha256") != actual_hash:
-                fail(
-                    f"{out.name} SHA-256 is {actual_hash}, "
-                    f"manifest.json says {record.get('sha256')}"
-                )
-        paths[dest] = out
+        actual_hash = hashlib.sha256(payload).hexdigest()
+        if record.get("sha256") != actual_hash:
+            fail(f"{out.name} SHA-256 is {actual_hash}, manifest.json says {record.get('sha256')}")
+        tmp = out.with_name(out.name + ".part")
+        tmp.write_bytes(payload)
+        tmp.replace(out)
+        paths.append(out)
 
-    engine = paths[spec["engine"][1]]
+    engine, network = paths
     if os.name != "nt":
         engine.chmod(0o755)
-    return engine, target / NETWORK
+    return engine, network
 
 
-def install_windows_runtime(source: Path, target: Path) -> list[str]:
-    """Extract and verify the same private VC++ archive used by the app."""
-    from package_bughouse_runtime import package
-    package(source, check=True)
-    archive = source / "data" / "bughouse-runtime"
-    manifest = json.loads((archive / "manifest.json").read_text())
-    for name, expected in manifest.items():
-        payload = gzip.decompress((archive / f"{name}.gz").read_bytes())
-        if hashlib.sha256(payload).hexdigest() != expected["sha256"]:
-            fail(f"{archive / name}: source changed after verification")
-        destination = target / name
-        destination.write_bytes(payload)
-        if hashlib.sha256(destination.read_bytes()).hexdigest() != expected["sha256"]:
-            fail(f"{destination}: installed DLL hash mismatch")
-    return sorted(manifest)
+START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1"
+START_DUAL_FEN = f"{START_FEN}|{START_FEN}"
+
+# What Fairy-Stockfish prints at the first search when EvalFile did not load:
+# an unreadable file ends the process after "info string ERROR: ...", a file
+# that is not this net makes HypeBeast fall back to its classical evaluation.
+NET_FAILURES = ("info string ERROR", "info string hb_error", "classical evaluation enabled")
 
 
 def cmd_run(args) -> int:
     # `--install-to` leaves the extraction behind so a later step can drive the
-    # same three files through the app's own Dart client, which is the only
+    # same two files through the app's own Dart client, which is the only
     # thing that proves the *app* works on this platform rather than the engine.
     with tempfile.TemporaryDirectory() as td:
         work = Path(args.install_to).resolve() if args.install_to else Path(td) / "bughouse"
-        engine, network = install_like_the_app(work)
+        try:
+            engine, network = install_like_the_app(work)
+        except Failure as exc:
+            print(f"  FAIL {exc}", file=sys.stderr)
+            return 1
         print(f"[run]  {engine.name} + {network.name} in {work}")
-
-        if args.windows_runtime_from:
-            if os.name != "nt":
-                fail("--windows-runtime-from is only meaningful on Windows")
-            source = Path(args.windows_runtime_from).resolve()
-            if not source.is_dir():
-                fail(f"Windows runtime directory does not exist: {source}")
-            copied = install_windows_runtime(source, work)
-            print("       app-local VC++ runtime: " + ", ".join(copied))
-
-        env = dict(os.environ)
-        if sys.platform == "darwin":
-            env["DYLD_LIBRARY_PATH"] = str(work)
-        elif os.name == "nt":
-            root = env.get("SystemRoot", r"C:\Windows")
-            path_key = next((key for key in env if key.lower() == "path"), "PATH")
-            env[path_key] = ";".join(
-                [
-                    str(work),
-                    str(Path(root) / "System32"),
-                    root,
-                    str(Path(root) / "System32" / "Wbem"),
-                ]
-            )
-        else:
-            env["LD_LIBRARY_PATH"] = str(work)
 
         started = time.time()
         proc = subprocess.Popen(
-            [str(engine), "--model", str(network)],
+            [str(engine)],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, bufsize=1, env=env,
+            text=True, bufsize=1, cwd=work,
         )
 
         lines: list[str] = []
         errors: list[str] = []
-        done = threading.Event()
 
         def pump(stream, sink):
             for line in stream:
                 sink.append(line.rstrip())
-            done.set()
 
         threading.Thread(target=pump, args=(proc.stdout, lines), daemon=True).start()
         threading.Thread(target=pump, args=(proc.stderr, errors), daemon=True).start()
@@ -439,50 +393,65 @@ def cmd_run(args) -> int:
             proc.stdin.write(text + "\n")
             proc.stdin.flush()
 
-        def wait_for(token: str, seconds: float, what: str) -> float:
+        def tail() -> str:
+            shown = [l for l in lines if not l.startswith("option ")][-8:] + errors[-4:]
+            return ("\n  " + "\n  ".join(shown)) if shown else "\n  the engine printed nothing at all"
+
+        def wait_for(token: str, seconds: float, what: str) -> str:
             deadline = time.time() + seconds
             while time.time() < deadline:
-                if any(line.strip() == token or line.startswith(token) for line in lines):
-                    return time.time() - started
+                hit = next((l for l in lines if l.startswith(token)), None)
+                if hit is not None:
+                    return hit
                 if proc.poll() is not None:
-                    fail(
-                        f"engine exited ({proc.returncode}) before {what}"
-                        + ("\n  " + "\n  ".join(errors) if errors else "")
-                    )
+                    time.sleep(0.2)  # let the readers drain what it printed
+                    fail(f"engine exited ({proc.returncode}) before {what}" + tail())
                 time.sleep(0.05)
-            fail(
-                f"no {what} within {seconds:.0f}s"
-                + ("\n  " + "\n  ".join(errors) if errors else
-                   "\n  the engine printed nothing at all" if not lines else "")
-            )
+            fail(f"no {what} within {seconds:.0f}s" + tail())
 
         try:
             send("uci")
-            at = wait_for("uciok", args.timeout, "uciok")
-            print(f"       uciok after {at:.1f}s")
+            wait_for("uciok", args.timeout, "uciok")
+            print(f"       uciok after {time.time() - started:.1f}s")
+            banner = next((l for l in lines if l.startswith("id name")), "")
+            if "Fairy-Stockfish" not in banner:
+                fail(f"not a Fairy-Stockfish engine: {banner or 'no id name'}")
+            if not any(l.startswith("option name HypeBeast ") for l in lines):
+                fail("the engine does not offer the HypeBeast option: not a HypeBeast build")
+            print(f"       {banner}")
 
-            backend = next(
-                (l for l in lines if l.startswith("info string backend")), None
-            )
-            if backend is None:
-                fail("the engine never reported a backend, so the network never loaded")
-            if "model" not in backend:
-                fail(f"backend line names no model: {backend}")
-            print(f"       {backend}")
-
+            send("setoption name HypeBeast value true")
+            send(f"setoption name EvalFile value {network}")
+            send("setoption name Threads value 1")
+            send("setoption name Hash value 16")
             send("isready")
-            at = wait_for("readyok", args.timeout, "readyok")
-            print(f"       readyok after {at:.1f}s")
+            wait_for("readyok", args.timeout, "readyok")
 
+            # The coordinated two-board search the app's two-board view runs.
+            send("setoption name Seat value Awhite")
             send("setoption name Team value white")
+            send("setoption name Coordination value true")
+            send("setoption name MultiPV value 1")
             send("position fen " + START_DUAL_FEN)
             send(f"go nodes {args.nodes}")
-            wait_for("bestmove", args.search_timeout, "bestmove")
-            best = next(l for l in lines if l.startswith("bestmove"))
+            best = wait_for("bestmove", args.search_timeout, "bestmove")
+            failed = next((l for l in lines if l.startswith(NET_FAILURES)), None)
+            if failed:
+                fail(f"the network did not load: {failed}")
+            loaded = next((l for l in lines if l.startswith("info string NNUE evaluation using")), None)
+            if loaded is None or NETWORK not in loaded:
+                fail("the engine never said it is evaluating with the bughouse network" + tail())
+            print(f"       {loaded}")
+            if not any(l.startswith("info string hb_summary") for l in lines):
+                fail("no hb_summary: the two-board coordinator did not run")
             print(f"       {best}")
-            if "(" not in best or "," not in best:
-                fail(f"bestmove is not a joint action: {best}")
-            if not any(" nodes " in l for l in lines if l.startswith("info ")):
+            joint = best.split()[1] if len(best.split()) > 1 else ""
+            halves = joint.strip("()").split(",")
+            if not (joint.startswith("(") and joint.endswith(")") and len(halves) == 2):
+                fail(f"bestmove is not a joint answer: {best}")
+            if halves[1] != "pass" or halves[0] in ("pass", "(none)", ""):
+                fail(f"seat Awhite should move on board A and pass on B: {best}")
+            if not any(" nodes " in l for l in lines if l.startswith("info depth")):
                 fail("the search reported no nodes, so nothing was evaluated")
         except Failure as exc:
             print(f"  FAIL {exc}", file=sys.stderr)
@@ -493,49 +462,37 @@ def cmd_run(args) -> int:
                 proc.wait(timeout=5)
             except (OSError, ValueError, subprocess.TimeoutExpired):
                 proc.kill()
+                proc.wait()
 
-    print("\nThe bughouse engine loads its network and searches on this platform.")
+    print("\nThe bughouse engine loads its network and searches both boards on this platform.")
     if args.install_to:
-        print(f"HIVEMIND_BIN={engine}")
-        print(f"HIVEMIND_MODEL={network}")
-        print(f"HIVEMIND_LIB={engine.parent}")
+        print(f"HYPEBEAST_BIN={engine}")
+        print(f"HYPEBEAST_NET={network}")
     return 0
 
 
-START_DUAL_FEN = (
-    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1"
-    "|rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1"
-)
-
-
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap = argparse.ArgumentParser(description=(__doc__ or "").split("\n")[0])
     sub = ap.add_subparsers(dest="command")
 
     deps = sub.add_parser("deps", help="static dependency audit")
     deps.add_argument("--all", action="store_true",
-                      help="audit every platform whose assets are fetched")
+                      help="audit every platform whose binary is fetched")
     deps.set_defaults(func=cmd_deps)
 
     run = sub.add_parser("run", help="extract and drive the host engine")
-    run.add_argument("--timeout", type=float, default=90.0)
+    run.add_argument("--timeout", type=float, default=60.0)
     run.add_argument("--search-timeout", type=float, default=120.0)
-    run.add_argument("--nodes", type=int, default=400)
+    run.add_argument("--nodes", type=int, default=50000)
     run.add_argument("--install-to", metavar="DIR",
                      help="extract into DIR and keep it, instead of a temp dir")
-    run.add_argument(
-        "--windows-runtime-from",
-        metavar="DIR",
-        help="copy the final app bundle's VC++ DLLs beside the engine before launch",
-    )
     run.set_defaults(func=cmd_run)
 
     args = ap.parse_args()
     if args.command:
         return args.func(args)
 
-    deps_args = ap.parse_args(["deps"])
-    rc = cmd_deps(deps_args)
+    rc = cmd_deps(ap.parse_args(["deps"]))
     if rc:
         return rc
     print()

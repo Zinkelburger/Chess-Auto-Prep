@@ -47,6 +47,13 @@ Use that SDK (or set `FLUTTER=/path/to/flutter/bin/flutter`).
 `scripts/ci.sh format` is the separate command that applies formatting.
 `scripts/ci.sh full` also checks formatting without applying fixes.
 
+Engines are fetched, not committed: `python3 tools/fetch_assets.py` puts this
+platform's Stockfish and the bughouse engine (a HypeBeast release binary and
+its network) into the gitignored `assets/`, pinned by `tools/assets.lock.json`;
+CMake and the macOS build run it, and `--check` verifies. Hivemind, which only
+the bughouse MCP server and arena use, is a separate `--only hivemind` fetch
+and is never bundled. See the [tooling map](docs/agents/tooling.md).
+
 No bot opens dependency pull requests. Run `python3 scripts/outdated_deps.py`
 now and then to list outdated Dart and npm packages, pinned Python
 requirements and commit-pinned GitHub Actions; it changes nothing. Name
