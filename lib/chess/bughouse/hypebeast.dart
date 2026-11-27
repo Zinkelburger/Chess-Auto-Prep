@@ -20,6 +20,8 @@ library;
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:collection/collection.dart' show ListEquality;
+
 import 'table.dart';
 
 /// One search line of the board searched: its MultiPV rank, how deep, its
@@ -213,19 +215,23 @@ final class SeatReport {
 /// - A MultiPV 1 line with only a bound is noise and is passed over; a
 ///   later rank may only ever have bounds and is kept.
 /// - Each new MultiPV 1 line drops the other ranks more than one iteration
-///   older, so rows from different depths do not mix.
-/// - A search stopped mid-iteration prints a last main line cut short,
-///   deeper than the iteration it finished; the engine's closing verdict
-///   (`info depth 17 score … nodes …`, no `pv`) names the depth it stands
-///   by, and the line of that depth is put back.
-/// - Fairy-Stockfish in HypeBeast v1.1.1 prints MultiPV lines 2…N without
-///   searching them when `Coordination` is off: `score cp 0`, a `seldepth`
-///   frozen at 1 or 2 and an old move. Such a line is dropped while the
-///   main line is properly deep (seldepth above 4). This guards v1.1.1
-///   only; a fixed engine never prints one.
+///   older, as the website's driver does, so rows from different depths do
+///   not mix. The last block of a stopped search may still be out of order
+///   (lines its unfinished iteration did not reach keep the previous
+///   depth's score) or cut to a move or two; [seatRows] sorts by score.
+/// - Builds before HypeBeast v1.1.2 (v1.1.1 among them) predate its MultiPV
+///   support: with `Coordination` off they print lines 2…N without
+///   searching them, each iteration repeating the rank's last line — the
+///   same moves and the same `seldepth` (often 1) — at `score cp 0`, one
+///   depth deeper or again at the same depth when the block is printed
+///   twice. Such a line is dropped, with what the rank showed before, while
+///   the main line is properly deep (seldepth above 4). v1.1.2 and later
+///   search every line and never repeat one unchanged at 0.
 final class SeatReader {
   final _lines = <int, SeatLine>{};
-  SeatLine? _earlierMain;
+
+  /// Each later rank's line as last printed, shown or not.
+  final _printed = <int, SeatLine>{};
   Coordination? _coordination;
   int _nodes = 0;
   int? _totalNodes;
@@ -245,36 +251,31 @@ final class SeatReader {
     if (info == null) return false;
     final grew = info.nodes > _nodes;
     if (grew) _nodes = info.nodes;
-    if (info.pv.isEmpty) return _verdict(info) || grew;
+    // The closing `info depth … nodes …` without a pv only counts nodes.
+    if (info.pv.isEmpty) return grew;
     if (info.bound && info.multipv == 1) return grew;
-    if (info.multipv > 1 && _unsearched(info)) {
-      return _lines.remove(info.multipv) != null || grew;
+    if (info.multipv > 1) {
+      final before = _printed[info.multipv];
+      _printed[info.multipv] = info;
+      if (_unsearched(info, before)) {
+        return _lines.remove(info.multipv) != null || grew;
+      }
     }
     if (info.multipv == 1) {
-      _earlierMain = _lines[1];
       _lines.removeWhere((rank, l) => rank > 1 && l.depth < info.depth - 1);
     }
     _lines[info.multipv] = info;
     return true;
   }
 
-  bool _unsearched(SeatLine line) =>
+  bool _unsearched(SeatLine line, SeatLine? before) =>
       line.cp == 0 &&
       line.mate == null &&
-      line.seldepth <= 2 &&
+      before != null &&
+      line.depth >= before.depth &&
+      line.seldepth == before.seldepth &&
+      const ListEquality<String>().equals(line.pv, before.pv) &&
       (_lines[1]?.seldepth ?? 0) > 4;
-
-  bool _verdict(SeatLine verdict) {
-    final main = _lines[1];
-    final earlier = _earlierMain;
-    if (main == null || earlier == null) return false;
-    if (main.depth <= verdict.depth || earlier.depth > verdict.depth) {
-      return false;
-    }
-    _lines[1] = earlier;
-    _earlierMain = null;
-    return true;
-  }
 
   bool _string(String text) {
     final space = text.indexOf(' ');
@@ -303,8 +304,9 @@ typedef SeatRow = ({String? move, int? cp, int? mate, List<String> pv});
 
 /// The rows for a seat's search, at most [count].
 ///
-/// Searched alone ([coordinated] false): the lines by MultiPV rank, each
-/// with its whole line. With the coordinator: while it searches, the main
+/// Searched alone ([coordinated] false): the lines best first by score for
+/// the side to move (a mate for it first, the quicker the better; one
+/// against it last), each with its whole line. With the coordinator: while it searches, the main
 /// line; once [decision] is known, the decision first (a sit as a row of
 /// its own, with no score), then the other moves the coordinator compared,
 /// best first by `S`, else `L`, then those it did not score. A move that is
@@ -319,10 +321,12 @@ List<SeatRow> seatRows(
   SeatRow rowOf(SeatLine line) =>
       (move: line.pv.first, cp: line.cp, mate: line.mate, pv: line.pv);
   if (!coordinated) {
-    return [
-      for (final line in report.lines)
-        if (line.pv.isNotEmpty) rowOf(line),
-    ].take(count).toList();
+    final lines = report.lines.where((line) => line.pv.isNotEmpty).toList()
+      ..sort((a, b) {
+        final better = _strength(b).compareTo(_strength(a));
+        return better != 0 ? better : a.multipv.compareTo(b.multipv);
+      });
+    return [for (final line in lines.take(count)) rowOf(line)];
   }
   final main = report.main;
   if (decision == null) return [if (main != null) rowOf(main)];
@@ -351,6 +355,15 @@ List<SeatRow> seatRows(
   }
   return rows.take(count).toList();
 }
+
+/// How good [line] is for the side to move, for sorting: any mate for it
+/// beats any score, the quicker the better; any mate against it is worse
+/// than any score, the slower the better; no score is last.
+double _strength(SeatLine line) => switch ((line.cp, line.mate)) {
+  (_, final int mate) => mate > 0 ? 1e6 - mate : -1e6 - mate,
+  (final int cp, _) => cp.toDouble(),
+  _ => double.negativeInfinity,
+};
 
 /// lila's winning chances of a centipawn score, −1 to 1.
 double winningChances(int cp) => 2 / (1 + math.exp(-0.00368208 * cp)) - 1;

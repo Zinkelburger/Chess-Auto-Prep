@@ -46,7 +46,8 @@ final class LinesOn extends LabLines {
   final int? nodes;
   final bool thinking;
 
-  /// How much of the search time has gone, 0 to 1; null before it starts.
+  /// How much of the search time has gone, 0 to 1; null while the engine
+  /// is still starting.
   final double? progress;
 }
 
@@ -213,7 +214,8 @@ final class LabEngine extends ChangeNotifier {
     }
     final threads = math.max(1, (cores - 1) ~/ questions.length);
     final found = <BoardNumber, _Found>{};
-    final clock = Stopwatch()..start();
+    // Started by the first search sent, not by the engine's install.
+    final clock = Stopwatch();
     void show() {
       if (!wanted()) return;
       final thinking =
@@ -237,12 +239,14 @@ final class LabEngine extends ChangeNotifier {
               ? null
               : found.values.fold<int>(0, (sum, f) => sum + f.report.nodes),
           thinking: thinking,
-          progress: thinking
+          progress: !thinking
+              ? 1.0
+              : clock.isRunning
               ? (clock.elapsedMilliseconds / searchTime.inMilliseconds).clamp(
                   0.0,
                   1.0,
                 )
-              : 1.0,
+              : null,
         ),
       );
     }
@@ -260,7 +264,7 @@ final class LabEngine extends ChangeNotifier {
     _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) => show());
     await Future.wait([
       for (final (seat, question) in searching.indexed)
-        _stream(seat, question, threads, wanted, (f) {
+        _stream(seat, question, threads, wanted, clock, (f) {
           found[question.board] = f;
           if (f.done) _remember(_key(question, boards), f);
           show();
@@ -275,6 +279,7 @@ final class LabEngine extends ChangeNotifier {
     _Question question,
     int threads,
     bool Function() wanted,
+    Stopwatch clock,
     void Function(_Found found) update,
   ) async {
     final engine = await _acquire(seat);
@@ -285,6 +290,7 @@ final class LabEngine extends ChangeNotifier {
     }
     await _busy[seat];
     if (!wanted()) return;
+    if (!clock.isRunning) clock.start();
     final searching = engine.search(
       _toAsk(question, threads),
       onReport: (report) {

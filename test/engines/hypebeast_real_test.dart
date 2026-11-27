@@ -91,13 +91,13 @@ void main() {
         contains(decision),
       );
       final rows = seatRows(answer.report, coordinated: false, count: 3);
-      expect(rows, isNotEmpty);
-      expect(rows.first.move, decision);
+      // v1.1.2 and later search all three lines.
+      expect(rows.map((r) => r.move).toSet(), hasLength(3));
+      expect(rows.every((r) => r.cp != null || r.mate != null), isTrue);
+      expect(rows.map((r) => r.move), contains(decision));
       for (final row in rows) {
         final steps = pvSteps(TablePosition.initial, BoardNumber.one, row.pv);
         expect(steps, isNotEmpty, reason: 'row ${row.pv} plays');
-        // v1.1.1's unsearched ranks never reach a row.
-        expect(row.cp == 0 && row.pv.length < 3 && rows.length > 1, isFalse);
       }
       await engines.dispose();
       expect(engines.pids, isEmpty);

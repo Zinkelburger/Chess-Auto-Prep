@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:chess_auto_prep/chess/bughouse/hypebeast.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +14,15 @@ const _alone = [
       'time 13 pv e2e3',
   'info depth 1 seldepth 1 multipv 3 score cp 2 nodes 21 nps 1615 tbhits 0 '
       'time 13 pv d2d3',
+  'info depth 2 seldepth 2 multipv 1 score cp 134 nodes 92 pv e2e4 a7a6',
+  'info depth 2 seldepth 2 multipv 2 score cp 130 nodes 92 pv d2d4 a7a6',
+  'info depth 1 seldepth 1 multipv 3 score cp 20 nodes 92 pv e2e3',
+  'info depth 3 seldepth 3 multipv 1 score cp 129 nodes 191 pv e2e4 d7d6 d2d4',
+  'info depth 2 seldepth 2 multipv 2 score cp 130 nodes 191 pv d2d4 a7a6',
+  'info depth 2 seldepth 1 multipv 3 score cp 0 nodes 191 pv e2e3',
+  'info depth 4 seldepth 4 multipv 1 score cp 171 nodes 267 pv e2e4 d7d6 d2d4',
+  'info depth 3 seldepth 2 multipv 2 score cp 0 nodes 267 pv d2d4 a7a6',
+  'info depth 3 seldepth 1 multipv 3 score cp 0 nodes 267 pv e2e3',
   'info depth 5 seldepth 5 multipv 1 score cp 63 nodes 837 nps 59785 tbhits 0 '
       'time 14 pv e2e4 d7d5 e4d5 d8d5 d2d4',
   'info depth 4 seldepth 2 multipv 2 score cp 0 nodes 837 nps 59785 tbhits 0 '
@@ -163,25 +174,66 @@ void main() {
     test(
       'v1.1.1\'s unsearched ranks are dropped once the main line is deep',
       () {
-        final report = read(_alone.take(7));
+        final report = read(_alone.take(16));
         expect(report.lines.map((l) => l.multipv), [1]);
         expect(report.main!.pv.first, 'e2e4');
       },
     );
 
+    test('a rank frozen at its old seldepth after the best move changed is '
+        'dropped too', () {
+      // Eight threads, v1.1.1: e4 was best, then d4; e4 stays at rank 2,
+      // repeated at 0 with the seldepth it had.
+      final report = read([
+        'info depth 14 seldepth 22 multipv 1 score cp 52 nodes 9 pv e2e4 e7e5',
+        'info depth 15 seldepth 24 multipv 1 score cp 56 nodes 19 pv d2d4 d7d5',
+        'info depth 14 seldepth 24 multipv 2 score cp 52 nodes 19 pv e2e4 e7e5',
+        'info depth 16 seldepth 26 multipv 1 score cp 47 nodes 29 pv d2d4 d7d5',
+        'info depth 15 seldepth 24 multipv 2 score cp 0 nodes 29 pv e2e4 e7e5',
+      ]);
+      expect(report.lines.map((l) => l.multipv), [1]);
+    });
+
+    test('an unsearched rank printed twice at one depth is dropped', () {
+      // Twenty-one threads, v1.1.1: the block is printed again within a
+      // depth, the frozen rank with it.
+      final report = read([
+        'info depth 21 seldepth 31 multipv 1 score cp 45 nodes 9 pv e7e6 d5e6',
+        'info depth 21 seldepth 31 multipv 2 score cp -50 nodes 9 pv c7c6 d2d4',
+        'info depth 22 seldepth 33 multipv 1 score cp 41 nodes 19 pv e7e6 d5e6',
+        'info depth 22 seldepth 31 multipv 2 score cp 0 nodes 19 pv c7c6 d2d4',
+        'info depth 22 seldepth 33 multipv 1 score cp 41 nodes 29 pv e7e6 d5e6',
+        'info depth 22 seldepth 31 multipv 2 score cp 0 nodes 29 pv c7c6 d2d4',
+      ]);
+      expect(report.lines.map((l) => l.multipv), [1]);
+    });
+
+    test('a whole v1.1.1 search alone ends with its one searched line', () {
+      final report = read(
+        File(
+          'test/fixtures/bughouse/hypebeast_v111_alone.txt',
+        ).readAsLinesSync(),
+      );
+      expect(report.lines.map((l) => l.multipv), [1]);
+      expect(report.main!.pv.first, 'e7e6');
+    });
+
     test('a real second line with a level score is kept', () {
       final report = read([
         'info depth 12 seldepth 18 multipv 1 score cp 30 nodes 9 pv e2e4',
         'info depth 12 seldepth 16 multipv 2 score cp 0 nodes 9 pv d2d4 d7d5',
+        'info depth 13 seldepth 19 multipv 1 score cp 30 nodes 19 pv e2e4',
+        'info depth 13 seldepth 18 multipv 2 score cp 0 nodes 19 pv d2d4 d7d5',
       ]);
       expect(report.lines.map((l) => l.multipv), [1, 2]);
     });
 
-    test('the cut line of a stopped iteration gives way to the verdict\'s', () {
+    test('a stopped iteration\'s last line is kept as printed; the closing '
+        'line counts the nodes', () {
       final report = read(_alone);
-      expect(report.main!.depth, 18);
-      expect(report.main!.cp, 56);
-      expect(report.main!.pv, hasLength(6));
+      expect(report.main!.depth, 19);
+      expect(report.main!.cp, 48);
+      expect(report.main!.pv, ['e2e4', 'e7e5']);
       expect(report.nodes, 1521565);
     });
 
@@ -211,8 +263,8 @@ void main() {
       'coordinated: the main line, the report and the whole search size',
       () {
         final report = read(_coordinated);
-        expect(report.main!.depth, 17);
-        expect(report.main!.pv, hasLength(5));
+        expect(report.main!.depth, 18);
+        expect(report.main!.pv, ['e7e6']);
         expect(report.coordination!.candidates, hasLength(5));
         expect(report.nodes, 1126201);
       },
@@ -226,6 +278,38 @@ void main() {
         ('d2d4', 92, 1),
         ('e2e3', 20, 1),
       ]);
+    });
+
+    test('alone: a stopped search\'s last block, out of order, sorted by score '
+        'for the side to move', () {
+      // v1.1.2: the unfinished depth 18 reached line 1 only, which fell
+      // below line 2's depth-17 score.
+      final report = read([
+        'info depth 17 seldepth 23 multipv 1 score cp -38 nodes 9 pv c7c6 d2d4',
+        'info depth 17 seldepth 25 multipv 2 score cp -49 nodes 9 pv e7e6 d5e6',
+        'info depth 17 seldepth 25 multipv 3 score cp -53 nodes 9 pv g7g6 d2d4',
+        'info depth 18 seldepth 25 multipv 1 score cp -44 nodes 19 pv e7e6 d5e6',
+        'info depth 17 seldepth 24 multipv 2 score cp -38 nodes 19 pv c7c6 d2d4',
+        'info depth 17 seldepth 25 multipv 3 score cp -53 nodes 19 pv g7g6 d2d4',
+      ]);
+      final rows = seatRows(report, coordinated: false, count: 3);
+      expect(rows.map((r) => (r.move, r.cp)), [
+        ('c7c6', -38),
+        ('e7e6', -44),
+        ('g7g6', -53),
+      ]);
+    });
+
+    test('alone: a mate for the side to move first, one against it last', () {
+      final report = read([
+        'info depth 9 seldepth 9 multipv 1 score cp 300 nodes 9 pv a2a3',
+        'info depth 9 seldepth 9 multipv 2 score mate -2 nodes 9 pv b2b3',
+        'info depth 9 seldepth 9 multipv 3 score mate 3 nodes 9 pv c2c3',
+      ]);
+      expect(
+        seatRows(report, coordinated: false, count: 3).map((r) => r.move),
+        ['c2c3', 'a2a3', 'b2b3'],
+      );
     });
 
     test('coordinated, while searching: the main line alone', () {
@@ -248,7 +332,7 @@ void main() {
         count: 5,
       );
       expect(rows.map((r) => (r.move, r.cp, r.pv.length)), [
-        ('e7e6', 263, 5),
+        ('e7e6', 292, 1),
         ('g8f6', 157, 1),
         ('c7c6', 98, 1),
         ('d8d5', 66, 1),
@@ -275,7 +359,7 @@ void main() {
       );
       expect(rows.map((r) => (r.move, r.cp, r.pv.length)), [
         ('g8f6', 157, 1),
-        ('e7e6', 263, 5),
+        ('e7e6', 292, 1),
         ('c7c6', 98, 1),
       ]);
     });

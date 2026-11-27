@@ -73,7 +73,8 @@ panel on the right: 440–640 px beside board 1 alone, 440–480 px beside both.
   boards have reported, the one that has (tooltip `+ is good for A + B:
   White on board 1, Black on board 2. Both boards’ scores added, in
   pawns.`). While the engine searches, a 2 px bar under it fills as the
-  search's ten seconds go. The engine is told the game that led to the table
+  search's ten seconds go (it moves without a measure while the engine is
+  still starting). The engine is told the game that led to the table
   (`position fen … moves 1e2e4 …`), so it knows a position that came up
   before; a table set up by FEN, or one whose hands were edited on the way,
   is asked about as it stands.
@@ -242,7 +243,7 @@ paste commands are refused here with
 ## Data
 
 - **Engine** — `hypebeast-linux`, `hypebeast-windows.exe` or
-  `hypebeast-macos` (about 1.5 MB, a static build of the HypeBeast release
+  `hypebeast-macos` (about 3.3 MB, a static build of the HypeBeast release
   pinned in `tools/assets.lock.json`) and Fairy-Stockfish's bughouse net
   `bughouse-cd8cceab93fe.nnue` (58 MB; the engine takes a net for the
   variant its file name starts with) from `assets/bughouse/`. They are
@@ -268,12 +269,14 @@ paste commands are refused here with
   side: kept for A or B on move, sign changed for C or D. With the
   coordinator, a compared move's score is its `S` (with what it sends the
   partner board), else its `L` (its board alone), from `info string
-  hb_coord`. A search stopped mid-iteration prints a last line cut short;
-  the engine's closing `info depth … score …` names the depth it stands by,
-  and that depth's line is shown. HypeBeast v1.1.1 prints MultiPV lines
-  2–3 of a one-board search without searching them (`score cp 0`,
-  `seldepth` 1 or 2); while the main line is deeper than that they are
-  dropped, so that release shows one line on one board.
+  hb_coord`. One board's rows are sorted by score: the last block of a
+  stopped search can be out of order, since the lines its unfinished
+  iteration did not reach keep the previous depth's score, and its lines
+  can be cut to a move or two. Lines more than one depth behind line 1 are
+  dropped. Builds before HypeBeast v1.1.2 print lines 2–3 of a one-board
+  search without searching them (each iteration repeats a rank's last line,
+  the same moves and `seldepth`, at `score cp 0`); such a line is dropped
+  once the main line is past a few plies, so those builds show one line.
 - **BPGN** — a file is split into games where a tag follows movetext. Read
   from a game: `WhiteA`, `BlackA`, `WhiteB`, `BlackB` (A, C, D and B) and
   their `…Elo`, `TimeControl` (`120+0` or `120`, the seconds each clock
