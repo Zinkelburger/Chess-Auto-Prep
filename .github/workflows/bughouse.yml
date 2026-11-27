@@ -1,24 +1,20 @@
 # Does the bughouse engine actually run on the platforms we ship it to?
 #
-# It exists because the answer was "no on Windows" and nothing here could tell
-# us: the engine is fetched at release time, never built, and the app's own
-# tests drive a fake. A friend's Windows machine showed "Loading the network…"
-# and then a 90-second timeout, because onnxruntime.dll imports the Visual C++
-# runtime and the engine runs as a separate process out of %APPDATA%, where
-# the copy the app ships beside its own exe is not on the loader's path.
+# The engine is HypeBeast, a Fairy-Stockfish fork: one release binary per
+# platform plus the bughouse NNUE, fetched at release time and never built
+# here, while the app's own tests drive a fake. Three things are checked:
 #
-# Three things are checked, and only the first can catch that particular bug:
+#   deps    A static audit of the shipped binary's own headers: static on
+#           Linux, only Windows' own DLLs on Windows. Every hosted image has
+#           the Visual C++ redistributable installed, so a runner cannot
+#           pretend to be a clean machine — but it can read what the binary
+#           asks for and insist it is part of the OS.
 #
-#   deps    A static audit of the shipped binaries' own import tables. Every
-#           hosted image has the Visual C++ redistributable installed, so a
-#           runner cannot pretend to be a clean machine — but it can read what
-#           the binaries ask for and insist each of those is either part of
-#           the OS or shipped by us.
+#   run     A real launch: extract the way the app does, load the net,
+#           handshake, run a coordinated two-board search and require a joint
+#           move back.
 #
-#   run     A real launch: extract the way the app does, load the 54 MB
-#           network, handshake, search, and require a joint move back.
-#
-#   client  The same three files through the app's own Dart client, which is
+#   client  The same two files through the app's own Dart client, which is
 #           where the two-board dialect, the joint-move parsing and the
 #           handshake timeout live.
 #
@@ -65,16 +61,11 @@ jobs:
           python tools/fetch_assets.py --check --only bughouse
 
       # Static, and the only check here that a hosted runner cannot fake.
-      - name: Test diagnostic on Windows PowerShell
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: tools/test_diagnose_bughouse_windows.ps1
-
-      - name: Audit what the binaries need
+      - name: Audit what the binary needs
         run: python tools/test_bughouse_engine.py deps
 
-      # Live. Extracts the way BughouseBundle does — same names, same size
-      # check against manifest.json — then loads the network and searches.
+      # Live. Extracts the way HypeBeastInstall does — same names, same size
+      # and SHA-256 check against manifest.json — then loads the net and searches.
       # The directory has a space in its name on purpose. The app extracts the
       # engine under "…\Chess Auto Prep\bughouse", so every path it hands the
       # engine has one, and a Windows command line splits on spaces unless the
@@ -85,28 +76,22 @@ jobs:
         timeout-minutes: 10
         run: python tools/test_bughouse_engine.py run --install-to "engine under test"
 
-      - name: Verify private Windows ONNX loading and incompatible-runtime failures
-        if: runner.os == 'Windows'
-        timeout-minutes: 10
-        run: python tools/test_windows_ort_loading.py
-
       - run: flutter pub get
 
       - name: Drive the engine through the app's client
         timeout-minutes: 10
         env:
-          HIVEMIND_BIN: ${{ matrix.os == 'windows-2022' && 'engine under test/hivemind-windows.exe' || 'engine under test/hivemind-linux' }}
-          HIVEMIND_MODEL: engine under test/hivemind.onnx
-          HIVEMIND_LIB: engine under test
+          HYPEBEAST_BIN: ${{ matrix.os == 'windows-2022' && 'engine under test/hypebeast-windows.exe' || 'engine under test/hypebeast-linux' }}
+          HYPEBEAST_NET: engine under test/bughouse-cd8cceab93fe.nnue
         run: >-
-          flutter test test/engines/hivemind_real_test.dart
-          test/engines/hivemind_engine_test.dart
-          test/engines/hivemind_install_test.dart
+          flutter test test/engines/hypebeast_real_test.dart
+          test/engines/hypebeast_engine_test.dart
+          test/engines/hypebeast_install_test.dart
           test/features/bughouse
 
       # Unlike the Python extraction/client checks, this runs inside a built
       # Flutter desktop app. It proves rootBundle discovery, first extraction,
-      # app-local VC++ copying, Unicode profile paths and corruption recovery.
+      # Unicode profile paths and corruption recovery.
       - name: Fetch bundled Stockfish for the desktop boot test
         if: runner.os == 'Windows'
         run: python tools/fetch_assets.py --only stockfish-windows
