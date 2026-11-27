@@ -67,12 +67,14 @@ panel on the right: 440–640 px beside board 1 alone, 440–480 px beside both.
   from, both boards' together with two boards), or why the engine stopped,
   in the error colour. The score is A + B's in pawns: with one board, the
   first row's (tooltip `+ is good for White on board 1 (A + B). In pawns.`);
-  with two, both boards' first rows added, since a team's winning chances
+  with two, both boards' scores added, since a team's winning chances
   follow the plain sum of its two boards' scores, with a forced mate on
-  either board shown as the mate (two mates: the quicker), and before both
-  boards have reported, the one that has (tooltip `+ is good for A + B:
-  White on board 1, Black on board 2. Both boards’ scores added, in
-  pawns.`). While the engine searches, a 2 px bar under it fills as the
+  either board shown as the mate (two mates: the quicker). A board's score
+  is its first row's, or, when that row has none (a `sit`, or a move the
+  coordinator chose without scoring it), the score its main search ended
+  on. Before both boards with a move have a score, the bar shows the one
+  that has (tooltip `+ is good for A + B: White on board 1, Black on board
+  2. Both boards’ scores added, in pawns.`). While the engine searches, a 2 px bar under it fills as the
   search's ten seconds go (it moves without a measure while the engine is
   still starting). The engine is told the game that led to the table
   (`position fen … moves 1e2e4 …`), so it knows a position that came up
@@ -84,10 +86,12 @@ panel on the right: 440–640 px beside board 1 alone, 440–480 px beside both.
   after it, up to eight (`1. d4 d5 2. Nf3`). With one board the rows are the
   engine's three best lines of board 1, each whole. With two, while the
   engine searches, a board has one row, its main line; once the search ends,
-  the engine's decision comes first (as the main line when it is the main
-  line's move), then the other moves its coordinator compared across the
-  boards, best first, each a row of that one move with the coordinator's
-  score; a move it compared without scoring shows a muted `—`. A decision
+  the engine's decision comes first (with the engine's own score and line
+  for it when its coordinator reports one, else as the main line when it
+  is the main line's move), then the other moves its coordinator compared
+  across the boards, best first, each a row of that one move with the
+  coordinator's score; a move it compared without scoring shows a muted
+  `—`. A decision
   to wait there is a row of its own, a muted `sit` without a score. Each
   move is its own token, as in the workspace's engine lines. Rows are 28 px,
   clip what does not fit, and keep their place and size whether the engine
@@ -269,7 +273,10 @@ paste commands are refused here with
   side: kept for A or B on move, sign changed for C or D. With the
   coordinator, a compared move's score is its `S` (with what it sends the
   partner board), else its `L` (its board alone), from `info string
-  hb_coord`. One board's rows are the last block of lines all searched at
+  hb_coord`; the decision's own score and line are `hb_coord`'s
+  `decision_line` (engine versions after v1.1.2; without it the decision is
+  scored as above). A board's main search score is `hb_summary`'s
+  `main_score_cp`, a mate written as 100000 less its plies. One board's rows are the last block of lines all searched at
   line 1's depth (a line one or more depths behind is from an earlier
   iteration), sorted by score; a stopped search's last block, which the
   unfinished iteration left uneven, gives way to the block before it. The
