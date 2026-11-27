@@ -102,8 +102,8 @@ fork that plays one board knowing the other. A captured piece leaves the
 board for the partner's hand, as in bughouse (a promoted piece goes as a
 pawn; `tree.ts`, pure, `npm run test:analysis`), and never reaches the
 capturer's own hand. PGN is written with `[Variant "Bughouse"]`. Under
-FEN and PGN a row of links leads to Bughouse Puzzles, Bughouse Games and
-HypeBeast's "How it works"; the board editor hides it.
+FEN and PGN a link leads to HypeBeast's "How it works"; the board editor
+hides it.
 
 **One board or two** is a setting (the two-boards button under the panel,
 kept in this browser; one by default). With one, what a partner would send
