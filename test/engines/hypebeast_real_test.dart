@@ -91,7 +91,9 @@ void main() {
         contains(decision),
       );
       final rows = seatRows(answer.report, coordinated: false, count: 3);
-      // v1.1.2 and later search all three lines.
+      // v1.1.2 and later search all three lines, at one depth.
+      expect(answer.report.lines, hasLength(3));
+      expect(answer.report.lines.map((l) => l.depth).toSet(), hasLength(1));
       expect(rows.map((r) => r.move).toSet(), hasLength(3));
       expect(rows.every((r) => r.cp != null || r.mate != null), isTrue);
       expect(rows.map((r) => r.move), contains(decision));

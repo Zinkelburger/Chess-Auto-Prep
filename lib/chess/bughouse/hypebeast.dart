@@ -20,8 +20,6 @@ library;
 import 'dart:convert';
 import 'dart:math' as math;
 
-import 'package:collection/collection.dart' show ListEquality;
-
 import 'table.dart';
 
 /// One search line of the board searched: its MultiPV rank, how deep, its
@@ -214,31 +212,26 @@ final class SeatReport {
 ///
 /// - A MultiPV 1 line with only a bound is noise and is passed over; a
 ///   later rank may only ever have bounds and is kept.
-/// - Each new MultiPV 1 line drops the other ranks more than one iteration
-///   older, as the website's driver does, so rows from different depths do
-///   not mix. The last block of a stopped search may still be out of order
-///   (lines its unfinished iteration did not reach keep the previous
-///   depth's score) or cut to a move or two; [seatRows] sorts by score.
-/// - Builds before HypeBeast v1.1.2 (v1.1.1 among them) predate its MultiPV
-///   support: with `Coordination` off they print lines 2…N without
-///   searching them, each iteration repeating the rank's last line — the
-///   same moves and the same `seldepth` (often 1) — at `score cp 0`, one
-///   depth deeper or again at the same depth when the block is printed
-///   twice. Such a line is dropped, with what the rank showed before, while
-///   the main line is properly deep (seldepth above 4). v1.1.2 and later
-///   search every line and never repeat one unchanged at 0.
+/// - The engine prints a block per iteration, line 1 first. The lines shown
+///   are the last block in which every line was searched at line 1's depth:
+///   a line one or more depths behind line 1 is from an earlier iteration.
+///   A block is shown once it has as many lines as the one before it, so
+///   rows do not drop out while the next block is printed. The last block
+///   of a stopped search usually fails this (the lines its unfinished
+///   iteration did not reach keep the previous depth's score under the new
+///   depth's number, or the previous depth's), and the block before it
+///   stays; [seatRows] sorts the lines by score.
 final class SeatReader {
-  final _lines = <int, SeatLine>{};
-
-  /// Each later rank's line as last printed, shown or not.
-  final _printed = <int, SeatLine>{};
+  /// The block being printed, and the last one shown.
+  var _block = <int, SeatLine>{};
+  var _shown = <int, SeatLine>{};
   Coordination? _coordination;
   int _nodes = 0;
   int? _totalNodes;
 
   SeatReport get report => SeatReport(
     lines: List.unmodifiable(
-      _lines.values.toList()..sort((a, b) => a.multipv.compareTo(b.multipv)),
+      _shown.values.toList()..sort((a, b) => a.multipv.compareTo(b.multipv)),
     ),
     coordination: _coordination,
     nodes: _totalNodes ?? _nodes,
@@ -254,28 +247,17 @@ final class SeatReader {
     // The closing `info depth … nodes …` without a pv only counts nodes.
     if (info.pv.isEmpty) return grew;
     if (info.bound && info.multipv == 1) return grew;
-    if (info.multipv > 1) {
-      final before = _printed[info.multipv];
-      _printed[info.multipv] = info;
-      if (_unsearched(info, before)) {
-        return _lines.remove(info.multipv) != null || grew;
-      }
-    }
     if (info.multipv == 1) {
-      _lines.removeWhere((rank, l) => rank > 1 && l.depth < info.depth - 1);
+      _block = {1: info};
+    } else {
+      _block[info.multipv] = info;
     }
-    _lines[info.multipv] = info;
+    final depth = _block[1]?.depth;
+    final level = depth != null && _block.values.every((l) => l.depth == depth);
+    if (!level || _block.length < _shown.length) return grew;
+    _shown = Map.of(_block);
     return true;
   }
-
-  bool _unsearched(SeatLine line, SeatLine? before) =>
-      line.cp == 0 &&
-      line.mate == null &&
-      before != null &&
-      line.depth >= before.depth &&
-      line.seldepth == before.seldepth &&
-      const ListEquality<String>().equals(line.pv, before.pv) &&
-      (_lines[1]?.seldepth ?? 0) > 4;
 
   bool _string(String text) {
     final space = text.indexOf(' ');

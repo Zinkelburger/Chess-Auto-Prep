@@ -114,7 +114,7 @@ const aloneSearch = [
   'info depth 1 seldepth 1 multipv 3 score cp 2 nodes 21 pv d2d3',
   'info depth 2 seldepth 2 multipv 1 score cp 134 nodes 92 pv e2e4 a7a6',
   'info depth 2 seldepth 2 multipv 2 score cp 130 nodes 92 pv d2d4 a7a6',
-  'info depth 1 seldepth 1 multipv 3 score cp 20 nodes 92 pv e2e3',
+  'info depth 2 seldepth 2 multipv 3 score cp 25 nodes 92 pv e2e3 e7e5',
   'bestmove (e2e4,pass)',
 ];
 
@@ -239,7 +239,7 @@ void main() {
     expect(answer.report.lines.map((l) => (l.multipv, l.cp)), [
       (1, 134),
       (2, 130),
-      (3, 20),
+      (3, 25),
     ]);
   });
 

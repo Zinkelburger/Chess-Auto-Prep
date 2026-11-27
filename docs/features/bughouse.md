@@ -269,14 +269,12 @@ paste commands are refused here with
   side: kept for A or B on move, sign changed for C or D. With the
   coordinator, a compared move's score is its `S` (with what it sends the
   partner board), else its `L` (its board alone), from `info string
-  hb_coord`. One board's rows are sorted by score: the last block of a
-  stopped search can be out of order, since the lines its unfinished
-  iteration did not reach keep the previous depth's score, and its lines
-  can be cut to a move or two. Lines more than one depth behind line 1 are
-  dropped. Builds before HypeBeast v1.1.2 print lines 2–3 of a one-board
-  search without searching them (each iteration repeats a rank's last line,
-  the same moves and `seldepth`, at `score cp 0`); such a line is dropped
-  once the main line is past a few plies, so those builds show one line.
+  hb_coord`. One board's rows are the last block of lines all searched at
+  line 1's depth (a line one or more depths behind is from an earlier
+  iteration), sorted by score; a stopped search's last block, which the
+  unfinished iteration left uneven, gives way to the block before it. The
+  bundle check (`tools/test_bughouse_engine.py run`) keeps out a build that
+  does not search every line.
 - **BPGN** — a file is split into games where a tag follows movetext. Read
   from a game: `WhiteA`, `BlackA`, `WhiteB`, `BlackB` (A, C, D and B) and
   their `…Elo`, `TimeControl` (`120+0` or `120`, the seconds each clock
