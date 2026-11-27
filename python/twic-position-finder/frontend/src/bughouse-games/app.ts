@@ -46,7 +46,7 @@ function loadFlipped(): boolean {
 
 function problemCopy(e: unknown, what: string): string {
   if (isContractError(e)) return `${what} does not follow the games format.`;
-  if (e instanceof Error && /^\d{3} /.test(e.message)) return `The server answered ${e.message.slice(0, 3)} for ${what.toLowerCase()}.`;
+  if (e instanceof Error && /^\d{3} /.test(e.message)) return `${what} could not be fetched just now (error ${e.message.slice(0, 3)}).`;
   return `${what} did not load. Check the connection.`;
 }
 
@@ -192,7 +192,11 @@ export class BughouseGamesApp {
   }
 
   private setView(view: View) { $('bg').dataset.view = view; }
-  private setState(state: State) { $('bg').dataset.state = state; }
+  private setState(state: State) {
+    $('bg').dataset.state = state;
+    // Nothing to analyse until a game is read.
+    $<HTMLInputElement>('bg-engine-on').disabled = state !== 'ready';
+  }
 
   // ── The list ───────────────────────────────────────────────────
 
@@ -343,6 +347,8 @@ export class BughouseGamesApp {
   private moveRow(m: Move): HTMLElement {
     const row = el('button', `bg-mv bg-mv-${m.board}${m.book ? ' book' : ''}`);
     row.type = 'button';
+    // The list is one Tab stop, the current move; ← → move through the game and the focus follows.
+    row.tabIndex = -1;
     row.dataset.i = String(m.i);
     const white = m.seat.endsWith('white');
     row.append(el('span', 'bg-mv-time num', m.t !== null ? formatGameTime(m.t) : ''));
@@ -358,10 +364,15 @@ export class BughouseGamesApp {
 
   private renderActiveMove() {
     const box = $('bg-moves');
-    box.querySelector('.bg-mv.active')?.classList.remove('active');
+    const focused = box.contains(document.activeElement);
+    const old = box.querySelector<HTMLElement>('.bg-mv.active');
+    old?.classList.remove('active');
     box.querySelector('[aria-current]')?.removeAttribute('aria-current');
-    const row = box.querySelector<HTMLElement>(`.bg-mv[data-i="${this.cursor.move}"]`);
-    if (!row) { if (this.cursor.move < 0) box.scrollTop = 0; return; }
+    for (const r of box.querySelectorAll<HTMLElement>('.bg-mv[tabindex="0"]')) r.tabIndex = -1;
+    const row = box.querySelector<HTMLElement>(`.bg-mv[data-i="${this.cursor.move}"]`) ?? box.querySelector<HTMLElement>('.bg-mv');
+    if (row) row.tabIndex = 0;
+    if (focused && row) row.focus({ preventScroll: true });
+    if (!row || this.cursor.move < 0) { box.scrollTop = 0; return; }
     row.classList.add('active');
     row.setAttribute('aria-current', 'true');
     // Scroll the list itself, never the page: on a phone the list sits below the boards.
@@ -380,7 +391,7 @@ export class BughouseGamesApp {
     const out: HTMLElement[] = [];
     if (!m) {
       const head = el('div', 'bg-note-head');
-      head.append(el('b', 'bg-note-move', 'Start of the game'));
+      head.append(el('b', 'bg-note-start', 'Start of the game'));
       out.push(head, el('p', 'bg-note-facts', [game.event, game.date].filter(Boolean).join(' · ')));
       const given = game.moves.filter((x) => x.book).length;
       if (given) out.push(el('p', 'bg-note-text', startWords(given)));
@@ -396,7 +407,8 @@ export class BughouseGamesApp {
     const facts = [`${sideName(white ? 'white' : 'black')} on board ${m.board}`, game.seats[m.seat]];
     if (m.t !== null) facts.push(`at ${formatGameTime(m.t)}`);
     if (m.book) facts.push('from a human game, not an engine move');
-    if (m.eval !== null || m.mate !== null) facts.push(m.mate !== null ? mateWords(m.mate) : `score ${formatEval(m.eval, null, true)}`);
+    // The mover's engine's own score when it chose the move, from White's side of that board.
+    if (m.eval !== null || m.mate !== null) facts.push(m.mate !== null ? `its score: ${mateWords(m.mate)}` : `its score ${formatEval(m.eval, null, true)} from White’s side`);
     out.push(el('p', 'bg-note-facts', facts.join(' · ')));
     if (m.waited) out.push(el('p', 'bg-note-wait', `Before this move, ${seatLabel(m.seat)} ${waitPhrase(m.waited)}.`));
     if (m.i === game.moves.length - 1) out.push(el('p', 'bg-note-result', gameResult(game)));

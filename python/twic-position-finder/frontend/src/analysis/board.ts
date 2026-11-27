@@ -8,12 +8,19 @@
  *   paints on press and while the button is held; the hand cursor drags
  *   pieces freely and off the board to remove them. Dragging a spare piece
  *   onto the board places it too.
+ *
+ * The board is also one Tab stop, as the puzzle board is: the arrows move a
+ * square cursor (drawn only once a key is pressed on the board), Enter or
+ * Space presses the square as a click does (pick up, put down, drop a hand
+ * piece, paint with the editor's brush), Escape puts back what is picked. A
+ * polite live line says where the cursor is and what was picked.
  */
 import { Chessground } from '@lichess-org/chessground';
 import type { Api } from '@lichess-org/chessground/api';
 import type { DrawShape } from '@lichess-org/chessground/draw';
 import { write as writeBoard } from '@lichess-org/chessground/fen';
 import type { Color, Key, Piece, Role } from '@lichess-org/chessground/types';
+import { moveCursor, type CursorKey } from '../bughouse-puzzles/puzzle';
 
 export type Brush = 'pointer' | 'trash' | Piece;
 
@@ -87,10 +94,15 @@ export class CrazyBoard {
   private brush: Brush = 'pointer';
   private painting: { last: Key | null; erase: boolean } | null = null;
   private promotion: HTMLElement | null = null;
+  /** The keyboard cursor's square; null until a key places it. */
+  private cursor: Key | null = null;
+  private cursorShown = false;
+  private readonly cursorEl: HTMLElement;
+  private readonly live: HTMLElement;
 
   constructor(
     private readonly wrap: HTMLElement,
-    el: HTMLElement,
+    private readonly el: HTMLElement,
     private readonly hooks: BoardHooks,
     private readonly options: BoardOptions = {},
   ) {
@@ -98,7 +110,8 @@ export class CrazyBoard {
       coordinates: true,
       autoCastle: true,
       highlight: { lastMove: true, check: true },
-      animation: { enabled: true, duration: 150 },
+      // No sliding pieces for a reader who asked for less motion.
+      animation: { enabled: !matchMedia('(prefers-reduced-motion: reduce)').matches, duration: 150 },
       premovable: { enabled: false },
       predroppable: { enabled: false },
       draggable: { showGhost: true },
@@ -139,6 +152,110 @@ export class CrazyBoard {
       });
     for (const type of ['mouseup', 'touchend', 'touchcancel'] as const)
       document.addEventListener(type, () => { this.painting = null; });
+
+    // The keyboard: one Tab stop, a square cursor, a live line.
+    el.tabIndex = 0;
+    this.cursorEl = document.createElement('div');
+    this.cursorEl.className = 'ch-cursor';
+    this.cursorEl.hidden = true;
+    this.cursorEl.setAttribute('aria-hidden', 'true');
+    wrap.append(this.cursorEl);
+    this.live = document.createElement('p');
+    this.live.className = 'visually-hidden';
+    this.live.setAttribute('aria-live', 'polite');
+    wrap.append(this.live);
+    el.addEventListener('keydown', (e) => this.keydown(e));
+    el.addEventListener('blur', () => this.hideCursor());
+    // A mouse or a finger on the board takes over from the keyboard.
+    for (const type of ['mousedown', 'touchstart'] as const) el.addEventListener(type, () => this.hideCursor(), { capture: true, passive: true });
+  }
+
+  /** A hand piece picked from the keyboard: the board takes the focus, cursor showing. */
+  focusForDrop(text: string) {
+    this.el.focus({ preventScroll: true });
+    this.showCursor();
+    this.say(text);
+  }
+
+  private say(text: string) { this.live.textContent = text; }
+
+  private keydown(e: KeyboardEvent) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      // While the board has focus the arrows belong to the cursor, not to the moves.
+      e.preventDefault();
+      e.stopPropagation();
+      if (this.cursorShown && this.cursor) this.cursor = moveCursor(this.cursor, e.key as CursorKey, this.cg.state.orientation) as Key;
+      else this.showCursor();
+      this.drawCursor();
+      this.saySquare();
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!this.cursorShown || !this.cursor) { this.showCursor(); this.saySquare(); return; }
+      this.press(this.cursor);
+    } else if (e.key === 'Escape' && this.cg.state.selected) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.cg.selectSquare(null);
+      this.say('Put back');
+    }
+  }
+
+  /** Enter or Space on a square: what a click there does. */
+  private press(key: Key) {
+    if (this.mode === 'editor' && this.brush !== 'pointer') {
+      const here = this.cg.state.pieces.get(key);
+      const brush = this.brush;
+      this.painting = { last: null, erase: brush === 'trash' || (!!here && here.role === brush.role && here.color === brush.color) };
+      this.paint(key);
+      this.painting = null;
+      this.saySquare();
+      return;
+    }
+    const before = this.cg.state.selected;
+    this.cg.selectSquare(key);
+    const now = this.cg.state.selected;
+    if (now && now !== before) {
+      const piece = this.cg.state.pieces.get(now);
+      const n = this.cg.state.movable.dests?.get(now)?.length ?? 0;
+      if (piece) this.say(`${piece.color} ${piece.role} ${now} picked${this.mode === 'analysis' ? `, ${n} move${n === 1 ? '' : 's'}` : ''}`);
+    }
+  }
+
+  /** The cursor starts on the last move's square, else the king of the side to move. */
+  private showCursor() {
+    if (!this.cursor) {
+      const turn = this.cg.state.turnColor;
+      const king = [...this.cg.state.pieces].find(([, p]) => p.role === 'king' && p.color === turn)?.[0];
+      this.cursor = this.cg.state.lastMove?.at(-1) ?? king ?? 'e1';
+    }
+    this.cursorShown = true;
+    this.drawCursor();
+  }
+
+  private hideCursor() {
+    this.cursorShown = false;
+    this.drawCursor();
+  }
+
+  private drawCursor() {
+    const el = this.cursorEl;
+    el.hidden = !this.cursorShown || !this.cursor;
+    if (el.hidden) return;
+    const file = this.cursor!.charCodeAt(0) - 97;
+    const rank = Number(this.cursor![1]) - 1;
+    const white = this.cg.state.orientation === 'white';
+    el.dataset.square = this.cursor!;
+    el.style.left = `${(white ? file : 7 - file) * 12.5}%`;
+    el.style.top = `${(white ? 7 - rank : rank) * 12.5}%`;
+  }
+
+  private saySquare() {
+    const key = this.cursor;
+    if (!key) return;
+    const piece = this.cg.state.pieces.get(key);
+    this.say(piece ? `${key}, ${piece.color} ${piece.role}` : `${key}, empty`);
   }
 
   showAnalysis(view: AnalysisView) {
@@ -336,7 +453,10 @@ export class CrazyBoard {
       const file = dest.charCodeAt(0) - 97;
       const left = orientation === 'white' ? file : 7 - file;
       const top = color === orientation;
-      const done = (role: Role | null) => { this.closePromotion(); resolve(role); };
+      // From the keyboard the picker takes the focus, and gives it back to the board.
+      const byKey = document.activeElement === this.el;
+      const done = (role: Role | null) => { this.closePromotion(); if (byKey) this.el.focus({ preventScroll: true }); resolve(role); };
+      overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(null); } });
       SQUARE_ROLES.forEach((role, i) => {
         const button = document.createElement('button');
         button.type = 'button';
@@ -354,6 +474,7 @@ export class CrazyBoard {
       overlay.onclick = () => done(null);
       this.promotion = overlay;
       this.wrap.append(overlay);
+      if (byKey) overlay.querySelector<HTMLElement>('button')?.focus({ preventScroll: true });
     });
   }
 

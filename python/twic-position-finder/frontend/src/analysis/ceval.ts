@@ -6,6 +6,9 @@
  * pressing a move plays the line up to it. When the engine waits for the
  * player (a phone's first download) or has failed, one button starts it.
  * Screen readers hear the evaluation once a search ends, not every update.
+ * By keyboard each line is one Tab stop: the arrows go along it and between
+ * lines, a focused move shows its board as hovering does, and Enter plays
+ * the line to it; the focus stays put while the engine redraws the lines.
  * HypeBeast on the bughouse board and Stockfish on the PGN page both use it;
  * the small board shows the hands where the page has places for them.
  */
@@ -18,6 +21,7 @@ import { boardScore, type EngineLine } from './engine';
 import { el } from './moves';
 import type { LineMove } from './variation-tree';
 import { pieceSrc } from './board';
+import { keepFocus } from './focus';
 
 const PV_MOVES = 16;
 const HAND_ROLES: Role[] = ['pawn', 'knight', 'bishop', 'rook', 'queen'];
@@ -50,6 +54,8 @@ export interface CevalOptions {
   doneTitle?: string;
   /** The hands of a position, shown around the small board of a hovered move. */
   hands?(fen: string): Material | undefined;
+  /** Keep the lines' rows, blank, while there are no lines (off, waiting, starting), so nothing under them moves. */
+  reserveRows?: boolean;
 }
 
 export interface CevalState {
@@ -98,15 +104,15 @@ export function formatEval(line: Pick<EngineLine, 'cp' | 'mate'>): string {
   return `${pawns > 0 ? '+' : ''}${pawns.toFixed(1)}`;
 }
 
-const TEAM_TITLE = 'Team: this board plus what the line’s captures are worth on the partner board. Board: this board alone, along the same line.';
-const BOARD_TITLE = 'This board alone: no partner board is shown, so captures are worth only what they change here.';
+const TEAM_TITLE = 'Every score is from White’s side of this board. White’s team: this board plus what the line’s captures are worth on the partner board, where the partner plays Black. This board: this board alone, along the same line.';
+const BOARD_TITLE = 'From White’s side, this board alone: no partner board is shown, so captures are worth only what they change here.';
 
-/** "Team · board +0.3" or "Board", named before the depth; empty when the page does not name its scores. */
+/** "White’s team · this board +0.3" or "This board only", named before the depth; empty when the page does not name its scores. Scores are from White’s side of the board searched. */
 export function scoreName(kind: CevalState['scoreKind'], line: EngineLine | undefined): string {
-  if (kind === 'board') return 'Board';
+  if (kind === 'board') return 'This board only';
   if (kind !== 'team') return '';
   const board = line && line.mate === undefined ? boardScore(line) : undefined;
-  return board === undefined ? 'Team' : `Team · board ${formatEval({ cp: board })}`;
+  return board === undefined ? 'White’s team' : `White’s team · this board ${formatEval({ cp: board })}`;
 }
 
 export class CevalView {
@@ -133,6 +139,20 @@ export class CevalView {
       if (move && row) this.showBoard(row, Number(move.dataset.index));
     });
     pvs.addEventListener('mouseleave', () => { hooks.hover(null); this.hideBoard(); });
+    // The keyboard sees what the pointer sees: a focused move shows its board.
+    pvs.addEventListener('focusin', (e) => {
+      const move = (e.target as HTMLElement).closest<HTMLElement>('.ch-pv-move');
+      const row = move?.closest<HTMLElement>('.ch-pv');
+      if (!move || !row) return;
+      hooks.hover(row.dataset.uci ?? null);
+      this.showBoard(row, Number(move.dataset.index));
+    });
+    pvs.addEventListener('focusout', (e) => {
+      if (pvs.contains(e.relatedTarget as Node | null)) return;
+      hooks.hover(null);
+      this.hideBoard();
+    });
+    pvs.addEventListener('keydown', (e) => this.lineKey(e));
     pvs.addEventListener('wheel', (e) => {
       if (!this.hovered) return;
       e.preventDefault();
@@ -148,11 +168,40 @@ export class CevalView {
     };
     // On press, as lila does: the rows are redrawn with every engine update, so a
     // release can land on a new row and a click would be lost. Keys still click.
-    pvs.addEventListener('pointerdown', (e) => { if (e.button === 0) { e.preventDefault(); pick(e); } });
-    pvs.addEventListener('click', (e) => { if (e.detail === 0) pick(e); });
+    // A finger plays on its tap, not on touching down: a touch may be the start of a scroll.
+    let touched = false;
+    pvs.addEventListener('pointerdown', (e) => {
+      touched = e.pointerType === 'touch';
+      if (e.button === 0 && !touched) { e.preventDefault(); pick(e); }
+    });
+    pvs.addEventListener('click', (e) => { if (e.detail === 0 || touched) pick(e); });
   }
 
   render(state: CevalState) {
+    keepFocus(this.els.pvs, () => this.draw(state));
+  }
+
+  /** ←/→ along a line, ↑/↓ to the same move of the line above or below, Home/End to its ends. */
+  private lineKey(e: KeyboardEvent) {
+    const move = (e.target as HTMLElement).closest<HTMLElement>('.ch-pv-move');
+    if (!move || e.ctrlKey || e.metaKey || e.altKey) return;
+    const row = move.closest<HTMLElement>('.ch-pv')!;
+    const moves = (r: Element | null) => [...(r?.querySelectorAll<HTMLElement>('.ch-pv-move') ?? [])];
+    const here = moves(row), i = here.indexOf(move);
+    const rows = [...this.els.pvs.querySelectorAll('.ch-pv')], r = rows.indexOf(row);
+    const at = (list: HTMLElement[], n: number) => list[Math.max(0, Math.min(list.length - 1, n))];
+    const steps: Record<string, () => HTMLElement | undefined> = {
+      ArrowLeft: () => at(here, i - 1), ArrowRight: () => at(here, i + 1), Home: () => here[0], End: () => here.at(-1),
+      ArrowUp: () => at(moves(rows[r - 1] ?? null), i), ArrowDown: () => at(moves(rows[r + 1] ?? null), i),
+    };
+    const to = steps[e.key]?.();
+    if (!(e.key in steps)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    to?.focus();
+  }
+
+  private draw(state: CevalState) {
     this.state = state;
     const { header, pearl, name, info, bar, threat, pvs, switch: toggle, action } = this.els;
     toggle.checked = state.enabled;
@@ -171,9 +220,11 @@ export class CevalView {
     pvs.replaceChildren();
     bar.style.width = '0';
     bar.classList.toggle('threat', state.threat);
-    if (state.over) { pearl.textContent = state.over === 'Checkmate' ? '#' : '½'; info.textContent = state.over; this.hideBoard(); return; }
-    if (!state.enabled) { pearl.textContent = ''; info.textContent = 'Off · press L to turn on'; this.hideBoard(); return; }
-    if (state.unplayable) { pearl.textContent = ''; info.textContent = state.unplayable; this.hideBoard(); return; }
+    const blank = () => { if (this.options.reserveRows) for (let i = 0; i < state.multiPv; i++) pvs.append(this.row(state, undefined)); };
+    if (state.over) { pearl.textContent = state.over === 'Checkmate' ? '#' : '½'; info.textContent = state.over; this.hideBoard(); blank(); return; }
+    // "press L" is no help on a phone or a tablet.
+    if (!state.enabled) { pearl.textContent = ''; info.textContent = matchMedia('(any-pointer: fine)').matches ? 'Off · press L to turn on' : 'Off'; this.hideBoard(); blank(); return; }
+    if (state.unplayable) { pearl.textContent = ''; info.textContent = state.unplayable; this.hideBoard(); blank(); return; }
     if (!state.result) this.hideBoard();
     const result = state.result;
     const status = state.status;
@@ -195,6 +246,7 @@ export class CevalView {
         info.textContent = status.text;
         if (status.fraction !== undefined) bar.style.width = `${Math.round(100 * status.fraction)}%`;
       } else info.textContent = 'Calculating…';
+      blank();
       return;
     }
     pearl.textContent = formatEval(result.lines[0]);
@@ -214,7 +266,7 @@ export class CevalView {
   private speak(fen: string, result: CevalResult) {
     const best = result.lines[0];
     const san = this.options.playLine(fen, best.pv, 1)[0]?.san;
-    const text = `Evaluation ${formatEval(best)}${san ? `, best move ${san}` : ''}`;
+    const text = `Evaluation ${formatEval(best)} from White’s side${san ? `, best move ${san}` : ''}`;
     if (text === this.spoken) return;
     this.spoken = text;
     this.els.live.textContent = text;
@@ -228,7 +280,7 @@ export class CevalView {
     row.classList.toggle('ch-pv-threat', state.threat);
     const score = el('strong', '', formatEval(line));
     const board = state.scoreKind === 'team' && line.mate === undefined ? boardScore(line) : undefined;
-    if (board !== undefined) score.title = `Team ${formatEval(line)} · board ${formatEval({ cp: board })}`;
+    if (board !== undefined) score.title = `White’s team ${formatEval(line)} · this board ${formatEval({ cp: board })}`;
     row.append(score);
     let ply = state.ply + (state.threat ? 1 : 0);
     this.options.playLine(state.fen, line.pv, PV_MOVES).forEach((move, i) => {
@@ -238,7 +290,9 @@ export class CevalView {
       const b = el('button', 'ch-pv-move', move.san) as HTMLButtonElement;
       b.type = 'button';
       b.dataset.index = String(i);
-      if (state.threat) b.tabIndex = -1;
+      b.dataset.focus = `pv-${line.multipv}-${i}`;
+      // One Tab stop per line; the arrows go along it.
+      b.tabIndex = state.threat || i > 0 ? -1 : 0;
       row.append(b);
     });
     return row;

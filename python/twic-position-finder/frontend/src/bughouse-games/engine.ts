@@ -64,7 +64,7 @@ export class GameEngine {
       hover: () => { /* The game boards draw no arrows. */ },
       play: (pv, upTo) => { if (this.target) hooks.showLine(this.target.board, this.target.fens[this.target.board], pv, upTo); },
       start: () => { if (this.status.kind === 'ask') this.engine.allow(); else this.search(); },
-    }, { engineName: 'HypeBeast', playLine, hands: (fen) => positionOf(fen).pockets });
+    }, { engineName: 'HypeBeast', playLine, hands: (fen) => positionOf(fen).pockets, reserveRows: true });
     toggle.addEventListener('change', () => this.setOn(toggle.checked));
   }
 

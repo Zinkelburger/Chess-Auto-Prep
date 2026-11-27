@@ -15,6 +15,7 @@ import type { Color } from 'chessops/types';
 import type { EngineResult, HandRole, PieceGain, PieceValues } from './engine';
 import { el } from './moves';
 import { pieceSrc } from './board';
+import { keepFocus } from './focus';
 
 const ROLES: HandRole[] = ['pawn', 'knight', 'bishop', 'rook', 'queen'];
 const LETTER_ROLE: Record<string, HandRole> = { P: 'pawn', N: 'knight', B: 'bishop', R: 'rook', Q: 'queen' };
@@ -63,27 +64,32 @@ export function arrivalText(arrival: string, mover: Color): string {
 }
 
 /** Why HypeBeast chose its move, from its coordinator's reason. */
-export function reasonText(result: EngineResult, partnerName: string, moveSan: string): string {
+export function reasonText(result: EngineResult, partnerName: string, moveSan: string, boardName = 'this board'): string {
   const reason = result.reason ?? '';
   const sent = result.coordination?.candidates.find((c) => c.move === result.decision)?.delivery;
   const sends = sent && LETTER_ROLE[sent] ? `, which sends ${partnerName} ${ARTICLE[LETTER_ROLE[sent]]}` : '';
   if (result.decision === 'pass') return 'Sits: every move hands the other team a mating piece.';
   switch (reason) {
-    case 'override': return `${moveSan} over its best move on this board for what it sends: the capture is worth more on ${partnerName}${sends}.`;
+    case 'override': return `${moveSan} over its best move on ${boardName} for what it sends: the capture is worth more on ${partnerName}${sends}.`;
     case 'world_switch': return `${moveSan} because of what may arrive from ${partnerName}: it scores best over the likely arrivals.`;
-    case 'no_arrivals': return `Nothing is likely to arrive from ${partnerName} soon, so ${moveSan} is its best move here${sends}.`;
-    case 'kept_main': return `${moveSan} is its best move here, and stays best with what may arrive from ${partnerName}${sends}.`;
+    case 'no_arrivals': return `Nothing is likely to arrive from ${partnerName} soon, so ${moveSan} is its best move on ${boardName}${sends}.`;
+    case 'kept_main': return `${moveSan} is its best move on ${boardName}, and stays best with what may arrive from ${partnerName}${sends}.`;
     case 'team_win_main': case 'team_win_override': return `${moveSan} wins the game for the team.`;
     case 'delivery_win': case 'delivery_win_main': return `${moveSan} captures a piece that lets ${partnerName} mate at once.`;
     case 'only_move': return `${moveSan} is the only move.`;
     case 'exposed': case 'veto': case 'no_safe_candidate': return `${moveSan} avoids handing the other team a piece that mates.`;
     case 'voluntary_wait': return `Waits for a piece ${partnerName} is about to capture.`;
-    default: return `${moveSan} is its best move here; there was no time left to compare others.`;
+    default: return `${moveSan} is its best move on ${boardName}; there was no time left to compare others.`;
   }
 }
 
 export class PartnerPanel {
-  constructor(private readonly host: PartnerHost, private readonly box: HTMLElement) {
+  /**
+   * `box` holds the piece values, under the engine lines; `notes`, under the
+   * partner board, what may arrive from it and why HypeBeast chose its move,
+   * in a block of fixed height, so nothing moves when they come.
+   */
+  constructor(private readonly host: PartnerHost, private readonly box: HTMLElement, private readonly notes?: HTMLElement) {
     box.addEventListener('click', (e) => {
       const cell = (e.target as HTMLElement).closest<HTMLElement>('[data-give]');
       if (!cell) return;
@@ -95,10 +101,9 @@ export class PartnerPanel {
   update() {
     const { host } = this;
     this.box.hidden = !host.active;
+    if (this.notes) this.notes.replaceChildren(...(host.active && host.twoBoards ? this.partnerNotes() : []));
     if (!host.active) { this.box.replaceChildren(); return; }
-    const parts: HTMLElement[] = [this.valuesTable()];
-    if (host.twoBoards) parts.push(...this.partnerNotes());
-    this.box.replaceChildren(...parts);
+    keepFocus(this.box, () => this.box.replaceChildren(this.valuesTable()));
   }
 
   private valuesTable(): HTMLElement {
@@ -106,7 +111,7 @@ export class PartnerPanel {
     const values = host.values();
     const section = el('div', 'bs-values');
     const head = el('div', 'bs-values-head');
-    head.append(el('span', 'bs-values-title', 'One more piece in hand'));
+    head.append(el('span', 'bs-values-title', 'One more piece in hand: what each side gains, in pawns'));
     const note = el('span', 'bs-values-note num');
     if (values) {
       note.textContent = `depth ${values.depth}${values.source === 'partner' ? ` · from ${host.partnerName}’s search` : ''}`;
@@ -148,6 +153,7 @@ export class PartnerPanel {
     const button = el('button', 'bs-values-give') as HTMLButtonElement;
     button.type = 'button';
     button.dataset.give = `${color}-${role}`;
+    button.dataset.focus = button.dataset.give;
     const img = document.createElement('img');
     img.src = pieceSrc(color, role);
     img.alt = '';
@@ -169,7 +175,10 @@ export class PartnerPanel {
     const { host } = this;
     const result = host.result();
     const out: HTMLElement[] = [];
-    if (!result?.done) return out;
+    if (!result?.done) {
+      out.push(el('p', 'bs-arrivals bs-values-title', `May arrive from ${host.partnerName}: …`));
+      return out;
+    }
     const forecast = result.forecast;
     if (forecast?.worlds.length) {
       const arrives = el('div', 'bs-arrivals');
@@ -190,7 +199,7 @@ export class PartnerPanel {
       out.push(arrives);
     }
     if (result.decision)
-      out.push(el('p', 'bs-why', reasonText(result, host.partnerName, result.decision === 'pass' ? '' : host.moveSan(result.decision))));
+      out.push(el('p', 'bs-why', reasonText(result, host.partnerName, result.decision === 'pass' ? '' : host.moveSan(result.decision), host.boardName)));
     return out;
   }
 }

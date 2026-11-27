@@ -33,6 +33,8 @@
   /* A board column is its head, two pockets (an eighth of the board each, plus padding) and the board. */
   --bg-board: clamp(240px, min(calc((100dvh - var(--nav-h) - 156px) / 1.25), calc((100vw - 48px - var(--bg-side) - 48px) / 2)), 600px);
   --bg-col: calc(var(--bg-board) * 1.25 + 48px);
+  /* Faint text (move numbers and times, engine status) at 5.2:1 on the panels, as on /bughouse. */
+  --text-faint: #949eab;
 }
 .bg-layout { display: grid; grid-template-columns: var(--bg-board) var(--bg-board) var(--bg-side); gap: 24px; align-items: start; justify-content: center; }
 .bg-board { min-width: 0; }
@@ -41,7 +43,7 @@
 /* ── A board: head, pockets with engine and clock, the board ─────── */
 .bg-board-head { display: flex; align-items: baseline; gap: 8px; height: 24px; font-size: 0.85rem; }
 .bg-board-name { font-weight: 600; }
-.bg-var-tag { padding: 0 8px; border-radius: 999px; background: var(--accent-bg); color: var(--accent); font-size: 0.75rem; font-weight: 600; line-height: 1.6; }
+.bg-var-tag { padding: 0 8px; border-radius: 999px; background: var(--accent-bg); color: var(--pick); font-size: 0.75rem; font-weight: 600; line-height: 1.6; }
 .bg-eval { margin-left: auto; font-family: var(--mono); font-weight: 600; color: var(--text-dim); cursor: help; }
 .bg-seat { display: flex; align-items: center; gap: 8px; padding: 4px 0; min-height: calc(var(--bg-board) / 8 + 8px); }
 .bg-who { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }
@@ -71,11 +73,15 @@
 .bg-title { font-size: 1.05rem; font-weight: 600; letter-spacing: 0; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .bg-meta { color: var(--text-dim); font-size: 0.82rem; line-height: 1.4; }
 .bg-problem { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; color: var(--danger); font-size: 0.9rem; }
-.bg-var-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 6px 6px 12px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--accent-bg); font-size: 0.85rem; }
+.bg-var-bar { position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px 6px 14px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--accent-bg); font-size: 0.85rem; }
+.bg-var-bar > span { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; }
 .bg-var-bar .btn { flex: none; }
 
-/* The current move: who, when, the score, a wait; at the start, what the game is. */
-.bg-note { flex: none; max-height: 30vh; overflow-y: auto; padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
+/* The current move: who, when, the score, a wait; at the start, what the game is.
+   Tall enough for a move with a wait and the result, so stepping does not move the list. */
+.bg-note-box { position: relative; flex: none; }
+.bg-note { min-height: 112px; max-height: 30vh; overflow-y: auto; padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
+.bg-note-start { font-size: 1rem; }
 .bg-note-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
 .bg-note-board { display: inline-grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--border-strong); border-radius: 4px; font-size: 0.75rem; font-weight: 700; color: var(--text-dim); align-self: center; }
 .bg-note-move { font-family: var(--mono); font-size: 1rem; }
@@ -96,7 +102,7 @@
 .bg-mv:hover { background: var(--bg-raised); }
 .bg-mv:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .bg-mv.active { background: var(--accent-bg); }
-.bg-mv.active .bg-mv-san { color: var(--accent); }
+.bg-mv.active .bg-mv-san { color: var(--pick); }
 .bg-mv-time { padding-right: 6px; text-align: right; color: var(--text-faint); font-family: var(--mono); font-size: 0.75rem; }
 .bg-mv-cell { display: flex; align-items: center; gap: 4px; min-width: 0; height: 100%; padding: 0 8px; overflow: hidden; white-space: nowrap; }
 .bg-mv-cell + .bg-mv-cell { border-left: 1px solid var(--border); }
@@ -105,10 +111,12 @@
 .bg-mv.book .bg-mv-san { font-weight: 400; color: var(--text-dim); }
 .bg-mv-wait { flex: none; padding: 0 5px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--text-dim); font-size: 0.75rem; line-height: 1.4; }
 
-/* The engine on request: the analysis board's panel (analysis.css), off until switched on. */
+/* The engine on request: the analysis board's panel (analysis.css), off until switched on.
+   Its lines' rows are kept, blank, while it is off, so switching it on moves nothing. */
 .bg-engine { position: relative; flex: none; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
 .bg-engine .ch-ceval { min-height: 44px; }
 .bg-engine .ch-ceval:last-child, .bg-engine .ch-ceval:has(+ .ch-pvs:empty) { border-bottom: 0; }
+.bg:not([data-state="ready"]) .bg-engine { opacity: 0.45; }
 .bg-engine .ch-pvs { border-bottom: 0; }
 .bg-engine .ch-pearl { font-size: 1.3rem; }
 .bg-engine .ch-ceval.off .ch-pearl { display: none; }
@@ -119,8 +127,13 @@
 .bg-foot-note { color: var(--text-faint); font-size: 0.75rem; }
 
 @media (max-width: 700px) {
-  .bg-controls .bg-icon { width: 44px; height: 44px; }
   .bg-note-text { font-size: 0.98rem; }
+}
+/* Touch: 44px targets, as on the puzzle page. */
+@media (pointer: coarse), (max-width: 860px), (max-width: 1100px) and (orientation: portrait) {
+  .bg-icon { width: 44px; height: 44px; }
+  .bg-mv { height: 44px; }
+  .bg-var-bar .btn, .bg-problem .btn, .bg-list-status .btn { min-height: 44px; }
 }
 
 /* Narrower windows, after the rules they change. */
@@ -129,8 +142,18 @@
   .bg { --bg-board: min(calc((100vw - 48px - 24px) / 2), 520px); }
   .bg-layout { grid-template-columns: var(--bg-board) var(--bg-board); }
   .bg-side { grid-column: 1 / -1; height: auto; }
-  .bg-note { flex: none; max-height: none; }
+  .bg-note { max-height: none; }
   .bg-moves { flex: none; height: min(50vh, 420px); }
+  /* The step buttons stay on screen while the boards are read: a bar along the bottom. */
+  .bg[data-view="game"] { padding-bottom: 64px; }
+  .bg-controls {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; justify-content: center; gap: 8px;
+    padding: 6px 16px calc(6px + env(safe-area-inset-bottom, 0px));
+    background: var(--bg-card); border-top: 1px solid var(--border);
+  }
+  .bg-controls-gap { flex: 0 0 24px; }
+  /* A game that could not be read has nothing to show on its boards: the problem comes first. */
+  .bg[data-state="error"] .bg-board { display: none; }
 }
 /* Phones: the boards one above the other. */
 @media (max-width: 700px) {

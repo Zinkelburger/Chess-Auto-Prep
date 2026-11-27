@@ -43,6 +43,16 @@ const open = async (page, id, i) => { await page.goto(`${origin}/bughouse-games/
 // What a board shows, read from chessground's pieces.
 const pieces = (page, b) => page.$eval(`#bg-cg-${b}`, (el) => [...el.querySelectorAll('piece')].filter((p) => !p.classList.contains('ghost')).map((p) => `${p.className}@${p.style.transform}`).sort().join(' '));
 const orientation = (page, b) => page.$eval(`#bg-cg-${b}`, (el) => (el.classList.contains('orientation-white') ? 'white' : el.classList.contains('orientation-black') ? 'black' : '?'));
+// Contrast of an element's text on its own (opaque) background.
+const contrast = (page, selector) => page.$eval(selector, (el) => {
+  const rgb = (c) => c.match(/[\d.]+/g).slice(0, 3).map(Number);
+  const lum = (c) => { const v = rgb(c).map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+  let bg = 'rgba(0, 0, 0, 0)';
+  for (let e = el; e && /rgba\(.*, 0\)|transparent/.test(bg); e = e.parentElement) bg = getComputedStyle(e).backgroundColor;
+  const [a, b] = [lum(getComputedStyle(el).color), lum(bg)].sort((p, q) => q - p);
+  return (a + 0.05) / (b + 0.05);
+});
+const top = (page, selector) => page.$eval(selector, (el) => Math.round(el.getBoundingClientRect().top));
 // Nothing inside the panel may stick out sideways.
 const overflowing = (page) => page.evaluate(() => [...document.querySelectorAll('.bg-side *, .bg-seat *')]
   .filter((el) => el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX === 'visible' && !el.closest('.bg-moves'))
@@ -107,6 +117,21 @@ try {
     assert.deepEqual(await overflowing(page), [], `${label}: nothing in the panel sticks out sideways`);
     assert.match(await page.$eval('#bg-analysis', (a) => a.href), /\/bughouse\?fen=.+&fen2=/);
     await shot(page, `${label}-move`);
+    // Faint text and the current move read at 4.5:1; the move list is one Tab stop, the current move.
+    assert.ok(await contrast(page, '.bg-mv:not(.active) .bg-mv-num') >= 4.5, `${label}: move numbers read`);
+    assert.ok(await contrast(page, '.bg-mv.active .bg-mv-san') >= 4.5, `${label}: the current move reads`);
+    assert.deepEqual(await page.$$eval('.bg-mv[tabindex="0"]', (rows) => rows.map((r) => r.dataset.i)), [String(mid.i)], 'one Tab stop in the move list: the current move');
+    // Phones and tablets keep the step buttons on screen while the boards are read.
+    if (viewport.width < 1180) {
+      const bar = await page.$eval('.bg-controls', (el) => ({ position: getComputedStyle(el).position, bottom: el.getBoundingClientRect().bottom }));
+      assert.equal(bar.position, 'fixed', `${label}: the step bar stays on screen`);
+      assert.ok(bar.bottom <= viewport.height + 0.5, `${label}: the step bar is inside the window`);
+    }
+    if (viewport.hasTouch) {
+      const tiny = await page.$$eval('.bg-icon, #bg-ceval .ch-switch, .bg-mv', (els) => els.filter((e) => e.offsetParent || getComputedStyle(e).position === 'fixed')
+        .map((e) => [e.id || e.className, Math.round(e.getBoundingClientRect().width), Math.round(e.getBoundingClientRect().height)]).filter(([, w, h]) => w < 43.5 || h < 43.5).slice(0, 5));
+      assert.deepEqual(tiny, [], `${label}: touch targets are 44px`);
+    }
     // A move the files annotate shows no note either.
     await open(page, first.id, annotated.i);
     assert.ok(!(await text(page, '#bg-note')).includes(annotated.note.trim().slice(0, 30)), `${label}: the annotator's note is not shown`);
@@ -140,8 +165,11 @@ try {
         && document.querySelectorAll('#bg-pvs .ch-pv-move').length > 0, { timeout: 180_000 });
       assert.equal(await page.evaluate(() => crossOriginIsolated), true, 'the page is cross-origin isolated for the engine');
       assert.match(await text(page, '#bg-engine-info'), /^Off/);
+      const movesTop = await top(page, '#bg-moves');
       await page.click('#bg-ceval .ch-switch');
       await evaluated();
+      assert.equal(await top(page, '#bg-moves'), movesTop, 'switching HypeBeast on moves nothing below it');
+      assert.match(await text(page, '#bg-engine-info'), /^White’s team/, 'the panel names whose side its score is from');
       const focus = (await text(page, '#bg-engine-name')).match(/^HypeBeast · board ([AB])$/)?.[1];
       assert.ok(focus, 'the engine names the board it searches');
       assert.equal(focus, mid.board, 'it searches the board the move was played on');
@@ -153,6 +181,7 @@ try {
       await page.waitForFunction(() => !document.querySelector('#bg-var-bar').hidden);
       assert.match(await text(page, '#bg-var-text'), new RegExp(`^HypeBeast’s line on board ${focus}: \\S+$`));
       assert.notEqual(await settled(focus), before, 'the line is on the board');
+      assert.equal(await top(page, '#bg-moves'), movesTop, 'the engine line’s bar covers the note instead of pushing the list');
       await shot(page, `${label}-engine-line`);
       await page.keyboard.press('Escape');
       await page.waitForFunction(() => document.querySelector('#bg-var-bar').hidden);
@@ -184,8 +213,11 @@ try {
     await page.goto('about:blank');
     await page.goto(`${origin}/bughouse-games/#${first.id}`);
     await page.waitForFunction(() => document.querySelector('#bg').dataset.state === 'error');
-    assert.match(await text(page, '#bg-problem-text'), /server answered 503/);
-    if (label === 'desktop') await shot(page, `${label}-error`);
+    assert.match(await text(page, '#bg-problem-text'), /error 503/);
+    assert.equal(await page.$eval('#bg-engine-on', (el) => el.disabled), true, 'no engine without a game');
+    const problemTop = await top(page, '#bg-problem');
+    assert.ok(problemTop < viewport.height, `${label}: the problem is on the first screen (${problemTop})`);
+    await shot(page, `${label}-error`);
     await page.close();
     assert.deepEqual(errors.filter((e) => !/503/.test(e)), [], `${label}: no page errors`);
     console.log(`${label}: list, game, no annotations, last move, keys, flip, engine and errors checked`);

@@ -144,12 +144,29 @@ side to move. Jobs run one at a time:
    values time, 3 seconds by default).
 
 The partner panel (`partner.ts`, under the engine lines) shows those piece
-values for both colours, in pawns, Mate where the piece makes a mate
-possible; clicking a cell adds the piece to that hand. With two boards it
-also shows what may arrive from the partner board in its next two moves
-(HypeBeast's forecast, with chances and the likely moves there) and why
-HypeBeast chose its move. Practice with computer answers after 600,000
-nodes.
+values for both colours, in pawns gained by that colour, Mate where the
+piece makes a mate possible; clicking a cell adds the piece to that hand.
+With two boards, a block of fixed height under the partner board shows what
+may arrive from it in its next two moves (HypeBeast's forecast, with chances
+and the likely moves there) and why HypeBeast chose its move, so their
+arrival moves nothing. Practice with computer answers after 600,000 nodes.
+
+Every score is from White's side of the board searched, as on Lichess, and
+says so: one board names it "This board only"; two boards "White's team"
+(this board plus what the line's captures are worth on the partner board,
+where the partner plays Black) with this board's own share, and the partner
+board's score likewise "White's team" of that board. The lines' rows are
+kept, blank, before the engine reports, so its first lines move nothing.
+
+Every control works by keyboard (? lists the keys). The board is one Tab
+stop, as on the puzzle page: the arrows move a square cursor, Enter or Space
+presses the square as a click does, Escape puts back; Enter on a piece in
+hand picks it and hands the focus to the board, and the promotion picker
+takes the focus. Each engine line is one Tab stop (arrows along it, its
+board shown on focus), and the focus stays put while the hands, the piece
+values and the lines are drawn again. On touch screens, narrow windows and
+portrait tablets the controls are 44px, and a line plays on a tap, not on
+touching down.
 
 The first download (the net, about 28 MB) shows its progress in the engine
 header and is kept in the Cache API, checked against `net.json`'s checksums;
@@ -410,6 +427,16 @@ are that board's settings. Pressing a move of an engine line shows the line on
 that board under an "Engine line" tag until the reader moves, Esc or **Back
 to the game**; the engine keeps searching the game's position. So the page is
 cross-origin isolated like `/bughouse` (`public/_headers`, `astro.config.mjs`).
+Its lines' rows are kept, blank, while it is off, and the engine-line bar
+covers the current move's card, so neither moves the list. The panel names
+its score "White's team", from White's side of the board searched; the
+card gives the mover's engine's own score "from White's side".
+
+The move list is one Tab stop, the current move, which the focus follows.
+Below 1180px the step buttons are a bar along the bottom of the window, so
+the boards and the buttons are on screen together; a game that could not be
+read shows its problem first, without skeleton boards, and the engine switch
+is off until a game is read. Touch targets are 44px.
 
 ```
 games.ts        types, contract checks (parseIndex, parseGame), #<id>:<move> links, GameStore
@@ -425,7 +452,10 @@ content hash but share the directory with `index.json`, so no rule marks
 them immutable. `npm run test:games` checks the served files and the pure
 modules; `npm run test:games:browser` drives the built page at desktop,
 1024×768 and phone sizes (at desktop it also switches HypeBeast on, opens one
-of its lines and steps on) and writes screenshots to `build/bughouse-games-web/`.
+of its lines and steps on, and checks that neither moves the list), checks
+contrast, the one-stop move list, the step bar below 1180px, touch targets
+and a failed game's problem on the first screen, and writes screenshots to
+`build/bughouse-games-web/`.
 
 ## Meow Chess
 
@@ -483,7 +513,11 @@ scripts/ci.sh with -- npm --prefix python/twic-position-finder/frontend run test
   1366×768 and phone sizes, with one board and two (a capture reaching the
   partner's hand, the partner board's search, switching boards), through a
   failed download and a phone's first visit, and writes screenshots to
-  `build/bughouse-web/`.
+  `build/bughouse-web/`. It also checks that the scores name their side,
+  that nothing moves when the lines, the partner's score or the forecast
+  arrive, the move list in view with two boards, the gear under its header,
+  focus kept through redraws, a move and a drop by keyboard alone, contrast
+  and 44px touch targets on a phone.
 - `test:puzzles:browser` drives `/bughouse-puzzles`: the FICS set by default,
   Settings switching to engine games, one engine puzzle solved on the board
   and stepped back through, results kept per set, and deep links opening the

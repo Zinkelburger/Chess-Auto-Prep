@@ -7,7 +7,8 @@
 import type { Color, Role } from 'chessops/types';
 import { HAND_ROLES, MAX_IN_HAND } from './tree';
 import { pieceSrc } from './board';
-import { bindSlot } from '../bughouse/pocket';
+import { bindSlot, type PickedBy } from '../bughouse/pocket';
+import { keepFocus } from './focus';
 
 const NAMES: Record<Role, string> = { pawn: 'pawn', knight: 'knight', bishop: 'bishop', rook: 'rook', queen: 'queen', king: 'king' };
 
@@ -24,7 +25,7 @@ export interface HandView {
 export interface HandHooks {
   adjust: (color: Color, role: Role, delta: 1 | -1) => void;
   drag: (color: Color, role: Role, e: MouseEvent | TouchEvent) => void;
-  pick: (role: Role) => void;
+  pick: (role: Role, by: PickedBy) => void;
 }
 
 export function renderHand(box: HTMLElement, view: HandView, hooks: HandHooks) {
@@ -42,6 +43,7 @@ export function renderHand(box: HTMLElement, view: HandView, hooks: HandHooks) {
     slot.className = 'zh-slot';
     slot.dataset.nb = String(count);
     slot.dataset.role = role;
+    slot.dataset.focus = `slot-${role}`;
     const img = document.createElement('img');
     img.src = pieceSrc(view.color, role);
     img.alt = '';
@@ -57,12 +59,12 @@ export function renderHand(box: HTMLElement, view: HandView, hooks: HandHooks) {
     slot.setAttribute('aria-pressed', String(view.picked === role));
     slot.disabled = !count || !view.usable(role);
     // Press and drag carries the piece on; a click or a tap picks it (the puzzles' pocket does the same).
-    if (!slot.disabled) bindSlot(slot, (e) => hooks.drag(view.color, role, e), () => hooks.pick(role));
+    if (!slot.disabled) bindSlot(slot, (e) => hooks.drag(view.color, role, e), (by) => hooks.pick(role, by));
     well.append(slot);
     more.append(stepButton(role, 1, `One more ${NAMES[role]} for ${side.toLowerCase()}`, count >= MAX_IN_HAND || !view.roomForMore, () => hooks.adjust(view.color, role, 1)));
     fewer.append(stepButton(role, -1, `One ${NAMES[role]} fewer for ${side.toLowerCase()}`, count <= 0, () => hooks.adjust(view.color, role, -1)));
   }
-  box.replaceChildren(more, well, fewer);
+  keepFocus(box, () => box.replaceChildren(more, well, fewer));
 }
 
 function stepRow(label: string): HTMLDivElement {
@@ -79,6 +81,8 @@ function stepButton(role: Role, delta: 1 | -1, label: string, disabled: boolean,
   b.className = 'ch-step';
   b.dataset.role = role;
   b.dataset.step = delta > 0 ? 'more' : 'fewer';
+  b.dataset.focus = `${b.dataset.step}-${role}`;
+  if (delta < 0) b.dataset.focusAlt = `more-${role}`;
   b.textContent = delta > 0 ? '+' : '−';
   b.title = label;
   b.setAttribute('aria-label', label);

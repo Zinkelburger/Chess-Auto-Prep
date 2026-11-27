@@ -35,13 +35,17 @@ export interface GearHooks extends SearchHooks {
 
 const seconds = (s: number) => (s === 0 ? '∞' : `${s}s`);
 
-const row = (id: string, label: string, title: string, control: HTMLElement, value?: HTMLElement) => {
+/** A named setting: its slider and value, with its one-line explanation on screen under them (DESIGN.md, Gear). */
+const row = (id: string, label: string, note: string, control: HTMLElement, value?: HTMLElement) => {
   const r = el('div', 'ch-setting');
-  r.title = title;
   const l = el('label', '', label) as HTMLLabelElement;
   l.htmlFor = id;
   r.append(l, control);
   if (value) r.append(value);
+  const p = el('p', 'ch-setting-note', note);
+  p.id = `${id}-note`;
+  (control.matches('input') ? control : control.querySelector('input'))?.setAttribute('aria-describedby', p.id);
+  r.append(p);
   return r;
 };
 

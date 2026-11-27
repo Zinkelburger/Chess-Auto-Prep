@@ -37,7 +37,8 @@ export class GameBoard {
       viewOnly: true,
       coordinates: true,
       highlight: { lastMove: true, check: true },
-      animation: { enabled: true, duration: 160 },
+      // No sliding pieces for a reader who asked for less motion.
+      animation: { enabled: !matchMedia('(prefers-reduced-motion: reduce)').matches, duration: 160 },
       drawable: { enabled: false, visible: true },
     });
     const resized = new ResizeObserver(() => this.cg.redrawAll());

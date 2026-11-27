@@ -31,7 +31,7 @@ const icon = {
     <section class="ch-stage" aria-label="Board">
       <div class="ch-spare" id="ch-spare-top" role="toolbar" aria-label="Spare pieces" hidden></div>
       <div class="ch-board-wrap" id="ch-board-wrap">
-        <div id="ch-board" class="bb-board" role="group" aria-label="Bughouse board"></div>
+        <div id="ch-board" class="bb-board" role="group" aria-label="Bughouse board: arrows move a cursor, Enter picks up and puts down"></div>
       </div>
       <div class="ch-spare" id="ch-spare-bottom" role="toolbar" aria-label="Spare pieces" hidden></div>
     </section>
@@ -47,6 +47,7 @@ const icon = {
       </button>
       <div class="ch-partner-hand" id="ch-partner-hand-bottom"></div>
       <button type="button" class="btn btn-outline btn-sm ch-partner-switch" id="ch-partner-switch">Work on this board</button>
+      <div class="bs-partner-notes scroll-thin" id="bs-partner-notes" aria-live="polite"></div>
     </section>
 
     <section class="ch-side" aria-label="Analysis">

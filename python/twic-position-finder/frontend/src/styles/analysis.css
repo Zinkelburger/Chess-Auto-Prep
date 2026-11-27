@@ -29,6 +29,9 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-board-wrap { position: relative; width: var(--ch-board); height: var(--ch-board); flex: none; }
 .ch[data-mode="editor"] .ch-board-wrap { width: calc(var(--ch-sq) * 8); height: calc(var(--ch-sq) * 8); }
 .ch-board-wrap .bb-board cg-container { width: 100%; height: 100%; }
+/* The keyboard: the board is one Tab stop, its ring around the board, and a square cursor (3:1 on both square colours). */
+.ch-board-wrap > .bb-board:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ch-cursor { position: absolute; width: 12.5%; height: 12.5%; z-index: 3; pointer-events: none; box-shadow: inset 0 0 0 3px #1d4170; }
 /* A promoted piece: a small dot in the top-left corner, clear of the coordinates (it goes back as a pawn when taken). */
 .ch-board-wrap cg-board square.ch-promoted { background: radial-gradient(circle at 14% 14%, var(--accent) 0 7%, transparent 8%); }
 .ch-board-wrap.ch-editing[data-brush="piece"] cg-board,
@@ -103,6 +106,8 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-engine-name { font-size: 0.85rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ch-engine-info { font-size: 0.8rem; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ch-engine-info.ch-failed { color: var(--danger); white-space: normal; }
+/* Waiting for the player: the download's size is what decides, so the line wraps rather than cut it. */
+.ch-ceval.ch-waiting .ch-engine-info { white-space: normal; }
 .ch-ceval.off .ch-engine-name { color: var(--text-faint); }
 .ch-spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: ch-spin 0.8s linear infinite; }
 @keyframes ch-spin { to { transform: rotate(360deg); } }
@@ -120,13 +125,14 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
   position: absolute; left: 0; right: 0; z-index: 8;
   display: flex; flex-direction: column; gap: 14px; padding: 16px 16px 18px;
   background: var(--bg-raised); border-top: 2px solid var(--accent); border-bottom: 1px solid var(--border-strong);
-  box-shadow: 0 12px 20px -8px rgb(0 0 0 / 0.55); font-size: 0.88rem;
+  font-size: 0.88rem;
 }
 .ch-settings[hidden], .ch-setting[hidden] { display: none; }
 .ch-setting { display: grid; grid-template-columns: 7.4em minmax(0, 1fr) 3.4em; align-items: center; column-gap: 12px; white-space: nowrap; }
 .ch-setting label { margin: 0; color: var(--text-dim); }
 .ch-setting-value { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
 .ch-setting-choice { grid-column: 2 / -1; }
+.ch-setting-note { grid-column: 1 / -1; margin: 2px 0 0; color: var(--text-dim); font-size: 0.8rem; line-height: 1.35; white-space: normal; }
 .ch-setting-choice button { padding: 5px 8px; }
 
 /* Sliders in the page's colours: a quiet track, a light thumb that takes the
@@ -156,17 +162,17 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 /* Engine lines, one row each, as on Lichess. */
 .ch-pvs { flex: none; border-bottom: 1px solid var(--border); }
 .ch-pvs:empty { display: none; }
-.ch-pv { display: flex; align-items: center; gap: 2px; height: 2em; padding: 0 8px; white-space: nowrap; overflow: hidden; font-size: 0.88rem; border-top: 1px solid var(--border); }
+.ch-pv { display: flex; align-items: center; gap: 2px; height: 2em; padding: 0 8px; white-space: nowrap; overflow: hidden; overflow: clip; font-size: 0.88rem; border-top: 1px solid var(--border); }
 .ch-pv:first-child { border-top: 0; }
 .ch-pv strong { flex: none; min-width: 3.6em; margin-right: 4px; font-variant-numeric: tabular-nums; }
 .ch-pv-num { color: var(--text-faint); margin-left: 3px; }
 .ch-pv-move { padding: 1px 3px; border: 0; border-radius: 3px; background: none; color: var(--text); font: inherit; cursor: pointer; }
-.ch-pv-move:hover { background: var(--accent-bg); color: var(--accent); }
+.ch-pv-move:hover, .ch-pv-move:focus-visible { background: var(--accent-bg); color: var(--pick); }
 .ch-pv-threat .ch-pv-move { cursor: default; }
 .ch-pv-threat .ch-pv-move:hover { background: var(--bg-raised); color: var(--text); }
 
 /* The position of a hovered move in an engine line, over the move list. */
-.ch-pv-board { position: absolute; left: 8px; z-index: 6; display: flex; flex-direction: column; gap: 3px; width: min(240px, calc(100% - 16px)); padding: 4px; background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: 6px; box-shadow: var(--shadow); pointer-events: none; }
+.ch-pv-board { position: absolute; left: 8px; z-index: 6; display: flex; flex-direction: column; gap: 3px; width: min(240px, calc(100% - 16px)); padding: 4px; background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: 6px; pointer-events: none; }
 .ch-pv-board[hidden] { display: none; }
 .ch-pv-board.ch-pv-board-flipped { flex-direction: column-reverse; }
 .ch-pv-board-cg { width: 100%; height: auto; aspect-ratio: 1; }
@@ -174,7 +180,7 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-pv-hand { display: flex; gap: 2px; min-height: 22px; align-items: center; }
 .ch-pv-hand-piece { position: relative; display: inline-flex; }
 .ch-pv-hand-piece img { width: 22px; height: 22px; }
-.ch-pv-hand-piece em { position: absolute; right: -2px; bottom: -2px; padding: 0 2px; border-radius: 3px; background: #d64f00; color: #fff; font: 700 9px/1.2 var(--sans); font-style: normal; }
+.ch-pv-hand-piece em { position: absolute; right: -2px; bottom: -2px; padding: 0 2px; border-radius: 3px; background: #d64f00; color: #fff; font: 700 12px/1.1 var(--sans); font-style: normal; }
 
 /* Moves: lila's column view, variations interrupting the columns. */
 .ch-moves { flex: 1 1 0; min-height: 7.6em; overflow-y: auto; display: grid; grid-template-columns: 2.4em 1fr 1fr; align-content: start; font-size: 0.95rem; }
@@ -183,7 +189,8 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-move { cursor: pointer; }
 .ch-empty { color: var(--text-faint); font-weight: 400; }
 .ch-move:hover { background: var(--bg-raised); }
-.ch-move.active, .ch-vmove.active { background: var(--accent-bg); color: var(--accent); }
+/* Text on the accent background takes the lighter accent: 5.7:1 (the accent is 4.0:1). */
+.ch-move.active, .ch-vmove.active { background: var(--accent-bg); color: var(--pick); }
 .ch-interrupt { grid-column: 1 / -1; padding: 4px 8px 6px 14px; background: var(--bg); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); font-size: 0.86rem; }
 .ch-line { padding: 1px 0; line-height: 1.7; }
 .ch-line + .ch-line { border-top: 1px dashed var(--border); }
@@ -195,7 +202,7 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-glyph-inaccuracy, .ch-move-inaccuracy { color: #56b4e9; }
 .ch-glyph-mistake, .ch-move-mistake { color: #e69f00; }
 .ch-glyph-blunder, .ch-move-blunder { color: #df5353; }
-.ch-move.active.ch-move-inaccuracy, .ch-move.active.ch-move-mistake, .ch-move.active.ch-move-blunder { color: var(--accent); }
+.ch-move.active.ch-move-inaccuracy, .ch-move.active.ch-move-mistake, .ch-move.active.ch-move-blunder { color: var(--pick); }
 .ch-pending-copy { background: var(--accent-bg) !important; }
 .ch-pending-delete { text-decoration: line-through; text-decoration-color: var(--danger); background: rgb(223 83 83 / 0.12) !important; }
 .ch-fold { margin: 0 4px 0 0; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: 3px; background: var(--bg-card); color: var(--text-dim); font: inherit; font-size: 0.8rem; line-height: 1.5; cursor: pointer; }
@@ -211,7 +218,7 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-fork { flex: none; display: flex; flex-wrap: wrap; gap: 2px 6px; padding: 6px 8px; border-top: 1px solid var(--border); font-size: 0.9rem; }
 .ch-fork[hidden] { display: none; }
 .ch-fork .ch-vmove { padding: 2px 6px; border: 1px solid var(--border); color: var(--text); }
-.ch-fork .ch-vmove.selected { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+.ch-fork .ch-vmove.selected { border-color: var(--accent); background: var(--accent-bg); color: var(--pick); }
 .ch-toast { position: absolute; right: 10px; bottom: 10px; z-index: 7; margin: 0; padding: 6px 10px; border-radius: 4px; background: var(--bg-raised); border: 1px solid var(--border-strong); box-shadow: var(--shadow); font-size: 0.85rem; }
 .ch-toast[hidden] { display: none; }
 .ch-edit { margin-left: 4px; padding: 0 4px; border-radius: 3px; background: var(--warn-bg); color: var(--warn); font-size: 0.72rem; font-weight: 600; font-family: var(--mono); }
@@ -222,7 +229,7 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-menu button { display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 8px; border: 0; border-radius: 4px; background: none; color: var(--text); font: inherit; font-size: 0.9rem; text-align: left; cursor: pointer; }
 .ch-menu button svg { width: 15px; height: 15px; flex: none; color: var(--text-dim); }
 .ch-menu button:hover svg, .ch-menu button:focus-visible svg { color: inherit; }
-.ch-menu button:hover, .ch-menu button:focus-visible { background: var(--accent-bg); color: var(--accent); outline: none; }
+.ch-menu button:hover, .ch-menu button:focus-visible { background: var(--accent-bg); color: var(--pick); outline: none; }
 
 /* ── Practice with computer ───────────────────────────────────── */
 .ch-practice { flex: none; border-bottom: 1px solid var(--border); }
@@ -253,13 +260,13 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-menu-tool { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 0; border-radius: 4px; background: none; color: var(--text); font: inherit; font-size: 0.92rem; text-align: left; cursor: pointer; }
 .ch-menu-tool svg { width: 20px; height: 20px; flex: none; color: var(--text-dim); }
 .ch-menu-tool:hover { background: var(--bg-raised); }
-.ch-menu-tool[aria-pressed="true"] { background: var(--accent-bg); color: var(--accent); }
+.ch-menu-tool[aria-pressed="true"] { background: var(--accent-bg); color: var(--pick); }
 .ch-menu-tool[aria-pressed="true"] svg { color: var(--accent); }
 .ch-menu-heading { margin: 16px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border); color: var(--text-dim); font-size: 0.8rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
 .ch-menu-replay { display: flex; gap: 8px; }
 .ch-menu-choice { flex: 1; padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: 4px; background: none; color: var(--text); font: inherit; font-size: 0.9rem; cursor: pointer; }
 .ch-menu-choice:hover { background: var(--bg-raised); }
-.ch-menu-choice[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+.ch-menu-choice[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-bg); color: var(--pick); }
 .ch-menu-switch { position: relative; display: flex; align-items: center; gap: 8px; margin: 0; padding: 7px 2px; font-size: 0.92rem; cursor: pointer; }
 .ch-menu-switch-label { flex: 1; }
 .ch-menu-switch kbd { padding: 0 5px; border: 1px solid var(--border-strong); border-radius: 3px; color: var(--text-faint); font: 0.75rem var(--mono); }
@@ -287,7 +294,7 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
 .ch-choice { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .ch-choice button { flex: 1; padding: 7px 8px; border: 0; background: none; color: var(--text-dim); font: inherit; font-size: 0.9rem; cursor: pointer; }
 .ch-choice button + button { border-left: 1px solid var(--border); }
-.ch-choice button[aria-checked="true"] { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+.ch-choice button[aria-checked="true"] { background: var(--accent-bg); color: var(--pick); font-weight: 600; }
 .ch-castling { display: grid; grid-template-columns: auto auto auto; gap: 6px 14px; justify-content: start; align-items: center; margin: 0; padding: 0; border: 0; font-size: 0.9rem; }
 .ch-castling legend { padding: 0; margin-bottom: 6px; font-size: 0.85rem; color: var(--text-dim); }
 .ch-castling > span { color: var(--text-dim); }
@@ -342,4 +349,22 @@ main:has(> .ch) { max-width: 1680px; padding: 14px 24px 40px; }
   /* The move arrows give up width first, so the row fits a 320 px phone. */
   .ch-controls { gap: 2px; }
   .ch-controls .ch-nav { flex: 0 1 52px; min-width: 28px; }
+}
+
+/* ── Touch: 44px targets ──────────────────────────────────────────
+   Coarse pointers, narrow windows and portrait tablets, as on the puzzle
+   page. The engine switch keeps its look inside a 44px target. */
+@media (pointer: coarse), (max-width: 860px), (max-width: 1100px) and (orientation: portrait) {
+  .ch-step { height: 44px; }
+  .ch-icon { width: 44px; height: 44px; }
+  .ch-controls .ch-nav { height: 44px; }
+  .ch-switch { width: 44px; height: 44px; }
+  .ch-switch span { inset: 13px 5px; }
+  .ch-pv { height: 44px; }
+  .ch-pv-move { align-self: stretch; min-width: 44px; }
+  .bs-values-give { height: 44px; }
+  .ch-move { min-height: 44px; }
+  .ch-range { height: 44px; }
+  .ch-ceval .btn, .ch-under .btn, .ch-editor .btn, .ch-partner-switch, .ch-fen-row input,
+  .ch-choice button, .ch-menu-tool, .ch-menu-choice, .ch-menu-switch, .ch-menu button { min-height: 44px; }
 }

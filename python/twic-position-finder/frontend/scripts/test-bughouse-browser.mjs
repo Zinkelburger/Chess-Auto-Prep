@@ -1,6 +1,9 @@
 // Drives the built /bughouse page in headless Chrome with the real engine:
 // npm run build && node scripts/test-bughouse-browser.mjs. Screenshots land
-// in build/bughouse-web/ at the repository root.
+// in build/bughouse-web/ at the repository root. Besides the engine and the
+// board's tools it checks what a player meets: the scores name their side,
+// nothing moves while HypeBeast reports, every control works by keyboard
+// (a move and a drop made with keys alone), and touch targets are 44px.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -42,6 +45,19 @@ const valuesDone = (page) => page.waitForFunction(() => {
   return /^depth \d+$/.test(note) && cells.length === 10 && !cells.some((c) => /…|—/.test(c.textContent));
 }, { timeout: 180_000 });
 const HOLE = 'r2q1rk1/pp3p1p/2n2Bp1/8/8/8/PPP2PPP/R2Q1RK1[] w - - 0 1';
+const top = (page, selector) => page.$eval(selector, (el) => Math.round(el.getBoundingClientRect().top));
+// WCAG contrast of an element's text on its own background (opaque backgrounds only).
+const contrast = (page, selector) => page.$eval(selector, (el) => {
+  const rgb = (c) => c.match(/[\d.]+/g).slice(0, 3).map(Number);
+  const lum = (c) => { const v = rgb(c).map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+  const s = getComputedStyle(el);
+  const [a, b] = [lum(s.color), lum(s.backgroundColor)].sort((p, q) => q - p);
+  return (a + 0.05) / (b + 0.05);
+});
+// Visible controls under `min` px either way.
+const small = (page, selector, min) => page.$$eval(selector, (els, min) => els.filter((e) => e.offsetParent)
+  .map((e) => { const r = e.getBoundingClientRect(); return [e.id || e.className || e.textContent, Math.round(r.width), Math.round(r.height)]; })
+  .filter(([, w, h]) => w < min - 0.5 || h < min - 0.5), min);
 
 try {
   const page = await browser.newPage();
@@ -58,9 +74,13 @@ try {
   });
   await page.goto(url('r1bqkb1r/pppp1ppp/2n2n2/4p3/4P3/2N2N2/PPPP1PPP/R1BQKB1R[] w KQkq - 4 4'));
   assert.equal(await page.evaluate(() => crossOriginIsolated), true, 'the page is cross-origin isolated');
+  // The lines' rows are there, blank, before HypeBeast reports, so its first lines move nothing.
+  await page.waitForFunction(() => document.querySelectorAll('#ch-pvs .ch-pv').length === 2 && !document.querySelector('#bs-partner').hidden);
+  const movesTop = await top(page, '#ch-moves');
 
   // The engine downloads its net, starts and evaluates; the piece values fill.
   await evaluated(page);
+  assert.equal(await top(page, '#ch-moves'), movesTop, 'the move list does not move when the lines arrive');
   assert.equal(await page.$('#ch-gauge'), null, 'no evaluation bar beside the board');
   assert.equal(await page.$('.ch-moves-empty'), null, 'an empty move list has no hint');
   await valuesDone(page);
@@ -69,7 +89,27 @@ try {
   assert.equal(await page.$$eval('#ch-pvs .ch-pv', (rows) => rows.filter((r) => r.dataset.uci).length), 2, 'two lines, the default, with one board');
   const before = await page.$eval('#ch-pearl', (el) => el.textContent);
   console.log('eval without hands:', before, await page.$eval('#ch-engine-info', (el) => el.textContent));
-  assert.match(await page.$eval('#ch-engine-info', (el) => el.textContent), /^Board · Depth \d+/, 'one board names its score the board’s');
+  assert.match(await page.$eval('#ch-engine-info', (el) => el.textContent), /^This board only · Depth \d+/, 'one board names its score the board’s');
+  assert.match(await text(page, '#bs-partner .bs-values-title'), /what each side gains, in pawns/, 'the piece table says what its numbers are');
+  assert.match(await text(page, '#ch-eval-live'), /from White’s side/, 'the spoken evaluation names its side');
+
+  // The keyboard. A focused engine move shows its board and keeps the focus while HypeBeast redraws the lines.
+  assert.equal(await page.$$eval('#ch-pvs .ch-pv-move', (bs) => bs.filter((b) => b.tabIndex === 0).length), 2, 'one Tab stop per engine line');
+  await page.focus('#ch-pvs .ch-pv-move');
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '1', '→ goes along the line');
+  assert.equal(await page.$eval('#ch-pv-board', (el) => el.hidden), false, 'a focused move shows its board');
+  assert.equal(await page.$eval('#ch-pvs .ch-pv', (row) => row.scrollLeft), 0, 'the focus does not scroll the line off its score');
+  await page.click('#ch-hand-bottom .ch-step[data-role="pawn"][data-step="more"]');
+  await page.focus('#ch-hand-bottom .ch-step[data-role="pawn"][data-step="more"]');
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => document.activeElement.dataset.focus), 'more-pawn', '+ keeps the focus after its hand is drawn again');
+  await page.keyboard.press('Enter');
+  assert.equal(await page.$eval('#ch-hand-bottom .zh-slot[data-role="pawn"]', (el) => el.dataset.nb), '3');
+  await page.focus('#ch-hand-bottom .ch-step[data-role="pawn"][data-step="fewer"]');
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => document.activeElement.dataset.focus), 'more-pawn', 'a − with nothing left hands the focus to its +');
+  assert.equal(await page.$eval('#ch-hand-bottom .zh-slot[data-role="pawn"]', (el) => el.dataset.nb), '0');
   await page.screenshot({ path: path.join(output, 'analysis.png') });
 
   // + under Black's knight: the hand, the FEN and the eval follow.
@@ -232,6 +272,7 @@ try {
   await page.click('#ch-hand-top .ch-step[data-role="queen"][data-step="more"]'); // Black +Q in the editor
   assert.match(await fen(page), /\/[A-Za-z]*q[A-Za-z]* [wb] /);
   await page.screenshot({ path: path.join(output, 'editor.png') });
+  assert.ok(await contrast(page, '#ch-turn button[aria-checked="true"]') >= 4.5, 'the chosen side to play reads (4.5:1)');
   await page.click('#ch-turn button[data-turn="black"]');
   // The engine follows the position being set up.
   assert.equal(await page.$eval('#ch-ceval', (el) => el.offsetParent !== null), true, 'the engine header shows in the editor');
@@ -309,6 +350,9 @@ try {
   assert.deepEqual(await rows(), max > 1 ? ['Search time', 'Multiple lines', 'Threads', 'Piece values'] : ['Search time', 'Multiple lines', 'Piece values']);
   assert.equal(await text(page, '#ch-settings .ch-setting:first-child .ch-setting-value'), '10s');
   await page.screenshot({ path: path.join(output, 'gear.png') });
+  const ceval = await page.$eval('#ch-ceval', (el) => el.getBoundingClientRect().bottom);
+  assert.ok(await top(page, '#ch-settings') >= Math.floor(ceval) - 1, 'the gear opens under the engine header, not over it');
+  assert.ok((await page.$$eval('#ch-settings .ch-setting-note', (ps) => ps.filter((p) => p.offsetParent).length)) >= 3, 'each gear row explains itself on screen');
   await page.keyboard.press('Escape');
   assert.equal(await page.$eval('#ch-settings', (el) => el.hidden), true, 'Esc closes the gear');
   await page.click('#ch-gear');
@@ -337,19 +381,27 @@ try {
   assert.equal(await page.$eval('#ch-practice-toggle', (b) => b.disabled), true, 'practice is for one board');
   await click(page, 'e4'); await click(page, 'd5');
   await until(page, '#ch-fen', /RNBQKBNR\/ b/); // exd5, nothing in White's hand
+  // The partner board's queen slot stays inside its well (the slots share the partner board's width).
+  const fits = await page.$eval('#ch-partner-hand-top .zh-pocket', (w) => w.lastElementChild.getBoundingClientRect().right <= w.getBoundingClientRect().right + 0.5);
+  assert.ok(fits, 'the partner hand fits its board');
+  const switchTop = await top(page, '#ch-partner-switch');
   // Board 2 faces the other way: Black, the capturer's partner, at the bottom, with the pawn.
   await page.waitForFunction(() => document.querySelector('#ch-partner-hand-bottom .zh-slot')?.dataset.nb === '1');
   assert.match(page.url(), /fen2=[^&]*%2Fp(\+|%20)w/, 'the link carries board 2 with its pawn');
   await evaluated(page);
   // The partner board gets its own search; the panel says what may arrive and why.
   await page.waitForFunction(() => /\d/.test(document.querySelector('#ch-partner-eval').textContent) && !/…/.test(document.querySelector('#ch-partner-eval').textContent), { timeout: 180_000 });
-  await page.waitForSelector('#bs-partner .bs-why', { timeout: 180_000 });
+  await page.waitForSelector('#bs-partner-notes .bs-why', { timeout: 180_000 });
+  assert.equal(await top(page, '#ch-partner-switch'), switchTop, 'the partner board does not move when its score arrives');
+  // The forecast sits under the partner board, so the move list keeps rows in view in the panel.
+  const inView = await page.$eval('#ch-moves', (el) => { const m = el.getBoundingClientRect(), t = document.querySelector('#ch-tools').getBoundingClientRect(); return Math.min(m.bottom, t.bottom) - m.top; });
+  assert.ok(inView >= 70, `two boards: the move list is in view (${Math.round(inView)} px)`);
   console.log('two boards:', await text(page, '#ch-partner-eval'), '|', await page.$eval('#bs-partner', (el) => el.innerText.replace(/\s+/g, ' ')));
   // Two boards name the score the team's, with the board's own share when the line gives it.
   const info = await page.$eval('#ch-engine-info', (el) => el.textContent);
   console.log('two-board score:', await page.$eval('#ch-pearl', (el) => el.textContent), info);
-  assert.match(info, /^Team( · board [+-]?\d+\.\d)? · Depth \d+/);
-  assert.match(await text(page, '#ch-partner-eval'), /^Team [+\-#]?\d/);
+  assert.match(info, /^White’s team( · this board [+-]?\d+\.\d)? · Depth \d+/);
+  assert.match(await text(page, '#ch-partner-eval'), /^White’s team [+\-#]?\d/);
   await page.screenshot({ path: path.join(output, 'two-boards.png') });
   // Working on board 2 makes it the large board.
   await page.click('#ch-partner-switch');
@@ -368,6 +420,7 @@ try {
   await evaluated(page);
   await valuesDone(page);
   await page.screenshot({ path: path.join(output, 'mobile.png'), fullPage: true });
+  assert.deepEqual(await small(page, '.ch-step, .ch-icon, #ch-controls .ch-nav, #ch-ceval .ch-switch, .bs-values-give, .ch-pv-move, #ch-fen-copy, #ch-pgn-copy', 44), [], 'touch targets are 44px on a phone');
   // A phone widens its layout viewport to fit wide content, so measure against
   // the device width, not innerWidth.
   for (const width of [390, 360, 320]) {
@@ -392,6 +445,8 @@ try {
   await fresh.waitForSelector('#ch-engine-action:not([hidden])');
   assert.equal(await fresh.$eval('#ch-engine-action', (b) => b.textContent), 'Download');
   assert.match(await fresh.$eval('#ch-engine-info', (el) => el.textContent), /MB, once/);
+  assert.ok(await fresh.$eval('#ch-engine-info', (el) => el.scrollWidth <= el.clientWidth + 1), 'the download size is not cut off');
+  assert.equal(await fresh.$eval('#ch-engine-info', (el) => el.getBoundingClientRect().height > 0), true);
   assert.equal(await fresh.$$eval('#bs-partner .ch-spinner', (s) => s.length), 0, 'no spinners while the engine waits');
   await fresh.click('#ch-engine-action');
   await evaluated(fresh);
@@ -416,6 +471,35 @@ try {
   await evaluated(desk);
   await valuesDone(desk);
   await broken.close();
+
+  // A move and a drop by keyboard alone: Tab to the board, arrows, Enter; Enter on a hand piece, then the board.
+  const keys = await browser.createBrowserContext();
+  const kb = await keys.newPage();
+  kb.setDefaultTimeout(30_000);
+  await kb.setViewport({ width: 1440, height: 900 });
+  await kb.goto(url('r1bqkb1r/pppp1ppp/2n2n2/4p3/4P3/2N2N2/PPPP1PPP/R1BQKB1R[N] w KQkq - 4 4'));
+  await kb.waitForSelector('#ch-board cg-board');
+  await kb.focus('#ch-board');
+  await kb.keyboard.press('Enter'); // shows the cursor on White's king, e1
+  assert.equal(await kb.$eval('.ch-cursor', (el) => el.dataset.square), 'e1');
+  await kb.keyboard.press('ArrowLeft'); await kb.keyboard.press('ArrowUp'); // d2
+  await kb.keyboard.press('Enter');
+  await kb.keyboard.press('ArrowUp'); await kb.keyboard.press('ArrowUp'); // d4
+  await kb.keyboard.press('Enter');
+  await until(kb, '#ch-moves', /d4/);
+  assert.match(await fen(kb), / b /, 'd4 played by keyboard');
+  // Off the board, ← steps back to White to move, with the knight in hand.
+  await kb.evaluate(() => document.activeElement.blur());
+  await kb.keyboard.press('ArrowLeft');
+  await until(kb, '#ch-fen', / w /);
+  await kb.focus('#ch-hand-bottom .zh-slot[data-role="knight"]');
+  await kb.keyboard.press('Enter');
+  assert.equal(await kb.evaluate(() => document.activeElement.id), 'ch-board', 'Enter on a hand piece hands the focus to the board');
+  await kb.keyboard.press('ArrowDown'); // the cursor is where it was, d4: down to the empty d3
+  assert.equal(await kb.$eval('.ch-cursor', (el) => el.dataset.square), 'd3');
+  await kb.keyboard.press('Enter');
+  await until(kb, '#ch-moves', /N@d3/);
+  await keys.close();
   console.log('bughouse browser: ok');
 } finally {
   await browser.close();

@@ -9,9 +9,13 @@
   grid-template-columns: var(--ch-board) var(--ch-partner) minmax(300px, 440px);
   grid-template-areas: 'stage partner side' 'under under controls';
 }
-.ch-partner { grid-area: partner; display: flex; flex-direction: column; align-items: stretch; gap: 4px; width: var(--ch-partner); min-width: 0; }
+.ch-partner { grid-area: partner; display: flex; flex-direction: column; align-items: stretch; gap: 4px; width: var(--ch-partner); min-width: 0;
+  /* Its hand's slots share its width, not the large board's squares. */
+  --ch-slot: min(60px, calc(var(--ch-partner) / 5)); }
 .ch-partner[hidden] { display: none; }
-.ch-partner-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 8px; font-size: 0.9rem; }
+/* Two fixed lines, name over score, so the score's arrival moves nothing. */
+.ch-partner-head { display: flex; flex-direction: column; font-size: 0.9rem; line-height: 1.4; }
+.ch-partner-name, .ch-partner-eval { height: 1.4em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .ch-partner-name { font-weight: 600; }
 .ch-partner-eval { color: var(--text-dim); font-weight: 600; }
 .ch-partner-board { display: block; width: var(--ch-partner); height: var(--ch-partner); padding: 0; border: 0; border-radius: 0; background: none; cursor: pointer; }
@@ -71,12 +75,17 @@
 .bs-values-give:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .bs-values-mate .bs-values-give { color: var(--ok); }
 
-.bs-arrivals { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 5px 10px 4px; border-top: 1px solid var(--border); }
-.bs-arrival-list { display: contents; }
-.bs-arrival { padding: 1px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-card); font-size: 0.82rem; }
+/* What may arrive from the partner board and why HypeBeast chose its move:
+   under the partner board, in a block of fixed height that scrolls when long,
+   so its arrival moves nothing. The chances are text, not buttons. */
+.bs-partner-notes { height: 10.5em; margin-top: 4px; overflow-y: auto; border-top: 1px solid var(--border); font-size: 0.85rem; line-height: 1.4; }
+.bs-arrivals { margin: 0; padding: 6px 0 2px; }
+.bs-arrivals > .bs-values-title { display: block; }
+.bs-arrival-list { display: inline; }
+.bs-arrival + .bs-arrival::before { content: ' · '; color: var(--text-faint); }
 .bs-arrival .num { color: var(--text-dim); }
-.bs-arrival-moves { flex: 1 0 100%; margin: 0; overflow: hidden; font-size: 0.8rem; white-space: nowrap; text-overflow: ellipsis; }
-.bs-why { margin: 0; padding: 5px 10px 6px; border-top: 1px solid var(--border); font-size: 0.82rem; line-height: 1.3; }
+.bs-arrival-moves { margin: 2px 0 0; }
+.bs-why { margin: 0; padding: 6px 0; border-top: 1px solid var(--border); }
 
 @media (max-height: 800px) and (min-width: 861px) {
   .bs-partner { border-top-width: 4px; }

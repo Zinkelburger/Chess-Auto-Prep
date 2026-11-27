@@ -43,8 +43,14 @@ import { makeUci } from 'chessops/util';
 import { draftOf, fenOfDraft, readDraftFen, type Draft } from './editor-draft';
 import { BOARDS_KEY, TREE_KEY, keepBoards, linkBoards, loadSaved, openBoard, type BoardState, type SavedBoards } from './saved-boards';
 
+/** Keys of this board only, after the shared ones. */
+const HELP_KEYS: [string, string][] = [
+  ['S', 'Work on the other board (two boards)'],
+  ['Tab to the board, then arrows', 'Move a square cursor on the board'],
+  ['Enter or Space on the board', 'Pick up and put down, as a click does'],
+];
 const HELP_NOTES = [
-  'In the board editor, F flips the board, right-click with a piece in hand takes the other colour, and Shift-click marks a piece promoted (a dot in its top-left corner): taken, it goes back as a pawn.',
+  'Enter on a piece in hand picks it for a drop and moves to the board. In the board editor, F flips the board, right-click with a piece in hand takes the other colour, and Shift-click marks a piece promoted (a dot in its top-left corner): taken, it goes back as a pawn.',
 ];
 
 const BOARD_NAMES = ['board 1', 'board 2'] as const;
@@ -186,7 +192,7 @@ export class BughouseApp {
       hover: (uci) => this.hover(uci, 'paleBlue'),
       play: (pv, upTo) => { if (this.mode === 'analysis') this.playLine(pv, upTo); },
       start: () => this.startEngine(),
-    }, { engineName: 'HypeBeast', playLine, hands: (fen) => positionOf(fen).pockets });
+    }, { engineName: 'HypeBeast', playLine, hands: (fen) => positionOf(fen).pockets, reserveRows: true });
     this.partner = new PartnerPanel({
       get active() { return app.mode === 'analysis' && !app.practice && app.settings.engineOn && !outcomeOf(app.current.fen); },
       get engineStopped() { return app.engineStopped; },
@@ -200,7 +206,7 @@ export class BughouseApp {
       partnerSan: (uci) => sanLine(this.other.current.fen, [uci])[0] ?? uci,
       moveSan: (uci) => sanLine(this.current.fen, [uci])[0] ?? uci,
       give: (color: Color, role: HandRole) => this.adjust(color, role, 1),
-    }, $('bs-partner'));
+    }, $('bs-partner'), $('bs-partner-notes'));
 
     this.bind();
     this.renderAll();
@@ -370,11 +376,15 @@ export class BughouseApp {
       }, {
         adjust: (c, role, delta) => this.adjust(c, role, delta),
         drag: (c, role, e) => { this.dropping = null; this.board.dragNew({ role, color: c }, e); },
-        pick: (role) => {
+        pick: (role, by) => {
           this.board.cg.selectSquare(null);
           this.dropping = this.dropping === role ? null : role;
           this.renderBoard();
           this.renderHands();
+          if (by === 'keyboard' && this.dropping) {
+            const n = dropSquares(this.current.fen, role).length;
+            this.board.focusForDrop(`${color} ${role} from the hand, ${n} square${n === 1 ? '' : 's'}`);
+          }
         },
       });
     }
@@ -720,7 +730,7 @@ export class BughouseApp {
       lastMove: other.uci ? squaresOf(other.uci) : undefined, check: pos.isCheck(),
     };
     if (!this.partnerCg)
-      this.partnerCg = Chessground($('ch-partner-cg'), { ...config, viewOnly: true, coordinates: false, animation: { enabled: true, duration: 150 }, drawable: { enabled: false, visible: true } });
+      this.partnerCg = Chessground($('ch-partner-cg'), { ...config, viewOnly: true, coordinates: false, animation: { enabled: !matchMedia('(prefers-reduced-motion: reduce)').matches, duration: 150 }, drawable: { enabled: false, visible: true } });
     else this.partnerCg.set(config);
     const result = this.evalOf(other.fen, this.active === 0 ? 1 : 0);
     const line = result?.lines[0];
@@ -735,8 +745,10 @@ export class BughouseApp {
     else {
       const best = line.pv[0] ? sanLine(other.fen, [line.pv[0]])[0] : '';
       const board = line.mate === undefined ? boardScore(line) : undefined;
-      evalBox.textContent = `Team ${formatEval(line)}${board === undefined ? '' : ` · board ${formatEval({ cp: board })}`}${best ? ` · ${best}` : ''}${result?.done ? '' : ' …'}`;
+      // From White's side of that board, whose White is the other team's player: said in the words.
+      evalBox.textContent = `White’s team ${formatEval(line)}${board === undefined ? '' : ` · board ${formatEval({ cp: board })}`}${best ? ` · best ${best}` : ''}${result?.done ? '' : ' …'}`;
     }
+    evalBox.title = evalBox.textContent ? `${evalBox.textContent}. From White’s side of ${BOARD_NAMES[this.active === 0 ? 1 : 0]}: its White is the partner of Black here.` : '';
   }
 
   /** A hand shown as lila's pocket, without controls (the partner board's). */
@@ -788,7 +800,7 @@ export class BughouseApp {
       flip: () => { this.flip(); this.closeActionMenu(); },
       editor: () => { this.closeActionMenu(); this.openEditor(); },
       practice: () => this.togglePractice(),
-      help: () => openHelp([], HELP_NOTES),
+      help: () => openHelp(HELP_KEYS, HELP_NOTES),
       clearMoves: () => this.clearMoves(),
       replay: (delay) => this.replay(delay),
       toggle: (key) => this.toggleSetting(key),
@@ -1055,6 +1067,8 @@ export class BughouseApp {
     const showGear = (open: boolean) => {
       settings.hidden = !open;
       gearButton.setAttribute('aria-expanded', String(open));
+      // Under the engine header, never over the gear that opened it.
+      if (open) settings.style.top = `${$('ch-ceval').offsetHeight}px`;
       if (open) this.renderGear();
     };
     gearButton.onclick = () => showGear(settings.hidden);
@@ -1154,7 +1168,7 @@ export class BughouseApp {
     const shift = e.shiftKey;
     // The editor keeps only F (flip) and ? (this help).
     const actions: Record<string, () => void> = this.mode === 'editor' ? {
-      f: () => this.flip(), '?': () => openHelp([], HELP_NOTES),
+      f: () => this.flip(), '?': () => openHelp(HELP_KEYS, HELP_NOTES),
     } : shift ? {
       ArrowLeft: () => this.goTo(this.tree.previousBranch(this.current.id)),
       K: () => this.goTo(this.tree.previousBranch(this.current.id)),
@@ -1163,7 +1177,7 @@ export class BughouseApp {
       ArrowUp: () => this.goTo(this.tree.stepLine(this.current.id, 'prev')),
       ArrowDown: () => this.goTo(this.tree.stepLine(this.current.id, 'next')),
       I: () => this.toggleSetting('inline'),
-      '?': () => openHelp([], HELP_NOTES),
+      '?': () => openHelp(HELP_KEYS, HELP_NOTES),
       $: () => this.last(),
     } : {
       ArrowLeft: () => this.prev(), ArrowRight: () => this.next(),
