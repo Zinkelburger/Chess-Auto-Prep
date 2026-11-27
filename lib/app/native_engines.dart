@@ -7,8 +7,8 @@ import 'package:flutter/services.dart';
 import '../chess/fen.dart';
 import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
-import '../engines/hivemind_engine.dart';
-import '../engines/hivemind_install.dart';
+import '../engines/hypebeast_engine.dart';
+import '../engines/hypebeast_install.dart';
 import '../engines/maia/maia_model.dart';
 import '../engines/maia/move_policy.dart';
 import '../engines/stockfish_install.dart';
@@ -102,18 +102,17 @@ Future<Uint8List?> readBundledAsset(String asset) async {
 
 /// The bughouse engine: installed from the bundle into the support folder,
 /// checked against its manifest, then started under [engines].
-Future<HivemindStart> launchHivemind({
+Future<HypeBeastStart> launchHypeBeast({
   required Directory support,
   required EngineSupervisor engines,
-  required int cores,
 }) async {
-  final install = HivemindInstall(
+  final install = HypeBeastInstall(
     supportDirectory: support,
     readAsset: readBundledAsset,
   );
   return switch (await install.locate()) {
-    HivemindMissing(:final reason) => HivemindStartFailed(reason),
-    HivemindReady(:final files) => engines.startHivemind(files, cores: cores),
+    HypeBeastMissing(:final reason) => HypeBeastStartFailed(reason),
+    HypeBeastReady(:final files) => engines.startHypeBeast(files),
   };
 }
 
@@ -122,7 +121,7 @@ Future<HivemindStart> launchHivemind({
 Future<bool> bughouseBundled() async {
   try {
     final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
-    return HivemindInstall.bundledIn(manifest.listAssets());
+    return HypeBeastInstall.bundledIn(manifest.listAssets());
   } on Object catch (error) {
     log.w('read the asset list for the bughouse engine', error);
     return false;

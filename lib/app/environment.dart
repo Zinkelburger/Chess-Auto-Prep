@@ -10,7 +10,7 @@ import '../chess/tournament/config.dart';
 import '../diagnostics/log.dart';
 import '../engines/analysis_launch.dart';
 import '../engines/engine_supervisor.dart';
-import '../engines/hivemind_engine.dart';
+import '../engines/hypebeast_engine.dart';
 import '../engines/maia/move_policy.dart';
 import '../engines/stockfish_install.dart';
 import '../engines/tournament_launch.dart';
@@ -67,10 +67,10 @@ typedef AppFolders = ({
 });
 
 /// What the Bughouse mode reaches outside the app: whether this build has
-/// the engine at all, and how to start it on so many cores.
+/// the engine at all, and how to start one process of it.
 typedef BughouseOutside = ({
   Future<bool> Function() bundled,
-  Future<HivemindStart> Function({required int cores}) launch,
+  Future<HypeBeastStart> Function() launch,
 });
 
 /// Starts a Stockfish with these threads and this table.
@@ -289,8 +289,7 @@ final class AppEnvironment {
       setFullScreen: setWindowFullScreen,
       bughouse: (
         bundled: bughouseBundled,
-        launch: ({required cores}) =>
-            launchHivemind(support: support, engines: engines, cores: cores),
+        launch: () => launchHypeBeast(support: support, engines: engines),
       ),
       updates: cache == null ? null : nativeUpdates(client, cache),
       jitter: () => dice.nextDouble() * 2 - 1,
@@ -490,11 +489,9 @@ final class AppEnvironment {
         StartFailed(:final reason) => StartFailed('$notice. $reason'),
       };
 
-  /// Hivemind on half of this machine's cores, not the Stockfish setting,
-  /// which the user may have turned down: a network engine on one core
-  /// takes a minute over what it otherwise answers in ten seconds.
-  Future<HivemindStart> startHivemind() =>
-      bughouse.launch(cores: max(1, coresAvailable ~/ 2));
+  /// One process of the bughouse engine; the Bughouse mode sets its
+  /// threads per search from [coresAvailable].
+  Future<HypeBeastStart> startHypeBeast() => bughouse.launch();
 }
 
 double _noJitter() => 0;

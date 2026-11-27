@@ -229,7 +229,11 @@ void main() {
     });
 
     test('coordinated, while searching: the main line alone', () {
-      final rows = seatRows(read(_coordinated.take(3)), coordinated: true);
+      final rows = seatRows(
+        read(_coordinated.take(3)),
+        coordinated: true,
+        count: 3,
+      );
       expect(rows.single.move, 'e7e6');
       expect(rows.single.pv, ['e7e6']);
     });
@@ -255,6 +259,7 @@ void main() {
           report,
           coordinated: true,
           decision: const SeatDecision('e7e6'),
+          count: 3,
         ),
         hasLength(3),
       );
@@ -266,6 +271,7 @@ void main() {
         read(_coordinated),
         coordinated: true,
         decision: const SeatDecision('g8f6'),
+        count: 3,
       );
       expect(rows.map((r) => (r.move, r.cp, r.pv.length)), [
         ('g8f6', 157, 1),
@@ -279,6 +285,7 @@ void main() {
         read(_coordinated),
         coordinated: true,
         decision: const SeatDecision(null),
+        count: 3,
       );
       expect(rows.first.move, isNull);
       expect(rows.first.cp, isNull);
@@ -291,6 +298,7 @@ void main() {
         read(['info depth 0 nodes 120 time 4']),
         coordinated: true,
         decision: const SeatDecision(null),
+        count: 3,
       );
       expect(rows.single.move, isNull);
     });

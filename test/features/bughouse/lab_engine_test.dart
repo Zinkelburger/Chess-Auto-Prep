@@ -1,35 +1,32 @@
-import 'package:chess_auto_prep/chess/bughouse/hivemind.dart';
+import 'package:chess_auto_prep/chess/bughouse/hypebeast.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
-import 'package:chess_auto_prep/engines/hivemind_engine.dart';
+import 'package:chess_auto_prep/engines/hypebeast_engine.dart';
 import 'package:chess_auto_prep/features/bughouse/bughouse_lab.dart';
 import 'package:chess_auto_prep/features/bughouse/lab_engine.dart';
-import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/scripted_bughouse.dart';
 
 void main() {
   late BughouseLab lab;
-  late ScriptedHivemind hivemind;
+  late ScriptedHypeBeast hypebeast;
   late LabEngine engine;
   String? startFailure;
   var starts = 0;
 
   setUp(() {
     lab = BughouseLab();
-    hivemind = ScriptedHivemind();
+    hypebeast = ScriptedHypeBeast();
     startFailure = null;
     starts = 0;
     engine = LabEngine(
       lab: lab,
-      passes: const [800, 4000],
-      liveNodes: 800,
-      zeroNodes: 400,
+      cores: 9,
       startEngine: () async {
         starts++;
         return switch (startFailure) {
-          final reason? => HivemindStartFailed(reason),
-          null => HivemindStarted(hivemind),
+          final reason? => HypeBeastStartFailed(reason),
+          null => HypeBeastStarted(hypebeast),
         };
       },
     );
@@ -40,197 +37,216 @@ void main() {
     lab.dispose();
   });
 
-  Future<void> settle() => Future<void>.delayed(Duration.zero);
+  Future<void> settle() async {
+    for (var i = 0; i < 20; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+  }
 
   Future<void> on() async {
     engine.open();
     engine.toggle();
-    for (var i = 0; i < 20; i++) {
-      await settle();
-    }
+    await settle();
   }
 
-  int nodes(HivemindQuestion question) => (question.budget as NodeBudget).nodes;
+  LinesOn shown() => engine.lines as LinesOn;
 
   test(
     'nothing is searched until the switch is on and the mode open',
     () async {
       engine.toggle();
       await settle();
-      expect(hivemind.asked, isEmpty);
+      expect(hypebeast.asked, isEmpty);
       engine.toggle();
       engine.open();
       await settle();
-      expect(hivemind.asked, isEmpty);
+      expect(hypebeast.asked, isEmpty);
       expect(engine.lines, isA<LinesOff>());
     },
   );
 
-  test('one board: each pass asks board 1 of its mover and the zero of the '
-      'other team, deeper each time', () async {
+  test('one board: board 1 alone for its side to move, three lines, on all '
+      'the cores but one, for ten seconds', () async {
     await on();
-    expect(hivemind.asked.take(4).map(nodes), [800, 800, 4000, 4000]);
-    final own = hivemind.asked.first;
-    expect(
-      (own.team, own.mustMove, own.maySit),
-      (Team.ab, MustMove.one, false),
-    );
-    final zero = hivemind.asked[1];
-    expect(zero.team, Team.cd);
-    expect(zero.position.turn(BoardNumber.two), Side.white);
-    final lines = engine.lines as LinesOn;
+    final asked = hypebeast.asked.single;
+    expect(asked.board, BoardNumber.one);
+    expect(asked.coordination, isFalse);
+    expect(asked.lines, 3);
+    expect(asked.threads, 8);
+    expect((asked.budget as TimeBudget).time, const Duration(seconds: 10));
+    // The partner board is passed as the table has it.
+    expect(asked.position, lab.position);
+    expect(starts, 1);
+    final lines = shown();
     expect(lines.thinking, isFalse);
-    expect(lines.nodes, 4000);
+    expect(lines.nodes, 200);
     expect(lines.rows.keys, [BoardNumber.one]);
-    expect(lines.rows[BoardNumber.one], hasLength(3));
-    // Both teams read cp −200: the zero is measured and the table level.
-    expect(lines.score.text, '0.00');
-    // Black may sit by default: the zero's search is C + D's, with it.
-    expect(zero.maySit, isTrue);
-    // Nothing else is searched.
-    expect(hivemind.asked, hasLength(4));
+    final rows = lines.rows[BoardNumber.one]!;
+    expect(rows, hasLength(3));
+    expect(rows.map((r) => r.score.text), ['-2.00', '-2.30', '-2.60']);
+    expect(rows.every((r) => r.pv.length == 1), isTrue);
+    // White on board 1 is A + B: the first row's score, as it stands.
+    expect(lines.score.text, '-2.00');
   });
 
-  test('one board: the side on move may sit when the clock says so', () async {
-    lab.setClock(ClockCase.abMaySit);
+  test('one board, Black to move: its score is turned to A + B\'s', () async {
+    lab.play(BoardNumber.one, 'e2e4');
     await on();
-    final own = hivemind.asked.first;
+    final asked = hypebeast.asked.single;
     expect(
-      (own.team, own.mustMove, own.maySit),
-      (Team.ab, MustMove.either, true),
+      asked.position.turn(BoardNumber.two),
+      lab.position.turn(BoardNumber.two),
     );
-    expect(hivemind.asked[1].maySit, isFalse);
+    expect(shown().score.text, '+2.00');
+    expect(shown().rows[BoardNumber.one]!.first.score.text, '+2.00');
+  });
+
+  test('one board: told the game that led to the table', () async {
+    for (final uci in ['g1f3', 'b8c6']) {
+      lab.play(BoardNumber.one, uci);
+    }
+    await on();
+    expect(hypebeast.asked.single.played?.moves, ['1g1f3', '1b8c6']);
   });
 
   test(
-    'one board, Black to move: the partner board is A + B\'s to move',
-    () async {
-      lab.play(BoardNumber.one, 'e2e4');
-      await on();
-      final zero = hivemind.asked.firstWhere((q) => q.team == Team.ab);
-      expect(zero.position.turn(BoardNumber.two), Side.black);
-      expect(zero.mustMove, MustMove.either);
-      // Its lines are read on the table searched, where B is on move.
-      final row = (engine.lines as LinesOn).rows[BoardNumber.one]!.first;
-      expect(row.table.turn(BoardNumber.two), Side.black);
-    },
-  );
-
-  test(
-    'two boards: each team with a move, sitting as the clock says',
+    'two boards: each board with a move, coordinated, the cores shared',
     () async {
       lab.showBoards(LabBoards.two);
-      lab.setClock(ClockCase.cdMaySit);
       await on();
-      final first = hivemind.asked.take(2).toList();
-      expect(first.map((q) => (q.team, q.mustMove, q.maySit)), [
-        (Team.ab, MustMove.either, false),
-        (Team.cd, MustMove.either, true),
-      ]);
-      expect((engine.lines as LinesOn).rows.keys, BoardNumber.values);
+      expect(
+        hypebeast.asked.map(
+          (q) => (q.board, q.coordination, q.lines, q.threads),
+        ),
+        [(BoardNumber.one, true, 1, 4), (BoardNumber.two, true, 1, 4)],
+      );
+      expect(starts, 2);
+      final lines = shown();
+      expect(lines.rows.keys, BoardNumber.values);
+      // White moves on both: A's −2.00 and D's −2.00 (+2.00 for A + B) add.
+      expect(lines.rows[BoardNumber.one]!.first.score.text, '-2.00');
+      expect(lines.rows[BoardNumber.two]!.first.score.text, '+2.00');
+      expect(lines.score.text, '0.00');
+      expect(lines.nodes, 400);
     },
   );
 
   test('two boards: the engine is asked about the game played, and about '
-      'the table alone once a hand was edited', () async {
+      'the table alone once it was set up afresh', () async {
     lab.showBoards(LabBoards.two);
     for (final uci in ['g1f3', 'b8c6', 'f3g1', 'c6b8']) {
       lab.play(BoardNumber.one, uci);
     }
     await on();
-    final asked = hivemind.asked.first;
+    final asked = hypebeast.asked.first;
     expect(asked.played?.root, TablePosition.initial);
     expect(asked.played?.moves, ['1g1f3', '1b8c6', '1f3g1', '1c6b8']);
 
     // The same table set up afresh is another question, not a cached one.
-    hivemind.asked.clear();
+    hypebeast.asked.clear();
     lab.loadDualFen(lab.position.dualFen);
-    for (var i = 0; i < 20; i++) {
-      await settle();
-    }
-    expect(hivemind.asked, isNotEmpty);
-    expect(hivemind.asked.first.played?.moves, isEmpty);
+    await settle();
+    expect(hypebeast.asked, isNotEmpty);
+    expect(hypebeast.asked.first.played?.moves, isEmpty);
   });
 
-  test('two boards: a team on move on both shows each board\'s own best '
-      'moves, not the same move in every joint line', () async {
-    lab
-      ..showBoards(LabBoards.two)
-      ..play(BoardNumber.two, 'd2d4');
-    hivemind.answer = (question) => question.team == Team.ab
-        ? const HivemindSearched(
-            best: JointMove('g1f3', 'd7d5'),
-            lines: [
-              JointLine(
-                rank: 1,
-                cp: 50,
-                nodes: 800,
-                pv: [JointMove('g1f3', 'd7d5')],
-              ),
-              JointLine(
-                rank: 2,
-                cp: 40,
-                nodes: 800,
-                pv: [JointMove('g1f3', 'e7e6')],
-              ),
-              JointLine(
-                rank: 3,
-                cp: 30,
-                nodes: 800,
-                pv: [JointMove('g1f3', null)],
-              ),
-              JointLine(
-                rank: 4,
-                cp: -400,
-                nodes: 800,
-                pv: [JointMove('e2e4', 'd7d5')],
-              ),
-            ],
-          )
-        : const HivemindSearched(best: null, lines: []);
+  test('two boards: the main line while searching, then the decision and '
+      'the moves compared', () async {
+    lab.showBoards(LabBoards.two);
+    hypebeast.hold = true;
     await on();
-    final rows = (engine.lines as LinesOn).rows;
-    expect(rows[BoardNumber.one]!.map((r) => r.move), ['g1f3', 'e2e4']);
-    expect(rows[BoardNumber.two]!.map((r) => r.move), ['d7d5', 'e7e6', null]);
-    expect(rows[BoardNumber.one]!.first.shift, 0);
-    // e4 is far behind: its arrow is not drawn.
-    expect(rows[BoardNumber.one]!.last.shift, greaterThan(0.2));
-    expect(engine.rowsOn(BoardNumber.two), rows[BoardNumber.two]);
+    var rows = shown().rows[BoardNumber.one]!;
+    expect(rows.map((r) => r.move), ['b1a3']);
+    expect(shown().thinking, isTrue);
+    hypebeast.release();
+    await settle();
+    rows = shown().rows[BoardNumber.one]!;
+    expect(rows.map((r) => r.move), ['b1a3', 'b1c3', 'g1f3']);
+    expect(rows.map((r) => r.score.text), ['-2.00', '-2.30', '-2.60']);
+    expect(rows.first.shift, 0);
+    expect(rows[1].shift, greaterThan(0));
+    expect(shown().thinking, isFalse);
+    expect(engine.rowsOn(BoardNumber.two), shown().rows[BoardNumber.two]);
     engine.playBest(BoardNumber.two);
-    expect(lab.line.of(BoardNumber.two).last.san, 'd5');
+    expect(lab.line.of(BoardNumber.two).last.san, 'Na3');
+  });
+
+  test('a decision to sit is a row without a score; the other board\'s '
+      'score stands for the table', () async {
+    lab.showBoards(LabBoards.two);
+    hypebeast.answer = (question) => question.board == BoardNumber.one
+        ? const HypeBeastSearched(
+            decision: SeatDecision(null),
+            report: SeatReport(nodes: 90),
+          )
+        : firstMoves(question);
+    await on();
+    final rows = shown().rows[BoardNumber.one]!;
+    expect(rows.single.move, isNull);
+    expect(rows.single.score.isEmpty, isTrue);
+    expect(shown().score.text, '+2.00');
+    engine.playBest(BoardNumber.one);
+    expect(lab.line.of(BoardNumber.one), isEmpty);
+  });
+
+  test('a mate on either board is the table\'s score', () async {
+    lab.showBoards(LabBoards.two);
+    hypebeast.answer = (question) => question.board == BoardNumber.two
+        ? const HypeBeastSearched(
+            decision: SeatDecision('e2e4'),
+            report: SeatReport(
+              lines: [
+                SeatLine(
+                  multipv: 1,
+                  depth: 9,
+                  mate: 3,
+                  nodes: 50,
+                  pv: ['e2e4'],
+                ),
+              ],
+              nodes: 50,
+            ),
+          )
+        : firstMoves(question);
+    await on();
+    // D, White on board 2, mates: C + D's mate, minus for A + B.
+    expect(shown().rows[BoardNumber.two]!.first.score.text, '#-3');
+    expect(shown().score.text, '#-3');
   });
 
   test('a new position drops the stale answer and starts over', () async {
-    hivemind.hold = true;
+    hypebeast.hold = true;
     engine.open();
     engine.toggle();
     await settle();
-    expect(hivemind.waiting, 1);
+    expect(hypebeast.waiting, 1);
     lab.play(BoardNumber.one, 'e2e4');
     // The table changed: the search under way was told to stop.
-    expect(hivemind.stops, greaterThan(0));
-    hivemind.hold = false;
-    for (var i = 0; i < 20; i++) {
-      await settle();
-    }
-    final lines = engine.lines as LinesOn;
+    expect(hypebeast.stops, greaterThan(0));
+    hypebeast.hold = false;
+    await settle();
+    final lines = shown();
     expect(lines.position, lab.position);
-    expect(lines.rows[BoardNumber.one], isNotEmpty);
+    expect(lines.rows[BoardNumber.one]!.first.move, 'a7a5');
+    expect(hypebeast.asked, hasLength(2));
   });
 
   test('a table seen before is answered from memory', () async {
     await on();
-    final asked = hivemind.asked.length;
     lab.play(BoardNumber.one, 'e2e4');
-    for (var i = 0; i < 20; i++) {
-      await settle();
-    }
+    await settle();
     lab.step(-1);
-    for (var i = 0; i < 20; i++) {
-      await settle();
-    }
-    expect(hivemind.asked.length, asked * 2);
-    expect((engine.lines as LinesOn).nodes, 4000);
+    await settle();
+    expect(hypebeast.asked, hasLength(2));
+    expect(shown().nodes, 200);
+    expect(shown().thinking, isFalse);
+  });
+
+  test('the board count is part of what is remembered', () async {
+    await on();
+    lab.showBoards(LabBoards.two);
+    await settle();
+    expect(hypebeast.asked.map((q) => q.coordination), [false, true, true]);
   });
 
   test(
@@ -243,97 +259,88 @@ void main() {
     },
   );
 
+  test('an engine that fails mid-search turns the switch off', () async {
+    hypebeast.hold = true;
+    await on();
+    hypebeast.crash();
+    await settle();
+    expect(engine.on, isFalse);
+    expect(
+      (engine.lines as LinesStopped).reason,
+      'Analysis failed: The bughouse engine stopped.',
+    );
+  });
+
   test('a board with no move to make is not searched', () async {
     lab.loadDualFen(
       'rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3',
     );
     await on();
-    expect(hivemind.asked, isEmpty);
-    expect((engine.lines as LinesOn).thinking, isFalse);
+    expect(hypebeast.asked, isEmpty);
+    expect(shown().thinking, isFalse);
   });
 
-  group('an engine that reports as it searches', () {
-    setUp(() => hivemind.streams = true);
-
-    test('one board: one search per team, on two engines, the rows '
-        'following each report', () async {
-      hivemind.hold = true;
+  group('as the engine reports', () {
+    test('the rows, nodes and progress follow each report', () async {
+      hypebeast.hold = true;
       await on();
-      expect(starts, 2);
-      expect(hivemind.asked.map((q) => (q.team, nodes(q))), [
-        (Team.ab, 800),
-        (Team.cd, 400),
-      ]);
-      var lines = engine.lines as LinesOn;
+      var lines = shown();
       expect(lines.rows[BoardNumber.one], hasLength(3));
       expect(lines.nodes, 50);
-      expect(lines.progress, 50 / 800);
+      expect(lines.progress, inInclusiveRange(0.0, 1.0));
       expect(lines.thinking, isTrue);
-      hivemind.report();
+      hypebeast.report();
       await settle();
-      lines = engine.lines as LinesOn;
-      expect(lines.nodes, 100);
-      // The other team has reported too: the zero is measured.
-      expect(lines.score.text, '0.00');
-      hivemind.release();
-      for (var i = 0; i < 20; i++) {
-        await settle();
-      }
-      lines = engine.lines as LinesOn;
+      expect(shown().nodes, 100);
+      hypebeast.release();
+      await settle();
+      lines = shown();
       expect(lines.nodes, 200);
       expect(lines.thinking, isFalse);
+      expect(lines.progress, 1);
       // Never restarted on the same table.
-      expect(hivemind.asked, hasLength(2));
+      expect(hypebeast.asked, hasLength(1));
     });
 
-    test('two boards: both teams stream, their nodes added', () async {
+    test('two boards: both stream, their nodes added', () async {
       lab.showBoards(LabBoards.two);
-      hivemind.hold = true;
+      hypebeast.hold = true;
       await on();
-      expect(hivemind.asked.map((q) => (q.team, nodes(q))), [
-        (Team.ab, 800),
-        (Team.cd, 800),
-      ]);
-      final lines = engine.lines as LinesOn;
+      final lines = shown();
       expect(lines.rows.keys, BoardNumber.values);
       expect(lines.nodes, 100);
-      expect(lines.progress, 100 / 1600);
-    });
-
-    test('a new position cuts both searches short and drops their '
-        'reports', () async {
-      hivemind.hold = true;
-      await on();
-      final asked = hivemind.asked.length;
-      lab.play(BoardNumber.one, 'e2e4');
-      expect(hivemind.stops, greaterThan(0));
-      for (var i = 0; i < 20; i++) {
-        await settle();
-      }
-      expect(hivemind.asked.length, asked + 2);
-      hivemind.report();
-      await settle();
-      final lines = engine.lines as LinesOn;
-      expect(lines.position, lab.position);
-      expect(lines.rows.keys, [BoardNumber.one]);
       expect(lines.thinking, isTrue);
     });
 
-    test('a finished search is remembered for the table', () async {
-      await on();
-      final asked = hivemind.asked.length;
-      lab.play(BoardNumber.one, 'e2e4');
-      for (var i = 0; i < 20; i++) {
+    test(
+      'a new position cuts the searches short and drops their reports',
+      () async {
+        lab.showBoards(LabBoards.two);
+        hypebeast.hold = true;
+        await on();
+        lab.play(BoardNumber.one, 'e2e4');
+        expect(hypebeast.stops, greaterThan(0));
         await settle();
-      }
-      lab.step(-1);
-      for (var i = 0; i < 20; i++) {
+        expect(hypebeast.asked, hasLength(4));
+        hypebeast.report();
         await settle();
-      }
-      expect(hivemind.asked.length, asked * 2);
-      final lines = engine.lines as LinesOn;
-      expect(lines.nodes, 200);
-      expect(lines.thinking, isFalse);
-    });
+        final lines = shown();
+        expect(lines.position, lab.position);
+        expect(lines.rows[BoardNumber.one]!.first.move, 'a7a5');
+        expect(lines.thinking, isTrue);
+      },
+    );
+
+    test(
+      'switched off, the search is cut short and nothing is shown',
+      () async {
+        hypebeast.hold = true;
+        await on();
+        engine.toggle();
+        expect(hypebeast.stops, greaterThan(0));
+        await settle();
+        expect(engine.lines, isA<LinesOff>());
+      },
+    );
   });
 }

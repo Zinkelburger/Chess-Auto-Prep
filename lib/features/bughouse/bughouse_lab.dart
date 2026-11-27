@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 
 import '../../chess/bughouse/bpgn_moves.dart';
 import '../../chess/bughouse/crazyhouse_pgn.dart';
-import '../../chess/bughouse/hivemind.dart';
 import '../../chess/bughouse/table.dart';
 import '../../chess/bughouse/table_game.dart';
 import '../../chess/bughouse/table_line.dart';
@@ -14,8 +13,8 @@ import '../../chess/bughouse/table_setup.dart';
 enum LabBoards { one, two }
 
 /// The Bughouse mode's table: the two boards, the line played on them with
-/// a cursor per board, how many boards are shown, the clock case the engine
-/// answers for, and what the user is pointing at. When the line is a game
+/// a cursor per board, how many boards are shown, and what the user is
+/// pointing at. When the line is a game
 /// from a BPGN, also who played it and the other games of its file.
 ///
 /// A scratchpad: nothing here is saved. Leaving the mode keeps the table
@@ -26,7 +25,6 @@ final class BughouseLab extends ChangeNotifier {
   TablePosition _position = TablePosition.initial;
   BoardNumber _focus = BoardNumber.one;
   LabBoards _boards = LabBoards.one;
-  ClockCase _clock = ClockCase.cdMaySit;
   bool _flipped = false;
   TableRefusal? _problem;
   TableGame? _game;
@@ -54,7 +52,6 @@ final class BughouseLab extends ChangeNotifier {
   BoardNumber get focus => _focus;
   LabBoards get boards => _boards;
   bool get single => _boards == LabBoards.one;
-  ClockCase get clock => _clock;
   bool get flipped => _flipped;
 
   /// Why the last move or step was refused, for the status line.
@@ -246,7 +243,7 @@ final class BughouseLab extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// A new game from the start; the clock stays.
+  /// A new game from the start.
   void newGame() => _reset(TablePosition.initial);
 
   /// One [role] more (+1) or fewer (−1) in [side]'s hand on [board], within
@@ -437,8 +434,6 @@ final class BughouseLab extends ChangeNotifier {
   void fileUnread(String file) => _refuse(FileUnread(file));
 
   void flip() => _change(() => _flipped = !_flipped);
-
-  void setClock(ClockCase clock) => _change(() => _clock = clock);
 
   /// One board or both; with one, the keys step board 1.
   void showBoards(LabBoards boards) => _change(() {

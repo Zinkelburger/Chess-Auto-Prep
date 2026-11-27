@@ -18,7 +18,7 @@ import 'mode.dart';
 import 'mode_view.dart';
 import 'window_input.dart';
 
-/// The Bughouse mode: its own screen, one board or two and what Hivemind
+/// The Bughouse mode: its own screen, one board or two and what HypeBeast
 /// makes of them, with nothing of the workspace but the window around it.
 /// The engine searches only while it is on screen.
 final class BughouseView extends ModeView {
@@ -44,8 +44,8 @@ final class BughouseView extends ModeView {
 
   @override
   void entered() {
-    // Stockfish would follow a board nobody sees, on the cores Hivemind is
-    // using.
+    // Stockfish would follow a board nobody sees, on the cores HypeBeast
+    // is using.
     workspace.analysis.pause(this, _pauseReason);
     _labs.engine.open();
   }

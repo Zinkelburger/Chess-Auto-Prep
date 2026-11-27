@@ -90,7 +90,7 @@ void main() {
         TablePosition.initial.legalMoves(BoardNumber.one).map((m) => m.uci),
         contains(decision),
       );
-      final rows = seatRows(answer.report, coordinated: false);
+      final rows = seatRows(answer.report, coordinated: false, count: 3);
       expect(rows, isNotEmpty);
       expect(rows.first.move, decision);
       for (final row in rows) {
@@ -141,6 +141,7 @@ void main() {
           answer.report,
           coordinated: true,
           decision: decision,
+          count: 3,
         );
         expect(rows.first.move, decision.move);
         expect(answer.report.nodes, greaterThan(main.nodes - 1));

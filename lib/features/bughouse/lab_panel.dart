@@ -1,7 +1,6 @@
 import 'package:dartchess/dartchess.dart' show Setup;
 import 'package:flutter/material.dart';
 
-import '../../chess/bughouse/hivemind.dart';
 import '../../chess/bughouse/table.dart';
 import '../../chess/fen.dart';
 import '../../ui/engine_switch.dart';
@@ -16,8 +15,8 @@ import 'bughouse_lab.dart';
 import 'lab_engine.dart';
 import 'lab_lines.dart';
 
-/// The column beside the boards: how many boards, who may sit, the engine
-/// switch with its score, then the moves: with one board its best moves and
+/// The column beside the boards: how many boards, the engine switch with
+/// its score, then the moves: with one board its best moves and
 /// its move list; with two, both boards' move lists side by side in the
 /// boards' order, each board's best moves staying under that board. A game
 /// read from a BPGN has a row over the moves saying which it is. Every
@@ -38,7 +37,6 @@ class LabPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _BoardsSwitch(lab: lab),
-          _TimeChips(lab: lab),
           const SizedBox(height: Space.s),
           ListenableBuilder(
             listenable: engine,
@@ -211,54 +209,8 @@ class _BothMoves extends StatelessWidget {
 String _withoutHands(String fen) =>
     fen.replaceFirst(RegExp(r'\[[^\]]*\]'), '').replaceAll('~', '');
 
-/// Who may sit rather than move, in the same compact segments as the board
-/// count: Hivemind always lets one team or the other.
-class _TimeChips extends StatelessWidget {
-  const _TimeChips({required this.lab});
-
-  final BughouseLab lab;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: Space.s),
-    child: Align(
-      alignment: Alignment.centerLeft,
-      child: Segments<ClockCase>(
-        segments: [
-          for (final clock in ClockCase.values)
-            ButtonSegment(
-              value: clock,
-              label: Text(_label(clock)),
-              tooltip: _hint(clock),
-            ),
-        ],
-        selected: lab.clock,
-        onChanged: (picked) => lab.setClock(picked),
-      ),
-    ),
-  );
-
-  /// With one board the seats are not shown: the cases name the colours.
-  String _label(ClockCase clock) => !lab.single
-      ? clock.label
-      : switch (clock) {
-          ClockCase.abMaySit => 'White may sit',
-          ClockCase.cdMaySit => 'Black may sit',
-        };
-
-  String _hint(ClockCase clock) => !lab.single
-      ? clock.hint
-      : switch (clock) {
-          ClockCase.abMaySit =>
-            'White is up on the clock, so can wait rather than move',
-          ClockCase.cdMaySit =>
-            'Black is up on the clock, so can wait rather than move',
-        };
-}
-
 /// The switch, the score, the engine's name with the size of the search
-/// shown, and a thin bar while it runs: how far towards the size it rests
-/// at, or moving without a measure while an engine searches in passes.
+/// shown, and a thin bar while it runs that fills as its time goes.
 class _EngineBar extends StatelessWidget {
   const _EngineBar({required this.engine, required this.single});
 
@@ -272,10 +224,10 @@ class _EngineBar extends StatelessWidget {
     final (String status, Color colour) = switch (lines) {
       LinesStopped(:final reason) => (reason, scheme.error),
       LinesOn(nodes: final nodes?) => (
-        'Hivemind · ${_thousands(nodes)} ${nodes == 1 ? 'node' : 'nodes'}',
+        'HypeBeast · ${_thousands(nodes)} ${nodes == 1 ? 'node' : 'nodes'}',
         scheme.onSurfaceVariant,
       ),
-      _ => ('Hivemind', scheme.onSurfaceVariant),
+      _ => ('HypeBeast', scheme.onSurfaceVariant),
     };
     final score = lines is LinesOn && lines.nodes != null
         ? lines.score.text

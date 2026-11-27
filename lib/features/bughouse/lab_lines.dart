@@ -30,16 +30,20 @@ const _rowMoves = 8;
 
 /// What a row's score means, on its tooltip.
 String scoreHint({required bool single}) => single
-    ? '+ is good for White on board 1 (A + B). Hivemind’s scale, not pawns.'
+    ? '+ is good for White on board 1 (A + B). In pawns.'
     : '+ is good for A + B: White on board 1, Black on board 2. '
-          'Hivemind’s scale, not pawns.';
+          'Both boards’ scores added, in pawns.';
 
-/// One board's best moves for the player on move there, as lila's engine
-/// lines: a row per move, its score, then the moves of that board that
-/// follow, each its own token. Resting on a move floats the board it is on
-/// after it, hands and all, and clicking one plays the line up to it — with
-/// both boards shown, the other board's moves before it too. Pointing at a
-/// row draws its move on the board; clicking the row plays it there. The
+/// What a row's score means, on its tooltip: each row is its own board's.
+String rowScoreHint({required bool single}) => single
+    ? scoreHint(single: true)
+    : '+ is good for A + B: White on board 1, Black on board 2. In pawns.';
+
+/// One board's rows for the player on move there, as lila's engine lines:
+/// a row per move, its score, then the moves of that board that follow,
+/// each its own token. Resting on a move floats the board it is on after
+/// it, hands and all, and clicking one plays the line up to it. Pointing at
+/// a row draws its move on the board; clicking the row plays it there. The
 /// right button copies the line as PGN. Every row is 28 px whether it holds
 /// a move or not, and nothing hovered changes its size.
 class BoardLineRows extends StatefulWidget {
@@ -88,12 +92,10 @@ class _BoardLineRowsState extends State<BoardLineRows> {
 
   /// The board appears once the pointer has rested on a move.
   void _hover(PvStep step, Offset anchor) {
-    final uci = step.uci;
-    if (uci == null) return;
     _hovered.rest(
       () => (
         board: step.after.board(step.board),
-        uci: uci,
+        uci: step.uci,
         orientation: lab.bottom(step.board),
         anchor: anchor,
       ),
@@ -137,20 +139,16 @@ class _BoardLineRowsState extends State<BoardLineRows> {
     );
   }
 
-  List<PvStep> _steps(EngineRow row, int limit) => pvSteps(
-    row.table,
-    row.pv,
-    board: board,
-    throughBoth: !lab.single,
-    limit: limit,
-  );
+  List<PvStep> _steps(EngineRow row, int limit) =>
+      pvSteps(row.table, board, row.pv, limit: limit);
 
   Widget _row(EngineRow row) {
     final steps = _steps(row, _rowMoves);
     final move = row.move;
     return _LineRow(
       score: row.score.text,
-      scoreHint: scoreHint(single: lab.single),
+      scored: !row.score.isEmpty,
+      scoreHint: rowScoreHint(single: lab.single),
       sits: move == null,
       steps: steps,
       onEnter: () => lab.preview.value = move == null ? null : {board: move},
@@ -167,7 +165,7 @@ class _BoardLineRowsState extends State<BoardLineRows> {
       onPlay: (index) => _play(steps, index),
       menu: () => [
         AppAction('Copy line PGN', () {
-          final all = _steps(row, row.pv.length * 2);
+          final all = _steps(row, row.pv.length);
           final text = lab.linePgnWith(pvMovesTo(all, all.length - 1));
           unawaited(Clipboard.setData(ClipboardData(text: text)));
         }, icon: AppIcons.copy),
@@ -183,6 +181,7 @@ class _BoardLineRowsState extends State<BoardLineRows> {
 class _LineRow extends StatelessWidget {
   const _LineRow({
     required this.score,
+    required this.scored,
     required this.scoreHint,
     required this.sits,
     required this.steps,
@@ -196,6 +195,9 @@ class _LineRow extends StatelessWidget {
   });
 
   final String score;
+
+  /// Whether the engine scored the row; one it did not reads a muted dash.
+  final bool scored;
   final String scoreHint;
 
   /// Whether the row's choice is to sit on its board rather than move.
@@ -235,15 +237,14 @@ class _LineRow extends StatelessWidget {
           ),
         ),
       for (final (i, step) in steps.indexed)
-        // A `sit` is muted and does nothing.
         LineMoveToken(
           label: step.label,
           san: step.san,
           height: engineRowHeight,
-          strong: i == 0 && !sits,
+          strong: i == 0,
           onHover: (anchor) => onHover(step, anchor),
           onLeave: onLeave,
-          onTap: step.uci == null ? null : () => onPlay(i),
+          onTap: () => onPlay(i),
         ),
     ];
     return MouseRegion(
@@ -266,7 +267,10 @@ class _LineRow extends StatelessWidget {
                     width: labScoreWidth,
                     child: Text(
                       score,
-                      style: monoText.copyWith(fontWeight: FontWeight.w600),
+                      style: monoText.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: scored ? null : scheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 ),

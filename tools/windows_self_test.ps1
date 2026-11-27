@@ -4,7 +4,7 @@ reports: the bughouse engine installed into this user's AppData from the
 app's own bundle, started, and answered a search.
 
   -Fresh   remove the engine folder an earlier run installed, first
-  -Damage  overwrite 4 KiB in the middle of the installed network first, then
+  -Damage  overwrite 4 KiB in the middle of the installed net first, then
            require the app to have written it back to the bundled hash
 
 Reports land in $env:RUNNER_TEMP (or the temp folder) as self-test-<Name>.json.
@@ -30,7 +30,7 @@ function Last-EngineFolder {
   return $null
 }
 
-$network = $null
+$net = $null
 if ($Fresh) {
   $folder = Last-EngineFolder
   if ($folder -and (Test-Path $folder)) {
@@ -41,12 +41,12 @@ if ($Fresh) {
 if ($Damage) {
   $folder = Last-EngineFolder
   if (-not $folder) { throw 'No earlier report says where the engine is' }
-  $network = Join-Path $folder 'hivemind.onnx'
-  $bytes = [IO.File]::ReadAllBytes($network)
+  $net = Join-Path $folder 'bughouse-cd8cceab93fe.nnue'
+  $bytes = [IO.File]::ReadAllBytes($net)
   $middle = [int]($bytes.Length / 2)
   for ($i = 0; $i -lt 4096; $i++) { $bytes[$middle + $i] = 0x5A }
-  [IO.File]::WriteAllBytes($network, $bytes)
-  Write-Host "Damaged $network (same size, wrong bytes)"
+  [IO.File]::WriteAllBytes($net, $bytes)
+  Write-Host "Damaged $net (same size, wrong bytes)"
 }
 
 $report = Join-Path $temp "self-test-$Name.json"
@@ -65,15 +65,17 @@ if (-not $result.ok) { throw "${Name} failed after $seconds s: $($result.failure
 Write-Host "${Name} passed in $seconds s: best $($result.best)"
 
 $names = $result.files.PSObject.Properties.Name | ForEach-Object { $_.ToLower() }
-foreach ($need in @('hivemind-windows.exe', 'hivemind_ort.dll', 'hivemind.onnx', 'msvcp140.dll', 'vcruntime140.dll')) {
-  if ($names -notcontains $need) { throw "${Name}: $need is not beside the engine" }
+foreach ($need in @('hypebeast-windows.exe', 'bughouse-cd8cceab93fe.nnue')) {
+  if ($names -notcontains $need) { throw "${Name}: $need is not in the engine folder" }
 }
-if ($names -contains 'onnxruntime.dll') { throw "${Name}: a generic onnxruntime.dll is beside the engine" }
+foreach ($former in @('hivemind-windows.exe', 'hivemind_ort.dll', 'hivemind.onnx')) {
+  if ($names -contains $former) { throw "${Name}: the former engine's $former was not removed" }
+}
 
 if ($Damage) {
   $manifest = Join-Path (Split-Path $Exe) 'data\flutter_assets\assets\bughouse\manifest.json'
-  $want = (Get-Content $manifest -Raw | ConvertFrom-Json).'hivemind.onnx'.sha256
-  $have = (Get-FileHash $network -Algorithm SHA256).Hash.ToLower()
-  if ($have -ne $want) { throw "${Name}: the damaged network was not written back ($have)" }
-  Write-Host 'The damaged network was written back from the bundle'
+  $want = (Get-Content $manifest -Raw | ConvertFrom-Json).'bughouse-cd8cceab93fe.nnue'.sha256
+  $have = (Get-FileHash $net -Algorithm SHA256).Hash.ToLower()
+  if ($have -ne $want) { throw "${Name}: the damaged net was not written back ($have)" }
+  Write-Host 'The damaged net was written back from the bundle'
 }

@@ -56,7 +56,7 @@ final class TableGame {
 
   /// One line that says how the game went and which it is, the result
   /// first since the line is cut short where the room ends: `A + B won ·
-  /// checkmate · Hivemind Arena · Round 3 · 2026.11.10`.
+  /// checkmate · Bughouse Arena · Round 3 · 2026.11.10`.
   String get heading => [
     if (winner case final team?)
       '${team.label} won'

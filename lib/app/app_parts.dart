@@ -348,7 +348,7 @@ final class AppParts {
   bool _sittingPaused = false;
 
   /// The window stays open: the puzzle's delayed turn and the Train tab's
-  /// sitting carry on where they were, and Hivemind starts again while
+  /// sitting carry on where they were, and HypeBeast starts again while
   /// Bughouse is the mode on screen.
   void resumeAfterClose() {
     if (_disposed) return;

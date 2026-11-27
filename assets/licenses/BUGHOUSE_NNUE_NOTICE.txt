@@ -1,0 +1,7 @@
+Fairy-Stockfish bughouse net
+File: bughouse-cd8cceab93fe.nnue
+From: https://fairy-stockfish.github.io/nnue/
+Credited there to: belzedar_ in discord
+
+Chess Auto Prep bundles this file unchanged for its bughouse engine,
+HypeBeast. The page it comes from states no licence for it.

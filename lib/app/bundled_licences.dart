@@ -14,8 +14,12 @@ import '../diagnostics/log.dart';
 const bundledLicences = <({String name, String asset})>[
   (name: 'Stockfish engine', asset: 'assets/licenses/STOCKFISH_LICENSE.txt'),
   (
-    name: 'Hivemind bughouse engine',
-    asset: 'assets/licenses/HIVEMIND_LICENSE.txt',
+    name: 'HypeBeast bughouse engine',
+    asset: 'assets/licenses/HYPEBEAST_LICENSE.txt',
+  ),
+  (
+    name: 'Fairy-Stockfish bughouse net',
+    asset: 'assets/licenses/BUGHOUSE_NNUE_NOTICE.txt',
   ),
   (name: 'Maia 3', asset: 'assets/licenses/MAIA3_LICENSE.txt'),
   (name: 'ONNX Runtime', asset: 'assets/licenses/ONNXRUNTIME_LICENSE.txt'),

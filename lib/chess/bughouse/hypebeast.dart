@@ -314,7 +314,7 @@ List<SeatRow> seatRows(
   SeatReport report, {
   required bool coordinated,
   SeatDecision? decision,
-  int count = 3,
+  required int count,
 }) {
   SeatRow rowOf(SeatLine line) =>
       (move: line.pv.first, cp: line.cp, mate: line.mate, pv: line.pv);

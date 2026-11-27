@@ -222,7 +222,11 @@ LabModes wireLabModes(AppEnvironment env) {
   final lab = BughouseLab();
   return LabModes(
     lab: lab,
-    engine: LabEngine(lab: lab, startEngine: env.startHivemind),
+    engine: LabEngine(
+      lab: lab,
+      startEngine: env.startHypeBeast,
+      cores: env.coresAvailable,
+    ),
     picker: env.viewerPicker,
     files: env.fileImport,
   );

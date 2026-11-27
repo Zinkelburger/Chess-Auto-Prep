@@ -1,20 +1,18 @@
 // The app's bughouse engine on first use, inside a built desktop app:
 // the bundled assets read through rootBundle, installed into an empty
 // profile whose path has spaces and non-ASCII characters, started through
-// the app's own launch path, asked for a real search, then damaged and
-// started again. On Windows this also covers the private ONNX Runtime and
-// the Visual C++ DLLs copied beside the engine.
+// the app's own launch path (which proves the net loaded), asked for a
+// real search, then damaged and started again.
 //
 // `flutter test integration_test/bughouse_first_run_test.dart -d windows`
 // (or `-d linux`).
 import 'dart:io';
 
 import 'package:chess_auto_prep/app/native_engines.dart';
-import 'package:chess_auto_prep/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/engines/engine_supervisor.dart';
-import 'package:chess_auto_prep/engines/hivemind_engine.dart';
-import 'package:chess_auto_prep/engines/hivemind_install.dart';
+import 'package:chess_auto_prep/engines/hypebeast_engine.dart';
+import 'package:chess_auto_prep/engines/hypebeast_install.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -38,32 +36,28 @@ void main() {
     await scratch.delete(recursive: true);
   });
 
-  Future<Hivemind> start() async {
-    final started = await launchHivemind(
-      support: profile,
-      engines: engines,
-      cores: 2,
-    );
+  Future<HypeBeast> start() async {
+    final started = await launchHypeBeast(support: profile, engines: engines);
     return switch (started) {
-      HivemindStarted(:final engine) => engine,
-      HivemindStartFailed(:final reason) => fail('did not start: $reason'),
+      HypeBeastStarted(:final engine) => engine,
+      HypeBeastStartFailed(:final reason) => fail('did not start: $reason'),
     };
   }
 
-  Future<void> searchesTheStart(Hivemind engine) async {
+  Future<void> searchesTheStart(HypeBeast engine) async {
     final answer = await engine.search((
       position: TablePosition.initial,
       played: null,
-      team: Team.ab,
-      maySit: false,
-      mustMove: MustMove.either,
-      lines: 2,
-      budget: const NodeBudget(64),
+      board: BoardNumber.one,
+      lines: 1,
+      coordination: true,
+      threads: 2,
+      budget: const NodeBudget(20000),
     ));
-    expect(answer, isA<HivemindSearched>(), reason: '$answer');
-    final found = answer as HivemindSearched;
-    expect(found.best, isNotNull);
-    expect(found.lines, isNotEmpty);
+    expect(answer, isA<HypeBeastSearched>(), reason: '$answer');
+    final found = answer as HypeBeastSearched;
+    expect(found.decision?.move, isNotNull);
+    expect(found.report.main, isNotNull);
   }
 
   testWidgets('installs into a fresh profile, searches, and repairs damage', (
@@ -71,7 +65,7 @@ void main() {
   ) async {
     final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
     // Fail rather than skip: a release build without its engine is a bug.
-    expect(HivemindInstall.bundledIn(manifest.listAssets()), isTrue);
+    expect(HypeBeastInstall.bundledIn(manifest.listAssets()), isTrue);
     expect(await profile.exists(), isFalse);
 
     final first = await start();
@@ -79,35 +73,27 @@ void main() {
     await first.quit();
 
     final folder = Directory(p.join(profile.path, 'bughouse'));
-    for (final name in HivemindInstall.installedNames) {
+    for (final name in HypeBeastInstall.installedNames) {
       expect(
         File(p.join(folder.path, name)).existsSync(),
         isTrue,
         reason: name,
       );
     }
-    if (Platform.isWindows) {
-      final names = folder.listSync().map(
-        (e) => p.basename(e.path).toLowerCase(),
-      );
-      expect(names, containsAll(['vcruntime140.dll', 'msvcp140.dll']));
-      // The engine must never find a generic runtime by that name.
-      expect(names, isNot(contains('onnxruntime.dll')));
-    }
 
     // Right size, wrong bytes: the case that once stuck for good.
-    final network = File(p.join(folder.path, 'hivemind.onnx'));
-    final bytes = network.readAsBytesSync();
+    final net = File(p.join(folder.path, HypeBeastInstall.net));
+    final bytes = net.readAsBytesSync();
     final middle = bytes.length ~/ 2;
     final original = bytes.sublist(middle, middle + 4096);
     bytes.fillRange(middle, middle + 4096, 0x5A);
-    network.writeAsBytesSync(bytes, flush: true);
-    expect(network.lengthSync(), bytes.length);
+    net.writeAsBytesSync(bytes, flush: true);
+    expect(net.lengthSync(), bytes.length);
 
     final second = await start();
     await searchesTheStart(second);
     await second.quit();
-    final repaired = network.readAsBytesSync();
+    final repaired = net.readAsBytesSync();
     expect(repaired.sublist(middle, middle + 4096), original);
   }, timeout: const Timeout(Duration(minutes: 10)));
 }

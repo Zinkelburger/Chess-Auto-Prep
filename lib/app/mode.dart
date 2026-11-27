@@ -145,7 +145,7 @@ final class TrainingModes {
 }
 
 /// The owners behind the labs, the modes with a screen of their own: the
-/// Bughouse mode's table and what Hivemind makes of it, and the file dialog
+/// Bughouse mode's table and what HypeBeast makes of it, and the file dialog
 /// and reader its moves are opened through. [offered] says whether this
 /// build has the engine, which is what puts the mode in the mode menu at all.
 final class LabModes {

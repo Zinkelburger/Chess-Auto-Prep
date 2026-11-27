@@ -431,7 +431,7 @@ List<SettingRow> _appRows({
   SettingRow(
     'Licences',
     ActionSetting('View', openLicences),
-    hint: 'Stockfish, Hivemind, Maia, fonts and every package',
+    hint: 'Stockfish, HypeBeast, Maia, fonts and every package',
   ),
   if (copyDiagnostics != null)
     SettingRow(

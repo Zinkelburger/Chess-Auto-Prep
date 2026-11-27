@@ -39,7 +39,8 @@ void main() {
     final names = bundledLicences.map((l) => l.name).join(' ');
     for (final part in [
       'Stockfish',
-      'Hivemind',
+      'HypeBeast',
+      'bughouse net',
       'Maia',
       'Inter',
       'Source Code Pro',

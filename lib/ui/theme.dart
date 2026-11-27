@@ -293,7 +293,8 @@ const engineOtherArrow = Color(0x594A4A4A);
 
 /// lila's engine arrow widths in sixty-fourths of a square: its choice
 /// 15, another move 12 when level with it down to 2, and none drawn once
-/// a move is [engineArrowCutoff] behind (half the difference in value).
+/// a move is [engineArrowCutoff] behind (half the difference in winning
+/// chances).
 const engineArrowWidth = 15.0;
 const engineArrowCutoff = 0.2;
 

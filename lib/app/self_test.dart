@@ -3,11 +3,10 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../chess/bughouse/hivemind.dart';
 import '../chess/bughouse/table.dart';
 import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
-import '../engines/hivemind_engine.dart';
+import '../engines/hypebeast_engine.dart';
 import '../storage/atomic_write.dart';
 import 'native_engines.dart';
 
@@ -43,32 +42,28 @@ Future<Never> runBughouseSelfTest({
   final engines = EngineSupervisor();
   var ok = false;
   try {
-    final started = await launchHivemind(
-      support: support,
-      engines: engines,
-      cores: 2,
-    );
+    final started = await launchHypeBeast(support: support, engines: engines);
     switch (started) {
-      case HivemindStartFailed(:final reason):
+      case HypeBeastStartFailed(:final reason):
         report['failure'] = reason;
-      case HivemindStarted(:final engine):
+      case HypeBeastStarted(:final engine):
+        report['engine'] = engine.provenance;
+        // Board 1 with the coordinator, as the mode's two-board search.
         final answer = await engine.search((
           position: TablePosition.initial,
           played: null,
-          team: Team.ab,
-          maySit: false,
-          mustMove: MustMove.either,
+          board: BoardNumber.one,
           lines: 1,
-          budget: const NodeBudget(64),
+          coordination: true,
+          threads: 2,
+          budget: const NodeBudget(20000),
         ));
         switch (answer) {
-          case HivemindFailed(:final reason):
+          case HypeBeastFailed(:final reason):
             report['failure'] = reason;
-          case HivemindSearched(:final best):
-            report['best'] = best == null
-                ? null
-                : '(${best.one ?? 'pass'},${best.two ?? 'pass'})';
-            ok = best != null;
+          case HypeBeastSearched(:final decision):
+            report['best'] = decision?.toString();
+            ok = decision?.move != null;
             if (!ok) report['failure'] = 'The engine returned no move.';
         }
         await engine.quit();
