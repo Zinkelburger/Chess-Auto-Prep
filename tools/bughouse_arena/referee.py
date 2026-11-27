@@ -4,8 +4,8 @@ partner, judged by the same terminal rules the engine searches with.
 The referee is deliberately an independent implementation (python-chess, not
 Fairy-Stockfish) so a rules bug in either side shows up as a disagreement
 instead of being shared silently. Every rule that decides a result mirrors
-Hivemind's ``engine/src/environment/board.cc`` (unpack
-``tools/bughouse_windows/hivemind-source.tar.gz`` to read it):
+Hivemind's ``engine/src/environment/board.cc`` (in
+https://github.com/Zinkelburger/hivemind at tag ``engine-v0.2.0``):
 
 * ``is_checkmate(team, time_advantage)`` ports ``Board::is_checkmate`` and
   ``Board::can_partner_provide_blocking_piece``, so a check that the partner can

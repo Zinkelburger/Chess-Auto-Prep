@@ -6,14 +6,11 @@
 # Windows 10 generation, build 20348) and a Windows Server 2025 runner (the
 # Windows 11 24H2 generation, build 26100):
 #
-#   native   The shipped engine against a deliberately old ONNX Runtime, a
-#            missing and a corrupt private runtime, then a real search from a
-#            Unicode path with an old `onnxruntime.dll` beside it.
 #   first    The app's own install path inside a built desktop app: a fresh
 #            profile with spaces and non-ASCII letters, a real search, a
 #            damaged network repaired on the next start.
 #   clean    The machine's Visual C++ runtime uninstalled, as on a PC that
-#            never had it. The portable zip must still run the engine.
+#            never had it. The portable zip must still run the app and engine.
 #   setup    The setup installed silently into a folder with spaces; it puts
 #            the runtime back as a prerequisite. The installed app runs its
 #            `--self-test-bughouse` in the user's real AppData, then again
@@ -72,10 +69,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/fetch_assets.py --check --only bughouse-windows
 
-      - name: native — private ONNX Runtime loading
-        timeout-minutes: 10
-        run: python tools/test_windows_ort_loading.py
-
       - name: Decline file associations in the disposable test account
         run: |
           New-Item -Path HKCU:\Software\ChessAutoPrep -Force | Out-Null
@@ -129,11 +122,9 @@ jobs:
           )
           if ($proc.ExitCode -ne 0) { Get-Content $log -Tail 80; exit $proc.ExitCode }
           foreach ($f in @('chess_auto_prep.exe',
-                           'data\flutter_assets\assets\bughouse\hivemind-windows.exe.gz',
-                           'data\flutter_assets\assets\bughouse\hivemind_ort.dll.gz',
-                           'data\flutter_assets\assets\bughouse\hivemind.onnx.gz',
-                           'data\flutter_assets\assets\bughouse\manifest.json',
-                           'data\bughouse-runtime\manifest.json')) {
+                           'data\flutter_assets\assets\bughouse\hypebeast-windows.exe.gz',
+                           'data\flutter_assets\assets\bughouse\bughouse-cd8cceab93fe.nnue.gz',
+                           'data\flutter_assets\assets\bughouse\manifest.json')) {
             if (-not (Test-Path (Join-Path $installDir $f))) { throw "Setup did not install $f" }
           }
           "INSTALL_DIR=$installDir" | Out-File -Append $env:GITHUB_ENV

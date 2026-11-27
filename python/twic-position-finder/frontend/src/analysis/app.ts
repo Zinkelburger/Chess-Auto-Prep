@@ -710,7 +710,8 @@ export class BughouseApp {
   private renderPartner() {
     const box = $('ch-partner');
     box.hidden = !this.twoBoards;
-    if (!this.twoBoards) return;
+    // A hidden board measures 0×0, and chessground would draw any arrow left on it at NaN.
+    if (!this.twoBoards) { this.partnerCg?.setAutoShapes([]); return; }
     const other = this.other.current;
     const pos = positionOf(other.fen);
     const orientation = opposite(this.orientation);

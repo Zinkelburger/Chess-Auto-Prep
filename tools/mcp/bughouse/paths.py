@@ -1,15 +1,15 @@
 """Where the Hivemind engine, its network and its ONNX runtime live.
 
-Three sources, in order of how much the caller asked for it:
+Hivemind is no longer the app's engine (the app's Bughouse mode runs
+HypeBeast), so it is fetched for the tools alone. Two sources, in order of how
+much the caller asked for it:
 
   1. ``HIVEMIND_BIN`` / ``HIVEMIND_MODEL`` / ``HIVEMIND_LIB`` — an explicit
      build, which is what you want while working on the engine itself.
-  2. The desktop app's support directory. The app extracts the bundle on its
-     first analysis, so once you have used Bughouse Lab the files are already
-     unpacked and the server costs nothing.
-  3. ``assets/bughouse/*.gz`` in this checkout, unpacked into
-     ``~/.local/share/chess-prep/bughouse/``. The MCP server never writes
-     inside the app's directory — the two share data read-only.
+  2. ``tools/hivemind-engine/*.gz`` in this checkout, written by
+     ``python3 tools/fetch_assets.py --only hivemind`` and unpacked into
+     ``~/.local/share/chess-prep/bughouse/`` (used as it is when the
+     checkout has no fetch of its own).
 """
 
 from __future__ import annotations
@@ -23,31 +23,10 @@ from pathlib import Path
 from typing import Literal, overload
 
 REPO = Path(__file__).resolve().parents[3]
-ASSETS = REPO / "assets" / "bughouse"
+# The tool-only fetch target; tools/fetch_assets.py HIVEMIND_ASSETS.
+ASSETS = REPO / "tools" / "hivemind-engine"
 
 
-def _app_support() -> Path:
-    """Where the desktop app extracts its copy of the bundle.
-
-    This mirrors `path_provider`'s `getApplicationSupportDirectory()` on each
-    desktop platform, keyed off the same identifiers the Flutter runners are
-    built with — `APPLICATION_ID` on Linux, `PRODUCT_BUNDLE_IDENTIFIER` on
-    macOS, and the `CompanyName`/`ProductName` pair in `Runner.rc` on Windows.
-    We only ever read from here; the server writes under `OWN_SUPPORT`.
-    """
-    system = platform.system()
-    if system == "Windows":
-        base = Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming"))
-        return base / "com.example" / "Chess Auto Prep" / "bughouse"
-    if system == "Darwin":
-        return (
-            Path.home()
-            / "Library/Application Support/com.example.chessAutoPrep/bughouse"
-        )
-    return Path.home() / ".local/share/com.example.chess_auto_prep/bughouse"
-
-
-APP_SUPPORT = _app_support()
 OWN_SUPPORT = Path.home() / ".local/share/chess-prep/bughouse"
 
 
@@ -56,10 +35,9 @@ class EngineNotInstalled(Exception):
 
     def __init__(self, detail: str) -> None:
         super().__init__(
-            f"{detail}\nRun `python3 tools/fetch_assets.py --only bughouse` to download "
-            "the bundle (add `--hivemind <checkout>` to package a local engine "
-            "build instead), or set HIVEMIND_BIN and HIVEMIND_MODEL to point "
-            "at a build."
+            f"{detail}\nRun `python3 tools/fetch_assets.py --only hivemind` to "
+            "download it, or set HIVEMIND_BIN and HIVEMIND_MODEL to point at a "
+            "build."
         )
 
 
@@ -72,7 +50,7 @@ def binary_name() -> str:
 
 def runtime_name() -> str:
     return {
-        "Windows": "hivemind_ort.dll",
+        "Windows": "onnxruntime.dll",
         "Darwin": "libonnxruntime.dylib",
     }.get(platform.system(), "libonnxruntime.so.1")
 
@@ -144,7 +122,7 @@ def _unpack_assets() -> EngineFiles | None:
         finally:
             tmp.unlink(missing_ok=True)
     wanted[binary_name()].chmod(0o755)
-    return _from_directory(OWN_SUPPORT, "unpacked from assets/bughouse")
+    return _from_directory(OWN_SUPPORT, "unpacked from tools/hivemind-engine")
 
 
 def _refreshed_assets() -> EngineFiles | None:
@@ -168,14 +146,12 @@ def locate(required: bool = True) -> EngineFiles | None:
     # `fetch_assets.py` was never unpacked, and the old engine ran forever.
     found = (
         _from_env()
-        or _from_directory(APP_SUPPORT, "app support directory")
         or _refreshed_assets()
         or _from_directory(OWN_SUPPORT, "chess-prep support directory")
     )
     if found is None and required:
         raise EngineNotInstalled(
-            f"No Hivemind build found (looked in {APP_SUPPORT}, {OWN_SUPPORT} "
-            f"and {ASSETS})."
+            f"No Hivemind build found (looked in {ASSETS} and {OWN_SUPPORT})."
         )
     if found is not None:
         missing = [str(p) for p in (found.binary, found.model) if not p.exists()]
