@@ -96,9 +96,7 @@ void main() {
     expect(w.bughouse.starts, 0);
   });
 
-  testWidgets('two boards show both, and drop across', (
-    tester,
-  ) async {
+  testWidgets('two boards show both, and drop across', (tester) async {
     await toBughouse(tester);
     await twoBoards(tester);
     expect(find.byType(Chessboard), findsNWidgets(2));

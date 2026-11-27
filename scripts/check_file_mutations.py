@@ -34,12 +34,6 @@ APPROVED: dict[str, tuple[int, str]] = {
         "hour-old one a killed install left, and of the known Hivemind files "
         "an older version installed in the same folder",
     ),
-    "lib/engines/hivemind_install.dart": (
-        4,
-        "reproducible bughouse engine bundle: verified .part write, "
-        "rename into place, removal of its own leftover .part and of an "
-        "hour-old one a killed install left",
-    ),
     "lib/storage/tournament_inbox.dart": (1, "disposable cross-process request: atomically claim the public name; delete only the private claim, never a newer request"),
     "lib/storage/tournaments.dart": (
         1,

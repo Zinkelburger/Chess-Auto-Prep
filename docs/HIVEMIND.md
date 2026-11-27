@@ -1,7 +1,12 @@
 # Hivemind, end to end
 
-The bughouse engine behind the app's Bughouse mode and the `bughouse` MCP
-server. `tools/bughouse_web/` also builds it for the browser (one board, the
+The two-board engine behind the `bughouse` MCP server, and the arena's
+`hivemind` opponent (`tools/bughouse_arena/`). The app does not ship it: the
+desktop Bughouse mode runs
+[HypeBeast](https://github.com/Zinkelburger/HypeBeast) (see
+[Bughouse](features/bughouse.md)), and the tools fetch Hivemind for
+themselves with `python3 tools/fetch_assets.py --only hivemind`, into the
+git-ignored `tools/hivemind-engine/`. `tools/bughouse_web/` also builds it for the browser (one board, the
 partner board held still, on the GPU through WebGPU), but no website page
 loads that build: the site's `/bughouse` board runs
 [HypeBeast](https://github.com/Zinkelburger/HypeBeast), a bughouse engine
@@ -14,8 +19,7 @@ numbers are in [Why everything reads 0.00](#why-everything-reads-000).
 
 Calling the thing is documented elsewhere: [`bughouse-mcp`
 skill](../.agents/skills/bughouse-mcp/SKILL.md) for the MCP tools,
-[Bughouse](features/bughouse.md) for the desktop mode, [Component map](COMPONENT_MAP.md) for the Flutter
-surfaces.
+[`tools/bughouse_arena`](../tools/bughouse_arena/README.md) for matches.
 
 ## What it is
 
@@ -40,15 +44,15 @@ resemblance:
 
 | | |
 |---|---|
-| Upstream | `github.com/Zinkelburger/hivemind` (the owner's fork of aminwoo/hivemind), branch `portable-desktop-builds`. The desktop engines are release `engine-v0.2.0`, revision `0b025880cf6b2fe3175e210e224c0764a9b4838e`; the web build stays on `5508ba9daf4164e48a8a8a9b39e101efdc60e97a` with its own patches |
+| Upstream | `github.com/Zinkelburger/hivemind` (the owner's fork of aminwoo/hivemind), branch `portable-desktop-builds`. The native engines the tools fetch are release `engine-v0.2.0`, revision `0b025880cf6b2fe3175e210e224c0764a9b4838e`; the web build stays on `5508ba9daf4164e48a8a8a9b39e101efdc60e97a` with its own patches |
 | Language | C++23, CMake + Ninja; embeds a stripped Fairy-Stockfish for move generation |
 | Licence | Hivemind MIT; the bundled Fairy-Stockfish is GPL-3.0 |
-| Backends | `tensorrt` (FP16, default upstream) or `onnxruntime` (FP32, portable) — **we ship ORT** |
-| Corresponding source, vendored | `tools/bughouse_windows/hivemind-source.tar.gz` and `python/twic-position-finder/frontend/public/bughouse-engine/hivemind-source.tar.gz` |
+| Backends | `tensorrt` (FP16, default upstream) or `onnxruntime` (FP32, portable) — **the tools run ORT** |
+| Corresponding source, vendored | `python/twic-position-finder/frontend/public/bughouse-engine/hivemind-source.tar.gz` (the web build's revision); the native revision is the fork's `engine-v0.2.0` tag |
 
 The repository holds no Hivemind checkout. When you need to read the
-engine's own code, unpack one of those two tarballs (the Windows one is the
-desktop revision); when you need to *change* it, commit to the fork and
+engine's own code, unpack that tarball or check out the fork at
+`engine-v0.2.0`; when you need to *change* it, commit to the fork and
 release it (see [Rebuilding](#rebuilding-and-repackaging)).
 
 ## The path a position takes
@@ -76,8 +80,8 @@ release it (see [Rebuilding](#rebuilding-and-repackaging)).
   bestmove (d2d4,pass) ponder (d7d5,d2d4)
   info depth 12 score cp -230 nodes 1500 nps 350 … pv (d2d4,pass) …
         │
-        ├── Bughouse mode           lib/features/bughouse/
         ├── bughouse MCP server     tools/mcp/bughouse/
+        ├── arena opponent          tools/bughouse_arena/
         └── the browser (WASM)      python/twic-position-finder/frontend/
 ```
 
@@ -231,10 +235,9 @@ sit, and `false` means the opponent may. Each seat's −230 is that seat
 losing to an opponent who can wait, and how much depends on the position.
 Two `false` searches therefore describe two different clocks; the
 calibration below cancels the clock between them rather than modelling an
-even one. The app's Bughouse mode searches one consistent case instead
-(A + B may sit, or C + D may), so its score keeps the clock's worth, and so
-does the browser build's one board (White may sit, or Black may; the frozen
-partner board lets nobody actually sit there).
+even one. The browser build's one board searches one consistent case
+instead (White may sit, or Black may; the frozen partner board lets nobody
+actually sit there), so its score keeps the clock's worth.
 
 The `policy` UCI command prints the network's opinion with no search at all,
 which separates the network from the MCTS. Raw value, our seat, no sitting
@@ -340,7 +343,7 @@ than the ones the display invites you to assume.
 
 `win%` is linear in `advantage` (`50·(1 + advantage)`), so gains and losses
 read symmetrically, and 58.8% is much harder to misread than +0.51. The MCP
-server returns it as `win_percent` (the desktop mode does not show it). It is
+server returns it as `win_percent`. It is
 a re-centred engine estimate, **not** a calibrated probability, and it is not
 the network's WDL. One pawn delivered to your partner is 0.104 of Q, so
 `pawns ≈ 9.6 × advantage` (knight 1.7, rook 1.5, queen 4.1) reads the ten
@@ -427,26 +430,21 @@ Three consumers, one engine, sharing only files.
 
 | | |
 |---|---|
-| **Bughouse mode** (desktop) | `lib/engines/hivemind_engine.dart` owns the process and parses its output, `lib/engines/hivemind_install.dart` installs and checks the assets before each launch, `lib/chess/bughouse/hivemind.dart` calibrates; the mode itself is `lib/features/bughouse/` |
+| **The arena** | `tools/bughouse_arena/players.py` — the `hivemind` player, the tool-only fetch launched as a referee seat |
 | **`bughouse` MCP server** | `tools/mcp/bughouse/` — `engine.py` the UCI client, `board.py` the cross-board rule, `calibration.py` the offset, `analysis.py` the three question shapes (`analyse` / `compare` / `playout`), `tools.py` the schemas |
 | **The browser** | `tools/bughouse_web/` and `frontend/src/analysis/hivemind.worker.ts` — the same C++ compiled to WASM, ORT-web for inference on WebGPU (batches of 32) or CPU threads |
 
 `tools/mcp/bughouse/paths.py:locate()` finds the engine in this order:
-`HIVEMIND_BIN`/`HIVEMIND_MODEL`/`HIVEMIND_LIB` → the desktop app's support
-directory → `assets/bughouse/*.gz`, ungzipped into
-`~/.local/share/chess-prep/bughouse/` whenever a bundle file is newer than
-its copy → that copy as it is (no bundle in the checkout). It never writes
-inside the app's directory.
-
-The desktop app installs its own copy into `<support>/bughouse/` from
-`assets/bughouse/` and checks each file against `manifest.json` (size and
-SHA-256) before every launch. The unpacked Linux files are about 3.7 MB
+`HIVEMIND_BIN`/`HIVEMIND_MODEL`/`HIVEMIND_LIB` → `tools/hivemind-engine/*.gz`
+in this checkout, ungzipped into `~/.local/share/chess-prep/bughouse/`
+whenever a fetched file is newer than its copy → that copy as it is (no
+fetch in the checkout). The unpacked Linux files are about 3.7 MB
 (`hivemind-linux`), 54 MB (`hivemind.onnx`) and 28 MB
 (`libonnxruntime.so.1`).
 
-The `*.gz` payloads in `assets/bughouse/` are gitignored and fetched, not
-committed. Fill them with `python3 tools/fetch_assets.py --only bughouse`;
-checksums live in `tools/assets.lock.json`.
+The `*.gz` payloads in `tools/hivemind-engine/` are gitignored and fetched,
+not committed. Fill them with `python3 tools/fetch_assets.py --only
+hivemind`; checksums live in `tools/assets.lock.json`.
 
 ### Budgets
 
@@ -484,15 +482,6 @@ network or engine) can be scored against it.
 Bulk analysis uses **800 nodes**. This changes the neural budget only; the
 native root mate allowance still follows the engine's existing coupling
 described in the study.
-
-The desktop mode does not pick a budget per question. Each team it shows
-gets one continuous `go nodes 30000` on its own engine process, its lines
-following every report (the first within about a second, then four a
-second), and rests there; the one-board zero search rests at 8,000. The two
-processes share the half of the machine's cores the mode takes, so each
-runs at roughly half the single-process rate until the other rests. An
-engine without `ReportIntervalMs` is asked in passes of 800, 4,000 and
-20,000 nodes on one process instead.
 
 ## The two books
 
@@ -600,19 +589,15 @@ isolation headers but no caching or compression rule.
 ## Rebuilding and repackaging
 
 ```
-# unpack the vendored corresponding source to read it
-tar xzf tools/bughouse_windows/hivemind-source.tar.gz
+# unpack the vendored corresponding source (the web build's revision)
+tar xzf python/twic-position-finder/frontend/public/bughouse-engine/hivemind-source.tar.gz
 
-# desktop engines: commit to the fork's portable-desktop-builds branch, then
+# tool engines: commit to the fork's portable-desktop-builds branch, then
 # push a new tag engine-vX.Y.Z; its Engine release workflow builds Linux,
 # Windows and both Macs and attaches them. Attach hivemind-network-fp32.onnx.gz
-# from the previous release by hand. Then bump BUGHOUSE_TAG and refetch:
-python3 tools/fetch_assets.py --only bughouse-linux --force    # and each platform
-# Windows ships our own cross-build of the same revision (tools/bughouse_windows)
-scripts/ci.sh with -- python3 tools/bughouse_windows/build.py --source <fork-checkout>
-
-# or package a local engine build into assets/bughouse/
-python3 tools/fetch_assets.py --only bughouse --hivemind <hivemind-checkout>
+# from the previous release by hand. Then bump the tag in tools/fetch_assets.py
+# and refetch:
+python3 tools/fetch_assets.py --only hivemind --force
 
 # web: recompile the WASM bridge (only when bridge.cc/engine_web.cc change)
 python3 tools/bughouse_web/build.py
@@ -621,18 +606,11 @@ python3 tools/bughouse_web/prepare_assets.py
 # checks
 python3 tools/mcp/test_bughouse.py              # fast, no engine
 python3 tools/mcp/test_bughouse.py --engine      # adds the searches, ~1 min
-scripts/ci.sh test test/features/bughouse
 ```
 
 python-chess is a hard dependency of the `bughouse` MCP server; without it in
 `python3` the server exits at start and the client reports
 `CONNECTION_CLOSED` (`python3 -m pip install --user python-chess`).
-
-`test/engines/hivemind_real_test.dart` drives the real engine named by
-`HIVEMIND_BIN` / `HIVEMIND_MODEL` / `HIVEMIND_LIB` (it must run when they are
-set), else the copy the app installed on a Linux machine, and skips when there
-is neither. The Windows build needs its `hivemind_ort.dll` loaded by absolute
-path — see `tools/bughouse_windows/README.md`.
 
 ## Reproducing the measurements
 
