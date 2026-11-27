@@ -73,8 +73,7 @@ Source: "{#VCRedistDir}\VC_redist.x64.exe"; Flags: dontcopy noencryption
 ; The setup build uses the centrally installed VC++ runtime. Excluding the
 ; loose copies prevents a stale app-local DLL from overriding the serviced one.
 ; The separately-produced portable zip still contains these files.
-; data/bughouse-runtime/*.dll.gz stays included: Hivemind verifies and repairs
-; its own private runtime from those archives, independent of central VC++.
+; The bughouse engine needs none of them: it imports only Windows' own DLLs.
 Source: "{#BundleDir}\*"; DestDir: "{app}"; Excludes: "concrt140.dll,msvcp140*.dll,vcruntime140*.dll"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [InstallDelete]
@@ -88,6 +87,14 @@ Type: files; Name: "{app}\msvcp140_atomic_wait.dll"
 Type: files; Name: "{app}\msvcp140_codecvt_ids.dll"
 Type: files; Name: "{app}\vcruntime140.dll"
 Type: files; Name: "{app}\vcruntime140_1.dll"
+; The Hivemind bughouse engine older versions shipped: its private VC++
+; archives and its bundled files, which a new install no longer overwrites.
+Type: filesandordirs; Name: "{app}\data\bughouse-runtime"
+Type: files; Name: "{app}\data\flutter_assets\assets\bughouse\hivemind-windows.exe.gz"
+Type: files; Name: "{app}\data\flutter_assets\assets\bughouse\hivemind_ort.dll.gz"
+Type: files; Name: "{app}\data\flutter_assets\assets\bughouse\hivemind.onnx.gz"
+Type: files; Name: "{app}\data\flutter_assets\assets\bughouse\hivemind-windows-source.tar.gz"
+Type: files; Name: "{app}\data\flutter_assets\assets\bughouse\onnxruntime.dll.gz"
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"

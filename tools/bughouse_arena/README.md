@@ -84,8 +84,8 @@ into play. With 1.5–2.5 s about a third of decisions are taken up on time.
 
 `referee.py` uses python-chess, not Fairy-Stockfish, so a rules bug on either
 side shows up as a disagreement instead of being shared. Its terminal rules
-port Hivemind's `engine/src/environment/board.cc` (unpack
-`tools/bughouse_windows/hivemind-source.tar.gz` to read it):
+port Hivemind's `engine/src/environment/board.cc` (in
+https://github.com/Zinkelburger/hivemind at tag `engine-v0.2.0`):
 
 * **Mate** is `Board::is_checkmate`: no escape, *and* the partner cannot supply
   a blocking piece (now if on turn, or after any opponent reply when up on

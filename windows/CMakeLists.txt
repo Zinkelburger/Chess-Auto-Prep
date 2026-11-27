@@ -96,8 +96,7 @@ endif()
 # Ship the Visual C++ runtime beside the executable.
 #
 # chess_auto_prep.exe itself imports MSVCP140.dll and VCRUNTIME140(_1).dll, as
-# do five bundled plugin DLLs and both copies of onnxruntime.dll — the app's
-# own (Maia) and the one the bughouse engine loads. None of that is part of a
+# do five bundled plugin DLLs and onnxruntime.dll (Maia). None of that is part of a
 # clean Windows install, and Flutter's template does not copy it, so the app
 # died on first launch with "VCRUNTIME140.dll was not found" on any machine
 # that had never installed the redistributable through some other program.
@@ -137,25 +136,3 @@ install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
 install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
-
-# Keep verified, compressed VC++ copies for the separate bughouse process.
-# The setup installer excludes loose runtime DLLs but includes these archives.
-# Neither a damaged system installation nor a stale extracted DLL becomes the
-# engine's only source of dependencies. Run after all bundle files are installed.
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../assets/bughouse/hivemind-windows.exe.gz")
-  find_program(BUGHOUSE_PYTHON NAMES python3 python)
-  if(NOT BUGHOUSE_PYTHON)
-    message(FATAL_ERROR "Python is required to package the bughouse runtime")
-  endif()
-  install(CODE "
-    execute_process(
-      COMMAND \"${BUGHOUSE_PYTHON}\"
-        \"${CMAKE_CURRENT_SOURCE_DIR}/../tools/package_bughouse_runtime.py\"
-        --bundle \"${CMAKE_INSTALL_PREFIX}\"
-      RESULT_VARIABLE bughouse_runtime_result
-    )
-    if(NOT bughouse_runtime_result EQUAL 0)
-      message(FATAL_ERROR \"Could not package the verified bughouse runtime\")
-    endif()
-  " COMPONENT Runtime)
-endif()
